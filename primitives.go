@@ -3,7 +3,37 @@
 
 package engine
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
+
+// formatPt renders a dimension in scaled points the way TeX's \the does, using
+// print_scaled (§103): e.g. 196608 → "3.0pt", 4736287 → "72.26999pt".
+func formatPt(sp int) string {
+	var b strings.Builder
+	if sp < 0 {
+		b.WriteByte('-')
+		sp = -sp
+	}
+	b.WriteString(strconv.Itoa(sp / unity)) // integer part
+	b.WriteByte('.')
+	s := 10*(sp%unity) + 5
+	delta := 10
+	for {
+		if delta > unity {
+			s += unity/2 - 50000 // round the last displayed digit
+		}
+		b.WriteByte(byte('0' + s/unity))
+		s = 10 * (s % unity)
+		delta *= 10
+		if s <= delta {
+			break
+		}
+	}
+	b.WriteString("pt")
+	return b.String()
+}
 
 // expandableSet lists the primitives that act in the gullet (expansion).
 var expandableSet = map[string]bool{
@@ -42,6 +72,9 @@ func (e *Engine) loadPrimitives() {
 
 	// registers & arithmetic
 	e.prim("count", func(e *Engine) { e.doCountAssign(false) })
+	e.prim("dimen", func(e *Engine) { e.doDimenAssign(false) })
+	e.prim("dimendef", func(e *Engine) { e.doDimendef() })
+	e.prim("newdimen", func(e *Engine) { e.doNewdimen() })
 	e.prim("advance", func(e *Engine) { e.doAdvance(false) })
 	e.prim("multiply", func(e *Engine) { e.doMultiply(false) })
 	e.prim("catcode", func(e *Engine) { e.doCatcode(false) })
@@ -222,27 +255,90 @@ func (e *Engine) doCountAssign(global bool) {
 	}
 }
 
-func (e *Engine) doAdvance(global bool) {
-	i, ok := e.countIndex()
-	if !ok {
+// doDimenAssign handles \dimen<n>=<dimen>.
+func (e *Engine) doDimenAssign(global bool) {
+	i := e.scanInt()
+	e.scanEquals()
+	v := e.scanDimen()
+	e.setDimen(i, v, global)
+}
+
+// doDimendef handles \dimendef\name=<n>.
+func (e *Engine) doDimendef() {
+	name := e.scanCSName()
+	e.scanEquals()
+	n := e.scanInt()
+	if name != "" {
+		e.define(name, &meaning{kind: mDimenRef, code: n}, false)
+	}
+}
+
+// doNewdimen handles \newdimen\name (allocate the next free \dimen register).
+func (e *Engine) doNewdimen() {
+	name := e.scanCSName()
+	if name == "" || e.allocDim >= 256 {
 		return
 	}
-	e.skipByKeyword()
-	v := e.scanInt()
-	if i >= 0 && i < 256 {
-		e.setCount(i, e.count[i]+v, global)
+	e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, false)
+	e.allocDim++
+}
+
+// dimenRefAssign handles an assignment to a \dimendef'd register: \name=<dimen>.
+func (e *Engine) dimenRefAssign(code int, global bool) {
+	e.scanEquals()
+	e.setDimen(code, e.scanDimen(), global)
+}
+
+// dimenIndex reads a dimen-register reference: the \dimen primitive followed by a
+// number, or a \dimendef'd control sequence. ok=false if the next token is neither.
+func (e *Engine) dimenIndex() (int, bool) {
+	t, ok := e.getXToken()
+	if !ok {
+		return 0, false
+	}
+	if t.cs_ {
+		if m := e.eq[t.cs]; m != nil {
+			if m.kind == mDimenRef {
+				return m.code, true
+			}
+			if m.kind == mPrim && m.name == "dimen" {
+				return e.scanInt(), true
+			}
+		}
+	}
+	e.back(t)
+	return 0, false
+}
+
+func (e *Engine) doAdvance(global bool) {
+	if i, ok := e.countIndex(); ok {
+		e.skipByKeyword()
+		v := e.scanInt()
+		if i >= 0 && i < 256 {
+			e.setCount(i, e.count[i]+v, global)
+		}
+		return
+	}
+	if i, ok := e.dimenIndex(); ok {
+		e.skipByKeyword()
+		v := e.scanDimen()
+		e.setDimen(i, e.dimen[i]+v, global)
 	}
 }
 
 func (e *Engine) doMultiply(global bool) {
-	i, ok := e.countIndex()
-	if !ok {
+	if i, ok := e.countIndex(); ok {
+		e.skipByKeyword()
+		v := e.scanInt()
+		if i >= 0 && i < 256 {
+			e.setCount(i, e.count[i]*v, global)
+		}
 		return
 	}
-	e.skipByKeyword()
-	v := e.scanInt()
-	if i >= 0 && i < 256 {
-		e.setCount(i, e.count[i]*v, global)
+	if i, ok := e.dimenIndex(); ok {
+		e.skipByKeyword()
+		v := e.scanInt() // \multiply scales a dimen by an integer
+		e.setDimen(i, e.dimen[i]*v, global)
 	}
 }
 
@@ -360,6 +456,12 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mCountRef:
 				e.pushString(strconv.Itoa(e.count[m.code]))
+				return
+			case m.kind == mPrim && m.name == "dimen":
+				e.pushString(formatPt(e.dimen[e.scanInt()]))
+				return
+			case m.kind == mDimenRef:
+				e.pushString(formatPt(e.dimen[m.code]))
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))

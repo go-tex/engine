@@ -76,6 +76,7 @@ type Engine struct {
 	catcode [256]cat
 	eq      map[string]*meaning
 	count   [256]int
+	dimen   [256]int // \dimen registers, in scaled points (1pt = 65536sp)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
@@ -85,6 +86,7 @@ type Engine struct {
 	err      error
 	noBase   bool // when true, getNext does not fall through to the base string
 	allocCnt int  // next free \count register handed out by \newcount
+	allocDim int  // next free \dimen register handed out by \newdimen
 }
 
 type mkind uint8
@@ -95,6 +97,7 @@ const (
 	mLetChar  // \let to a character token
 	mCharDef  // \chardef
 	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
+	mDimenRef // \dimendef / \newdimen — an alias for a \dimen register (code = index)
 	mUndef
 )
 
@@ -110,17 +113,18 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind int // 0=eqtb, 1=count, 2=catcode
+	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen
 	name string
 	old  *meaning
 	idx  int
 	oldi int
 	oldc cat
+	oldd int
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10} // \newcount hands out 10,11,…
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10} // allocators start at 10
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -285,6 +289,16 @@ func (e *Engine) setCount(i, v int, global bool) {
 	e.count[i] = v
 }
 
+func (e *Engine) setDimen(i, v int, global bool) {
+	if i < 0 || i >= 256 {
+		return
+	}
+	if !global && len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 3, idx: i, oldd: e.dimen[i]})
+	}
+	e.dimen[i] = v
+}
+
 func (e *Engine) setCat(r rune, c cat, global bool) {
 	if r >= 256 {
 		return
@@ -317,6 +331,8 @@ func (e *Engine) endGroup() {
 			e.count[s.idx] = s.oldi
 		case 2:
 			e.catcode[rune(s.idx)] = s.oldc
+		case 3:
+			e.dimen[s.idx] = s.oldd
 		}
 	}
 }
@@ -550,6 +566,10 @@ func (e *Engine) mainLoop() {
 			e.countRefAssign(m.code, false) // \n=<v>
 			continue
 		}
+		if m.kind == mDimenRef {
+			e.dimenRefAssign(m.code, false) // \d=<dimen>
+			continue
+		}
 		if m.kind == mPrim && !isExpandable(m.name) {
 			m.prim(e)
 		}
@@ -616,6 +636,168 @@ func (e *Engine) scanInt() int {
 		e.back(t)
 		return 0
 	}
+}
+
+// unitRatio maps a physical unit keyword to TeX's exact (num, denom) ratio to
+// points (§458 set_conversion). pt/sp are handled specially in scanDimen.
+var unitRatio = map[string][2]int{
+	"in": {7227, 100},
+	"pc": {12, 1},
+	"cm": {7227, 254},
+	"mm": {7227, 2540},
+	"bp": {7227, 7200},
+	"dd": {1238, 1157},
+	"cc": {14856, 1157},
+}
+
+const unity = 65536 // scaled points per point
+
+// scanDimen scans an optional-signed dimension and returns scaled points. It
+// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
+// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
+func (e *Engine) scanDimen() int {
+	e.skipOptSpace()
+	sign := 1
+	for {
+		t, ok := e.getXToken()
+		if !ok {
+			return 0
+		}
+		if t.is('+', catOther) {
+			continue
+		}
+		if t.is('-', catOther) {
+			sign = -sign
+			continue
+		}
+		if t.is(' ', catSpace) {
+			continue
+		}
+		// \dimen register or \dimendef'd alias used as a value.
+		if t.cs_ {
+			if m := e.eq[t.cs]; m != nil {
+				switch {
+				case m.kind == mDimenRef:
+					return sign * e.dimen[m.code]
+				case m.kind == mPrim && m.name == "dimen":
+					return sign * e.dimen[e.scanInt()]
+				}
+			}
+			e.back(t)
+			return 0
+		}
+		if (t.ch >= '0' && t.ch <= '9') || t.ch == '.' || t.ch == ',' {
+			e.back(t)
+			intPart, f := e.scanDecimalSP() // integer part, 16-bit fraction
+			return sign * e.applyUnit(intPart, f)
+		}
+		e.back(t)
+		return 0
+	}
+}
+
+// scanDecimalSP reads a non-negative decimal and returns its integer part and the
+// fractional part as a 16-bit value (TeX round_decimals: 0.d1d2… × 65536 rounded).
+func (e *Engine) scanDecimalSP() (int, int) {
+	intPart := 0
+	var digs []int
+	seenDot := false
+	for {
+		t, ok := e.getXToken()
+		if !ok {
+			break
+		}
+		if !t.cs_ && (t.ch == '.' || t.ch == ',') && !seenDot {
+			seenDot = true
+			continue
+		}
+		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
+			if seenDot {
+				if len(digs) < 17 { // TeX keeps at most 17 fraction digits
+					digs = append(digs, int(t.ch-'0'))
+				}
+			} else {
+				intPart = intPart*10 + int(t.ch-'0')
+			}
+			continue
+		}
+		e.back(t)
+		break
+	}
+	return intPart, roundDecimals(digs)
+}
+
+// roundDecimals converts fraction digits to a 16-bit value (TeX §102).
+func roundDecimals(digs []int) int {
+	a := 0
+	for k := len(digs) - 1; k >= 0; k-- {
+		a = (a + digs[k]*(2*unity)) / 10
+	}
+	return (a + 1) / 2
+}
+
+// applyUnit converts an integer part + 16-bit fraction to scaled points given the
+// unit keyword that follows (TeX §453–458). Defaults to pt if none is recognised.
+func (e *Engine) applyUnit(intPart, f int) int {
+	e.skipOptSpace()
+	a, ok := e.getXToken()
+	if !ok || a.cs_ {
+		if ok {
+			e.back(a)
+		}
+		return intPart*unity + f // bare number ⇒ pt
+	}
+	b, ok := e.getXToken()
+	if !ok || b.cs_ {
+		if ok {
+			e.back(b)
+		}
+		e.back(a)
+		return intPart*unity + f
+	}
+	key := string([]rune{lower(a.ch), lower(b.ch)})
+	switch {
+	case key == "pt":
+		e.skipOneOptSpace()
+		return intPart*unity + f
+	case key == "sp":
+		e.skipOneOptSpace()
+		return intPart // sp is already scaled; fraction is dropped
+	default:
+		if r, isUnit := unitRatio[key]; isUnit {
+			e.skipOneOptSpace()
+			num, den := r[0], r[1]
+			q, rem := xnOverD(intPart, num, den)
+			f = (num*f + unity*rem) / den
+			return q*unity + f
+		}
+	}
+	e.back(b)
+	e.back(a)
+	return intPart*unity + f
+}
+
+// xnOverD returns the quotient and remainder of x*n/d (TeX §107, for x ≥ 0 and
+// values within int64 — sufficient for dimension scanning).
+func xnOverD(x, n, d int) (int, int) {
+	xn := int64(x) * int64(n)
+	return int(xn / int64(d)), int(xn % int64(d))
+}
+
+// skipOneOptSpace consumes a single optional trailing space (TeX eats one space
+// after a unit keyword).
+func (e *Engine) skipOneOptSpace() {
+	t, ok := e.getNext()
+	if ok && !(t.cat == catSpace && !t.cs_) {
+		e.back(t)
+	}
+}
+
+func lower(r rune) rune {
+	if r >= 'A' && r <= 'Z' {
+		return r + 32
+	}
+	return r
 }
 
 // scanCSName reads the next token and returns the name to define (\def\foo → foo).
