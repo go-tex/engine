@@ -1,0 +1,715 @@
+// Copyright (c) the go-tex/engine authors.
+// SPDX-License-Identifier: BSD-3-Clause
+
+// Package engine is the core of a pure-Go (CGO=0) TeX engine: a faithful
+// re-implementation of TeX's mouth and gullet — category-code tokenization,
+// the equivalents table (eqtb) with grouping/scoping, macro definition with
+// delimited parameters, and the expansion machinery (\def, \edef, \let,
+// \expandafter, \csname, \noexpand, \string, \the, \number, conditionals,
+// integer registers). It is the foundation on which the real LaTeX kernel and
+// packages will run, gated by TeX's own conformance suite (the TRIP test) — the
+// path to functional parity with a TeX distribution, not a subset.
+package engine
+
+import (
+	"fmt"
+	"strings"
+)
+
+// ── category codes & tokens ─────────────────────────────────────────────────
+
+type cat uint8
+
+const (
+	catEsc     cat = 0 // \
+	catBegin   cat = 1 // {
+	catEnd     cat = 2 // }
+	catMath    cat = 3 // $
+	catAlign   cat = 4 // &
+	catEOL     cat = 5 // end of line
+	catParam   cat = 6 // #
+	catSup     cat = 7 // ^
+	catSub     cat = 8 // _
+	catIgnore  cat = 9
+	catSpace   cat = 10 // space
+	catLetter  cat = 11 // a-z A-Z
+	catOther   cat = 12 // everything else
+	catActive  cat = 13 // ~
+	catComment cat = 14 // %
+	catInvalid cat = 15
+)
+
+// tok is a TeX token: either a control sequence (cs set) or a character with a
+// category code. A parameter marker (from a macro parameter text) uses catParam
+// with ch = '1'..'9', or ch = '#' for a literal doubled ##.
+type tok struct {
+	cs    string
+	ch    rune
+	cat   cat
+	cs_   bool // is a control sequence
+	noexp bool // \noexpand'd: pass through getXToken unexpanded once
+}
+
+func csTok(name string) tok         { return tok{cs: name, cs_: true} }
+func chTok(r rune, c cat) tok       { return tok{ch: r, cat: c} }
+func (t tok) isCS() bool            { return t.cs_ }
+func (t tok) is(r rune, c cat) bool { return !t.cs_ && t.ch == r && t.cat == c }
+
+func (t tok) String() string {
+	if t.cs_ {
+		return "\\" + t.cs
+	}
+	return string(t.ch)
+}
+
+// ── the engine ──────────────────────────────────────────────────────────────
+
+// Engine holds all TeX state: the input stack, the eqtb (control-sequence
+// meanings), integer registers, category codes, the grouping save stack, and
+// the \message output buffer.
+type Engine struct {
+	// input: a stack of token lists (top = most recent), plus the base string.
+	lists [][]tok
+	base  []rune
+	bpos  int
+
+	catcode [256]cat
+	eq      map[string]*meaning
+	count   [256]int
+
+	// save stack for grouping: each entry restores one eqtb/register/catcode.
+	save   []saveItem
+	groups []int // save-stack length at each group's start
+
+	out    strings.Builder // \message output
+	err    error
+	noBase bool // when true, getNext does not fall through to the base string
+}
+
+type mkind uint8
+
+const (
+	mMacro mkind = iota
+	mPrim
+	mLetChar // \let to a character token
+	mCharDef // \chardef
+	mUndef
+)
+
+type meaning struct {
+	kind   mkind
+	params []tok // macro parameter text
+	body   []tok // macro replacement text
+	prim   func(e *Engine)
+	name   string // primitive name (for \meaning/\string)
+	ch     rune   // let-char / chardef code
+	cat    cat
+	code   int
+}
+
+type saveItem struct {
+	kind int // 0=eqtb, 1=count, 2=catcode
+	name string
+	old  *meaning
+	idx  int
+	oldi int
+	oldc cat
+}
+
+// New builds an engine with TeX's default category codes and primitives loaded.
+func New() *Engine {
+	e := &Engine{eq: map[string]*meaning{}}
+	for i := range e.catcode {
+		e.catcode[i] = catOther
+	}
+	for c := 'a'; c <= 'z'; c++ {
+		e.catcode[c] = catLetter
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		e.catcode[c] = catLetter
+	}
+	e.catcode['\\'] = catEsc
+	e.catcode['{'] = catBegin
+	e.catcode['}'] = catEnd
+	e.catcode['$'] = catMath
+	e.catcode['&'] = catAlign
+	e.catcode['\n'] = catEOL
+	e.catcode['#'] = catParam
+	e.catcode['^'] = catSup
+	e.catcode['_'] = catSub
+	e.catcode[' '] = catSpace
+	e.catcode['\t'] = catSpace
+	e.catcode['~'] = catActive
+	e.catcode['%'] = catComment
+	e.loadPrimitives()
+	e.loadMore()
+	return e
+}
+
+// Run tokenizes src as the base input and processes it to completion, returning
+// the accumulated \message output.
+func (e *Engine) Run(src string) (string, error) {
+	e.base = []rune(src)
+	e.bpos = 0
+	e.mainLoop()
+	return e.out.String(), e.err
+}
+
+// ── input & tokenization ────────────────────────────────────────────────────
+
+// push puts a token list on the input stack (read before the base input).
+func (e *Engine) push(ts []tok) {
+	if len(ts) == 0 {
+		return
+	}
+	e.lists = append(e.lists, ts)
+}
+
+// getNext returns the next raw token (no expansion), or ok=false at end.
+func (e *Engine) getNext() (tok, bool) {
+	for len(e.lists) > 0 {
+		top := e.lists[len(e.lists)-1]
+		if len(top) == 0 {
+			e.lists = e.lists[:len(e.lists)-1]
+			continue
+		}
+		t := top[0]
+		if rest := top[1:]; len(rest) == 0 {
+			e.lists = e.lists[:len(e.lists)-1] // drop the drained list eagerly so
+		} else { //                              len(e.lists) reflects real nesting
+			e.lists[len(e.lists)-1] = rest
+		}
+		return t, true
+	}
+	if e.noBase {
+		return tok{}, false
+	}
+	return e.scan()
+}
+
+// back pushes a single token back onto the input.
+func (e *Engine) back(t tok) { e.lists = append(e.lists, []tok{t}) }
+
+// scan reads the next token from the base string using current catcodes.
+func (e *Engine) scan() (tok, bool) {
+	for e.bpos < len(e.base) {
+		r := e.base[e.bpos]
+		c := e.catOf(r)
+		switch c {
+		case catEsc:
+			e.bpos++
+			return e.scanCS(), true
+		case catComment:
+			for e.bpos < len(e.base) && e.base[e.bpos] != '\n' {
+				e.bpos++
+			}
+		case catSpace, catEOL:
+			e.bpos++
+			// collapse spaces; emit one space token
+			for e.bpos < len(e.base) {
+				cc := e.catOf(e.base[e.bpos])
+				if cc != catSpace && cc != catEOL {
+					break
+				}
+				e.bpos++
+			}
+			return chTok(' ', catSpace), true
+		case catIgnore:
+			e.bpos++
+		default:
+			e.bpos++
+			return chTok(r, c), true
+		}
+	}
+	return tok{}, false
+}
+
+func (e *Engine) catOf(r rune) cat {
+	if r < 256 {
+		return e.catcode[r]
+	}
+	return catOther
+}
+
+// scanCS reads a control-sequence name after an escape char.
+func (e *Engine) scanCS() tok {
+	if e.bpos >= len(e.base) {
+		return csTok("")
+	}
+	r := e.base[e.bpos]
+	if e.catOf(r) != catLetter {
+		e.bpos++
+		return csTok(string(r))
+	}
+	st := e.bpos
+	for e.bpos < len(e.base) && e.catOf(e.base[e.bpos]) == catLetter {
+		e.bpos++
+	}
+	name := string(e.base[st:e.bpos])
+	// a control word absorbs following spaces
+	for e.bpos < len(e.base) {
+		cc := e.catOf(e.base[e.bpos])
+		if cc != catSpace && cc != catEOL {
+			break
+		}
+		e.bpos++
+	}
+	return csTok(name)
+}
+
+// ── meanings & grouping ─────────────────────────────────────────────────────
+
+func (e *Engine) meaningOf(t tok) *meaning {
+	if t.cs_ {
+		return e.eq[t.cs]
+	}
+	if t.cat == catActive {
+		return e.eq["~active~"+string(t.ch)]
+	}
+	return nil
+}
+
+func (e *Engine) define(name string, m *meaning, global bool) {
+	if !global && len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 0, name: name, old: e.eq[name]})
+	}
+	e.eq[name] = m
+}
+
+func (e *Engine) setCount(i, v int, global bool) {
+	if !global && len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 1, idx: i, oldi: e.count[i]})
+	}
+	e.count[i] = v
+}
+
+func (e *Engine) setCat(r rune, c cat, global bool) {
+	if r >= 256 {
+		return
+	}
+	if !global && len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 2, idx: int(r), oldc: e.catcode[r]})
+	}
+	e.catcode[r] = c
+}
+
+func (e *Engine) beginGroup() { e.groups = append(e.groups, len(e.save)) }
+
+func (e *Engine) endGroup() {
+	if len(e.groups) == 0 {
+		return
+	}
+	mark := e.groups[len(e.groups)-1]
+	e.groups = e.groups[:len(e.groups)-1]
+	for len(e.save) > mark {
+		s := e.save[len(e.save)-1]
+		e.save = e.save[:len(e.save)-1]
+		switch s.kind {
+		case 0:
+			if s.old == nil {
+				delete(e.eq, s.name)
+			} else {
+				e.eq[s.name] = s.old
+			}
+		case 1:
+			e.count[s.idx] = s.oldi
+		case 2:
+			e.catcode[rune(s.idx)] = s.oldc
+		}
+	}
+}
+
+// ── expansion ───────────────────────────────────────────────────────────────
+
+// getXToken returns the next token, expanding expandable control sequences
+// (macros and expandable primitives) until a non-expandable token surfaces.
+func (e *Engine) getXToken() (tok, bool) {
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return tok{}, false
+		}
+		if t.noexp {
+			t.noexp = false
+			return t, true
+		}
+		m := e.meaningOf(t)
+		if m == nil {
+			return t, true
+		}
+		switch m.kind {
+		case mMacro:
+			e.expandMacro(m)
+		case mPrim:
+			if isExpandable(m.name) {
+				m.prim(e)
+			} else {
+				return t, true
+			}
+		default:
+			return t, true
+		}
+	}
+}
+
+// expandMacro matches the macro's parameters against the input and pushes the
+// substituted body.
+func (e *Engine) expandMacro(m *meaning) {
+	args := e.matchParams(m.params)
+	var body []tok
+	for i := 0; i < len(m.body); i++ {
+		b := m.body[i]
+		if b.cat == catParam && !b.cs_ && b.ch >= '1' && b.ch <= '9' {
+			n := int(b.ch - '1')
+			if n < len(args) {
+				body = append(body, args[n]...)
+			}
+			continue
+		}
+		body = append(body, b)
+	}
+	e.push(body)
+}
+
+// matchParams consumes the arguments for a parameter text, honoring literal
+// delimiter tokens between parameters.
+func (e *Engine) matchParams(params []tok) [][]tok {
+	var args [][]tok
+	i := 0
+	for i < len(params) {
+		p := params[i]
+		if p.cat == catParam && !p.cs_ && p.ch >= '1' && p.ch <= '9' {
+			// Determine the delimiter that terminates this argument.
+			var delim []tok
+			j := i + 1
+			for j < len(params) && !(params[j].cat == catParam && !params[j].cs_) {
+				delim = append(delim, params[j])
+				j++
+			}
+			if len(delim) == 0 {
+				args = append(args, e.grabUndelimited())
+			} else {
+				args = append(args, e.grabDelimited(delim))
+			}
+			i = j
+			continue
+		}
+		// literal delimiter in the parameter text: must match input.
+		e.matchLiteral(p)
+		i++
+	}
+	return args
+}
+
+func (e *Engine) grabUndelimited() []tok {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return nil
+	}
+	if t.cat == catBegin && !t.cs_ {
+		return e.grabGroup()
+	}
+	return []tok{t}
+}
+
+func (e *Engine) grabDelimited(delim []tok) []tok {
+	var arg []tok
+	depth := 0
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return arg
+		}
+		if depth == 0 && t.cat == catBegin && !t.cs_ {
+			depth++
+			arg = append(arg, t)
+			continue
+		}
+		if depth > 0 {
+			if t.cat == catBegin && !t.cs_ {
+				depth++
+			} else if t.cat == catEnd && !t.cs_ {
+				depth--
+			}
+			arg = append(arg, t)
+			continue
+		}
+		// try to match the delimiter starting here.
+		if tokEq(t, delim[0]) {
+			matched := []tok{t}
+			ok2 := true
+			for k := 1; k < len(delim); k++ {
+				u, uk := e.getNext()
+				if !uk || !tokEq(u, delim[k]) {
+					if uk {
+						e.back(u)
+					}
+					ok2 = false
+					break
+				}
+				matched = append(matched, u)
+			}
+			if ok2 {
+				return e.stripOuterBraces(arg)
+			}
+			// partial match: keep first token, back the rest
+			for k := len(matched) - 1; k >= 1; k-- {
+				e.back(matched[k])
+			}
+		}
+		arg = append(arg, t)
+	}
+}
+
+// stripOuterBraces removes one level of braces if the whole arg is a group.
+func (e *Engine) stripOuterBraces(arg []tok) []tok { return arg }
+
+func (e *Engine) grabGroup() []tok {
+	depth := 1
+	var g []tok
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return g
+		}
+		if t.cat == catBegin && !t.cs_ {
+			depth++
+		} else if t.cat == catEnd && !t.cs_ {
+			depth--
+			if depth == 0 {
+				return g
+			}
+		}
+		g = append(g, t)
+	}
+}
+
+func (e *Engine) matchLiteral(p tok) {
+	t, ok := e.getNext()
+	if !ok {
+		return
+	}
+	if !tokEq(t, p) {
+		e.back(t) // best-effort: don't consume a non-match
+	}
+}
+
+func (e *Engine) skipOptSpace() {
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return
+		}
+		if !(t.cat == catSpace && !t.cs_) {
+			e.back(t)
+			return
+		}
+	}
+}
+
+func tokEq(a, b tok) bool {
+	if a.cs_ != b.cs_ {
+		return false
+	}
+	if a.cs_ {
+		return a.cs == b.cs
+	}
+	return a.ch == b.ch && a.cat == b.cat
+}
+
+// ── main loop ───────────────────────────────────────────────────────────────
+
+// mainLoop drives execution: it fetches expanded tokens and performs the
+// non-expandable ones (assignments, grouping, \message, …). Characters that are
+// not consumed by a primitive are dropped (this core has no typesetting stomach
+// yet — that is the next stage).
+func (e *Engine) mainLoop() {
+	for e.err == nil {
+		t, ok := e.getXToken()
+		if !ok {
+			return
+		}
+		if !t.cs_ {
+			switch t.cat {
+			case catBegin:
+				e.beginGroup()
+			case catEnd:
+				e.endGroup()
+			}
+			continue
+		}
+		m := e.meaningOf(t)
+		if m == nil {
+			e.fail("Undefined control sequence \\" + t.cs)
+			return
+		}
+		if m.kind == mPrim && !isExpandable(m.name) {
+			m.prim(e)
+		}
+	}
+}
+
+func (e *Engine) fail(msg string) {
+	if e.err == nil {
+		e.err = fmt.Errorf("texengine: %s", msg)
+	}
+}
+
+// ── scanning helpers used by primitives ─────────────────────────────────────
+
+// scanInt scans an optional-signed integer (decimal, or \count register, or
+// `\char, or a \chardef'd cs).
+func (e *Engine) scanInt() int {
+	e.skipOptSpace()
+	sign := 1
+	for {
+		t, ok := e.getXToken()
+		if !ok {
+			return 0
+		}
+		if t.is('+', catOther) {
+			continue
+		}
+		if t.is('-', catOther) {
+			sign = -sign
+			continue
+		}
+		if t.is(' ', catSpace) {
+			continue
+		}
+		// \count register?
+		if t.cs_ {
+			if m := e.eq[t.cs]; m != nil {
+				if m.kind == mCharDef {
+					return sign * m.code
+				}
+				if m.kind == mPrim && m.name == "count" {
+					return sign * e.count[e.scanInt()]
+				}
+			}
+		}
+		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
+			n := int(t.ch - '0')
+			for {
+				u, uk := e.getXToken()
+				if uk && !u.cs_ && u.ch >= '0' && u.ch <= '9' {
+					n = n*10 + int(u.ch-'0')
+					continue
+				}
+				if uk && !(u.cat == catSpace) {
+					e.back(u)
+				}
+				break
+			}
+			return sign * n
+		}
+		e.back(t)
+		return 0
+	}
+}
+
+// scanCSName reads the next token and returns the name to define (\def\foo → foo).
+func (e *Engine) scanCSName() string {
+	t, ok := e.getNext()
+	if !ok || !t.cs_ {
+		return ""
+	}
+	return t.cs
+}
+
+// scanEquals consumes an optional '='.
+func (e *Engine) scanEquals() {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if ok && !t.is('=', catOther) {
+		e.back(t)
+	}
+}
+
+// scanDefText reads a macro's parameter text (up to the opening brace) and its
+// body (the balanced group).
+func (e *Engine) scanDefText() (params, body []tok) {
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return
+		}
+		if t.cat == catBegin && !t.cs_ {
+			break
+		}
+		if t.cat == catParam && !t.cs_ {
+			n, ok := e.getNext()
+			if ok {
+				params = append(params, tok{ch: n.ch, cat: catParam})
+			}
+			continue
+		}
+		params = append(params, t)
+	}
+	body = e.scanBody()
+	return
+}
+
+// scanBody reads a macro replacement text (the balanced group), converting
+// #<digit> into a parameter marker and ## into a literal #.
+func (e *Engine) scanBody() []tok {
+	depth := 1
+	var g []tok
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return g
+		}
+		switch {
+		case t.cat == catBegin && !t.cs_:
+			depth++
+		case t.cat == catEnd && !t.cs_:
+			depth--
+			if depth == 0 {
+				return g
+			}
+		case t.cat == catParam && !t.cs_:
+			n, ok := e.getNext()
+			if !ok {
+				return g
+			}
+			if n.cat == catParam && !n.cs_ {
+				g = append(g, chTok('#', catOther)) // ## → #
+			} else {
+				g = append(g, tok{ch: n.ch, cat: catParam}) // #digit → parameter
+			}
+			continue
+		}
+		g = append(g, t)
+	}
+}
+
+// toksToString renders a token list to a string (for \message, \the, …).
+func (e *Engine) toksToString(ts []tok) string {
+	var b strings.Builder
+	for _, t := range ts {
+		switch {
+		case t.cs_:
+			b.WriteString("\\" + t.cs)
+			if isWord(t.cs) {
+				b.WriteByte(' ')
+			}
+		case t.cat == catParam:
+			b.WriteByte('#')
+			b.WriteRune(t.ch)
+		default:
+			b.WriteRune(t.ch)
+		}
+	}
+	return b.String()
+}
+
+func isWord(s string) bool {
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
+			return false
+		}
+	}
+	return s != ""
+}

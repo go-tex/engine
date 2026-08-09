@@ -1,0 +1,43 @@
+name: ci
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  test:
+    name: test + conformance (${{ matrix.os }})
+    strategy:
+      matrix: { os: [ubuntu-latest, macos-latest, windows-latest] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - run: go vet ./...
+      - run: go build ./...
+      - name: test + conformance ratchet
+        shell: bash
+        run: |
+          go test -race -coverprofile=cover.out ./...
+          pct=$(go tool cover -func=cover.out | tail -1 | grep -oE '[0-9.]+' | tail -1)
+          echo "coverage ${pct}% (in-progress engine; primary gate is the conformance ratchet in TestConformance)"
+          awk "BEGIN{exit !(${pct} >= 80.0)}" || { echo "coverage ${pct}% below 80% floor"; exit 1; }
+  arch:
+    name: arch ${{ matrix.goarch }} (qemu)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goarch: [riscv64, loong64, ppc64le, s390x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - uses: docker/setup-qemu-action@v3
+      - run: GOARCH=${{ matrix.goarch }} go test -exec="qemu-${{ matrix.goarch }}-static" ./...
+  wasm:
+    name: wasm (${{ matrix.goos }}/wasm)
+    runs-on: ubuntu-latest
+    strategy: { matrix: { goos: [js, wasip1] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - run: GOOS=${{ matrix.goos }} GOARCH=wasm go build ./...
