@@ -38,12 +38,16 @@ const (
 	vbox
 )
 
-// boxNode is a packed hbox or vbox with its reference-point dimensions (sp).
+// boxNode is a packed hbox or vbox with its reference-point dimensions (sp) and
+// the glue-set that renders its glue to the target size.
 type boxNode struct {
 	kind                 boxKind
 	width, height, depth int
-	shift                int    // shift amount (\raise/\lower/\moveleft — future)
-	list                 []node // contents
+	shift                int     // shift amount (\raise/\lower/\moveleft — future)
+	list                 []node  // contents
+	glueSet              float64 // set ratio applied to matching-order glue
+	glueOrder            int     // order (0..3) the set applies to
+	glueSign             int     // 0 normal, 1 stretching, 2 shrinking
 }
 
 type packMode uint8
@@ -87,7 +91,9 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			}
 		}
 	}
-	return &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list}
+	b := &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list}
+	setGlue(b, b.width-natural, list)
+	return b
 }
 
 // vpack packs a vertical list into a vbox: the width is the widest item, and the
@@ -117,7 +123,9 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			d = c.depth
 		}
 	}
-	return &boxNode{kind: vbox, width: w, height: packWidth(x, mode, target), depth: d, list: list}
+	b := &boxNode{kind: vbox, width: w, height: packWidth(x, mode, target), depth: d, list: list}
+	setGlue(b, b.height-x, list)
+	return b
 }
 
 // packWidth resolves a natural size against the packing mode (to/spread/natural).
@@ -130,6 +138,65 @@ func packWidth(natural int, mode packMode, target int) int {
 	default:
 		return natural
 	}
+}
+
+// setGlue computes the glue-set that stretches or shrinks the list's glue to
+// absorb `excess` sp (target − natural), storing it on the box (TeX §657/§664).
+// The highest glue order present dominates; a positive excess stretches, a
+// negative one shrinks (finite shrink is capped at its total, glueSet ≤ 1).
+func setGlue(b *boxNode, excess int, list []node) {
+	if excess == 0 {
+		return
+	}
+	var stretch, shrink [4]int
+	for _, n := range list {
+		if g, ok := n.(glueNode); ok {
+			stretch[g.spec.stretchOrder] += g.spec.stretch
+			shrink[g.spec.shrinkOrder] += g.spec.shrink
+		}
+	}
+	if excess > 0 {
+		order := highestOrder(stretch)
+		if total := stretch[order]; total > 0 {
+			b.glueSign, b.glueOrder, b.glueSet = 1, order, float64(excess)/float64(total)
+		}
+		return
+	}
+	order := highestOrder(shrink)
+	if total := shrink[order]; total > 0 {
+		set := float64(-excess) / float64(total)
+		if order == 0 && set > 1 {
+			set = 1 // finite shrink cannot exceed its total
+		}
+		b.glueSign, b.glueOrder, b.glueSet = 2, order, set
+	}
+}
+
+// highestOrder returns the largest index with a non-zero total (0 if all zero).
+func highestOrder(totals [4]int) int {
+	for o := 3; o > 0; o-- {
+		if totals[o] != 0 {
+			return o
+		}
+	}
+	return 0
+}
+
+// setWidth returns a glue node's rendered width under a box's glue-set: its
+// natural width adjusted by the matching-order stretch or shrink (TeX §625).
+func (b *boxNode) setWidth(g glueSpec) int {
+	w := g.width
+	switch b.glueSign {
+	case 1:
+		if g.stretchOrder == b.glueOrder {
+			w += int(b.glueSet * float64(g.stretch))
+		}
+	case 2:
+		if g.shrinkOrder == b.glueOrder {
+			w -= int(b.glueSet * float64(g.shrink))
+		}
+	}
+	return w
 }
 
 // cloneBox deep-copies a box (for \copy, which leaves the register intact).
