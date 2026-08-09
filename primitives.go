@@ -587,6 +587,15 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "skip":
 				e.pushString(formatGlue(e.skip[e.scanInt()]))
 				return
+			case m.kind == mPrim && m.name == "wd":
+				e.pushString(formatPt(e.boxDim('w')))
+				return
+			case m.kind == mPrim && m.name == "ht":
+				e.pushString(formatPt(e.boxDim('h')))
+				return
+			case m.kind == mPrim && m.name == "dp":
+				e.pushString(formatPt(e.boxDim('d')))
+				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
 				return
@@ -858,6 +867,31 @@ func (e *Engine) loadMore() {
 	e.eq["empty"] = &meaning{kind: mMacro}
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
 	e.prim("par", func(e *Engine) {})
+	e.loadStomach()
+}
+
+// loadStomach registers the box-building primitives. When invoked standalone (in
+// the main vertical list, which this milestone does not yet assemble) box/glue/
+// kern producers scan and discard their argument to keep the parser in sync; the
+// real work happens when they are reached inside \setbox via scanBox/buildBoxList.
+func (e *Engine) loadStomach() {
+	e.prim("setbox", func(e *Engine) { e.doSetbox() })
+	e.prim("hbox", func(e *Engine) { e.makeBox(hbox) })
+	e.prim("vbox", func(e *Engine) { e.makeBox(vbox) })
+	e.prim("box", func(e *Engine) { e.setBox(e.scanInt(), nil) })
+	e.prim("copy", func(e *Engine) { e.scanInt() })
+	e.prim("kern", func(e *Engine) { e.scanDimen() })
+	e.prim("hskip", func(e *Engine) { e.scanGlue() })
+	e.prim("vskip", func(e *Engine) { e.scanGlue() })
+	for _, f := range []string{"hfil", "hfill", "hss", "vfil", "vfill", "vss"} {
+		e.prim(f, func(e *Engine) {})
+	}
+	e.prim("hrule", func(e *Engine) { e.scanRule(true) })
+	e.prim("vrule", func(e *Engine) { e.scanRule(false) })
+	e.prim("penalty", func(e *Engine) { e.scanInt() })
+	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
+	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
+	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
 }
 
 // doCase applies \uppercase/\lowercase to the next {group}: it re-cases letter

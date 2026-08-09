@@ -78,6 +78,7 @@ type Engine struct {
 	count   [256]int
 	dimen   [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
 	skip    [256]glueSpec // \skip (glue) registers
+	box     [256]*boxNode // \box registers (nil = void)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
@@ -573,27 +574,35 @@ func (e *Engine) mainLoop() {
 			}
 			continue
 		}
-		m := e.meaningOf(t)
-		if m == nil {
-			e.fail("Undefined control sequence \\" + t.cs)
+		if !e.execCS(t) {
 			return
 		}
-		if m.kind == mCountRef {
-			e.countRefAssign(m.code, false) // \n=<v>
-			continue
-		}
-		if m.kind == mDimenRef {
-			e.dimenRefAssign(m.code, false) // \d=<dimen>
-			continue
-		}
-		if m.kind == mSkipRef {
-			e.skipRefAssign(m.code, false) // \s=<glue>
-			continue
-		}
-		if m.kind == mPrim && !isExpandable(m.name) {
+	}
+}
+
+// execCS performs one control-sequence token (an assignment or non-expandable
+// primitive). It returns false on a fatal error (undefined cs). Expandable
+// tokens never reach here — getXToken has already expanded them. Both the main
+// loop and box building route control sequences through this one dispatch.
+func (e *Engine) execCS(t tok) bool {
+	m := e.meaningOf(t)
+	if m == nil {
+		e.fail("Undefined control sequence \\" + t.cs)
+		return false
+	}
+	switch m.kind {
+	case mCountRef:
+		e.countRefAssign(m.code, false) // \n=<v>
+	case mDimenRef:
+		e.dimenRefAssign(m.code, false) // \d=<dimen>
+	case mSkipRef:
+		e.skipRefAssign(m.code, false) // \s=<glue>
+	case mPrim:
+		if !isExpandable(m.name) {
 			m.prim(e)
 		}
 	}
+	return true
 }
 
 func (e *Engine) fail(msg string) {
@@ -719,6 +728,12 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.dimen[m.code], 0
 			case m.kind == mPrim && m.name == "dimen":
 				return e.dimen[e.scanInt()], 0
+			case m.kind == mPrim && m.name == "wd":
+				return e.boxDim('w'), 0
+			case m.kind == mPrim && m.name == "ht":
+				return e.boxDim('h'), 0
+			case m.kind == mPrim && m.name == "dp":
+				return e.boxDim('d'), 0
 			}
 		}
 		e.back(t)
