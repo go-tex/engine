@@ -75,6 +75,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("dimen", func(e *Engine) { e.doDimenAssign(false) })
 	e.prim("dimendef", func(e *Engine) { e.doDimendef() })
 	e.prim("newdimen", func(e *Engine) { e.doNewdimen() })
+	e.prim("skip", func(e *Engine) { e.doSkipAssign(false) })
+	e.prim("skipdef", func(e *Engine) { e.doSkipdef() })
+	e.prim("newskip", func(e *Engine) { e.doNewskip() })
 	e.prim("advance", func(e *Engine) { e.doAdvance(false) })
 	e.prim("multiply", func(e *Engine) { e.doMultiply(false) })
 	e.prim("catcode", func(e *Engine) { e.doCatcode(false) })
@@ -310,6 +313,60 @@ func (e *Engine) dimenIndex() (int, bool) {
 	return 0, false
 }
 
+// doSkipAssign handles \skip<n>=<glue>.
+func (e *Engine) doSkipAssign(global bool) {
+	i := e.scanInt()
+	e.scanEquals()
+	e.setSkip(i, e.scanGlue(), global)
+}
+
+// doSkipdef handles \skipdef\name=<n>.
+func (e *Engine) doSkipdef() {
+	name := e.scanCSName()
+	e.scanEquals()
+	n := e.scanInt()
+	if name != "" {
+		e.define(name, &meaning{kind: mSkipRef, code: n}, false)
+	}
+}
+
+// doNewskip handles \newskip\name (allocate the next free \skip register).
+func (e *Engine) doNewskip() {
+	name := e.scanCSName()
+	if name == "" || e.allocSkp >= 256 {
+		return
+	}
+	e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, false)
+	e.allocSkp++
+}
+
+// skipRefAssign handles an assignment to a \skipdef'd register: \name=<glue>.
+func (e *Engine) skipRefAssign(code int, global bool) {
+	e.scanEquals()
+	e.setSkip(code, e.scanGlue(), global)
+}
+
+// skipIndex reads a skip-register reference: the \skip primitive followed by a
+// number, or a \skipdef'd control sequence. ok=false if the next token is neither.
+func (e *Engine) skipIndex() (int, bool) {
+	t, ok := e.getXToken()
+	if !ok {
+		return 0, false
+	}
+	if t.cs_ {
+		if m := e.eq[t.cs]; m != nil {
+			if m.kind == mSkipRef {
+				return m.code, true
+			}
+			if m.kind == mPrim && m.name == "skip" {
+				return e.scanInt(), true
+			}
+		}
+	}
+	e.back(t)
+	return 0, false
+}
+
 func (e *Engine) doAdvance(global bool) {
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
@@ -323,6 +380,12 @@ func (e *Engine) doAdvance(global bool) {
 		e.skipByKeyword()
 		v := e.scanDimen()
 		e.setDimen(i, e.dimen[i]+v, global)
+		return
+	}
+	if i, ok := e.skipIndex(); ok {
+		e.skipByKeyword()
+		g := e.scanGlue()
+		e.setSkip(i, addGlue(e.skip[i], g), global)
 	}
 }
 
@@ -339,7 +402,65 @@ func (e *Engine) doMultiply(global bool) {
 		e.skipByKeyword()
 		v := e.scanInt() // \multiply scales a dimen by an integer
 		e.setDimen(i, e.dimen[i]*v, global)
+		return
 	}
+	if i, ok := e.skipIndex(); ok {
+		e.skipByKeyword()
+		v := e.scanInt()
+		e.setSkip(i, scaleGlue(e.skip[i], v), global)
+	}
+}
+
+// addGlue adds two glues, combining like-order stretch/shrink (a higher order
+// dominates a lower one, matching TeX's glue arithmetic).
+func addGlue(a, b glueSpec) glueSpec {
+	r := glueSpec{width: a.width + b.width}
+	r.stretch, r.stretchOrder = addInf(a.stretch, a.stretchOrder, b.stretch, b.stretchOrder)
+	r.shrink, r.shrinkOrder = addInf(a.shrink, a.shrinkOrder, b.shrink, b.shrinkOrder)
+	return r
+}
+
+func addInf(av, ao, bv, bo int) (int, int) {
+	switch {
+	case ao == bo:
+		return av + bv, ao
+	case ao > bo:
+		return av, ao
+	default:
+		return bv, bo
+	}
+}
+
+// scaleGlue multiplies a glue's width and (finite and infinite) stretch/shrink by
+// an integer.
+func scaleGlue(g glueSpec, n int) glueSpec {
+	return glueSpec{
+		width: g.width * n, stretch: g.stretch * n, shrink: g.shrink * n,
+		stretchOrder: g.stretchOrder, shrinkOrder: g.shrinkOrder,
+	}
+}
+
+// formatGlue renders a glue the way TeX's \the does (print_glue / print_spec):
+// the width in pt, then optional "plus"/"minus" components with fil orders.
+func formatGlue(g glueSpec) string {
+	var b strings.Builder
+	b.WriteString(formatPt(g.width)) // width always carries its "pt" unit
+	if g.stretch != 0 {
+		b.WriteString(" plus " + glueComponent(g.stretch, g.stretchOrder))
+	}
+	if g.shrink != 0 {
+		b.WriteString(" minus " + glueComponent(g.shrink, g.shrinkOrder))
+	}
+	return b.String()
+}
+
+// glueComponent renders one stretch/shrink component: finite in pt, or a fil order.
+func glueComponent(v, order int) string {
+	if order == 0 {
+		return formatPt(v)
+	}
+	s := strings.TrimSuffix(formatPt(v), "pt")
+	return s + "fil" + strings.Repeat("l", order-1)
 }
 
 // skipByKeyword consumes an optional "by".
@@ -462,6 +583,12 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mDimenRef:
 				e.pushString(formatPt(e.dimen[m.code]))
+				return
+			case m.kind == mPrim && m.name == "skip":
+				e.pushString(formatGlue(e.skip[e.scanInt()]))
+				return
+			case m.kind == mSkipRef:
+				e.pushString(formatGlue(e.skip[m.code]))
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))

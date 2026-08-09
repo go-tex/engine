@@ -76,7 +76,8 @@ type Engine struct {
 	catcode [256]cat
 	eq      map[string]*meaning
 	count   [256]int
-	dimen   [256]int // \dimen registers, in scaled points (1pt = 65536sp)
+	dimen   [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
+	skip    [256]glueSpec // \skip (glue) registers
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
@@ -87,17 +88,19 @@ type Engine struct {
 	noBase   bool // when true, getNext does not fall through to the base string
 	allocCnt int  // next free \count register handed out by \newcount
 	allocDim int  // next free \dimen register handed out by \newdimen
+	allocSkp int  // next free \skip register handed out by \newskip
 }
 
 type mkind uint8
 
 const (
-	mMacro    mkind = iota
+	mMacro mkind = iota
 	mPrim
 	mLetChar  // \let to a character token
 	mCharDef  // \chardef
 	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
 	mDimenRef // \dimendef / \newdimen — an alias for a \dimen register (code = index)
+	mSkipRef  // \skipdef / \newskip — an alias for a \skip register (code = index)
 	mUndef
 )
 
@@ -113,18 +116,19 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen
+	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen, 4=skip
 	name string
 	old  *meaning
 	idx  int
 	oldi int
 	oldc cat
 	oldd int
+	oldg glueSpec
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10} // allocators start at 10
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10} // allocators start at 10
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -299,6 +303,16 @@ func (e *Engine) setDimen(i, v int, global bool) {
 	e.dimen[i] = v
 }
 
+func (e *Engine) setSkip(i int, v glueSpec, global bool) {
+	if i < 0 || i >= 256 {
+		return
+	}
+	if !global && len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 4, idx: i, oldg: e.skip[i]})
+	}
+	e.skip[i] = v
+}
+
 func (e *Engine) setCat(r rune, c cat, global bool) {
 	if r >= 256 {
 		return
@@ -333,6 +347,8 @@ func (e *Engine) endGroup() {
 			e.catcode[rune(s.idx)] = s.oldc
 		case 3:
 			e.dimen[s.idx] = s.oldd
+		case 4:
+			e.skip[s.idx] = s.oldg
 		}
 	}
 }
@@ -570,6 +586,10 @@ func (e *Engine) mainLoop() {
 			e.dimenRefAssign(m.code, false) // \d=<dimen>
 			continue
 		}
+		if m.kind == mSkipRef {
+			e.skipRefAssign(m.code, false) // \s=<glue>
+			continue
+		}
 		if m.kind == mPrim && !isExpandable(m.name) {
 			m.prim(e)
 		}
@@ -652,16 +672,13 @@ var unitRatio = map[string][2]int{
 
 const unity = 65536 // scaled points per point
 
-// scanDimen scans an optional-signed dimension and returns scaled points. It
-// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
-// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
-func (e *Engine) scanDimen() int {
-	e.skipOptSpace()
+// scanSign consumes optional leading spaces and +/- signs, returning the net sign.
+func (e *Engine) scanSign() int {
 	sign := 1
 	for {
 		t, ok := e.getXToken()
 		if !ok {
-			return 0
+			return sign
 		}
 		if t.is('+', catOther) {
 			continue
@@ -673,27 +690,90 @@ func (e *Engine) scanDimen() int {
 		if t.is(' ', catSpace) {
 			continue
 		}
-		// \dimen register or \dimendef'd alias used as a value.
-		if t.cs_ {
-			if m := e.eq[t.cs]; m != nil {
-				switch {
-				case m.kind == mDimenRef:
-					return sign * e.dimen[m.code]
-				case m.kind == mPrim && m.name == "dimen":
-					return sign * e.dimen[e.scanInt()]
-				}
+		e.back(t)
+		return sign
+	}
+}
+
+// scanDimen scans an optional-signed dimension and returns scaled points. It
+// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
+// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
+func (e *Engine) scanDimen() int {
+	e.skipOptSpace()
+	sign := e.scanSign()
+	v, _ := e.scanDimenValue(false)
+	return sign * v
+}
+
+// scanDimenValue reads one (unsigned) dimension value, returning its scaled-point
+// size and glue order (0 = finite pt; 1/2/3 = fil/fill/filll when inf is true).
+func (e *Engine) scanDimenValue(inf bool) (int, int) {
+	t, ok := e.getXToken()
+	if !ok {
+		return 0, 0
+	}
+	if t.cs_ {
+		if m := e.eq[t.cs]; m != nil {
+			switch {
+			case m.kind == mDimenRef:
+				return e.dimen[m.code], 0
+			case m.kind == mPrim && m.name == "dimen":
+				return e.dimen[e.scanInt()], 0
 			}
-			e.back(t)
-			return 0
-		}
-		if (t.ch >= '0' && t.ch <= '9') || t.ch == '.' || t.ch == ',' {
-			e.back(t)
-			intPart, f := e.scanDecimalSP() // integer part, 16-bit fraction
-			return sign * e.applyUnit(intPart, f)
 		}
 		e.back(t)
+		return 0, 0
+	}
+	if (t.ch >= '0' && t.ch <= '9') || t.ch == '.' || t.ch == ',' {
+		e.back(t)
+		intPart, f := e.scanDecimalSP() // integer part, 16-bit fraction
+		if inf {
+			if order := e.scanFil(); order > 0 {
+				e.skipOneOptSpace()
+				return intPart*unity + f, order
+			}
+		}
+		return e.applyUnit(intPart, f), 0
+	}
+	e.back(t)
+	return 0, 0
+}
+
+// scanFil matches a "fil", "fill", or "filll" infinite-glue unit, returning its
+// order (1/2/3) or 0 if the upcoming tokens are not such a keyword (backed out).
+func (e *Engine) scanFil() int {
+	e.skipOptSpace()
+	var buf []tok
+	backOut := func() int {
+		for k := len(buf) - 1; k >= 0; k-- {
+			e.back(buf[k])
+		}
 		return 0
 	}
+	for _, w := range []rune{'f', 'i', 'l'} {
+		t, ok := e.getXToken()
+		if !ok {
+			return backOut()
+		}
+		buf = append(buf, t)
+		if t.cs_ || lower(t.ch) != w {
+			return backOut()
+		}
+	}
+	order := 1
+	for order < 3 {
+		t, ok := e.getXToken()
+		if ok && !t.cs_ && lower(t.ch) == 'l' {
+			order++
+			buf = append(buf, t)
+			continue
+		}
+		if ok {
+			e.back(t)
+		}
+		break
+	}
+	return order
 }
 
 // scanDecimalSP reads a non-negative decimal and returns its integer part and the
@@ -782,6 +862,72 @@ func (e *Engine) applyUnit(intPart, f int) int {
 func xnOverD(x, n, d int) (int, int) {
 	xn := int64(x) * int64(n)
 	return int(xn / int64(d)), int(xn % int64(d))
+}
+
+// glueSpec is a TeX glue quantity: a natural width plus stretch and shrink, each
+// with an order (0 = finite pt, 1/2/3 = fil/fill/filll). All sizes are in sp.
+type glueSpec struct {
+	width, stretch, shrink    int
+	stretchOrder, shrinkOrder int
+}
+
+// scanGlue scans a glue: <dimen> [plus <dimen or fil>] [minus <dimen or fil>], or
+// an internal glue register / \skipdef'd alias copied whole.
+func (e *Engine) scanGlue() glueSpec {
+	e.skipOptSpace()
+	// An internal glue quantity (\skip register or \skipdef alias) is copied whole.
+	if t, ok := e.getXToken(); ok {
+		if t.cs_ {
+			if m := e.eq[t.cs]; m != nil {
+				switch {
+				case m.kind == mSkipRef:
+					return e.skip[m.code]
+				case m.kind == mPrim && m.name == "skip":
+					return e.skip[e.scanInt()]
+				}
+			}
+		}
+		e.back(t)
+	}
+	sign := e.scanSign()
+	w, _ := e.scanDimenValue(false)
+	// A \skip register or \skipdef'd alias used directly as a glue value.
+	g := glueSpec{width: sign * w}
+	if e.scanKeyword("plus") {
+		s := e.scanSign()
+		v, o := e.scanDimenValue(true)
+		g.stretch, g.stretchOrder = s*v, o
+	}
+	if e.scanKeyword("minus") {
+		s := e.scanSign()
+		v, o := e.scanDimenValue(true)
+		g.shrink, g.shrinkOrder = s*v, o
+	}
+	return g
+}
+
+// scanKeyword tries to match the literal word (case-insensitively) after optional
+// spaces, consuming it on success and backing out every token on failure.
+func (e *Engine) scanKeyword(word string) bool {
+	e.skipOptSpace()
+	var buf []tok
+	for _, w := range word {
+		t, ok := e.getNext()
+		if !ok {
+			for k := len(buf) - 1; k >= 0; k-- {
+				e.back(buf[k])
+			}
+			return false
+		}
+		buf = append(buf, t)
+		if t.cs_ || lower(t.ch) != w {
+			for k := len(buf) - 1; k >= 0; k-- {
+				e.back(buf[k])
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // skipOneOptSpace consumes a single optional trailing space (TeX eats one space
