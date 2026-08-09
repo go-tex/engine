@@ -570,6 +570,7 @@ func (e *Engine) loadMore() {
 	// \empty and \space are ordinary macros, defined as in plain TeX.
 	e.eq["empty"] = &meaning{kind: mMacro}
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
+	e.prim("par", func(e *Engine) {})
 }
 
 // doCase applies \uppercase/\lowercase to the next {group}: it re-cases letter

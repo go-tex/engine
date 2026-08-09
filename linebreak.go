@@ -23,6 +23,8 @@ const (
 type Item struct {
 	Kind            ItemKind
 	Width           float64
+	Height, Depth   float64 // box only (glyph metrics)
+	R               rune    // box only (the glyph, 0 if none)
 	Stretch, Shrink float64 // glue only
 	Penalty         float64 // penalty only
 	Flagged         bool    // penalty only (e.g. a hyphen) — consecutive flags are penalised
@@ -30,6 +32,11 @@ type Item struct {
 
 // Box, Glue and Penalty are constructors.
 func Box(w float64) Item { return Item{Kind: KBox, Width: w} }
+
+// Glyph is a box carrying a rune and its height/depth (used by the typesetter).
+func Glyph(r rune, w, h, d float64) Item {
+	return Item{Kind: KBox, Width: w, Height: h, Depth: d, R: r}
+}
 func Glue(w, stretch, shrink float64) Item {
 	return Item{Kind: KGlue, Width: w, Stretch: stretch, Shrink: shrink}
 }

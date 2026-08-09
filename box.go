@@ -153,7 +153,11 @@ func BuildParagraph(items []Item, lineWidth, tolerance, linePenalty, baselineski
 			it := items[i]
 			switch it.Kind {
 			case KBox:
-				hl = append(hl, Char{W: it.Width, H: lineHeightFor(it), D: 0})
+				h := it.Height
+				if h == 0 {
+					h = 1 // placeholder until metrics are supplied
+				}
+				hl = append(hl, Char{R: it.R, W: it.Width, H: h, D: it.Depth})
 			case KGlue:
 				hl = append(hl, SetGlue{W: it.Width, Stretch: it.Stretch, Shrink: it.Shrink})
 			}
@@ -162,11 +166,4 @@ func BuildParagraph(items []Item, lineWidth, tolerance, linePenalty, baselineski
 		lineBoxes = append(lineBoxes, hpack(hl, &w))
 	}
 	return Paragraph{Box: vpack(lineBoxes, baselineskip), Lines: lines}, true
-}
-
-// lineHeightFor is a placeholder box height until real font metrics arrive
-// (fonts are the next stage); a box carries no height field yet, so use a unit.
-func lineHeightFor(it Item) float64 {
-	_ = it
-	return 1
 }
