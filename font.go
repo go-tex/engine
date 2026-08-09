@@ -55,6 +55,17 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	return w, -minY, maxY
 }
 
+// glyphPath returns the SVG path ("d") for a rune's glyph at the face's size,
+// baseline-relative in SVG (Y-down) coordinates. Empty if the font lacks it.
+func (o *OpenTypeFont) glyphPath(r rune) string {
+	gid, ok := o.f.GlyphIndex(r)
+	if !ok {
+		return ""
+	}
+	d, _ := o.fc.GlyphSVGPath(gid)
+	return d
+}
+
 // Space returns TeX-like interword glue derived from the space advance.
 func (o *OpenTypeFont) Space() (float64, float64, float64) {
 	w := float64(o.fc.Advance(' '))
