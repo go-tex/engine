@@ -81,18 +81,20 @@ type Engine struct {
 	save   []saveItem
 	groups []int // save-stack length at each group's start
 
-	out    strings.Builder // \message output
-	err    error
-	noBase bool // when true, getNext does not fall through to the base string
+	out      strings.Builder // \message output
+	err      error
+	noBase   bool // when true, getNext does not fall through to the base string
+	allocCnt int  // next free \count register handed out by \newcount
 }
 
 type mkind uint8
 
 const (
-	mMacro mkind = iota
+	mMacro    mkind = iota
 	mPrim
-	mLetChar // \let to a character token
-	mCharDef // \chardef
+	mLetChar  // \let to a character token
+	mCharDef  // \chardef
+	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
 	mUndef
 )
 
@@ -118,7 +120,7 @@ type saveItem struct {
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}}
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10} // \newcount hands out 10,11,…
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -544,6 +546,10 @@ func (e *Engine) mainLoop() {
 			e.fail("Undefined control sequence \\" + t.cs)
 			return
 		}
+		if m.kind == mCountRef {
+			e.countRefAssign(m.code, false) // \n=<v>
+			continue
+		}
 		if m.kind == mPrim && !isExpandable(m.name) {
 			m.prim(e)
 		}
@@ -583,6 +589,9 @@ func (e *Engine) scanInt() int {
 			if m := e.eq[t.cs]; m != nil {
 				if m.kind == mCharDef {
 					return sign * m.code
+				}
+				if m.kind == mCountRef {
+					return sign * e.count[m.code]
 				}
 				if m.kind == mPrim && m.name == "count" {
 					return sign * e.count[e.scanInt()]

@@ -37,6 +37,8 @@ func (e *Engine) loadPrimitives() {
 	e.prim("let", func(e *Engine) { e.doLet(false) })
 	e.prim("global", func(e *Engine) { e.doGlobal() })
 	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
+	e.prim("countdef", func(e *Engine) { e.doCountdef() })
+	e.prim("newcount", func(e *Engine) { e.doNewcount() })
 
 	// registers & arithmetic
 	e.prim("count", func(e *Engine) { e.doCountAssign(false) })
@@ -154,6 +156,61 @@ func (e *Engine) doChardef(global bool) {
 	}
 }
 
+// doCountdef handles \countdef\name=<n>: \name becomes an alias for \count<n>.
+func (e *Engine) doCountdef() {
+	name := e.scanCSName()
+	e.scanEquals()
+	n := e.scanInt()
+	if name != "" {
+		e.define(name, &meaning{kind: mCountRef, code: n}, false)
+	}
+}
+
+// doNewcount handles \newcount\name: allocate the next free \count register and
+// \countdef \name to it (a primitive stand-in for plain.tex's allocator).
+func (e *Engine) doNewcount() {
+	name := e.scanCSName()
+	if name == "" || e.allocCnt >= 256 {
+		return
+	}
+	e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
+	e.allocCnt++
+}
+
+// countRefAssign handles an assignment to a \countdef'd register: \name=<v>.
+func (e *Engine) countRefAssign(code int, global bool) {
+	e.scanEquals()
+	v := e.scanInt()
+	if code >= 0 && code < 256 {
+		e.setCount(code, v, global)
+	}
+}
+
+// countIndex reads a count-register reference for \advance/\multiply/\the: either
+// the \count primitive followed by a number, or a \countdef'd control sequence.
+func (e *Engine) countIndex() (int, bool) {
+	t, ok := e.getXToken()
+	if !ok || !t.cs_ {
+		if ok {
+			e.back(t)
+		}
+		return 0, false
+	}
+	m := e.eq[t.cs]
+	if m == nil {
+		e.back(t)
+		return 0, false
+	}
+	if m.kind == mCountRef {
+		return m.code, true
+	}
+	if m.kind == mPrim && m.name == "count" {
+		return e.scanInt(), true
+	}
+	e.back(t)
+	return 0, false
+}
+
 // ── registers ───────────────────────────────────────────────────────────────
 
 func (e *Engine) doCountAssign(global bool) {
@@ -166,11 +223,10 @@ func (e *Engine) doCountAssign(global bool) {
 }
 
 func (e *Engine) doAdvance(global bool) {
-	t, ok := e.getXToken()
-	if !ok || !t.cs_ || e.eq[t.cs] == nil || e.eq[t.cs].name != "count" {
+	i, ok := e.countIndex()
+	if !ok {
 		return
 	}
-	i := e.scanInt()
 	e.skipByKeyword()
 	v := e.scanInt()
 	if i >= 0 && i < 256 {
@@ -179,11 +235,10 @@ func (e *Engine) doAdvance(global bool) {
 }
 
 func (e *Engine) doMultiply(global bool) {
-	t, ok := e.getXToken()
-	if !ok || !t.cs_ || e.eq[t.cs] == nil || e.eq[t.cs].name != "count" {
+	i, ok := e.countIndex()
+	if !ok {
 		return
 	}
-	i := e.scanInt()
 	e.skipByKeyword()
 	v := e.scanInt()
 	if i >= 0 && i < 256 {
@@ -302,6 +357,9 @@ func (e *Engine) doThe() {
 			switch {
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
+				return
+			case m.kind == mCountRef:
+				e.pushString(strconv.Itoa(e.count[m.code]))
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))
