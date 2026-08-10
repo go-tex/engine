@@ -23,7 +23,7 @@ func (e *Engine) endParagraph() {
 		return
 	}
 	e.inPar = false
-	list := e.parList
+	list := e.hyphenateList(e.parList) // insert discretionary hyphens (if patterns loaded)
 	e.parList = nil
 
 	// \parfillskip (0pt plus 1fil) fills the last line; a forced break ends it.
@@ -34,19 +34,44 @@ func (e *Engine) endParagraph() {
 	items := toItems(list)
 	lineWidth := spToPt(e.hsize)
 	lines, ok := KnuthPlass(items, lineWidth, 200, 10)
-	if !ok {
-		// Emergency pass: accept even very-bad (underfull) lines so the paragraph
-		// still wraps into multiple lines instead of collapsing onto one, as TeX
-		// does when its \tolerance pass fails.
-		lines, ok = KnuthPlass(items, lineWidth, maxBadRatio, 10)
+	// The first pass can "succeed" with a single over/underfull line via the forced
+	// final break. When it leaves a bad line, run the emergency pass at a large
+	// tolerance so discretionary (hyphen) and no-stretch breaks become feasible —
+	// TeX's second pass. Adopt it only if it removes the bad line.
+	if !ok || hasBadLine(lines) {
+		if l2, ok2 := KnuthPlass(items, lineWidth, maxBadRatio, 10); ok2 {
+			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
+				lines, ok = l2, true
+			}
+		}
 	}
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
 	}
 	for _, ln := range lines {
 		seg := trimLeadingGlue(list[ln.Start:ln.End])
+		// If the line was broken at a discretionary, append a hyphen. Copy the
+		// segment first: it aliases list's backing array, so appending in place
+		// would overwrite the next line's first node.
+		if ln.End < len(list) {
+			if _, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil {
+				w, h, dd := e.curFont.charDimsSP('-')
+				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd})
+			}
+		}
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
 	}
+}
+
+// hasBadLine reports whether any line is overfull or badly underfull (a ratio
+// well outside the normal [-1, small] range — the capped/infinite bad values).
+func hasBadLine(lines []Line) bool {
+	for _, ln := range lines {
+		if ln.Ratio < -1 || ln.Ratio > 100 {
+			return true
+		}
+	}
+	return false
 }
 
 // appendToPage adds a box to the main vertical list, inserting interline glue so
@@ -89,6 +114,9 @@ func toItems(list []node) []Item {
 			items[i] = Glue(spToPt(c.spec.width), st, sh)
 		case penaltyNode:
 			items[i] = Penalty(0, float64(c.penalty), false)
+		case discNode:
+			items[i] = Penalty(0, float64(c.penalty), true) // a flagged (hyphen) break
+
 		case ruleNode:
 			items[i] = Box(spToPt(c.width))
 		case *boxNode:
@@ -98,12 +126,15 @@ func toItems(list []node) []Item {
 	return items
 }
 
-// trimLeadingGlue drops a single leading glue node (TeX discards glue at a line's
-// left edge, since the break has already absorbed it).
+// trimLeadingGlue drops a leading glue or discretionary node (TeX discards glue
+// at a line's left edge, and a discretionary carried to a line start is not set).
 func trimLeadingGlue(seg []node) []node {
-	if len(seg) > 0 {
-		if _, isGlue := seg[0].(glueNode); isGlue {
-			return seg[1:]
+	for len(seg) > 0 {
+		switch seg[0].(type) {
+		case glueNode, discNode:
+			seg = seg[1:]
+		default:
+			return seg
 		}
 	}
 	return seg

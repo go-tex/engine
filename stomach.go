@@ -28,12 +28,14 @@ type charNode struct { // a set character from the current font (metrics in sp)
 	ch                   rune
 	width, height, depth int
 }
+type discNode struct{ penalty int } // a discretionary hyphen point (Liang)
 
 func (kernNode) isNode()    {}
 func (glueNode) isNode()    {}
 func (penaltyNode) isNode() {}
 func (ruleNode) isNode()    {}
 func (charNode) isNode()    {}
+func (discNode) isNode()    {}
 func (*boxNode) isNode()    {}
 
 type boxKind uint8

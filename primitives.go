@@ -880,6 +880,7 @@ func (e *Engine) loadMore() {
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
 	e.prim("par", func(e *Engine) { e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
+	e.prim("patterns", func(e *Engine) { e.doPatterns() })
 	e.prim("cr", func(e *Engine) {})   // recognised structurally by \halign
 	e.prim("crcr", func(e *Engine) {}) //  "
 	e.prim("font", func(e *Engine) { e.doFont() })

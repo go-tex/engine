@@ -93,6 +93,9 @@ type Engine struct {
 	parindent    int    // width of the indentation box at a paragraph's start (sp)
 	prevDepth    int    // \prevdepth for interline glue (ignoreDepth = suppress)
 
+	hyph          *hyphenator // loaded hyphenation patterns (nil = no hyphenation)
+	hyphenpenalty int         // penalty at a discretionary hyphen
+
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
 	groups []int // save-stack length at each group's start
@@ -150,6 +153,7 @@ func New() *Engine {
 	e.baselineskip = 12 * unity                                                       // 12pt
 	e.lineskip = unity                                                                // 1pt
 	e.parindent = 20 * unity                                                          // plain TeX \parindent = 20pt
+	e.hyphenpenalty = 50                                                              // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
 	for i := range e.catcode {
 		e.catcode[i] = catOther
