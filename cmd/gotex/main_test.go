@@ -47,3 +47,23 @@ func TestRunUsageError(t *testing.T) {
 		t.Errorf("no input should exit 2, got %d", code)
 	}
 }
+
+func TestRunOutdirLatexmkStyle(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "main.tex")
+	os.WriteFile(src, []byte(`\hsize=300pt A latexmk-style compile.\par`), 0644)
+	build := filepath.Join(dir, ".build")
+	os.Mkdir(build, 0755)
+	// mirror the loom contract: gotex -pdf -outdir=<build> <main.tex>
+	if code := run([]string{"-pdf", "-outdir", build, src}, new(bytes.Buffer), new(bytes.Buffer)); code != 0 {
+		t.Fatalf("run exit != 0")
+	}
+	pdf := filepath.Join(build, "main.pdf")
+	b, err := os.ReadFile(pdf)
+	if err != nil {
+		t.Fatalf("expected %s: %v", pdf, err)
+	}
+	if len(b) < 500 || string(b[:5]) != "%PDF-" {
+		t.Fatalf("bad PDF at outdir")
+	}
+}

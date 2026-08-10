@@ -25,7 +25,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("gotex", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	out := fs.String("o", "", "output file (default: input with .pdf/.svg)")
+	outdir := fs.String("outdir", "", "output directory (latexmk-style; PDF named after the input)")
 	format := fs.String("format", "pdf", "output format: pdf or svg")
+	fs.Bool("pdf", false, "produce PDF (accepted for latexmk compatibility; PDF is the default)")
 	fontPath := fs.String("font", "", "roman text font file (.ttf/.otf); default is built in")
 	boldPath := fs.String("boldfont", "", "bold font file, bound to \\bf (so \\textbf bolds)")
 	italicPath := fs.String("italicfont", "", "italic font file, bound to \\it (so \\emph slants)")
@@ -77,6 +79,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	outName := *out
 	if outName == "" {
 		outName = replaceExt(filepath.Base(input), "."+*format)
+		if *outdir != "" {
+			outName = filepath.Join(*outdir, outName)
+		}
 	}
 	pages, err := writeOutput(src, outName, *format, opt)
 	if err != nil {
