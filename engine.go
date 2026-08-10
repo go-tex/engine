@@ -627,6 +627,16 @@ func (e *Engine) startChar(ch rune) {
 	e.parList = e.appendChar(e.parList, ch)
 }
 
+// charNodeFor builds a measured character node for the current font, or reports
+// ok=false when there is no font to measure with.
+func (e *Engine) charNodeFor(ch rune) (charNode, bool) {
+	if e.curFont == nil {
+		return charNode{}, false
+	}
+	w, h, d := e.curFont.charDimsSP(ch)
+	return charNode{ch: ch, width: w, height: h, depth: d}, true
+}
+
 // appendChar appends a measured character to a horizontal list, inserting the
 // font's inter-character kern before it when the previous node is a character
 // (TeX's font kern program). It is shared by paragraph building and box building.

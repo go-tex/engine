@@ -404,6 +404,12 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.scanRule(false), true
 	case "penalty":
 		return penaltyNode{penalty: e.scanInt()}, true
+	case "char":
+		n := e.scanInt()
+		if c, ok := e.charNodeFor(rune(n)); ok {
+			return c, true
+		}
+		return nil, true
 	case "hbox":
 		return e.makeBox(hbox), true
 	case "vbox":

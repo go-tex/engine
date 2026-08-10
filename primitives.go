@@ -881,8 +881,9 @@ func (e *Engine) loadMore() {
 	e.prim("par", func(e *Engine) { e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
-	e.prim("cr", func(e *Engine) {})   // recognised structurally by \halign
-	e.prim("crcr", func(e *Engine) {}) //  "
+	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
+	e.prim("cr", func(e *Engine) {})                                   // recognised structurally by \halign
+	e.prim("crcr", func(e *Engine) {})                                 //  "
 	e.prim("font", func(e *Engine) { e.doFont() })
 	e.prim("input", func(e *Engine) { e.doInput() })
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
