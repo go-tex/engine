@@ -41,6 +41,16 @@ const Plain = `
 \def\negthinspace{\hskip-.16667em}
 \def\raggedright{\rightskip=0pt plus 1fil\relax}
 \def\justified{\rightskip=0pt\relax}
+\def\vfill{\vskip0pt plus 1fil\relax}
+\def\eject{\par\penalty-10000 }
+\def\supereject{\par\penalty-10000 }
+\def\break{\penalty-10000 }
+\def\nobreak{\penalty10000 }
+\def\goodbreak{\par\penalty-500 }
+\def\smallbreak{\par\penalty-100 \smallskip}
+\def\medbreak{\par\penalty-100 \medskip}
+\def\bigbreak{\par\penalty-100 \bigskip}
+\def\bye{\par\vfill\penalty-10000 }
 `
 
 // LoadPlain defines the Plain structural macros in the engine.
