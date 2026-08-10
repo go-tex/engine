@@ -60,6 +60,49 @@ func (e *Engine) Pages() []*boxNode {
 	return pages
 }
 
+// splitVList splits a vertical list at the first legal break that keeps the
+// height within vsize, returning the taken part and the remainder (with a leading
+// glue/kern discarded, as at a page break).
+func splitVList(list []node, vsize int) ([]node, []node) {
+	h := 0
+	for i, n := range list {
+		c := vContribution(n)
+		_, isGlue := n.(glueNode)
+		_, isKern := n.(kernNode)
+		if h+c > vsize && h > 0 {
+			if isGlue || isKern {
+				return list[:i], list[i+1:]
+			}
+			return list[:i], list[i:]
+		}
+		h += c
+	}
+	return list, nil
+}
+
+// doVsplit handles \vsplit<n> to <dimen>: split box register n's vbox to the
+// given height, returning the top part (packed to that height) and leaving the
+// remainder in register n. Returns nil if the register is void or the syntax is
+// malformed.
+func (e *Engine) doVsplit() *boxNode {
+	n := e.scanInt()
+	if !e.scanKeyword("to") {
+		return nil
+	}
+	h := e.scanDimen()
+	src := e.getBox(n)
+	if src == nil {
+		return nil
+	}
+	top, rest := splitVList(src.list, h)
+	if len(rest) == 0 {
+		e.setBox(n, nil)
+	} else {
+		e.setBox(n, vpackSP(rest, packNatural, 0))
+	}
+	return vpackSP(top, packTo, h)
+}
+
 // RenderPages renders each page of the main vertical list to its own SVG string.
 func (e *Engine) RenderPages(margin float64) []string {
 	pages := e.Pages()

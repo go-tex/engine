@@ -270,6 +270,8 @@ func (e *Engine) scanBox() *boxNode {
 				return e.makeBox(vbox)
 			case "vtop":
 				return e.makeVtop()
+			case "vsplit":
+				return e.doVsplit()
 			case "box":
 				n := e.scanInt()
 				b := e.getBox(n)

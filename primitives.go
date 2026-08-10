@@ -915,6 +915,7 @@ func (e *Engine) loadStomach() {
 	e.prim("hbox", func(e *Engine) { e.place(e.makeBox(hbox)) })
 	e.prim("vbox", func(e *Engine) { e.place(e.makeBox(vbox)) })
 	e.prim("vtop", func(e *Engine) { e.place(e.makeVtop()) })
+	e.prim("vsplit", func(e *Engine) { e.place(e.doVsplit()) })
 	e.prim("box", func(e *Engine) {
 		i := e.scanInt()
 		e.place(e.getBox(i))
