@@ -82,6 +82,7 @@ const MiniLaTeXKernel = `
 \def\newpage{\par\penalty-10000 }
 \def\clearpage{\par\penalty-10000 }
 \def\hline{}
+\def\cline#1{}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

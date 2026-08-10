@@ -77,6 +77,54 @@ func TestTabularParColumn(t *testing.T) {
 	}
 }
 
+// \cline{from-to} draws a partial rule: a left kern up to the start of column
+// `from`, then a rule spanning columns from..to (each with its 2·\tabcolsep). With
+// columns [20,30,40]pt and no vertical rules, \cline{2-3} kerns past column 1
+// (2·6 + 20 = 32pt) and spans columns 2 and 3 (2·(2·6) + 30 + 40 = 94pt).
+func TestClineGeometry(t *testing.T) {
+	colw := []int{20 * unity, 30 * unity, 40 * unity}
+	noRule := func(int) bool { return false }
+	n := clineRule(2, 3, 3, colw, noRule)
+	box, ok := n.(*boxNode)
+	if !ok {
+		t.Fatalf("clineRule returned %T, want *boxNode", n)
+	}
+	kern, ok := box.list[0].(kernNode)
+	if !ok || kern.width != 32*unity {
+		t.Errorf("cline left kern = %v, want 32pt", box.list[0])
+	}
+	rule, ok := box.list[1].(ruleNode)
+	if !ok || rule.width != 94*unity {
+		t.Errorf("cline rule width = %v, want 94pt", box.list[1])
+	}
+	// A malformed / out-of-range range renders nothing.
+	if r := clineRule(0, 0, 3, colw, noRule); r != nil {
+		t.Errorf("empty cline range should render nil, got %T", r)
+	}
+	if r := clineRule(3, 2, 3, colw, noRule); r != nil {
+		t.Errorf("reversed cline range should render nil, got %T", r)
+	}
+}
+
+// parseCline turns \cline's "from-to" text into 1-based column indices.
+func TestParseCline(t *testing.T) {
+	cases := []struct {
+		in       string
+		from, to int
+	}{
+		{"2-3", 2, 3},
+		{"1-1", 1, 1},
+		{" 2 - 4 ", 2, 4},
+		{"nonsense", 0, 0},
+		{"5", 0, 0},
+	}
+	for _, c := range cases {
+		if f, to := parseCline(c.in); f != c.from || to != c.to {
+			t.Errorf("parseCline(%q) = (%d,%d), want (%d,%d)", c.in, f, to, c.from, c.to)
+		}
+	}
+}
+
 // Right alignment puts the fil before the content so the cell is flush right.
 func TestTabularRightAlign(t *testing.T) {
 	e := New()

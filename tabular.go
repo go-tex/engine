@@ -13,15 +13,22 @@ package engine
 
 const tabColSep = 6 * unity // \tabcolsep default (added on each side of a column)
 
-// tabItem is one item of a tabular body: a horizontal rule (\hline) or a data row.
+// tabItem is one item of a tabular body: a full rule (\hline), a partial rule
+// (\cline{from-to}, 1-based inclusive column range), or a data row.
 type tabItem struct {
 	hline bool
+	cline bool
+	cfrom int
+	cto   int
 	cells [][]tok
 }
 
 // tabBuilt is a tabItem with its cells turned into aligned node lists.
 type tabBuilt struct {
 	hline bool
+	cline bool
+	cfrom int
+	cto   int
 	cells [][]node
 }
 
@@ -35,6 +42,10 @@ func (e *Engine) doTabular() {
 	for _, it := range items {
 		if it.hline {
 			built = append(built, tabBuilt{hline: true})
+			continue
+		}
+		if it.cline {
+			built = append(built, tabBuilt{cline: true, cfrom: it.cfrom, cto: it.cto})
 			continue
 		}
 		var cells [][]node
@@ -187,6 +198,10 @@ func (e *Engine) collectTabularBody() []tabItem {
 		case depth == 0 && t.cs_ && t.cs == "hline":
 			endRow() // flush any pending row, then record the rule
 			items = append(items, tabItem{hline: true})
+		case depth == 0 && t.cs_ && t.cs == "cline":
+			endRow()
+			from, to := parseCline(e.readBraceName())
+			items = append(items, tabItem{cline: true, cfrom: from, cto: to})
 		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
 			endRow()
 		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
@@ -302,16 +317,89 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 		}
 	}
 
-	// Second pass: emit rows and \hline rules (spanning the full table width).
+	// Second pass: emit rows, \hline rules (full width) and \cline partial rules.
 	var vlist []node
 	for i, b := range built {
-		if b.hline {
+		switch {
+		case b.hline:
 			vlist = append(vlist, ruleNode{width: maxW, height: defaultRule})
-		} else {
+		case b.cline:
+			if r := clineRule(b.cfrom, b.cto, ncol, colw, hasRule); r != nil {
+				vlist = append(vlist, r)
+			}
+		default:
 			vlist = append(vlist, rowBoxes[i])
 		}
 	}
 	return vpackSP(vlist, packNatural, 0)
+}
+
+// clineRule builds the partial horizontal rule for \cline{from-to} (1-based,
+// inclusive): a left kern to the start of column `from` followed by a rule that
+// spans columns from..to (their \tabcolsep padding and any interior | rules).
+func clineRule(from, to, ncol int, colw []int, hasRule func(int) bool) node {
+	if from < 1 || to < from || from > ncol {
+		return nil
+	}
+	ci, cj := from-1, to-1
+	if cj >= ncol {
+		cj = ncol - 1
+	}
+	left := 0
+	for j := 0; j <= ci; j++ {
+		if hasRule(j) {
+			left += defaultRule
+		}
+	}
+	for j := 0; j < ci; j++ {
+		left += 2*tabColSep + colw[j]
+	}
+	w := 0
+	for j := ci; j <= cj; j++ {
+		w += 2*tabColSep + colw[j]
+	}
+	for g := ci + 1; g <= cj; g++ {
+		if hasRule(g) {
+			w += defaultRule
+		}
+	}
+	return hpackSP([]node{kernNode{width: left}, ruleNode{width: w, height: defaultRule}}, packNatural, 0)
+}
+
+// parseCline parses \cline's "from-to" argument (e.g. "2-3") into 1-based column
+// indices. A malformed argument yields (0, 0), which clineRule renders as nothing.
+func parseCline(s string) (int, int) {
+	dash := -1
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			dash = i
+			break
+		}
+	}
+	if dash < 0 {
+		return 0, 0
+	}
+	return atoiTrim(s[:dash]), atoiTrim(s[dash+1:])
+}
+
+// atoiTrim parses a run of ASCII digits (ignoring surrounding spaces) into an int.
+func atoiTrim(s string) int {
+	n, seen := 0, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+			seen = true
+		} else if c == ' ' && !seen {
+			continue
+		} else {
+			break
+		}
+	}
+	if !seen {
+		return 0
+	}
+	return n
 }
 
 // trimSpaceToks drops leading and trailing space tokens from a cell (LaTeX
