@@ -26,7 +26,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	out := fs.String("o", "", "output file (default: input with .pdf/.svg)")
 	format := fs.String("format", "pdf", "output format: pdf or svg")
-	fontPath := fs.String("font", "", "text font file (.ttf/.otf); default is built in")
+	fontPath := fs.String("font", "", "roman text font file (.ttf/.otf); default is built in")
+	boldPath := fs.String("boldfont", "", "bold font file, bound to \\bf (so \\textbf bolds)")
+	italicPath := fs.String("italicfont", "", "italic font file, bound to \\it (so \\emph slants)")
 	size := fs.Int("size", 10, "default text size in points")
 	margin := fs.Float64("margin", 72, "page margin in points")
 	if err := fs.Parse(args); err != nil {
@@ -43,14 +45,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	var fontBytes []byte
-	if *fontPath != "" {
-		b, err := os.ReadFile(*fontPath)
-		if err != nil {
-			fmt.Fprintf(stderr, "gotex: %v\n", err)
-			return 1
-		}
-		fontBytes = b
+	fontBytes, err := readIf(*fontPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
+		return 1
+	}
+	boldBytes, err := readIf(*boldPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
+		return 1
+	}
+	italicBytes, err := readIf(*italicPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
+		return 1
 	}
 	src, err := os.ReadFile(input)
 	if err != nil {
@@ -64,7 +72,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	opt := engine.Options{Font: fontBytes, Size: *size, Margin: *margin}
+	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, Size: *size, Margin: *margin}
 
 	outName := *out
 	if outName == "" {
@@ -104,6 +112,14 @@ func writeOutput(src []byte, name, format string, opt engine.Options) (int, erro
 	}
 	defer f.Close()
 	return engine.CompileToPDF(src, opt, f)
+}
+
+// readIf reads a file, returning nil bytes (no error) when the path is empty.
+func readIf(path string) ([]byte, error) {
+	if path == "" {
+		return nil, nil
+	}
+	return os.ReadFile(path)
 }
 
 func replaceExt(name, ext string) string {

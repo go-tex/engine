@@ -19,11 +19,12 @@ import (
 // Options configures a compile. The zero value is valid: a built-in font at 10pt
 // with a 72pt (1 inch) margin.
 type Options struct {
-	Font    []byte  // text font (.ttf/.otf); nil ⇒ the built-in default
-	Size    int     // font size in points (0 ⇒ 10)
-	Margin  float64 // page margin in points (0 ⇒ 72)
-	Plain   bool    // load the Plain structural macros (default true via NewDocument)
-	NoPlain bool    // set to omit the Plain macros even in NewDocument
+	Font       []byte  // roman text font (.ttf/.otf); nil ⇒ the built-in default
+	BoldFont   []byte  // optional bold face, bound to \bf (so \textbf really bolds)
+	ItalicFont []byte  // optional italic face, bound to \it (so \textit/\emph slant)
+	Size       int     // font size in points (0 ⇒ 10)
+	Margin     float64 // page margin in points (0 ⇒ 72)
+	NoPlain    bool    // set to omit the Plain macros
 }
 
 func (o Options) size() int {
@@ -41,36 +42,68 @@ func (o Options) margin() float64 {
 }
 
 // NewDocument builds an engine configured from opts: the Plain macros loaded
-// (unless NoPlain) and the current text font set. It is the starting point for
+// (unless NoPlain) and the text font family set. It is the starting point for
 // programmatic use when callers want to Run source incrementally before
 // rendering.
 func NewDocument(opt Options) (*Engine, error) {
+	return buildEngine(opt, false)
+}
+
+// buildEngine builds an engine with macros and the font family. Fonts are bound
+// after the macro layers so \rm/\bf/\it win over the LaTeX kernel's no-op stubs.
+func buildEngine(opt Options, latex bool) (*Engine, error) {
 	e := New()
 	if !opt.NoPlain {
 		if err := e.LoadPlain(); err != nil {
 			return nil, fmt.Errorf("texengine: loading macros: %w", err)
 		}
 	}
+	if latex {
+		if err := e.LoadLaTeX(); err != nil {
+			return nil, fmt.Errorf("texengine: loading LaTeX: %w", err)
+		}
+	}
 	fontBytes := opt.Font
 	if fontBytes == nil {
 		fontBytes = texmath.DefaultFont()
 	}
-	f, err := NewOpenTypeFont(fontBytes, opt.size())
+	reg, err := NewOpenTypeFont(fontBytes, opt.size())
 	if err != nil {
 		return nil, fmt.Errorf("texengine: font: %w", err)
 	}
-	e.SetFont(f)
+	e.SetFont(reg)
+	e.bindFont("rm", reg)
+	if err := e.bindOptionalFont("bf", opt.BoldFont, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont("it", opt.ItalicFont, opt.size()); err != nil {
+		return nil, err
+	}
 	return e, nil
+}
+
+// bindFont defines a control sequence that selects the given font.
+func (e *Engine) bindFont(name string, f fontFace) {
+	e.eq[name] = &meaning{kind: mFont, font: f, name: name}
+}
+
+func (e *Engine) bindOptionalFont(name string, data []byte, size int) error {
+	if data == nil {
+		return nil
+	}
+	f, err := NewOpenTypeFont(data, size)
+	if err != nil {
+		return fmt.Errorf("texengine: %s font: %w", name, err)
+	}
+	e.bindFont(name, f)
+	return nil
 }
 
 // CompileToPDF processes TeX source and writes a PDF to w, returning the page
 // count. A document's own \font/\hsize/… override the option defaults.
 func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
-	e, err := NewDocument(opt)
+	e, err := buildEngine(opt, isLaTeX(src))
 	if err != nil {
-		return 0, err
-	}
-	if err := loadLaTeXIfNeeded(e, src); err != nil {
 		return 0, err
 	}
 	if _, err := e.Run(string(src)); err != nil {
@@ -85,11 +118,8 @@ func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
 // CompileToSVGPages processes TeX source and returns one SVG string per page —
 // the form an editor preview pane consumes directly.
 func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
-	e, err := NewDocument(opt)
+	e, err := buildEngine(opt, isLaTeX(src))
 	if err != nil {
-		return nil, err
-	}
-	if err := loadLaTeXIfNeeded(e, src); err != nil {
 		return nil, err
 	}
 	if _, err := e.Run(string(src)); err != nil {
@@ -98,11 +128,7 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 	return e.RenderPages(opt.margin()), nil
 }
 
-// loadLaTeXIfNeeded loads the minimal LaTeX kernel when the source looks like a
-// LaTeX document (\documentclass present).
-func loadLaTeXIfNeeded(e *Engine, src []byte) error {
-	if bytes.Contains(src, []byte(`\documentclass`)) {
-		return e.LoadLaTeX()
-	}
-	return nil
+// isLaTeX reports whether the source looks like a LaTeX document.
+func isLaTeX(src []byte) bool {
+	return bytes.Contains(src, []byte(`\documentclass`))
 }
