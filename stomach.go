@@ -252,6 +252,8 @@ func (e *Engine) scanBox() *boxNode {
 				return e.makeBox(hbox)
 			case "vbox":
 				return e.makeBox(vbox)
+			case "vtop":
+				return e.makeVtop()
 			case "box":
 				n := e.scanInt()
 				b := e.getBox(n)
@@ -290,6 +292,31 @@ func (e *Engine) makeBox(kind boxKind) *boxNode {
 		return hpackSP(list, mode, target)
 	}
 	return vpackSP(list, mode, target)
+}
+
+// makeVtop builds a \vtop: the same contents as a \vbox, but the reference point
+// is at the top, so the box height is the height of its first box/rule and the
+// depth is everything below (TeX §1087).
+func (e *Engine) makeVtop() *boxNode {
+	b := e.makeBox(vbox)
+	total := b.height + b.depth
+	firstH := 0
+	for _, n := range b.list {
+		switch c := n.(type) {
+		case *boxNode:
+			firstH = c.height
+		case ruleNode:
+			if !c.heightRun {
+				firstH = c.height
+			}
+		default:
+			continue // skip leading glue/kern
+		}
+		break
+	}
+	b.height = firstH
+	b.depth = total - firstH
+	return b
 }
 
 // buildBoxList builds a material list until the matching '}' (consumed), turning
@@ -360,6 +387,8 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.makeBox(hbox), true
 	case "vbox":
 		return e.makeBox(vbox), true
+	case "vtop":
+		return e.makeVtop(), true
 	case "box":
 		i := e.scanInt()
 		b := e.getBox(i)

@@ -910,6 +910,7 @@ func (e *Engine) loadStomach() {
 	// vertical list; inside \setbox they are reached via scanBox/buildBoxList.
 	e.prim("hbox", func(e *Engine) { e.place(e.makeBox(hbox)) })
 	e.prim("vbox", func(e *Engine) { e.place(e.makeBox(vbox)) })
+	e.prim("vtop", func(e *Engine) { e.place(e.makeVtop()) })
 	e.prim("box", func(e *Engine) {
 		i := e.scanInt()
 		e.place(e.getBox(i))
