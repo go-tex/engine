@@ -8,6 +8,7 @@ func TestParagraphBreaksIntoLines(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{}) // every letter 5pt, space 3pt
 	e.hsize = 40 * unity
+	e.parindent = 0 // isolate line-wrapping from indentation (tested separately)
 	e.baselineskip = 10 * unity
 	// six 3-letter words: "www " ×6. Each word 15pt, space 3pt.
 	src := `www www www www www www\par`
