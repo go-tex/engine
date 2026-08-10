@@ -108,6 +108,41 @@ func (e *Engine) doNewcommand() {
 	}
 }
 
+// doNewenvironment implements \newenvironment{name}[nargs][default]{begin}{end}:
+// it defines \name (a macro of nargs parameters whose body is the begin-code) and
+// \endname (a 0-parameter macro whose body is the end-code), so \begin{name} and
+// \end{name} run them via \csname. The optional-argument default is consumed but
+// not modelled (as for \newcommand).
+func (e *Engine) doNewenvironment() {
+	name := e.readBraceName()
+	nargs := e.scanOptBracketInt()
+	e.scanOptBracketSkip()
+	begin := e.readBodyGroup()
+	end := e.readBodyGroup()
+	if name == "" {
+		return
+	}
+	var params []tok
+	for i := 1; i <= nargs && i <= 9; i++ {
+		params = append(params, tok{ch: rune('0' + i), cat: catParam})
+	}
+	e.define(name, &meaning{kind: mMacro, params: params, body: begin}, false)
+	e.define("end"+name, &meaning{kind: mMacro, body: end}, false)
+}
+
+// readBodyGroup reads a {…} group as a macro body (converting #n to parameters).
+func (e *Engine) readBodyGroup() []tok {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return nil
+	}
+	return e.scanBody()
+}
+
 // scanCmdName reads the command name for \newcommand: either {\name} or \name.
 // It reads raw (no expansion) so a \renewcommand target that is already defined
 // is not expanded before its name is captured.
