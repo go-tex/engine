@@ -1036,6 +1036,12 @@ func (e *Engine) contribute(n node) {
 	switch c := n.(type) {
 	case *boxNode:
 		if c != nil {
+			// Under an active alignment (\centering/\flushleft/\flushright set a fil
+			// \leftskip/\rightskip), a contributed box is wrapped to \hsize with those
+			// skips so it aligns — this is how a tabular inside center gets centred.
+			if e.leftskip.stretchOrder > 0 || e.rightskip.stretchOrder > 0 {
+				c = hpackSP([]node{glueNode{spec: e.leftskip}, c, glueNode{spec: e.rightskip}}, packTo, e.hsize)
+			}
 			e.appendToPage(c)
 		}
 	case ruleNode:
