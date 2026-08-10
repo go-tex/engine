@@ -898,6 +898,7 @@ func (e *Engine) loadMore() {
 	e.prim("providecommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("renewenvironment", func(e *Engine) { e.doNewenvironment() })
+	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code

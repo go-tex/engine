@@ -409,6 +409,8 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.scanRule(true), true
 	case "vrule":
 		return e.scanRule(false), true
+	case "rule":
+		return e.doRuleNode(), true
 	case "penalty":
 		return penaltyNode{penalty: e.scanInt()}, true
 	case "char":

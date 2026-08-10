@@ -51,8 +51,12 @@ const MiniLaTeXKernel = `
 \def\enditemize{\par\smallskip}
 \def\enumerate{\par\smallskip}
 \def\endenumerate{\par\smallskip}
-\def\quotation{\par\smallskip}
-\def\endquotation{\par\smallskip}
+\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
+\def\endquote{\par\endgroup\smallskip}
+\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
+\def\endquotation{\par\endgroup\smallskip}
+\def\verse{\par\begingroup\leftskip=20pt\smallskip}
+\def\endverse{\par\endgroup\smallskip}
 \def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\relax}
 \def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\relax}
 \def\center{\par\begingroup\centering}
@@ -128,6 +132,43 @@ func (e *Engine) doNewenvironment() {
 	}
 	e.define(name, &meaning{kind: mMacro, params: params, body: begin}, false)
 	e.define("end"+name, &meaning{kind: mMacro, body: end}, false)
+}
+
+// doRuleNode builds a node for LaTeX's \rule[lift]{width}{height}: a filled
+// rectangle of the given width and height, raised by the optional lift.
+func (e *Engine) doRuleNode() ruleNode {
+	lift := 0
+	e.skipOptSpace()
+	if t, ok := e.getXToken(); ok {
+		if !t.cs_ && t.ch == '[' {
+			lift = e.scanDimen()
+			if c, ok := e.getXToken(); ok && !(!c.cs_ && c.ch == ']') {
+				e.back(c)
+			}
+		} else {
+			e.back(t)
+		}
+	}
+	w := e.readBraceDimen()
+	h := e.readBraceDimen()
+	return ruleNode{width: w, height: h - lift, depth: lift}
+}
+
+// readBraceDimen reads a {dimen} group and returns the dimension in sp.
+func (e *Engine) readBraceDimen() int {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return 0
+	}
+	d := e.scanDimen()
+	if c, ok := e.getXToken(); ok && !(c.cat == catEnd && !c.cs_) {
+		e.back(c)
+	}
+	return d
 }
 
 // readBodyGroup reads a {…} group as a macro body (converting #n to parameters).
