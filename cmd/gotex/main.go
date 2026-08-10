@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	engine "github.com/go-tex/engine"
-	texmath "github.com/go-tex/math"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -44,72 +43,67 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fontBytes, err := loadFont(*fontPath)
+	var fontBytes []byte
+	if *fontPath != "" {
+		b, err := os.ReadFile(*fontPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "gotex: %v\n", err)
+			return 1
+		}
+		fontBytes = b
+	}
+	src, err := os.ReadFile(input)
 	if err != nil {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
-	e := engine.New()
-	if err := e.LoadPlain(); err != nil {
-		fmt.Fprintf(stderr, "gotex: loading macros: %v\n", err)
-		return 1
+	// Resolve relative \input paths against the document's directory.
+	if dir := filepath.Dir(input); dir != "." {
+		if err := os.Chdir(dir); err != nil {
+			fmt.Fprintf(stderr, "gotex: %v\n", err)
+			return 1
+		}
 	}
-	f, err := engine.NewOpenTypeFont(fontBytes, *size)
-	if err != nil {
-		fmt.Fprintf(stderr, "gotex: font: %v\n", err)
-		return 1
-	}
-	e.SetFont(f)
-
-	// Process the document by \input (its own \font/\hsize/… take effect).
-	if _, err := e.Run(`\input ` + input + ` `); err != nil {
-		fmt.Fprintf(stderr, "gotex: %v\n", err)
-		return 1
-	}
+	opt := engine.Options{Font: fontBytes, Size: *size, Margin: *margin}
 
 	outName := *out
 	if outName == "" {
-		outName = replaceExt(input, "."+*format)
+		outName = replaceExt(filepath.Base(input), "."+*format)
 	}
-	if err := writeOutput(e, outName, *format, *margin); err != nil {
-		fmt.Fprintf(stderr, "gotex: writing %s: %v\n", outName, err)
+	pages, err := writeOutput(src, outName, *format, opt)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
-	pages := len(e.Pages())
 	fmt.Fprintf(stdout, "gotex: wrote %s (%d page%s)\n", outName, pages, plural(pages))
 	return 0
 }
 
-// loadFont returns the font bytes: the file at path, or the built-in default.
-func loadFont(path string) ([]byte, error) {
-	if path == "" {
-		return texmath.DefaultFont(), nil // built-in (STIX Two Math, OFL)
-	}
-	return os.ReadFile(path)
-}
-
-// writeOutput emits the compiled document in the requested format.
-func writeOutput(e *engine.Engine, name, format string, margin float64) error {
+// writeOutput compiles src and emits it in the requested format, returning the
+// page count.
+func writeOutput(src []byte, name, format string, opt engine.Options) (int, error) {
 	if format == "svg" {
-		pages := e.RenderPages(margin)
-		if len(pages) <= 1 {
-			return os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
+		pages, err := engine.CompileToSVGPages(src, opt)
+		if err != nil {
+			return 0, err
 		}
-		// Multiple pages: write name-1.svg, name-2.svg, …
+		if len(pages) <= 1 {
+			return len(pages), os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
+		}
 		base := strings.TrimSuffix(name, ".svg")
 		for i, svg := range pages {
 			if err := os.WriteFile(fmt.Sprintf("%s-%d.svg", base, i+1), []byte(svg), 0644); err != nil {
-				return err
+				return 0, err
 			}
 		}
-		return nil
+		return len(pages), nil
 	}
 	f, err := os.Create(name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
-	return e.RenderPDF(f, margin)
+	return engine.CompileToPDF(src, opt, f)
 }
 
 func replaceExt(name, ext string) string {
