@@ -908,26 +908,54 @@ func (e *Engine) loadStomach() {
 	e.prim("setbox", func(e *Engine) { e.doSetbox() })
 	// At top level (vertical mode) box/rule/glue producers contribute to the main
 	// vertical list; inside \setbox they are reached via scanBox/buildBoxList.
-	e.prim("hbox", func(e *Engine) { e.contribute(e.makeBox(hbox)) })
-	e.prim("vbox", func(e *Engine) { e.contribute(e.makeBox(vbox)) })
+	e.prim("hbox", func(e *Engine) { e.place(e.makeBox(hbox)) })
+	e.prim("vbox", func(e *Engine) { e.place(e.makeBox(vbox)) })
 	e.prim("box", func(e *Engine) {
 		i := e.scanInt()
-		e.contribute(e.getBox(i))
+		e.place(e.getBox(i))
 		e.setBox(i, nil) // \box empties the register
 	})
-	e.prim("copy", func(e *Engine) { e.contribute(cloneBox(e.getBox(e.scanInt()))) })
-	e.prim("kern", func(e *Engine) { e.contribute(kernNode{width: e.scanDimen()}) })
+	e.prim("copy", func(e *Engine) { e.place(cloneBox(e.getBox(e.scanInt()))) })
+	e.prim("kern", func(e *Engine) { e.place(kernNode{width: e.scanDimen()}) })
 	e.prim("vskip", func(e *Engine) { e.contribute(glueNode{spec: e.scanGlue()}) })
-	e.prim("hskip", func(e *Engine) { e.scanGlue() }) // starts a paragraph — deferred
-	for _, f := range []string{"hfil", "hfill", "hss", "vfil", "vfill", "vss"} {
+	e.prim("hskip", func(e *Engine) { e.placeHGlue(e.scanGlue()) })
+	e.prim("hfil", func(e *Engine) { e.placeHGlue(glueSpec{stretch: unity, stretchOrder: 1}) })
+	e.prim("hfill", func(e *Engine) { e.placeHGlue(glueSpec{stretch: unity, stretchOrder: 2}) })
+	e.prim("hss", func(e *Engine) {
+		e.placeHGlue(glueSpec{stretch: unity, stretchOrder: 1, shrink: unity, shrinkOrder: 1})
+	})
+	for _, f := range []string{"vfil", "vfill", "vss"} {
 		e.prim(f, func(e *Engine) {})
 	}
 	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
-	e.prim("vrule", func(e *Engine) { e.scanRule(false) })
-	e.prim("penalty", func(e *Engine) { e.contribute(penaltyNode{penalty: e.scanInt()}) })
+	e.prim("vrule", func(e *Engine) { e.place(e.scanRule(false)) })
+	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
 	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
 	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
+}
+
+// place adds material that is legal in both modes: inside a paragraph
+// (horizontal mode) it becomes an inline node on the current line; in vertical
+// mode it is contributed to the main vertical list. A nil box is dropped.
+func (e *Engine) place(n node) {
+	if b, ok := n.(*boxNode); ok && b == nil {
+		return
+	}
+	if e.inPar {
+		e.parList = append(e.parList, n)
+		return
+	}
+	e.contribute(n)
+}
+
+// placeHGlue adds horizontal glue: inside a paragraph it joins the line; in
+// vertical mode it starts a paragraph (an \hskip in vertical mode begins one).
+func (e *Engine) placeHGlue(g glueSpec) {
+	if !e.inPar {
+		e.beginParagraph(false)
+	}
+	e.parList = append(e.parList, glueNode{spec: g})
 }
 
 // contribute adds top-level vertical material to the main vertical list. A
