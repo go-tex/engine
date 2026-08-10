@@ -608,6 +608,12 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "baselineskip":
 				e.pushString(formatPt(e.baselineskip))
 				return
+			case m.kind == mPrim && m.name == "leftskip":
+				e.pushString(formatGlue(e.leftskip))
+				return
+			case m.kind == mPrim && m.name == "rightskip":
+				e.pushString(formatGlue(e.rightskip))
+				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
 				return
@@ -889,6 +895,8 @@ func (e *Engine) loadMore() {
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.vsize = e.scanDimen() })
 	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
+	e.prim("leftskip", func(e *Engine) { e.scanEquals(); e.leftskip = e.scanGlue() })
+	e.prim("rightskip", func(e *Engine) { e.scanEquals(); e.rightskip = e.scanGlue() })
 	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.parindent = e.scanDimen() })
 	e.prim("indent", func(e *Engine) {
 		if !e.inPar {

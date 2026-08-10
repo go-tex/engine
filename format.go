@@ -36,6 +36,8 @@ const Plain = `
 \def\enspace{\hskip.5em}
 \def\thinspace{\hskip.16667em}
 \def\negthinspace{\hskip-.16667em}
+\def\raggedright{\rightskip=0pt plus 1fil\relax}
+\def\justified{\rightskip=0pt\relax}
 `
 
 // LoadPlain defines the Plain structural macros in the engine.

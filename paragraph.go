@@ -59,8 +59,21 @@ func (e *Engine) endParagraph() {
 				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd})
 			}
 		}
+		seg = e.applyLineSkips(seg)
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
 	}
+}
+
+// applyLineSkips wraps a line's material with \leftskip and \rightskip glue (when
+// non-zero). \rightskip = 0pt plus 1fil gives ragged-right (flush-left) lines.
+func (e *Engine) applyLineSkips(seg []node) []node {
+	if e.leftskip != (glueSpec{}) {
+		seg = append([]node{glueNode{spec: e.leftskip}}, seg...)
+	}
+	if e.rightskip != (glueSpec{}) {
+		seg = append(append([]node{}, seg...), glueNode{spec: e.rightskip})
+	}
+	return seg
 }
 
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio

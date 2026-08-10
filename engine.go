@@ -95,6 +95,8 @@ type Engine struct {
 
 	hyph          *hyphenator // loaded hyphenation patterns (nil = no hyphenation)
 	hyphenpenalty int         // penalty at a discretionary hyphen
+	leftskip      glueSpec    // glue at the left of every line
+	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
