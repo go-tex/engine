@@ -24,6 +24,20 @@ func (e *Engine) RenderBox(i int, margin float64) string {
 	return RenderBoxSVG(e.getBox(i), margin)
 }
 
+// Page vpacks the main vertical list (everything contributed at top level) into a
+// single vbox at natural height. Empty (nil) if nothing was contributed.
+func (e *Engine) Page() *boxNode {
+	if len(e.mvl) == 0 {
+		return nil
+	}
+	return vpackSP(e.mvl, packNatural, 0)
+}
+
+// RenderPage renders the main vertical list to an SVG page with the given margin.
+func (e *Engine) RenderPage(margin float64) string {
+	return RenderBoxSVG(e.Page(), margin)
+}
+
 // RenderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
 // margin (in points). The box's reference point (left edge, baseline) sits at
 // (margin, margin+height).

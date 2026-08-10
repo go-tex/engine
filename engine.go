@@ -79,6 +79,7 @@ type Engine struct {
 	dimen   [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
 	skip    [256]glueSpec // \skip (glue) registers
 	box     [256]*boxNode // \box registers (nil = void)
+	mvl     []node        // main vertical list (top-level contributions)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem

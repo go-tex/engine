@@ -876,22 +876,36 @@ func (e *Engine) loadMore() {
 // real work happens when they are reached inside \setbox via scanBox/buildBoxList.
 func (e *Engine) loadStomach() {
 	e.prim("setbox", func(e *Engine) { e.doSetbox() })
-	e.prim("hbox", func(e *Engine) { e.makeBox(hbox) })
-	e.prim("vbox", func(e *Engine) { e.makeBox(vbox) })
-	e.prim("box", func(e *Engine) { e.setBox(e.scanInt(), nil) })
-	e.prim("copy", func(e *Engine) { e.scanInt() })
-	e.prim("kern", func(e *Engine) { e.scanDimen() })
-	e.prim("hskip", func(e *Engine) { e.scanGlue() })
-	e.prim("vskip", func(e *Engine) { e.scanGlue() })
+	// At top level (vertical mode) box/rule/glue producers contribute to the main
+	// vertical list; inside \setbox they are reached via scanBox/buildBoxList.
+	e.prim("hbox", func(e *Engine) { e.contribute(e.makeBox(hbox)) })
+	e.prim("vbox", func(e *Engine) { e.contribute(e.makeBox(vbox)) })
+	e.prim("box", func(e *Engine) {
+		i := e.scanInt()
+		e.contribute(e.getBox(i))
+		e.setBox(i, nil) // \box empties the register
+	})
+	e.prim("copy", func(e *Engine) { e.contribute(cloneBox(e.getBox(e.scanInt()))) })
+	e.prim("kern", func(e *Engine) { e.contribute(kernNode{width: e.scanDimen()}) })
+	e.prim("vskip", func(e *Engine) { e.contribute(glueNode{spec: e.scanGlue()}) })
+	e.prim("hskip", func(e *Engine) { e.scanGlue() }) // starts a paragraph — deferred
 	for _, f := range []string{"hfil", "hfill", "hss", "vfil", "vfill", "vss"} {
 		e.prim(f, func(e *Engine) {})
 	}
-	e.prim("hrule", func(e *Engine) { e.scanRule(true) })
+	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
 	e.prim("vrule", func(e *Engine) { e.scanRule(false) })
-	e.prim("penalty", func(e *Engine) { e.scanInt() })
+	e.prim("penalty", func(e *Engine) { e.contribute(penaltyNode{penalty: e.scanInt()}) })
 	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
 	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
+}
+
+// contribute appends a node to the main vertical list (nil boxes are dropped).
+func (e *Engine) contribute(n node) {
+	if b, ok := n.(*boxNode); ok && b == nil {
+		return
+	}
+	e.mvl = append(e.mvl, n)
 }
 
 // doCase applies \uppercase/\lowercase to the next {group}: it re-cases letter
