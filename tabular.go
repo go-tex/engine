@@ -27,7 +27,7 @@ type tabBuilt struct {
 
 // doTabular typesets a tabular environment onto the current list.
 func (e *Engine) doTabular() {
-	aligns, vrules := e.scanColSpec()
+	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody()
 	ncol := len(aligns)
 
@@ -40,28 +40,32 @@ func (e *Engine) doTabular() {
 		var cells [][]node
 		for j, toks := range it.cells {
 			a := byte('l')
+			pw := 0
 			if j < ncol {
 				a = aligns[j]
+				pw = pwidths[j]
 			}
-			cells = append(cells, e.buildAlignedCell(toks, a))
+			cells = append(cells, e.buildAlignedCell(toks, a, pw))
 		}
 		built = append(built, tabBuilt{cells: cells})
 	}
-	e.place(assembleTabular(built, ncol, vrules))
+	e.place(assembleTabular(built, ncol, pwidths, vrules))
 }
 
-// scanColSpec reads the {…} column specification, returning the l/c/r alignments
-// and, for each gap 0..ncol, whether a vertical rule (|) sits there.
-func (e *Engine) scanColSpec() ([]byte, []bool) {
+// scanColSpec reads the {…} column specification, returning the l/c/r/p alignments,
+// the fixed width of each p{…} column (0 for l/c/r), and, for each gap 0..ncol,
+// whether a vertical rule (|) sits there.
+func (e *Engine) scanColSpec() ([]byte, []int, []bool) {
 	e.skipOptSpace()
 	var aligns []byte
+	var pwidths []int
 	ruleGaps := map[int]bool{}
 	col := 0
 	if t, ok := e.getXToken(); !ok || !(t.cat == catBegin && !t.cs_) {
 		if ok {
 			e.back(t)
 		}
-		return aligns, []bool{}
+		return aligns, pwidths, []bool{}
 	}
 	for {
 		u, ok := e.getNext()
@@ -74,6 +78,11 @@ func (e *Engine) scanColSpec() ([]byte, []bool) {
 		switch u.ch {
 		case 'l', 'c', 'r':
 			aligns = append(aligns, byte(u.ch))
+			pwidths = append(pwidths, 0)
+			col++
+		case 'p', 'm', 'b': // paragraph column: p{width} (m/b treated as p)
+			aligns = append(aligns, 'p')
+			pwidths = append(pwidths, e.readBraceDimen())
 			col++
 		case '|':
 			ruleGaps[col] = true
@@ -85,7 +94,68 @@ func (e *Engine) scanColSpec() ([]byte, []bool) {
 			vrules[g] = true
 		}
 	}
-	return aligns, vrules
+	return aligns, pwidths, vrules
+}
+
+// breakToVbox line-breaks a cell's horizontal list to a fixed width and returns a
+// top-aligned vbox (LaTeX's p{width} column is a \parbox[t]): the reference point
+// is the baseline of the first line, so the row baseline meets the cell's top line.
+func (e *Engine) breakToVbox(hlist []node, width int) *boxNode {
+	list := append([]node{}, hlist...)
+	// \parfillskip (0pt plus 1fil) fills the last line; a forced break ends it.
+	list = append(list,
+		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}},
+		penaltyNode{penalty: -int(InfPenalty)})
+
+	items := toItems(list)
+	lineWidth := spToPt(width)
+	lines, ok := KnuthPlass(items, lineWidth, 200, 10)
+	if !ok || hasBadLine(lines) {
+		if l2, ok2 := KnuthPlass(items, lineWidth, maxBadRatio, 10); ok2 {
+			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
+				lines, ok = l2, true
+			}
+		}
+	}
+	if !ok || len(lines) == 0 {
+		lines = []Line{{Start: 0, End: len(list)}}
+	}
+
+	var vlist []node
+	prevDepth := ignoreDepth
+	for _, ln := range lines {
+		seg := trimLeadingGlue(list[ln.Start:ln.End])
+		if ln.End < len(list) {
+			if _, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil {
+				w, h, dd := e.curFont.charDimsSP('-')
+				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd})
+			}
+		}
+		line := hpackSP(seg, packTo, width)
+		if prevDepth > ignoreDepth {
+			gap := e.baselineskip - prevDepth - line.height
+			if gap < e.lineskip {
+				gap = e.lineskip
+			}
+			vlist = append(vlist, glueNode{spec: glueSpec{width: gap}})
+		}
+		vlist = append(vlist, line)
+		prevDepth = line.depth
+	}
+	b := vpackSP(vlist, packNatural, 0)
+	b.width = width // the column's fixed width (vpack derives width from contents)
+	// Convert to \parbox[t]: height = first line's height, depth = the rest.
+	total := b.height + b.depth
+	firstH := 0
+	for _, n := range b.list {
+		if lb, ok := n.(*boxNode); ok {
+			firstH = lb.height
+			break
+		}
+	}
+	b.height = firstH
+	b.depth = total - firstH
+	return b
 }
 
 // collectTabularBody reads raw tokens up to \end{tabular}, returning the rows and
@@ -158,8 +228,11 @@ func (e *Engine) readBraceName() string {
 
 // buildAlignedCell builds a cell's horizontal list and wraps it with \hfil glue
 // so it aligns left, centre or right when packed to the column width.
-func (e *Engine) buildAlignedCell(toks []tok, align byte) []node {
+func (e *Engine) buildAlignedCell(toks []tok, align byte, pwidth int) []node {
 	content := e.buildCellHList(trimSpaceToks(toks))
+	if align == 'p' { // paragraph column: line-break to the fixed width as a vbox
+		return []node{e.breakToVbox(content, pwidth)}
+	}
 	fil := glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}
 	switch align {
 	case 'r':
@@ -175,7 +248,7 @@ func (e *Engine) buildAlignedCell(toks []tok, align byte) []node {
 // assembleTabular computes column widths, builds each data row (cells packed to
 // their column width, inter-column separation, and | vertical rules), and stacks
 // the rows with \hline full-width rules into a vbox.
-func assembleTabular(built []tabBuilt, ncol int, vrules []bool) *boxNode {
+func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *boxNode {
 	colw := make([]int, ncol)
 	for _, b := range built {
 		if b.hline {
@@ -187,6 +260,12 @@ func assembleTabular(built []tabBuilt, ncol int, vrules []bool) *boxNode {
 					colw[j] = w
 				}
 			}
+		}
+	}
+	// p{…} columns have a fixed width, independent of their content.
+	for j := 0; j < ncol && j < len(pwidths); j++ {
+		if pwidths[j] > 0 {
+			colw[j] = pwidths[j]
 		}
 	}
 	hasRule := func(gap int) bool { return gap < len(vrules) && vrules[gap] }
