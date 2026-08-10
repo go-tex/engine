@@ -602,6 +602,9 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "vsize":
 				e.pushString(formatPt(e.vsize))
 				return
+			case m.kind == mPrim && m.name == "parindent":
+				e.pushString(formatPt(e.parindent))
+				return
 			case m.kind == mPrim && m.name == "baselineskip":
 				e.pushString(formatPt(e.baselineskip))
 				return
@@ -881,6 +884,19 @@ func (e *Engine) loadMore() {
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.vsize = e.scanDimen() })
 	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
+	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.parindent = e.scanDimen() })
+	e.prim("indent", func(e *Engine) {
+		if !e.inPar {
+			e.beginParagraph(true)
+		} else {
+			e.parList = append(e.parList, &boxNode{kind: hbox, width: e.parindent})
+		}
+	})
+	e.prim("noindent", func(e *Engine) {
+		if !e.inPar {
+			e.beginParagraph(false)
+		}
+	})
 	e.loadStomach()
 }
 

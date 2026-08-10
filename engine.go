@@ -89,6 +89,7 @@ type Engine struct {
 	vsize        int    // page height for the page builder (sp)
 	baselineskip int    // baseline-to-baseline glue (sp)
 	lineskip     int    // minimum interline glue when baselineskip is too small (sp)
+	parindent    int    // width of the indentation box at a paragraph's start (sp)
 	prevDepth    int    // \prevdepth for interline glue (ignoreDepth = suppress)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
@@ -147,6 +148,7 @@ func New() *Engine {
 	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                            // plain TeX \vsize = 8.9in
 	e.baselineskip = 12 * unity                                                       // 12pt
 	e.lineskip = unity                                                                // 1pt
+	e.parindent = 20 * unity                                                          // plain TeX \parindent = 20pt
 	e.prevDepth = ignoreDepth
 	for i := range e.catcode {
 		e.catcode[i] = catOther
@@ -606,15 +608,26 @@ func (e *Engine) mainLoop() {
 }
 
 // startChar appends a measured character to the current paragraph, starting one
-// if needed. Without a current font there is nothing to measure, so it is a no-op
-// (the character is dropped, as in the pre-font core).
+// (with indentation) if needed. Without a current font there is nothing to
+// measure, so it is a no-op (the character is dropped, as in the pre-font core).
 func (e *Engine) startChar(ch rune) {
 	if e.curFont == nil {
 		return
 	}
-	e.inPar = true
+	if !e.inPar {
+		e.beginParagraph(true)
+	}
 	w, h, d := e.curFont.charDimsSP(ch)
 	e.parList = append(e.parList, charNode{ch: ch, width: w, height: h, depth: d})
+}
+
+// beginParagraph starts a paragraph, optionally prefixing the \parindent box
+// (an empty hbox of that width) as TeX does for an indented paragraph.
+func (e *Engine) beginParagraph(indent bool) {
+	e.inPar = true
+	if indent {
+		e.parList = append(e.parList, &boxNode{kind: hbox, width: e.parindent})
+	}
 }
 
 // execCS performs one control-sequence token (an assignment or non-expandable
