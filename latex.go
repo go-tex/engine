@@ -32,8 +32,12 @@ const MiniLaTeXKernel = `
 \def\emph#1{{\it #1}}
 \def\underline#1{#1}
 \def\mbox#1{\hbox{#1}}
-\def\section#1{\par\medskip\noindent#1\par\nobreak\smallskip}
-\def\subsection#1{\par\smallskip\noindent#1\par\nobreak}
+\newcount\c@section
+\newcount\c@subsection
+\def\thesection{\the\c@section}
+\def\thesubsection{\the\c@section.\the\c@subsection}
+\def\section#1{\par\medskip\advance\c@section by1 \c@subsection=0 \noindent\thesection\quad#1\par\nobreak\smallskip}
+\def\subsection#1{\par\smallskip\advance\c@subsection by1 \noindent\thesubsection\quad#1\par\nobreak}
 \def\subsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\paragraph#1{\par\noindent#1\quad}
 \def\title#1{\def\@title{#1}}
