@@ -4,65 +4,94 @@
 package engine
 
 // This file implements LaTeX's tabular environment as a primitive: \tabular
-// (reached via \begin{tabular}) reads the column specification {lcr…}, collects
-// the body up to \end{tabular}, splits it into rows (by \\) and cells (by &),
-// builds each cell aligned to its column (l/c/r via \hfil), computes each
-// column's width as the widest cell, packs every cell to that width, and stacks
-// the rows into a vbox. Vertical rules (|) and p/m/b columns are not yet handled.
+// (reached via \begin{tabular}) reads the column specification {|lcr|…}, collects
+// the body up to \end{tabular}, splits it into rows (by \\) and cells (by &) with
+// \hline markers between them, builds each cell aligned to its column (l/c/r via
+// \hfil), computes each column's width as the widest cell, and stacks the rows —
+// interspersed with \hline full-width rules and | vertical column rules — into a
+// vbox. Not yet handled: p/m/b (paragraph) columns and \cline.
 
 const tabColSep = 6 * unity // \tabcolsep default (added on each side of a column)
 
+// tabItem is one item of a tabular body: a horizontal rule (\hline) or a data row.
+type tabItem struct {
+	hline bool
+	cells [][]tok
+}
+
+// tabBuilt is a tabItem with its cells turned into aligned node lists.
+type tabBuilt struct {
+	hline bool
+	cells [][]node
+}
+
 // doTabular typesets a tabular environment onto the current list.
 func (e *Engine) doTabular() {
-	aligns := e.scanColSpec()
-	rows := e.collectTabularBody()
+	aligns, vrules := e.scanColSpec()
+	items := e.collectTabularBody()
 	ncol := len(aligns)
 
-	var cellRows [][][]node
-	for _, row := range rows {
+	var built []tabBuilt
+	for _, it := range items {
+		if it.hline {
+			built = append(built, tabBuilt{hline: true})
+			continue
+		}
 		var cells [][]node
-		for j, toks := range row {
+		for j, toks := range it.cells {
 			a := byte('l')
 			if j < ncol {
 				a = aligns[j]
 			}
 			cells = append(cells, e.buildAlignedCell(toks, a))
 		}
-		cellRows = append(cellRows, cells)
+		built = append(built, tabBuilt{cells: cells})
 	}
-	e.place(assembleTabular(cellRows, ncol))
+	e.place(assembleTabular(built, ncol, vrules))
 }
 
-// scanColSpec reads the {…} column specification, keeping the l/c/r alignments.
-func (e *Engine) scanColSpec() []byte {
+// scanColSpec reads the {…} column specification, returning the l/c/r alignments
+// and, for each gap 0..ncol, whether a vertical rule (|) sits there.
+func (e *Engine) scanColSpec() ([]byte, []bool) {
 	e.skipOptSpace()
-	var spec []byte
-	t, ok := e.getXToken()
-	if !ok || !(t.cat == catBegin && !t.cs_) {
+	var aligns []byte
+	ruleGaps := map[int]bool{}
+	col := 0
+	if t, ok := e.getXToken(); !ok || !(t.cat == catBegin && !t.cs_) {
 		if ok {
 			e.back(t)
 		}
-		return spec
+		return aligns, []bool{}
 	}
 	for {
 		u, ok := e.getNext()
 		if !ok || (u.cat == catEnd && !u.cs_) {
 			break
 		}
-		if !u.cs_ {
-			switch u.ch {
-			case 'l', 'c', 'r':
-				spec = append(spec, byte(u.ch))
-			}
+		if u.cs_ {
+			continue
+		}
+		switch u.ch {
+		case 'l', 'c', 'r':
+			aligns = append(aligns, byte(u.ch))
+			col++
+		case '|':
+			ruleGaps[col] = true
 		}
 	}
-	return spec
+	vrules := make([]bool, len(aligns)+1)
+	for g := range ruleGaps {
+		if g >= 0 && g <= len(aligns) {
+			vrules[g] = true
+		}
+	}
+	return aligns, vrules
 }
 
-// collectTabularBody reads raw tokens up to \end{tabular}, returning rows of
-// cells (each a token slice). & separates cells, \\ separates rows.
-func (e *Engine) collectTabularBody() [][][]tok {
-	var rows [][][]tok
+// collectTabularBody reads raw tokens up to \end{tabular}, returning the rows and
+// \hline markers. & separates cells, \\ separates rows, \hline is a rule marker.
+func (e *Engine) collectTabularBody() []tabItem {
+	var items []tabItem
 	var cur [][]tok
 	var cell []tok
 	depth := 0
@@ -70,7 +99,7 @@ func (e *Engine) collectTabularBody() [][][]tok {
 	endRow := func() {
 		endCell()
 		if !allEmpty(cur) {
-			rows = append(rows, cur)
+			items = append(items, tabItem{cells: cur})
 		}
 		cur = nil
 	}
@@ -79,29 +108,29 @@ func (e *Engine) collectTabularBody() [][][]tok {
 		if !ok {
 			break
 		}
-		if depth == 0 && t.cs_ && t.cs == "end" {
+		switch {
+		case depth == 0 && t.cs_ && t.cs == "end":
 			if name := e.readBraceName(); name == "tabular" {
 				endRow()
-				break
+				return items
 			}
-			continue
-		}
-		if depth == 0 && t.cs_ && t.cs == `\` { // \\ row separator
+		case depth == 0 && t.cs_ && t.cs == "hline":
+			endRow() // flush any pending row, then record the rule
+			items = append(items, tabItem{hline: true})
+		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
 			endRow()
-			continue
-		}
-		if depth == 0 && !t.cs_ && t.cat == catAlign { // & cell separator
+		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
 			endCell()
-			continue
+		default:
+			if !t.cs_ && t.cat == catBegin {
+				depth++
+			} else if !t.cs_ && t.cat == catEnd {
+				depth--
+			}
+			cell = append(cell, t)
 		}
-		if !t.cs_ && t.cat == catBegin {
-			depth++
-		} else if !t.cs_ && t.cat == catEnd {
-			depth--
-		}
-		cell = append(cell, t)
 	}
-	return rows
+	return items
 }
 
 // readBraceName reads a {name} group and returns its text (used for \end{name}).
@@ -143,12 +172,16 @@ func (e *Engine) buildAlignedCell(toks []tok, align byte) []node {
 	}
 }
 
-// assembleTabular computes column widths, packs each cell to its column width
-// with inter-column separation, and stacks the rows into a vbox.
-func assembleTabular(cellRows [][][]node, ncol int) *boxNode {
+// assembleTabular computes column widths, builds each data row (cells packed to
+// their column width, inter-column separation, and | vertical rules), and stacks
+// the rows with \hline full-width rules into a vbox.
+func assembleTabular(built []tabBuilt, ncol int, vrules []bool) *boxNode {
 	colw := make([]int, ncol)
-	for _, row := range cellRows {
-		for j, cell := range row {
+	for _, b := range built {
+		if b.hline {
+			continue
+		}
+		for j, cell := range b.cells {
 			if j < ncol {
 				if w := hpackSP(cell, packNatural, 0).width; w > colw[j] {
 					colw[j] = w
@@ -156,20 +189,47 @@ func assembleTabular(cellRows [][][]node, ncol int) *boxNode {
 			}
 		}
 	}
-	var vlist []node
-	for _, row := range cellRows {
-		var rowNodes []node
-		for j, cell := range row {
-			if j > 0 {
-				rowNodes = append(rowNodes, kernNode{width: 2 * tabColSep})
-			}
-			width := 0
-			if j < ncol {
-				width = colw[j]
-			}
-			rowNodes = append(rowNodes, hpackSP(cell, packTo, width))
+	hasRule := func(gap int) bool { return gap < len(vrules) && vrules[gap] }
+	vrule := func() ruleNode { return ruleNode{width: defaultRule, heightRun: true, depthRun: true} }
+
+	// First pass: build each data-row hbox and find the widest (the table width).
+	rowBoxes := make([]*boxNode, len(built))
+	maxW := 0
+	for i, b := range built {
+		if b.hline {
+			continue
 		}
-		vlist = append(vlist, hpackSP(rowNodes, packNatural, 0))
+		var rn []node
+		for j := 0; j <= ncol; j++ {
+			if hasRule(j) {
+				rn = append(rn, vrule())
+			}
+			if j < ncol {
+				if j > 0 {
+					rn = append(rn, kernNode{width: 2 * tabColSep})
+				}
+				var cell []node
+				if j < len(b.cells) {
+					cell = b.cells[j]
+				}
+				rn = append(rn, hpackSP(cell, packTo, colw[j]))
+			}
+		}
+		box := hpackSP(rn, packNatural, 0)
+		rowBoxes[i] = box
+		if box.width > maxW {
+			maxW = box.width
+		}
+	}
+
+	// Second pass: emit rows and \hline rules (spanning the full table width).
+	var vlist []node
+	for i, b := range built {
+		if b.hline {
+			vlist = append(vlist, ruleNode{width: maxW, height: defaultRule})
+		} else {
+			vlist = append(vlist, rowBoxes[i])
+		}
 	}
 	return vpackSP(vlist, packNatural, 0)
 }
@@ -186,11 +246,14 @@ func trimSpaceToks(toks []tok) []tok {
 	return toks
 }
 
-// allEmpty reports whether every cell in a row is empty (a trailing \\ artefact).
+// allEmpty reports whether a row has no real content — every cell is empty or
+// only whitespace (e.g. the space between \\ and \hline, or a trailing \\).
 func allEmpty(row [][]tok) bool {
 	for _, c := range row {
-		if len(c) > 0 {
-			return false
+		for _, t := range c {
+			if t.cs_ || t.cat != catSpace {
+				return false
+			}
 		}
 	}
 	return true
