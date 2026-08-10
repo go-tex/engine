@@ -64,6 +64,19 @@ const Plain = `
 \def\dag{\char134\relax}
 \def\ddag{\char135\relax}
 \def\pounds{\char163\relax}
+\def\oe{\char339\relax}
+\def\OE{\char338\relax}
+\def\ae{\char230\relax}
+\def\AE{\char198\relax}
+\def\o{\char248\relax}
+\def\O{\char216\relax}
+\def\aa{\char229\relax}
+\def\AA{\char197\relax}
+\def\ss{\char223\relax}
+\def\l{\char322\relax}
+\def\L{\char321\relax}
+\def\i{\char305\relax}
+\def\j{\char567\relax}
 `
 
 // LoadPlain defines the Plain structural macros in the engine.

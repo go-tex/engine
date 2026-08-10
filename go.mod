@@ -7,6 +7,7 @@ require github.com/go-opentype/opentype v0.6.0
 require (
 	github.com/go-pdfkit/pdfkit v0.4.0
 	github.com/go-tex/math v0.2.0
+	golang.org/x/text v0.40.0
 )
 
 require (

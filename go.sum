@@ -14,5 +14,7 @@ github.com/go-widgets/painter v0.2.0 h1:C7anwlKLYnlTeCK90xKYvy0srxYXqhuvyDFismlf
 github.com/go-widgets/painter v0.2.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
 github.com/go-widgets/toolkit v0.79.0 h1:lZeQPeUYcGvD7++F8bFUN8in68nO98m0qpU3Nz+C0ws=
 github.com/go-widgets/toolkit v0.79.0/go.mod h1:uBYcJJeBA2hqHiTlKaLsPZ9t/NsBA6DFtpp33i5l5/8=
+golang.org/x/text v0.40.0 h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=
+golang.org/x/text v0.40.0/go.mod h1:hpnzDAfGV753zIKo+wk3u1bVKCGPbrnF7+7LBF/UHVY=
 rsc.io/pdf v0.1.1 h1:k1MczvYDUvJBe93bYd7wrZLLUEcLZAuF824/I4e5Xr4=
 rsc.io/pdf v0.1.1/go.mod h1:n8OzWcQ6Sp37PL01nO98y4iUCRdTGarVfzxY20ICaU4=

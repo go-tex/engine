@@ -902,7 +902,11 @@ func (e *Engine) loadMore() {
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
-	e.prim(" ", func(e *Engine) {                                      // control space: an explicit interword space
+	for _, acc := range []string{"'", "`", "^", "\"", "~", "=", ".", "u", "v", "H", "r", "c", "k", "b", "d"} {
+		a := acc
+		e.prim(a, func(e *Engine) { e.doAccent(a) }) // accent commands: \'e → é, \c c → ç, …
+	}
+	e.prim(" ", func(e *Engine) { // control space: an explicit interword space
 		if e.curFont != nil {
 			e.placeHGlue(e.curFont.spaceSP())
 		}
