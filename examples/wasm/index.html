@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  Live LaTeX preview in the browser — no server, no TeX Live.
+  Build the wasm and copy the Go runtime shim next to this file:
+
+    GOOS=js GOARCH=wasm go build -o gotex.wasm ./cmd/gotex-wasm
+    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" .
+
+  then serve this directory (e.g. `python3 -m http.server`) and open it.
+  This is the reference loom uses for client-side compile/preview.
+-->
+<meta charset="utf-8">
+<title>gotex — LaTeX in the browser (WASM)</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 0; display: grid; grid-template-columns: 1fr 1fr; height: 100vh; }
+  textarea { border: 0; border-right: 1px solid #ddd; padding: 16px; font: 13px ui-monospace, monospace; resize: none; }
+  #preview { overflow: auto; padding: 16px; background: #f6f6f6; }
+  #preview svg { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); margin-bottom: 12px; display: block; }
+  #status { position: fixed; bottom: 8px; right: 12px; font-size: 12px; color: #888; }
+</style>
+<textarea id="src" spellcheck="false">\hsize=300pt
+\baselineskip=15pt
+The go-tex engine is compiled to WebAssembly and runs this LaTeX entirely in
+your browser --- no server, no TeX Live. Knuth and Plass line breaking justifies
+the paragraph, and the quadratic $x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}$ is typeset
+with the OpenType MATH table.\par
+</textarea>
+<div id="preview">loading wasm…</div>
+<div id="status"></div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  const preview = document.getElementById('preview');
+  const src = document.getElementById('src');
+  const status = document.getElementById('status');
+
+  function render() {
+    if (!globalThis.gotexToSVG) return;
+    const t0 = performance.now();
+    const out = globalThis.gotexToSVG(src.value, { size: 11 });
+    if (out.error) { preview.textContent = 'Error: ' + out.error; return; }
+    preview.innerHTML = out.pages.join('');
+    status.textContent = out.pages.length + ' page(s) · ' + (performance.now() - t0).toFixed(1) + ' ms';
+  }
+
+  WebAssembly.instantiateStreaming(fetch('gotex.wasm'), go.importObject).then((res) => {
+    go.run(res.instance);
+    preview.textContent = '';
+    render();
+    src.addEventListener('input', render);
+  });
+</script>
