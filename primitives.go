@@ -979,6 +979,26 @@ func (e *Engine) loadStomach() {
 	for _, f := range []string{"vfil", "vfill", "vss"} {
 		e.prim(f, func(e *Engine) {})
 	}
+	// LaTeX spacing commands. \hspace{d}/\hspace*{d} put fixed horizontal glue of
+	// width d on the line; \vspace{d}/\vspace*{d} put fixed vertical glue on the
+	// page. \hrulefill and \dotfill are fill glue (order 2) rendered as a rule or a
+	// row of dots. The star is accepted but not distinguished (both variants space
+	// the same here). Each also has a boxNodeFor case so it works inside an \hbox.
+	e.prim("hspace", func(e *Engine) {
+		e.scanOptStar()
+		e.placeHGlue(glueSpec{width: e.readBraceDimen()})
+	})
+	e.prim("vspace", func(e *Engine) {
+		e.scanOptStar()
+		e.contribute(glueNode{spec: glueSpec{width: e.readBraceDimen()}})
+	})
+	e.prim("hrulefill", func(e *Engine) {
+		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderRule})
+	})
+	e.prim("dotfill", func(e *Engine) {
+		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderDots})
+	})
+	e.prim("@ifstar", func(e *Engine) { e.doIfstar() })
 	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
 	e.prim("vrule", func(e *Engine) { e.place(e.scanRule(false)) })
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
@@ -1025,11 +1045,41 @@ func (e *Engine) place(n node) {
 
 // placeHGlue adds horizontal glue: inside a paragraph it joins the line; in
 // vertical mode it starts a paragraph (an \hskip in vertical mode begins one).
-func (e *Engine) placeHGlue(g glueSpec) {
+func (e *Engine) placeHGlue(g glueSpec) { e.placeHGlueNode(glueNode{spec: g}) }
+
+// placeHGlueNode is placeHGlue for a fully-formed glue node (so a leader flag
+// survives), sharing the "an \hskip in vertical mode begins a paragraph" rule.
+func (e *Engine) placeHGlueNode(n glueNode) {
 	if !e.inPar {
 		e.beginParagraph(false)
 	}
-	e.parList = append(e.parList, glueNode{spec: g})
+	e.parList = append(e.parList, n)
+}
+
+// scanOptStar consumes an optional '*' after a command (as in \hspace*, \section*)
+// and reports whether one was present. A non-star token is backed out unexpanded.
+func (e *Engine) scanOptStar() bool {
+	e.skipOptSpace()
+	if t, ok := e.getNext(); ok {
+		if !t.cs_ && t.ch == '*' {
+			return true
+		}
+		e.back(t)
+	}
+	return false
+}
+
+// doIfstar implements LaTeX's \@ifstar#1#2: it grabs the two branch arguments,
+// then peeks the next token — if it is a '*' the star is swallowed and #1 is
+// pushed for execution, otherwise #2 is. This is what makes \section* work.
+func (e *Engine) doIfstar() {
+	yes := e.grabUndelimited()
+	no := e.grabUndelimited()
+	if e.scanOptStar() {
+		e.push(yes)
+		return
+	}
+	e.push(no)
 }
 
 // contribute adds top-level vertical material to the main vertical list. A

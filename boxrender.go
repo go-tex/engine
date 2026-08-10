@@ -75,7 +75,9 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 		case kernNode:
 			cx += spToPt(c.width)
 		case glueNode:
-			cx += spToPt(b.setWidth(c.spec))
+			w := spToPt(b.setWidth(c.spec))
+			paintLeader(sb, c.leader, cx, baseline, w, font)
+			cx += w
 		case charNode:
 			if font != nil {
 				if d := font.glyphPathAt(c.ch); d != "" {
@@ -122,6 +124,51 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			cy += spToPt(c.height + c.depth)
 		}
+	}
+}
+
+// paintLeader draws a glue node's set width as a leader: leaderRule fills the
+// span with a thin baseline rule (\hrulefill), leaderDots tiles a row of dots
+// (\dotfill). leaderNone (ordinary glue) paints nothing. w is the set width (pt).
+func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w float64, font fontFace) {
+	if w <= 0 {
+		return
+	}
+	switch kind {
+	case leaderRule:
+		th := spToPt(defaultRule)
+		rect(sb, x, baseline-th, w, th)
+	case leaderDots:
+		paintDotLeader(sb, x, baseline, w, font)
+	}
+}
+
+// dotLeaderGeom returns how many .44em dot cells fit across width w (pt) for a
+// font of design size emPt (pt), and the cell width. It yields zero cells for a
+// non-positive width or size, guarding the renderers against a zero-size font.
+func dotLeaderGeom(w, emPt float64) (n int, cell float64) {
+	cell = 0.44 * emPt // .44em dot box, as in latex.ltx
+	if w <= 0 || cell <= 0 {
+		return 0, cell
+	}
+	return int(w / cell), cell
+}
+
+// paintDotLeader tiles '.' glyphs centred in successive .44em cells across
+// [x, x+w], approximating TeX's \dotfill (\leaders\hbox to .44em{\hss.\hss}).
+func paintDotLeader(sb *strings.Builder, x, baseline, w float64, font fontFace) {
+	if font == nil {
+		return
+	}
+	d := font.glyphPathAt('.')
+	if d == "" {
+		return
+	}
+	n, cell := dotLeaderGeom(w, float64(font.sizePt()))
+	dotW := spToPt(func() int { w, _, _ := font.charDimsSP('.'); return w }())
+	for i := 0; i < n; i++ {
+		cx := x + float64(i)*cell + (cell-dotW)/2
+		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
 	}
 }
 

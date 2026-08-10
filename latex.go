@@ -36,9 +36,15 @@ const MiniLaTeXKernel = `
 \newcount\c@subsection
 \def\thesection{\the\c@section}
 \def\thesubsection{\the\c@section.\the\c@subsection}
-\def\section#1{\par\medskip\advance\c@section by1 \c@subsection=0 \noindent\thesection\quad#1\par\nobreak\smallskip}
-\def\subsection#1{\par\smallskip\advance\c@subsection by1 \noindent\thesubsection\quad#1\par\nobreak}
-\def\subsubsection#1{\par\smallskip\noindent#1\par\nobreak}
+\def\section{\@ifstar\@ssection\@nsection}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \noindent\thesection\quad#1\par\nobreak\smallskip}
+\def\@ssection#1{\par\medskip\noindent#1\par\nobreak\smallskip}
+\def\subsection{\@ifstar\@ssubsection\@nsubsection}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \noindent\thesubsection\quad#1\par\nobreak}
+\def\@ssubsection#1{\par\smallskip\noindent#1\par\nobreak}
+\def\subsubsection{\@ifstar\@ssubsubsection\@nsubsubsection}
+\def\@nsubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
+\def\@ssubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\paragraph#1{\par\noindent#1\quad}
 \def\title#1{\def\@title{#1}}
 \def\author#1{\def\@author{#1}}

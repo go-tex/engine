@@ -17,8 +17,27 @@ const defaultRule = 26214 // 0.4pt in sp, TeX's default_rule thickness
 // node is one item of horizontal or vertical material inside a box.
 type node interface{ isNode() }
 
-type kernNode struct{ width int }      // \kern (explicit space, no stretch)
-type glueNode struct{ spec glueSpec }  // \hskip/\vskip and the fil glues
+type kernNode struct{ width int } // \kern (explicit space, no stretch)
+type glueNode struct {            // \hskip/\vskip and the fil glues
+	spec   glueSpec
+	leader glueLeader // if set, the glue's set width is painted as a leader
+}
+
+// glueLeader marks a glue node that should be rendered as \leaders-like fill:
+// a horizontal rule (\hrulefill) or a row of dots (\dotfill) spanning its set
+// width. leaderNone (the zero value) is ordinary glue that paints nothing.
+type glueLeader uint8
+
+const (
+	leaderNone glueLeader = iota
+	leaderRule
+	leaderDots
+)
+
+// fillGlue returns 0pt plus 1fill (order-2 infinite stretch), the glue LaTeX's
+// \fill uses; \hfill, \hrulefill and \dotfill are all built on it.
+func fillGlue() glueSpec { return glueSpec{stretch: unity, stretchOrder: 2} }
+
 type penaltyNode struct{ penalty int } // \penalty
 type ruleNode struct {                 // \hrule/\vrule
 	width, height, depth          int
@@ -399,6 +418,13 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return kernNode{width: e.scanDimen()}, true
 	case "hskip", "vskip":
 		return glueNode{spec: e.scanGlue()}, true
+	case "hspace", "vspace":
+		e.scanOptStar()
+		return glueNode{spec: glueSpec{width: e.readBraceDimen()}}, true
+	case "hrulefill":
+		return glueNode{spec: fillGlue(), leader: leaderRule}, true
+	case "dotfill":
+		return glueNode{spec: fillGlue(), leader: leaderDots}, true
 	case "hfil", "vfil":
 		return glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, true
 	case "hfill", "vfill":

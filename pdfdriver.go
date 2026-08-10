@@ -72,7 +72,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case kernNode:
 			cx += spToPt(c.width)
 		case glueNode:
-			cx += spToPt(b.setWidth(c.spec))
+			w := spToPt(b.setWidth(c.spec))
+			d.leader(c.leader, cx, baseline, w)
+			cx += w
 		case charNode:
 			d.p.Text(cx, d.y(baseline), string(c.ch))
 			cx += spToPt(c.width)
@@ -112,6 +114,21 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))
 			cy += spToPt(c.height + c.depth)
+		}
+	}
+}
+
+// leader paints a glue node's set width as a \leaders-like fill: leaderRule draws
+// a thin baseline rule (\hrulefill), leaderDots tiles '.' glyphs (\dotfill).
+func (d *pdfDraw) leader(kind glueLeader, x, baseline, w float64) {
+	switch kind {
+	case leaderRule:
+		th := spToPt(defaultRule)
+		d.rect(x, baseline-th, w, th)
+	case leaderDots:
+		n, cell := dotLeaderGeom(w, d.size)
+		for i := 0; i < n; i++ {
+			d.p.Text(x+float64(i)*cell, d.y(baseline), ".")
 		}
 	}
 }

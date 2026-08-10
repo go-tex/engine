@@ -36,6 +36,27 @@ func TestRenderPDFProducesValidPDF(t *testing.T) {
 	}
 }
 
+// The PDF driver paints \hrulefill and \dotfill leaders (a rule rect and tiled
+// dots) as well as \hspace, over the same box tree as the SVG driver.
+func TestRenderPDFWithLeaders(t *testing.T) {
+	fp := "/System/Library/Fonts/Supplemental/Georgia.ttf"
+	if _, err := os.Stat(fp); err != nil {
+		t.Skip("no system font")
+	}
+	e := New()
+	e.Run(`\font\rm={` + fp + `} at 12pt \rm`)
+	e.Run(`\hsize=300pt \baselineskip=15pt `)
+	e.Run(`Left\hspace{20pt}Right\par Name\hrulefill End\par Item\dotfill 9\par`)
+	var buf bytes.Buffer
+	if err := e.RenderPDF(&buf, 24); err != nil {
+		t.Fatalf("RenderPDF: %v", err)
+	}
+	b := buf.Bytes()
+	if len(b) < 500 || string(b[:5]) != "%PDF-" {
+		t.Fatalf("not a valid PDF (%d bytes)", len(b))
+	}
+}
+
 func TestRenderPDFNeedsFont(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{}) // not embeddable
