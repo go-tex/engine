@@ -889,6 +889,8 @@ func (e *Engine) loadMore() {
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
 	e.prim("documentclass", func(e *Engine) { e.doGobbleOptAndGroup() })
 	e.prim("usepackage", func(e *Engine) { e.doGobbleOptAndGroup() })
+	e.prim("tabular", func(e *Engine) { e.doTabular() })
+	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
 	e.prim(" ", func(e *Engine) {                                      // control space: an explicit interword space
 		if e.curFont != nil {
