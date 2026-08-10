@@ -18,6 +18,24 @@ const MiniLaTeX = `
 \def\ldots{...}
 `
 
+// Plain is a small set of plain-TeX structural macros, written *in TeX* on top
+// of the box/glue primitives (\hbox to, \hfil, \vskip). Loaded with LoadPlain,
+// they let a document use the familiar commands without any Go-side support — the
+// same growth path as the kernel: add macros, do not hand-code commands.
+const Plain = `
+\def\centerline#1{\hbox to\hsize{\hfil#1\hfil}}
+\def\leftline#1{\hbox to\hsize{#1\hfil}}
+\def\rightline#1{\hbox to\hsize{\hfil#1}}
+\def\llap#1{\hbox to0pt{\hfil#1}}
+\def\rlap#1{\hbox to0pt{#1\hfil}}
+\def\bigskip{\vskip12pt}
+\def\medskip{\vskip6pt}
+\def\smallskip{\vskip3pt}
+`
+
+// LoadPlain defines the Plain structural macros in the engine.
+func (e *Engine) LoadPlain() error { return e.LoadFormat(Plain) }
+
 // LoadFormat executes a string of TeX definitions (a format/preamble) through
 // the gullet, defining its macros in the engine's eqtb without typesetting.
 func (e *Engine) LoadFormat(src string) error {

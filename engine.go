@@ -809,6 +809,12 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.boxDim('h'), 0
 			case m.kind == mPrim && m.name == "dp":
 				return e.boxDim('d'), 0
+			case m.kind == mPrim && m.name == "hsize":
+				return e.hsize, 0
+			case m.kind == mPrim && m.name == "vsize":
+				return e.vsize, 0
+			case m.kind == mPrim && m.name == "parindent":
+				return e.parindent, 0
 			}
 		}
 		e.back(t)
