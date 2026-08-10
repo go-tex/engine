@@ -71,6 +71,98 @@ func (e *Engine) LoadLaTeX() error {
 	return e.LoadFormat(MiniLaTeXKernel)
 }
 
+// doNewcommand implements LaTeX's \newcommand / \renewcommand / \providecommand:
+//
+//	\newcommand{\name}[nargs][default]{body}   (braces optional around \name)
+//
+// It defines \name as a macro of nargs undelimited parameters (#1…#nargs in the
+// body). An optional-argument default ([default]) is consumed but not yet honoured
+// (the arg is treated as mandatory), which covers the common no-optional-arg use.
+func (e *Engine) doNewcommand() {
+	name := e.scanCmdName()
+	nargs := e.scanOptBracketInt()
+	e.scanOptBracketSkip() // optional [default] — consumed; optional-arg not modelled
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return
+	}
+	body := e.scanBody()
+	var params []tok
+	for i := 1; i <= nargs && i <= 9; i++ {
+		params = append(params, tok{ch: rune('0' + i), cat: catParam})
+	}
+	if name != "" {
+		e.define(name, &meaning{kind: mMacro, params: params, body: body}, false)
+	}
+}
+
+// scanCmdName reads the command name for \newcommand: either {\name} or \name.
+// It reads raw (no expansion) so a \renewcommand target that is already defined
+// is not expanded before its name is captured.
+func (e *Engine) scanCmdName() string {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return ""
+	}
+	if t.cat == catBegin && !t.cs_ {
+		n, ok := e.getNext()
+		name := ""
+		if ok && n.cs_ {
+			name = n.cs
+		}
+		if c, ok := e.getNext(); ok && !(c.cat == catEnd && !c.cs_) {
+			e.back(c)
+		}
+		return name
+	}
+	if t.cs_ {
+		return t.cs
+	}
+	e.back(t)
+	return ""
+}
+
+// scanOptBracketInt reads an optional [n] and returns n (0 if absent).
+func (e *Engine) scanOptBracketInt() int {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return 0
+	}
+	if !t.cs_ && t.ch == '[' {
+		n := e.scanInt()
+		if c, ok := e.getXToken(); ok && !(!c.cs_ && c.ch == ']') {
+			e.back(c)
+		}
+		return n
+	}
+	e.back(t)
+	return 0
+}
+
+// scanOptBracketSkip consumes an optional [...] group (its content is ignored).
+func (e *Engine) scanOptBracketSkip() {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return
+	}
+	if !t.cs_ && t.ch == '[' {
+		for {
+			u, ok := e.getNext()
+			if !ok || (!u.cs_ && u.ch == ']') {
+				return
+			}
+		}
+	}
+	e.back(t)
+}
+
 // doDocumentClass gobbles \documentclass[options]{class} (both parts optional in
 // practice); it selects no behaviour yet — the class is ignored.
 func (e *Engine) doGobbleOptAndGroup() {
