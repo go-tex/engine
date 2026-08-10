@@ -116,18 +116,53 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 }
 
 // doMath handles a math-shift token: collect the source, render it, and place the
-// math box (inline in horizontal mode, or on the vertical list in vertical mode).
+// math box. Inline math ($…$) joins the current line; display math ($$…$$) ends
+// the paragraph and is centred on its own line (to \hsize with \hfil on each side).
 func (e *Engine) doMath() {
 	src, display := e.scanMathSource()
-	m := e.makeMath(src, display)
-	if !e.inPar && !display {
-		e.beginParagraph(false) // inline math begins a paragraph in vertical mode
+	e.placeMath(e.makeMath(src, display), display)
+}
+
+// doDelimitedMath handles LaTeX's \(…\) (inline) and \[…\] (display): it collects
+// the raw math source up to the closing control sequence and places it.
+func (e *Engine) doDelimitedMath(closeName string, display bool) {
+	src := e.collectMathUntilCS(closeName)
+	e.placeMath(e.makeMath(src, display), display)
+}
+
+// collectMathUntilCS reads raw tokens (no expansion) up to a control sequence
+// named close, reconstructing the math source for go-tex/math.
+func (e *Engine) collectMathUntilCS(close string) string {
+	var b strings.Builder
+	for {
+		t, ok := e.getNext()
+		if !ok || (t.cs_ && t.cs == close) {
+			break
+		}
+		if t.cs_ {
+			b.WriteByte('\\')
+			b.WriteString(t.cs)
+			b.WriteByte(' ')
+		} else {
+			b.WriteRune(t.ch)
+		}
 	}
-	if e.inPar {
-		e.parList = append(e.parList, m)
-	} else {
-		e.contribute(m) // display math on its own goes to the vertical list
+	return b.String()
+}
+
+// placeMath positions a math box: display math ends the paragraph and is centred
+// on its own line; inline math joins the current line (starting one if needed).
+func (e *Engine) placeMath(m mathNode, display bool) {
+	if display {
+		e.endParagraph()
+		fil := glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}
+		e.contribute(hpackSP([]node{fil, m, fil}, packTo, e.hsize))
+		return
 	}
+	if !e.inPar {
+		e.beginParagraph(false)
+	}
+	e.parList = append(e.parList, m)
 }
 
 // parseSVGSize extracts the width and height (points) from an SVG root element's
