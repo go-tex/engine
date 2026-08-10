@@ -137,7 +137,7 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen, 4=skip
+	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen, 4=skip, 5=font
 	name string
 	old  *meaning
 	idx  int
@@ -145,6 +145,7 @@ type saveItem struct {
 	oldc cat
 	oldd int
 	oldg glueSpec
+	oldf fontFace
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
@@ -341,6 +342,15 @@ func (e *Engine) setSkip(i int, v glueSpec, global bool) {
 	e.skip[i] = v
 }
 
+// selectFont makes f the current font, saving the previous one for restoration
+// at the end of the current group (so { \bf … } reverts afterwards).
+func (e *Engine) selectFont(f fontFace) {
+	if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 5, oldf: e.curFont})
+	}
+	e.curFont = f
+}
+
 func (e *Engine) setCat(r rune, c cat, global bool) {
 	if r >= 256 {
 		return
@@ -377,6 +387,8 @@ func (e *Engine) endGroup() {
 			e.dimen[s.idx] = s.oldd
 		case 4:
 			e.skip[s.idx] = s.oldg
+		case 5:
+			e.curFont = s.oldf
 		}
 	}
 }
@@ -690,7 +702,7 @@ func (e *Engine) execCS(t tok) bool {
 	case mSkipRef:
 		e.skipRefAssign(m.code, false) // \s=<glue>
 	case mFont:
-		e.curFont = m.font // \rm etc. selects the current font
+		e.selectFont(m.font) // \rm etc. selects the current font (group-scoped)
 	case mPrim:
 		if !isExpandable(m.name) {
 			m.prim(e)

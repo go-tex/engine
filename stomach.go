@@ -337,11 +337,13 @@ func (e *Engine) makeVtop() *boxNode {
 	return b
 }
 
-// buildBoxList builds a material list until the matching '}' (consumed), turning
-// node-producing primitives into nodes and executing everything else (including
-// assignments) via the shared execCS dispatch.
+// buildBoxList builds a material list until the box's matching '}' (consumed),
+// turning node-producing primitives into nodes and executing everything else via
+// the shared execCS dispatch. Nested { … } groups are handled with a depth count
+// so an inner '}' does not end the box (its own group is begun/ended locally).
 func (e *Engine) buildBoxList() []node {
 	var list []node
+	depth := 0
 	for e.err == nil {
 		t, ok := e.getXToken()
 		if !ok {
@@ -350,8 +352,13 @@ func (e *Engine) buildBoxList() []node {
 		if !t.cs_ {
 			switch t.cat {
 			case catEnd:
-				return list
+				if depth == 0 {
+					return list // the box's own closing brace (caller ends its group)
+				}
+				depth--
+				e.endGroup()
 			case catBegin:
+				depth++
 				e.beginGroup()
 			case catLetter, catOther:
 				if e.curFont != nil {

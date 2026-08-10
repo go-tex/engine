@@ -18,11 +18,18 @@ const MiniLaTeXKernel = `
 \def\end#1{\csname end#1\endcsname}
 \def\document{\catcode64=12 }
 \def\enddocument{\par\vfill\penalty-10000 }
-\def\textbf#1{#1}
-\def\textit#1{#1}
-\def\texttt#1{#1}
-\def\textsf#1{#1}
-\def\emph#1{#1}
+\def\rm{}
+\def\bf{}
+\def\it{}
+\def\sl{}
+\def\tt{}
+\def\sf{}
+\def\textbf#1{{\bf #1}}
+\def\textit#1{{\it #1}}
+\def\texttt#1{{\tt #1}}
+\def\textsf#1{{\sf #1}}
+\def\textrm#1{{\rm #1}}
+\def\emph#1{{\it #1}}
 \def\underline#1{#1}
 \def\mbox#1{\hbox{#1}}
 \def\section#1{\par\medskip\noindent#1\par\nobreak\smallskip}
