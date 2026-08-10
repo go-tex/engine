@@ -171,13 +171,19 @@ func KnuthPlass(items []Item, lineWidth, tolerance, linePenalty float64) ([]Line
 	return lines, true
 }
 
+// maxBadRatio caps the adjustment ratio of a short line that has no stretch (the
+// analogue of TeX's inf_bad): the line is very bad but still finite, so an
+// emergency pass with a large tolerance can accept it instead of collapsing the
+// whole paragraph onto one line.
+const maxBadRatio = 1e4
+
 // ratio is the glue adjustment ratio r for a line of natural width w with
 // stretch y and shrink z, on a line of width L.
 func ratio(w, y, z, L float64) float64 {
 	switch {
 	case w < L:
 		if y <= 0 {
-			return math.Inf(1)
+			return maxBadRatio // underfull with no stretch: bad but finite
 		}
 		return (L - w) / y
 	case w > L:

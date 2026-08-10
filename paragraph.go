@@ -31,10 +31,17 @@ func (e *Engine) endParagraph() {
 		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}},
 		penaltyNode{penalty: -int(InfPenalty)})
 
-	lines, ok := KnuthPlass(toItems(list), spToPt(e.hsize), 200, 10)
+	items := toItems(list)
+	lineWidth := spToPt(e.hsize)
+	lines, ok := KnuthPlass(items, lineWidth, 200, 10)
+	if !ok {
+		// Emergency pass: accept even very-bad (underfull) lines so the paragraph
+		// still wraps into multiple lines instead of collapsing onto one, as TeX
+		// does when its \tolerance pass fails.
+		lines, ok = KnuthPlass(items, lineWidth, maxBadRatio, 10)
+	}
 	if !ok || len(lines) == 0 {
-		// Fall back to a single overfull line so nothing is silently lost.
-		lines = []Line{{Start: 0, End: len(list)}}
+		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
 	}
 	for _, ln := range lines {
 		seg := trimLeadingGlue(list[ln.Start:ln.End])
