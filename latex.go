@@ -47,10 +47,12 @@ const MiniLaTeXKernel = `
 \def\@author{}
 \def\@date{}
 \def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
-\def\itemize{\par\smallskip}
-\def\enditemize{\par\smallskip}
-\def\enumerate{\par\smallskip}
-\def\endenumerate{\par\smallskip}
+\def\bullet{\char8226\relax}
+\newcount\c@enumi
+\def\itemize{\par\smallskip\begingroup\leftskip=24pt\def\item{\par\noindent\llap{\bullet\enspace}}}
+\def\enditemize{\par\endgroup\smallskip}
+\def\enumerate{\par\smallskip\begingroup\leftskip=24pt\c@enumi=0\def\item{\par\noindent\advance\c@enumi by1\relax\llap{\the\c@enumi.\enspace}}}
+\def\endenumerate{\par\endgroup\smallskip}
 \def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \def\endquote{\par\endgroup\smallskip}
 \def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}

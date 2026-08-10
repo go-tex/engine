@@ -29,8 +29,8 @@ const Plain = `
 \def\centerline#1{\hbox to\hsize{\hfil#1\hfil}}
 \def\leftline#1{\hbox to\hsize{#1\hfil}}
 \def\rightline#1{\hbox to\hsize{\hfil#1}}
-\def\llap#1{\hbox to0pt{\hfil#1}}
-\def\rlap#1{\hbox to0pt{#1\hfil}}
+\def\llap#1{\hbox to0pt{\hss#1}}
+\def\rlap#1{\hbox to0pt{#1\hss}}
 \def\bigskip{\vskip12pt}
 \def\medskip{\vskip6pt}
 \def\smallskip{\vskip3pt}
