@@ -361,8 +361,39 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.makeBox(hbox), true
 	case "vbox":
 		return e.makeBox(vbox), true
+	case "box":
+		i := e.scanInt()
+		b := e.getBox(i)
+		e.setBox(i, nil)
+		return boxOrNil(b)
+	case "copy":
+		return boxOrNil(cloneBox(e.getBox(e.scanInt())))
+	case "raise":
+		d := e.scanDimen()
+		return boxOrNil(e.scanShiftedBox(-d))
+	case "lower":
+		d := e.scanDimen()
+		return boxOrNil(e.scanShiftedBox(d))
 	}
 	return nil, false
+}
+
+// boxOrNil returns (box, true) as a node-producer result, using an untyped nil
+// node when the box is void so buildBoxList appends nothing.
+func boxOrNil(b *boxNode) (node, bool) {
+	if b == nil {
+		return nil, true
+	}
+	return b, true
+}
+
+// scanShiftedBox reads a box and applies a shift amount (positive = down).
+func (e *Engine) scanShiftedBox(shift int) *boxNode {
+	b := e.scanBox()
+	if b != nil {
+		b.shift = shift
+	}
+	return b
 }
 
 // scanRule reads an \hrule/\vrule with any number of width/height/depth keywords,

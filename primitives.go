@@ -930,9 +930,31 @@ func (e *Engine) loadStomach() {
 	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
 	e.prim("vrule", func(e *Engine) { e.place(e.scanRule(false)) })
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
+	// Box shifting: \raise/\lower move an hbox/vbox off the baseline (horizontal
+	// mode); \moveleft/\moveright shift a box horizontally (vertical mode). TeX's
+	// shift_amount is positive downward, so \raise and \moveleft negate it.
+	e.prim("raise", func(e *Engine) { d := e.scanDimen(); e.shiftAndPlace(-d, false) })
+	e.prim("lower", func(e *Engine) { d := e.scanDimen(); e.shiftAndPlace(d, false) })
+	e.prim("moveleft", func(e *Engine) { d := e.scanDimen(); e.shiftAndPlace(-d, true) })
+	e.prim("moveright", func(e *Engine) { d := e.scanDimen(); e.shiftAndPlace(d, true) })
 	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
 	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
+}
+
+// shiftAndPlace reads a box, applies a shift amount, and places it: vertical=true
+// (\moveleft/\moveright) contributes to the vertical list; vertical=false
+// (\raise/\lower) places it inline/vertically per the current mode.
+func (e *Engine) shiftAndPlace(shift int, vertical bool) {
+	b := e.scanShiftedBox(shift)
+	if b == nil {
+		return
+	}
+	if vertical {
+		e.contribute(b)
+	} else {
+		e.place(b)
+	}
 }
 
 // place adds material that is legal in both modes: inside a paragraph

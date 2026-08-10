@@ -90,7 +90,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			rect(sb, cx, baseline-spToPt(h), w, spToPt(h+d))
 			cx += w
 		case *boxNode:
-			paintBoxSP(sb, c, cx, baseline-spToPt(c.shift), font)
+			paintBoxSP(sb, c, cx, baseline+spToPt(c.shift), font) // shift>0 lowers the box
 			cx += spToPt(c.width)
 		}
 	}
