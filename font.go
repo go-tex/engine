@@ -19,6 +19,7 @@ type OpenTypeFont struct {
 	fc   *opentype.Face
 	upem float64
 	px   int
+	data []byte // original font bytes (for PDF embedding)
 }
 
 // NewOpenTypeFont builds a metrics source from a font and a pixel size.
@@ -27,7 +28,16 @@ func NewOpenTypeFont(fontBytes []byte, sizePx int) (*OpenTypeFont, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OpenTypeFont{f: f, fc: f.NewFace(sizePx), upem: float64(f.UnitsPerEm()), px: sizePx}, nil
+	return &OpenTypeFont{f: f, fc: f.NewFace(sizePx), upem: float64(f.UnitsPerEm()), px: sizePx, data: fontBytes}, nil
+}
+
+// fontBytes returns the original font blob (for the PDF driver to embed).
+func (o *OpenTypeFont) fontBytes() []byte { return o.data }
+
+// embeddableFont is a fontFace that can also supply its bytes for PDF embedding.
+type embeddableFont interface {
+	fontFace
+	fontBytes() []byte
 }
 
 // CharDims returns a glyph's advance width and its ink height above and depth
