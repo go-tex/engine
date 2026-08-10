@@ -49,10 +49,67 @@ func (e *Engine) refText(key string) string {
 	return "??"
 }
 
-// hasLabels reports whether a two-pass compile is needed (the source defines a
-// \label whose value a \ref may need before it is seen).
-func hasLabels(src []byte) bool {
-	return indexOf(src, `\label`) >= 0
+// doCite implements \cite{k1,k2,…}: the bracketed, comma-joined reference numbers
+// of one or more \bibitem entries, e.g. "[1, 3]". Each \bibitem stores its number
+// in the label table (via \label), so a \cite before the bibliography resolves on
+// the second pass. \nocite is a no-op here (it only affects a real .bib run).
+func (e *Engine) doCite() {
+	keys := splitComma(e.readBraceName())
+	for i, k := range keys {
+		keys[i] = e.refText(k)
+	}
+	e.pushString("[" + joinComma(keys) + "]")
+}
+
+// needsTwoPass reports whether the source must be compiled twice for forward
+// references to resolve: it defines a \label or a \bibitem whose number a \ref or
+// \cite may use before the definition is seen.
+func needsTwoPass(src []byte) bool {
+	return indexOf(src, `\label`) >= 0 || indexOf(src, `\bibitem`) >= 0
+}
+
+// splitComma splits a comma-separated key list, trimming spaces around each key.
+func splitComma(s string) []string {
+	var out []string
+	start := 0
+	flush := func(end int) {
+		k := trimSpaces(s[start:end])
+		if k != "" {
+			out = append(out, k)
+		}
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			flush(i)
+			start = i + 1
+		}
+	}
+	flush(len(s))
+	return out
+}
+
+// joinComma joins keys with ", ".
+func joinComma(keys []string) string {
+	out := ""
+	for i, k := range keys {
+		if i > 0 {
+			out += ", "
+		}
+		out += k
+	}
+	return out
+}
+
+// trimSpaces drops leading and trailing ASCII spaces.
+func trimSpaces(s string) string {
+	i, j := 0, len(s)
+	for i < j && s[i] == ' ' {
+		i++
+	}
+	for j > i && s[j-1] == ' ' {
+		j--
+	}
+	return s[i:j]
 }
 
 // indexOf is a tiny substring search (avoids importing bytes just for this).

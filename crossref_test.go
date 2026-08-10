@@ -95,12 +95,62 @@ func TestForwardRefTwoPass(t *testing.T) {
 	}
 }
 
-// hasLabels detects whether a two-pass compile is warranted.
-func TestHasLabels(t *testing.T) {
-	if !hasLabels([]byte(`x \label{a} y`)) {
-		t.Error("hasLabels should detect \\label")
+// needsTwoPass detects when forward references (\label or \bibitem) require it.
+func TestNeedsTwoPass(t *testing.T) {
+	if !needsTwoPass([]byte(`x \label{a} y`)) {
+		t.Error("needsTwoPass should detect \\label")
 	}
-	if hasLabels([]byte(`\ref{a} only, no definitions`)) {
-		t.Error("hasLabels should be false without \\label")
+	if !needsTwoPass([]byte(`\bibitem{a} An entry`)) {
+		t.Error("needsTwoPass should detect \\bibitem")
+	}
+	if needsTwoPass([]byte(`\ref{a} only, no definitions`)) {
+		t.Error("needsTwoPass should be false without \\label/\\bibitem")
+	}
+}
+
+// \bibitem numbers entries and stores each number under its key, so a \cite (even
+// one before the bibliography) resolves to the entry's number.
+func TestBibitemLabels(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(
+		`\begin{thebibliography}{9}` +
+			`\bibitem{a}First reference.` +
+			`\bibitem{b}Second reference.` +
+			`\end{thebibliography}`); err != nil {
+		t.Fatal(err)
+	}
+	if e.labels["a"] != "1" || e.labels["b"] != "2" {
+		t.Errorf("bib labels = %q/%q, want 1/2", e.labels["a"], e.labels["b"])
+	}
+}
+
+// \cite brackets and comma-joins the numbers of the cited entries; an unknown key
+// resolves to "??".
+func TestCite(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.labels = map[string]string{"a": "1", "b": "2"}
+	if _, err := e.Run(`\noindent\cite{a} \cite{a,b} \cite{x}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "[1][1,2][??]" { // spaces are glue, not chars
+		t.Errorf("cites typeset %q, want %q", got, "[1][1,2][??]")
+	}
+}
+
+// splitComma trims and drops empty keys.
+func TestSplitComma(t *testing.T) {
+	got := splitComma(" a , b ,,c ")
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("splitComma = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("splitComma[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }

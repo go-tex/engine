@@ -903,6 +903,8 @@ func (e *Engine) loadMore() {
 	e.prim("ref", func(e *Engine) { e.doRef() })
 	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
+	e.prim("cite", func(e *Engine) { e.doCite() })
+	e.prim("nocite", func(e *Engine) { e.readBraceName() }) // affects only a real .bib run; gobble the keys
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code

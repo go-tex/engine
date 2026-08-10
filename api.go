@@ -128,7 +128,7 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 // .aux file — carrying the labels into the second, rendered pass.
 func compile(src []byte, opt Options) (*Engine, error) {
 	latex := isLaTeX(src)
-	if latex && hasLabels(src) {
+	if latex && needsTwoPass(src) {
 		aux, err := buildEngine(opt, true)
 		if err != nil {
 			return nil, err

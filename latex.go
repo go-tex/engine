@@ -60,6 +60,11 @@ const MiniLaTeXKernel = `
 \def\enditemize{\par\endgroup\smallskip}
 \def\enumerate{\par\smallskip\begingroup\leftskip=24pt\c@enumi=0\def\item{\par\noindent\advance\c@enumi by1\relax\edef\@currentlabel{\the\c@enumi}\llap{\the\c@enumi.\enspace}}}
 \def\endenumerate{\par\endgroup\smallskip}
+\newcount\c@bibitem
+\def\thebibitem{\the\c@bibitem}
+\def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
+\def\endthebibliography{\par\endgroup\smallskip}
+\def\bibitem#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
 \def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \def\endquote{\par\endgroup\smallskip}
 \def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
