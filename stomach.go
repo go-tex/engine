@@ -410,6 +410,11 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 			return c, true
 		}
 		return nil, true
+	case " ": // control space inside a box
+		if e.curFont != nil {
+			return glueNode{spec: e.curFont.spaceSP()}, true
+		}
+		return nil, true
 	case "hbox":
 		return e.makeBox(hbox), true
 	case "vbox":

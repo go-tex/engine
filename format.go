@@ -23,6 +23,9 @@ const MiniLaTeX = `
 // they let a document use the familiar commands without any Go-side support — the
 // same growth path as the kernel: add macros, do not hand-code commands.
 const Plain = `
+\def\TeX{TeX}
+\def\LaTeX{LaTeX}
+\def\empty{}
 \def\centerline#1{\hbox to\hsize{\hfil#1\hfil}}
 \def\leftline#1{\hbox to\hsize{#1\hfil}}
 \def\rightline#1{\hbox to\hsize{\hfil#1}}
