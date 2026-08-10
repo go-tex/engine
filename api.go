@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -69,6 +70,9 @@ func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if err := loadLaTeXIfNeeded(e, src); err != nil {
+		return 0, err
+	}
 	if _, err := e.Run(string(src)); err != nil {
 		return 0, err
 	}
@@ -85,8 +89,20 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := loadLaTeXIfNeeded(e, src); err != nil {
+		return nil, err
+	}
 	if _, err := e.Run(string(src)); err != nil {
 		return nil, err
 	}
 	return e.RenderPages(opt.margin()), nil
+}
+
+// loadLaTeXIfNeeded loads the minimal LaTeX kernel when the source looks like a
+// LaTeX document (\documentclass present).
+func loadLaTeXIfNeeded(e *Engine, src []byte) error {
+	if bytes.Contains(src, []byte(`\documentclass`)) {
+		return e.LoadLaTeX()
+	}
+	return nil
 }
