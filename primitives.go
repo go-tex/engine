@@ -873,6 +873,8 @@ func (e *Engine) loadMore() {
 	e.eq["empty"] = &meaning{kind: mMacro}
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
 	e.prim("par", func(e *Engine) { e.endParagraph() })
+	e.prim("font", func(e *Engine) { e.doFont() })
+	e.prim("input", func(e *Engine) { e.doInput() })
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
 	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
 	e.loadStomach()

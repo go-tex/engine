@@ -112,6 +112,7 @@ const (
 	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
 	mDimenRef // \dimendef / \newdimen — an alias for a \dimen register (code = index)
 	mSkipRef  // \skipdef / \newskip — an alias for a \skip register (code = index)
+	mFont     // a font-switching control sequence defined by \font
 	mUndef
 )
 
@@ -124,6 +125,7 @@ type meaning struct {
 	ch     rune   // let-char / chardef code
 	cat    cat
 	code   int
+	font   fontFace // mFont: the font this cs selects
 }
 
 type saveItem struct {
@@ -630,6 +632,8 @@ func (e *Engine) execCS(t tok) bool {
 		e.dimenRefAssign(m.code, false) // \d=<dimen>
 	case mSkipRef:
 		e.skipRefAssign(m.code, false) // \s=<glue>
+	case mFont:
+		e.curFont = m.font // \rm etc. selects the current font
 	case mPrim:
 		if !isExpandable(m.name) {
 			m.prim(e)
