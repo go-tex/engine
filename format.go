@@ -31,6 +31,11 @@ const Plain = `
 \def\bigskip{\vskip12pt}
 \def\medskip{\vskip6pt}
 \def\smallskip{\vskip3pt}
+\def\quad{\hskip1em}
+\def\qquad{\hskip2em}
+\def\enspace{\hskip.5em}
+\def\thinspace{\hskip.16667em}
+\def\negthinspace{\hskip-.16667em}
 `
 
 // LoadPlain defines the Plain structural macros in the engine.

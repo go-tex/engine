@@ -956,6 +956,18 @@ func (e *Engine) applyUnit(intPart, f int) int {
 	case key == "sp":
 		e.skipOneOptSpace()
 		return intPart // sp is already scaled; fraction is dropped
+	case key == "em" || key == "ex":
+		// Font-relative units: 1em ≈ the font size (quad), 1ex ≈ half of it.
+		e.skipOneOptSpace()
+		size := 10
+		if e.curFont != nil {
+			size = e.curFont.sizePt()
+		}
+		coeff := intPart*unity + f // the decimal coefficient × unity
+		if key == "ex" {
+			return coeff * size / 2
+		}
+		return coeff * size
 	default:
 		if r, isUnit := unitRatio[key]; isUnit {
 			e.skipOneOptSpace()
