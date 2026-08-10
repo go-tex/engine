@@ -243,14 +243,26 @@ func (e *Engine) scan() (tok, bool) {
 				e.bpos++
 			}
 		case catSpace, catEOL:
+			// Collapse a run of spaces and line-endings into one token. A single
+			// line-ending is interword space; two or more (a blank line) is a
+			// paragraph break, which TeX turns into \par.
+			newlines := 0
+			if c == catEOL {
+				newlines++
+			}
 			e.bpos++
-			// collapse spaces; emit one space token
 			for e.bpos < len(e.base) {
 				cc := e.catOf(e.base[e.bpos])
 				if cc != catSpace && cc != catEOL {
 					break
 				}
+				if cc == catEOL {
+					newlines++
+				}
 				e.bpos++
+			}
+			if newlines >= 2 {
+				return csTok("par"), true
 			}
 			return chTok(' ', catSpace), true
 		case catIgnore:
