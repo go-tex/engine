@@ -310,8 +310,7 @@ func (e *Engine) buildBoxList() []node {
 				e.beginGroup()
 			case catLetter, catOther:
 				if e.curFont != nil {
-					w, h, d := e.curFont.charDimsSP(t.ch)
-					list = append(list, charNode{ch: t.ch, width: w, height: h, depth: d})
+					list = e.appendChar(list, t.ch)
 				}
 			case catSpace:
 				if e.curFont != nil {

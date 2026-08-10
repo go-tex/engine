@@ -83,6 +83,7 @@ type fontFace interface {
 	charDimsSP(r rune) (w, h, d int)
 	spaceSP() glueSpec
 	glyphPathAt(r rune) string // "" if the font lacks the glyph
+	kernSP(prev, cur rune) int // inter-character kern in sp (0 if none)
 }
 
 // ptToSP rounds points to scaled points.
@@ -99,6 +100,8 @@ func (o *OpenTypeFont) spaceSP() glueSpec {
 }
 
 func (o *OpenTypeFont) glyphPathAt(r rune) string { return o.glyphPath(r) }
+
+func (o *OpenTypeFont) kernSP(prev, cur rune) int { return ptToSP(float64(o.fc.Kern(prev, cur))) }
 
 // SetFont sets the current font used to measure and render characters in
 // horizontal mode. Passing an *OpenTypeFont (or any fontFace) is the Go-level

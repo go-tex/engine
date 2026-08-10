@@ -617,8 +617,31 @@ func (e *Engine) startChar(ch rune) {
 	if !e.inPar {
 		e.beginParagraph(true)
 	}
+	e.parList = e.appendChar(e.parList, ch)
+}
+
+// appendChar appends a measured character to a horizontal list, inserting the
+// font's inter-character kern before it when the previous node is a character
+// (TeX's font kern program). It is shared by paragraph building and box building.
+func (e *Engine) appendChar(list []node, ch rune) []node {
+	if prev, ok := lastChar(list); ok {
+		if k := e.curFont.kernSP(prev, ch); k != 0 {
+			list = append(list, kernNode{width: k})
+		}
+	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	e.parList = append(e.parList, charNode{ch: ch, width: w, height: h, depth: d})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d})
+}
+
+// lastChar returns the rune of the trailing character node, if the list ends in
+// one (so a kern can be inserted before the next character).
+func lastChar(list []node) (rune, bool) {
+	if len(list) > 0 {
+		if c, ok := list[len(list)-1].(charNode); ok {
+			return c.ch, true
+		}
+	}
+	return 0, false
 }
 
 // beginParagraph starts a paragraph, optionally prefixing the \parindent box

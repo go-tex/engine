@@ -17,6 +17,7 @@ func (spMock) spaceSP() glueSpec {
 	return glueSpec{width: 3 * unity, stretch: 3 * unity / 2, shrink: unity} // 3pt plus 1.5pt minus 1pt
 }
 func (spMock) glyphPathAt(rune) string { return "" }
+func (spMock) kernSP(_, _ rune) int    { return 0 }
 
 func TestCharNodeMetrics(t *testing.T) {
 	cases := []struct {
