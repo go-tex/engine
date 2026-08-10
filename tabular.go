@@ -205,14 +205,15 @@ func assembleTabular(built []tabBuilt, ncol int, vrules []bool) *boxNode {
 				rn = append(rn, vrule())
 			}
 			if j < ncol {
-				if j > 0 {
-					rn = append(rn, kernNode{width: 2 * tabColSep})
-				}
+				// \tabcolsep on both sides of every column keeps the content off
+				// the vertical rules and gives 2·\tabcolsep between columns.
 				var cell []node
 				if j < len(b.cells) {
 					cell = b.cells[j]
 				}
+				rn = append(rn, kernNode{width: tabColSep})
 				rn = append(rn, hpackSP(cell, packTo, colw[j]))
+				rn = append(rn, kernNode{width: tabColSep})
 			}
 		}
 		box := hpackSP(rn, packNatural, 0)

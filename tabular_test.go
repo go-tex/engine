@@ -33,9 +33,9 @@ func TestTabular(t *testing.T) {
 			continue
 		}
 		rows++
-		// each row width = col0(15) + gap(12) + col1(10) = 37pt
-		if row.width != 37*unity {
-			t.Errorf("row width %d sp want 37pt", row.width)
+		// width = col0(15)+col1(10) + 2·\tabcolsep per column (4×6pt) = 49pt
+		if row.width != 49*unity {
+			t.Errorf("row width %d sp want 49pt", row.width)
 		}
 	}
 	if rows != 2 {
@@ -50,8 +50,8 @@ func TestTabularRightAlign(t *testing.T) {
 	e.SetFont(spMock{})
 	e.Run(`\begin{tabular}{r}a \\ ccc\end{tabular}`)
 	tb := lastVbox(e)
-	row0 := tb.list[0].(*boxNode)   // first row hbox
-	cell := row0.list[0].(*boxNode) // its single cell
+	row0 := tb.list[0].(*boxNode)   // first row hbox: [tabcolsep, cell, tabcolsep]
+	cell := row0.list[1].(*boxNode) // the cell (after the leading \tabcolsep kern)
 	if _, isGlue := cell.list[0].(glueNode); !isGlue {
 		t.Errorf("right-aligned cell should lead with fil glue, got %T", cell.list[0])
 	}
