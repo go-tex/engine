@@ -15,10 +15,9 @@ import (
 // the output is selectable/copy-pasteable). It is the counterpart of the SVG
 // driver over the same sp box tree — the output format TeX exists to produce.
 // PDF space is points with the origin at the lower-left and y increasing upward,
-// so engine y (down from the top) maps to pageH − y.
-//
-// Limitations: math nodes (SVG from go-tex/math) are not yet drawn into the PDF
-// (they are logged as skipped); box shifts and rules are handled.
+// so engine y (down from the top) maps to pageH − y. Math (a go-tex/math SVG) is
+// translated to PDF vector paths by drawMathSVG (see mathpdf.go), so it appears
+// in the PDF, not only the SVG driver.
 
 // RenderPDF writes the main vertical list, split into \vsize pages, as a PDF to w.
 // Each page is (content width + 2·margin) × (content height + 2·margin) points.
@@ -87,7 +86,8 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			d.box(c, cx, baseline+spToPt(c.shift))
 			cx += spToPt(c.width)
 		case mathNode:
-			cx += spToPt(c.width) // math (SVG) not yet drawn into PDF
+			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
+			cx += spToPt(c.width)
 		}
 	}
 }
@@ -110,6 +110,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			d.box(c, x+spToPt(c.shift), cy+spToPt(c.height))
 			cy += spToPt(c.height + c.depth)
 		case mathNode:
+			drawMathSVG(d.p, c.svg, x, d.y(cy))
 			cy += spToPt(c.height + c.depth)
 		}
 	}
