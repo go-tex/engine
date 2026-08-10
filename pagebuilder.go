@@ -24,6 +24,8 @@ func vContribution(n node) int {
 		return c.spec.width
 	case charNode:
 		return c.height + c.depth
+	case mathNode:
+		return c.height + c.depth
 	}
 	return 0
 }

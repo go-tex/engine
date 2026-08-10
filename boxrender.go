@@ -83,6 +83,10 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 				}
 			}
 			cx += spToPt(c.width)
+		case mathNode:
+			// embed the math SVG with its top at (cx, baseline-height): centred
+			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
+			cx += spToPt(c.width)
 		case ruleNode:
 			h := ruleHeight(c, b)
 			d := ruleDepth(c, b)
@@ -113,6 +117,9 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			cy += hd
 		case *boxNode:
 			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font)
+			cy += spToPt(c.height + c.depth)
+		case mathNode: // display math on its own line
+			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			cy += spToPt(c.height + c.depth)
 		}
 	}

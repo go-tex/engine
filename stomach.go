@@ -82,6 +82,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			if c.depth > d {
 				d = c.depth
 			}
+		case mathNode:
+			natural += c.width
+			if c.height > h {
+				h = c.height
+			}
+			if c.depth > d {
+				d = c.depth
+			}
 		case glueNode:
 			natural += c.spec.width
 		case ruleNode:
@@ -120,6 +128,12 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			x += d + c.width
 			d = 0
 		case charNode: // unusual in a vlist; treat like a small box
+			if c.width > w {
+				w = c.width
+			}
+			x += d + c.height
+			d = c.depth
+		case mathNode: // display math on the vertical list
 			if c.width > w {
 				w = c.width
 			}
@@ -343,6 +357,9 @@ func (e *Engine) buildBoxList() []node {
 				if e.curFont != nil {
 					list = append(list, glueNode{spec: e.curFont.spaceSP()})
 				}
+			case catMath:
+				src, display := e.scanMathSource()
+				list = append(list, e.makeMath(src, display))
 			}
 			continue
 		}

@@ -81,6 +81,7 @@ type Engine struct {
 	box     [256]*boxNode // \box registers (nil = void)
 	mvl     []node        // main vertical list (top-level contributions)
 	curFont fontFace      // current font for measuring/rendering characters
+	mathR   mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
 	inPar        bool   // a paragraph is being accumulated
@@ -598,6 +599,8 @@ func (e *Engine) mainLoop() {
 				if e.inPar && e.curFont != nil {
 					e.parList = append(e.parList, glueNode{spec: e.curFont.spaceSP()})
 				}
+			case catMath:
+				e.doMath()
 			}
 			continue
 		}

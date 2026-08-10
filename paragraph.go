@@ -72,6 +72,9 @@ func toItems(list []node) []Item {
 		switch c := n.(type) {
 		case charNode:
 			items[i] = Glyph(c.ch, spToPt(c.width), spToPt(c.height), spToPt(c.depth))
+		case mathNode:
+			items[i] = Box(spToPt(c.width)) // a math box: fixed width, a valid break after
+
 		case kernNode:
 			items[i] = Box(spToPt(c.width))
 		case glueNode:
