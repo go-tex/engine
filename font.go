@@ -75,6 +75,36 @@ func (o *OpenTypeFont) Space() (float64, float64, float64) {
 	return w, w * 0.5, w / 3
 }
 
+// fontFace is the engine's current-font abstraction: glyph metrics in scaled
+// points plus an optional outline path for rendering. OpenTypeFont satisfies it;
+// tests use a deterministic mock. The face's pixel size is interpreted as its
+// point size, so 1px = 1pt and glyph coordinates match the sp box geometry.
+type fontFace interface {
+	charDimsSP(r rune) (w, h, d int)
+	spaceSP() glueSpec
+	glyphPathAt(r rune) string // "" if the font lacks the glyph
+}
+
+// ptToSP rounds points to scaled points.
+func ptToSP(pt float64) int { return int(pt*float64(unity) + 0.5) }
+
+func (o *OpenTypeFont) charDimsSP(r rune) (int, int, int) {
+	w, h, d := o.CharDims(r)
+	return ptToSP(w), ptToSP(h), ptToSP(d)
+}
+
+func (o *OpenTypeFont) spaceSP() glueSpec {
+	w, st, sh := o.Space()
+	return glueSpec{width: ptToSP(w), stretch: ptToSP(st), shrink: ptToSP(sh)}
+}
+
+func (o *OpenTypeFont) glyphPathAt(r rune) string { return o.glyphPath(r) }
+
+// SetFont sets the current font used to measure and render characters in
+// horizontal mode. Passing an *OpenTypeFont (or any fontFace) is the Go-level
+// stand-in for TeX's \font primitive until font-file loading via \font lands.
+func (e *Engine) SetFont(f fontFace) { e.curFont = f }
+
 // Typeset runs the gullet over src (expanding macros), builds a horizontal list
 // with the given font's metrics (glyph boxes and interword glue), and breaks it
 // into a paragraph box with Knuth–Plass. It stops at \par, end of input, or an

@@ -21,7 +21,7 @@ func spToPt(sp int) float64 { return float64(sp) / float64(unity) }
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
 func (e *Engine) RenderBox(i int, margin float64) string {
-	return RenderBoxSVG(e.getBox(i), margin)
+	return renderBoxSVG(e.getBox(i), margin, e.curFont)
 }
 
 // Page vpacks the main vertical list (everything contributed at top level) into a
@@ -35,13 +35,13 @@ func (e *Engine) Page() *boxNode {
 
 // RenderPage renders the main vertical list to an SVG page with the given margin.
 func (e *Engine) RenderPage(margin float64) string {
-	return RenderBoxSVG(e.Page(), margin)
+	return renderBoxSVG(e.Page(), margin, e.curFont)
 }
 
-// RenderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
+// renderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
 // margin (in points). The box's reference point (left edge, baseline) sits at
-// (margin, margin+height).
-func RenderBoxSVG(b *boxNode, margin float64) string {
+// (margin, margin+height). font (may be nil) draws character glyphs.
+func renderBoxSVG(b *boxNode, margin float64, font fontFace) string {
 	if b == nil {
 		return ""
 	}
@@ -51,24 +51,24 @@ func RenderBoxSVG(b *boxNode, margin float64) string {
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
 	sb.WriteString(`<rect width="100%" height="100%" fill="white"/><g fill="black">`)
-	paintBoxSP(&sb, b, margin, margin+spToPt(b.height))
+	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font)
 	sb.WriteString(`</g></svg>`)
 	return sb.String()
 }
 
 // paintBoxSP paints a box whose left edge is at x and whose baseline is at the
 // given y (SVG coordinates, points).
-func paintBoxSP(sb *strings.Builder, b *boxNode, x, baseline float64) {
+func paintBoxSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace) {
 	if b.kind == hbox {
-		paintHListSP(sb, b, x, baseline)
+		paintHListSP(sb, b, x, baseline, font)
 	} else {
-		paintVListSP(sb, b, x, baseline-spToPt(b.height))
+		paintVListSP(sb, b, x, baseline-spToPt(b.height), font)
 	}
 }
 
 // paintHListSP lays an hbox's material along the baseline, advancing the cursor
 // by each item's (set) width.
-func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64) {
+func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace) {
 	cx := x
 	for _, n := range b.list {
 		switch c := n.(type) {
@@ -76,6 +76,13 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64) {
 			cx += spToPt(c.width)
 		case glueNode:
 			cx += spToPt(b.setWidth(c.spec))
+		case charNode:
+			if font != nil {
+				if d := font.glyphPathAt(c.ch); d != "" {
+					fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+				}
+			}
+			cx += spToPt(c.width)
 		case ruleNode:
 			h := ruleHeight(c, b)
 			d := ruleDepth(c, b)
@@ -83,7 +90,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64) {
 			rect(sb, cx, baseline-spToPt(h), w, spToPt(h+d))
 			cx += w
 		case *boxNode:
-			paintBoxSP(sb, c, cx, baseline-spToPt(c.shift))
+			paintBoxSP(sb, c, cx, baseline-spToPt(c.shift), font)
 			cx += spToPt(c.width)
 		}
 	}
@@ -91,7 +98,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64) {
 
 // paintVListSP stacks a vbox's material from the top edge (top), advancing the
 // vertical cursor by each item's size and carrying the running depth.
-func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64) {
+func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace) {
 	cy := top
 	for _, n := range b.list {
 		switch c := n.(type) {
@@ -105,7 +112,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64) {
 			rect(sb, x, cy, spToPt(w), hd)
 			cy += hd
 		case *boxNode:
-			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height))
+			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font)
 			cy += spToPt(c.height + c.depth)
 		}
 	}

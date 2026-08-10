@@ -80,6 +80,7 @@ type Engine struct {
 	skip    [256]glueSpec // \skip (glue) registers
 	box     [256]*boxNode // \box registers (nil = void)
 	mvl     []node        // main vertical list (top-level contributions)
+	curFont fontFace      // current font for measuring/rendering characters
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem

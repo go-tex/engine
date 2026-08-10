@@ -24,11 +24,16 @@ type ruleNode struct {                 // \hrule/\vrule
 	width, height, depth          int
 	widthRun, heightRun, depthRun bool // a "running" dimension follows the box
 }
+type charNode struct { // a set character from the current font (metrics in sp)
+	ch                   rune
+	width, height, depth int
+}
 
 func (kernNode) isNode()    {}
 func (glueNode) isNode()    {}
 func (penaltyNode) isNode() {}
 func (ruleNode) isNode()    {}
+func (charNode) isNode()    {}
 func (*boxNode) isNode()    {}
 
 type boxKind uint8
@@ -69,6 +74,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 		switch c := n.(type) {
 		case kernNode:
 			natural += c.width
+		case charNode:
+			natural += c.width
+			if c.height > h {
+				h = c.height
+			}
+			if c.depth > d {
+				d = c.depth
+			}
 		case glueNode:
 			natural += c.spec.width
 		case ruleNode:
@@ -106,6 +119,12 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 		case kernNode:
 			x += d + c.width
 			d = 0
+		case charNode: // unusual in a vlist; treat like a small box
+			if c.width > w {
+				w = c.width
+			}
+			x += d + c.height
+			d = c.depth
 		case glueNode:
 			x += d + c.spec.width
 			d = 0
@@ -289,8 +308,17 @@ func (e *Engine) buildBoxList() []node {
 				return list
 			case catBegin:
 				e.beginGroup()
+			case catLetter, catOther:
+				if e.curFont != nil {
+					w, h, d := e.curFont.charDimsSP(t.ch)
+					list = append(list, charNode{ch: t.ch, width: w, height: h, depth: d})
+				}
+			case catSpace:
+				if e.curFont != nil {
+					list = append(list, glueNode{spec: e.curFont.spaceSP()})
+				}
 			}
-			continue // printable chars need a current font (deferred)
+			continue
 		}
 		if n, isNode := e.boxNodeFor(t); isNode {
 			if n != nil {
