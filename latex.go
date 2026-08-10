@@ -34,13 +34,14 @@ const MiniLaTeXKernel = `
 \def\mbox#1{\hbox{#1}}
 \newcount\c@section
 \newcount\c@subsection
+\def\@currentlabel{}
 \def\thesection{\the\c@section}
 \def\thesubsection{\the\c@section.\the\c@subsection}
 \def\section{\@ifstar\@ssection\@nsection}
-\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \noindent\thesection\quad#1\par\nobreak\smallskip}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\noindent\thesection\quad#1\par\nobreak\smallskip}
 \def\@ssection#1{\par\medskip\noindent#1\par\nobreak\smallskip}
 \def\subsection{\@ifstar\@ssubsection\@nsubsection}
-\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \noindent\thesubsection\quad#1\par\nobreak}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\noindent\thesubsection\quad#1\par\nobreak}
 \def\@ssubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\subsubsection{\@ifstar\@ssubsubsection\@nsubsubsection}
 \def\@nsubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
@@ -57,7 +58,7 @@ const MiniLaTeXKernel = `
 \newcount\c@enumi
 \def\itemize{\par\smallskip\begingroup\leftskip=24pt\def\item{\par\noindent\llap{\bullet\enspace}}}
 \def\enditemize{\par\endgroup\smallskip}
-\def\enumerate{\par\smallskip\begingroup\leftskip=24pt\c@enumi=0\def\item{\par\noindent\advance\c@enumi by1\relax\llap{\the\c@enumi.\enspace}}}
+\def\enumerate{\par\smallskip\begingroup\leftskip=24pt\c@enumi=0\def\item{\par\noindent\advance\c@enumi by1\relax\edef\@currentlabel{\the\c@enumi}\llap{\the\c@enumi.\enspace}}}
 \def\endenumerate{\par\endgroup\smallskip}
 \def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \def\endquote{\par\endgroup\smallskip}

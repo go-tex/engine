@@ -102,11 +102,8 @@ func (e *Engine) bindOptionalFont(name string, data []byte, size int) error {
 // CompileToPDF processes TeX source and writes a PDF to w, returning the page
 // count. A document's own \font/\hsize/… override the option defaults.
 func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
-	e, err := buildEngine(opt, isLaTeX(src))
+	e, err := compile(src, opt)
 	if err != nil {
-		return 0, err
-	}
-	if _, err := e.Run(string(src)); err != nil {
 		return 0, err
 	}
 	if err := e.RenderPDF(w, opt.margin()); err != nil {
@@ -118,14 +115,45 @@ func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
 // CompileToSVGPages processes TeX source and returns one SVG string per page —
 // the form an editor preview pane consumes directly.
 func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
-	e, err := buildEngine(opt, isLaTeX(src))
+	e, err := compile(src, opt)
+	if err != nil {
+		return nil, err
+	}
+	return e.RenderPages(opt.margin()), nil
+}
+
+// compile builds an engine and runs the source, ready for rendering. When the
+// document defines cross-reference \labels it compiles twice — the first pass
+// gathers the label table (so forward \refs resolve), exactly as LaTeX uses its
+// .aux file — carrying the labels into the second, rendered pass.
+func compile(src []byte, opt Options) (*Engine, error) {
+	latex := isLaTeX(src)
+	if latex && hasLabels(src) {
+		aux, err := buildEngine(opt, true)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := aux.Run(string(src)); err != nil {
+			return nil, err
+		}
+		e, err := buildEngine(opt, true)
+		if err != nil {
+			return nil, err
+		}
+		e.labels = aux.labels
+		if _, err := e.Run(string(src)); err != nil {
+			return nil, err
+		}
+		return e, nil
+	}
+	e, err := buildEngine(opt, latex)
 	if err != nil {
 		return nil, err
 	}
 	if _, err := e.Run(string(src)); err != nil {
 		return nil, err
 	}
-	return e.RenderPages(opt.margin()), nil
+	return e, nil
 }
 
 // isLaTeX reports whether the source looks like a LaTeX document.

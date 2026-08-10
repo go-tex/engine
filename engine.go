@@ -102,7 +102,8 @@ type Engine struct {
 	save   []saveItem
 	groups []int // save-stack length at each group's start
 
-	out      strings.Builder // \message output
+	out      strings.Builder   // \message output
+	labels   map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
 	err      error
 	noBase   bool // when true, getNext does not fall through to the base string
 	allocCnt int  // next free \count register handed out by \newcount

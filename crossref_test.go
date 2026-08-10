@@ -1,0 +1,106 @@
+package engine
+
+import "testing"
+
+// mvlText collects every character typeset in a node tree, ignoring glue/kern/
+// rules — enough to read back the letters and digits a run produced.
+func mvlText(nodes []node) string {
+	var b []rune
+	var walk func(ns []node)
+	walk = func(ns []node) {
+		for _, n := range ns {
+			switch c := n.(type) {
+			case charNode:
+				b = append(b, c.ch)
+			case *boxNode:
+				walk(c.list)
+			}
+		}
+	}
+	walk(nodes)
+	return string(b)
+}
+
+// \label freezes the current \@currentlabel: a section's number, a subsection's
+// dotted number, an enumerate item's counter — captured at \label time.
+func TestLabelValues(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(
+		`\section{A}\label{a}` +
+			`\subsection{b}\label{b}` +
+			`\section{C}\label{c}`); err != nil {
+		t.Fatal(err)
+	}
+	for k, want := range map[string]string{"a": "1", "b": "1.1", "c": "2"} {
+		if got := e.labels[k]; got != want {
+			t.Errorf("label %q = %q, want %q", k, got, want)
+		}
+	}
+}
+
+// \ref reproduces a stored label's text; an unknown key yields "??".
+func TestRefResolves(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.labels = map[string]string{"a": "1", "z": "2"}
+	if _, err := e.Run(`\noindent\ref{a} and \ref{z} and \ref{missing}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "1and2and??" {
+		t.Errorf("refs typeset %q, want %q", got, "1and2and??")
+	}
+}
+
+// \eqref parenthesises the reference text.
+func TestEqref(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.labels = map[string]string{"eq": "3"}
+	if _, err := e.Run(`\noindent\eqref{eq}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "(3)" {
+		t.Errorf("eqref typeset %q, want %q", got, "(3)")
+	}
+}
+
+// A forward \ref (used before its \label) resolves on the second pass, exactly as
+// the two-pass compile carries the label table from the aux run into the render.
+func TestForwardRefTwoPass(t *testing.T) {
+	src := `\noindent\ref{r}\section{X}\label{r}`
+	// Pass 1: labels start empty, so \ref{r} would be "??" here (discarded).
+	aux := New()
+	aux.LoadLaTeX()
+	aux.SetFont(spMock{})
+	if _, err := aux.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if aux.labels["r"] != "1" {
+		t.Fatalf("aux pass label r = %q, want 1", aux.labels["r"])
+	}
+	// Pass 2: with the aux labels, the forward \ref resolves to the section number.
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.labels = aux.labels
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "11X" { // \ref→1, section number 1, title X
+		t.Errorf("second pass typeset %q, want %q", got, "11X")
+	}
+}
+
+// hasLabels detects whether a two-pass compile is warranted.
+func TestHasLabels(t *testing.T) {
+	if !hasLabels([]byte(`x \label{a} y`)) {
+		t.Error("hasLabels should detect \\label")
+	}
+	if hasLabels([]byte(`\ref{a} only, no definitions`)) {
+		t.Error("hasLabels should be false without \\label")
+	}
+}
