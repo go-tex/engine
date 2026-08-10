@@ -51,6 +51,19 @@ const Plain = `
 \def\medbreak{\par\penalty-100 \medskip}
 \def\bigbreak{\par\penalty-100 \bigskip}
 \def\bye{\par\vfill\penalty-10000 }
+\def\%{\char37}
+\def\${\char36}
+\def\&{\char38}
+\def\#{\char35}
+\def\_{\char95}
+\def\{{\char123}
+\def\}{\char125}
+\def\S{\char167}
+\def\P{\char182}
+\def\copyright{\char169}
+\def\dag{\char134}
+\def\ddag{\char135}
+\def\pounds{\char163}
 `
 
 // LoadPlain defines the Plain structural macros in the engine.
