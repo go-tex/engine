@@ -911,8 +911,22 @@ func (e *Engine) loadMore() {
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.vsize = e.scanDimen() })
 	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
-	e.prim("leftskip", func(e *Engine) { e.scanEquals(); e.leftskip = e.scanGlue() })
-	e.prim("rightskip", func(e *Engine) { e.scanEquals(); e.rightskip = e.scanGlue() })
+	e.prim("leftskip", func(e *Engine) {
+		e.scanEquals()
+		g := e.scanGlue()
+		if len(e.groups) > 0 {
+			e.save = append(e.save, saveItem{kind: 6, oldg: e.leftskip})
+		}
+		e.leftskip = g
+	})
+	e.prim("rightskip", func(e *Engine) {
+		e.scanEquals()
+		g := e.scanGlue()
+		if len(e.groups) > 0 {
+			e.save = append(e.save, saveItem{kind: 7, oldg: e.rightskip})
+		}
+		e.rightskip = g
+	})
 	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.parindent = e.scanDimen() })
 	e.prim("indent", func(e *Engine) {
 		if !e.inPar {

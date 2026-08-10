@@ -23,8 +23,36 @@ func (e *Engine) endParagraph() {
 		return
 	}
 	e.inPar = false
-	list := e.hyphenateList(e.parList) // insert discretionary hyphens (if patterns loaded)
+	segments := splitAtForcedBreaks(e.parList) // \\ (a forced -10000 penalty) ends a line
 	e.parList = nil
+	for _, seg := range segments {
+		if len(seg) > 0 {
+			e.layoutSegment(seg)
+		}
+	}
+}
+
+// splitAtForcedBreaks divides a paragraph's horizontal list at explicit forced
+// breaks (\\, i.e. a penalty ≤ −10000) so each fragment is line-broken as its own
+// run of lines — an explicit line break, independent of the optimiser.
+func splitAtForcedBreaks(list []node) [][]node {
+	var segs [][]node
+	var cur []node
+	for _, n := range list {
+		if p, ok := n.(penaltyNode); ok && p.penalty <= -10000 {
+			segs = append(segs, cur)
+			cur = nil
+			continue
+		}
+		cur = append(cur, n)
+	}
+	return append(segs, cur)
+}
+
+// layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
+// contributes the lines of one paragraph fragment to the main vertical list.
+func (e *Engine) layoutSegment(hlist []node) {
+	list := e.hyphenateList(hlist) // insert discretionary hyphens (if patterns loaded)
 
 	// \parfillskip (0pt plus 1fil) fills the last line; a forced break ends it.
 	list = append(list,

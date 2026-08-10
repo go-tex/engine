@@ -137,7 +137,7 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind int // 0=eqtb, 1=count, 2=catcode, 3=dimen, 4=skip, 5=font
+	kind int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip
 	name string
 	old  *meaning
 	idx  int
@@ -389,6 +389,10 @@ func (e *Engine) endGroup() {
 			e.skip[s.idx] = s.oldg
 		case 5:
 			e.curFont = s.oldf
+		case 6:
+			e.leftskip = s.oldg
+		case 7:
+			e.rightskip = s.oldg
 		}
 	}
 }

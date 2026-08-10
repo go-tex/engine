@@ -53,9 +53,17 @@ const MiniLaTeXKernel = `
 \def\endenumerate{\par\smallskip}
 \def\quotation{\par\smallskip}
 \def\endquotation{\par\smallskip}
-\def\center{\par}
-\def\endcenter{\par}
+\def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\relax}
+\def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\relax}
+\def\center{\par\begingroup\centering}
+\def\endcenter{\par\endgroup}
+\def\flushleft{\par\begingroup\raggedright}
+\def\endflushleft{\par\endgroup}
+\def\flushright{\par\begingroup\raggedleft}
+\def\endflushright{\par\endgroup}
 \def\item{\par\noindent\quad-- }
+\def\\{\penalty-10000 }
+\def\newline{\penalty-10000 }
 \def\LaTeXe{LaTeX2e}
 \def\ldots{...}
 \def\dots{...}
