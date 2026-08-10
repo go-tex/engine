@@ -82,6 +82,14 @@ type Engine struct {
 	mvl     []node        // main vertical list (top-level contributions)
 	curFont fontFace      // current font for measuring/rendering characters
 
+	// paragraph-builder state (horizontal mode at top level)
+	inPar        bool   // a paragraph is being accumulated
+	parList      []node // the current paragraph's horizontal list
+	hsize        int    // line width for breaking (sp)
+	baselineskip int    // baseline-to-baseline glue (sp)
+	lineskip     int    // minimum interline glue when baselineskip is too small (sp)
+	prevDepth    int    // \prevdepth for interline glue (ignoreDepth = suppress)
+
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
 	groups []int // save-stack length at each group's start
@@ -132,6 +140,10 @@ type saveItem struct {
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
 	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10} // allocators start at 10
+	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                            // plain TeX \hsize = 6.5in
+	e.baselineskip = 12 * unity                                                       // 12pt
+	e.lineskip = unity                                                                // 1pt
+	e.prevDepth = ignoreDepth
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -565,6 +577,7 @@ func (e *Engine) mainLoop() {
 	for e.err == nil {
 		t, ok := e.getXToken()
 		if !ok {
+			e.endParagraph() // flush a trailing paragraph at end of input
 			return
 		}
 		if !t.cs_ {
@@ -573,6 +586,12 @@ func (e *Engine) mainLoop() {
 				e.beginGroup()
 			case catEnd:
 				e.endGroup()
+			case catLetter, catOther:
+				e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
+			case catSpace:
+				if e.inPar && e.curFont != nil {
+					e.parList = append(e.parList, glueNode{spec: e.curFont.spaceSP()})
+				}
 			}
 			continue
 		}
@@ -580,6 +599,18 @@ func (e *Engine) mainLoop() {
 			return
 		}
 	}
+}
+
+// startChar appends a measured character to the current paragraph, starting one
+// if needed. Without a current font there is nothing to measure, so it is a no-op
+// (the character is dropped, as in the pre-font core).
+func (e *Engine) startChar(ch rune) {
+	if e.curFont == nil {
+		return
+	}
+	e.inPar = true
+	w, h, d := e.curFont.charDimsSP(ch)
+	e.parList = append(e.parList, charNode{ch: ch, width: w, height: h, depth: d})
 }
 
 // execCS performs one control-sequence token (an assignment or non-expandable

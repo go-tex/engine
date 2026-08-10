@@ -596,6 +596,12 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "dp":
 				e.pushString(formatPt(e.boxDim('d')))
 				return
+			case m.kind == mPrim && m.name == "hsize":
+				e.pushString(formatPt(e.hsize))
+				return
+			case m.kind == mPrim && m.name == "baselineskip":
+				e.pushString(formatPt(e.baselineskip))
+				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
 				return
@@ -866,7 +872,9 @@ func (e *Engine) loadMore() {
 	// \empty and \space are ordinary macros, defined as in plain TeX.
 	e.eq["empty"] = &meaning{kind: mMacro}
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
-	e.prim("par", func(e *Engine) {})
+	e.prim("par", func(e *Engine) { e.endParagraph() })
+	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
+	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
 	e.loadStomach()
 }
 
@@ -900,12 +908,22 @@ func (e *Engine) loadStomach() {
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
 }
 
-// contribute appends a node to the main vertical list (nil boxes are dropped).
+// contribute adds top-level vertical material to the main vertical list. A
+// vertical command first ends any paragraph in progress; boxes route through
+// appendToPage (interline glue), a rule resets \prevdepth, other nodes append.
 func (e *Engine) contribute(n node) {
-	if b, ok := n.(*boxNode); ok && b == nil {
-		return
+	e.endParagraph()
+	switch c := n.(type) {
+	case *boxNode:
+		if c != nil {
+			e.appendToPage(c)
+		}
+	case ruleNode:
+		e.mvl = append(e.mvl, c)
+		e.prevDepth = ignoreDepth
+	default:
+		e.mvl = append(e.mvl, n)
 	}
-	e.mvl = append(e.mvl, n)
 }
 
 // doCase applies \uppercase/\lowercase to the next {group}: it re-cases letter
