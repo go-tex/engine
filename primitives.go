@@ -599,6 +599,9 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "hsize":
 				e.pushString(formatPt(e.hsize))
 				return
+			case m.kind == mPrim && m.name == "vsize":
+				e.pushString(formatPt(e.vsize))
+				return
 			case m.kind == mPrim && m.name == "baselineskip":
 				e.pushString(formatPt(e.baselineskip))
 				return
@@ -876,6 +879,7 @@ func (e *Engine) loadMore() {
 	e.prim("font", func(e *Engine) { e.doFont() })
 	e.prim("input", func(e *Engine) { e.doInput() })
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
+	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.vsize = e.scanDimen() })
 	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
 	e.loadStomach()
 }

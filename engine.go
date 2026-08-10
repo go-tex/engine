@@ -86,6 +86,7 @@ type Engine struct {
 	inPar        bool   // a paragraph is being accumulated
 	parList      []node // the current paragraph's horizontal list
 	hsize        int    // line width for breaking (sp)
+	vsize        int    // page height for the page builder (sp)
 	baselineskip int    // baseline-to-baseline glue (sp)
 	lineskip     int    // minimum interline glue when baselineskip is too small (sp)
 	prevDepth    int    // \prevdepth for interline glue (ignoreDepth = suppress)
@@ -143,6 +144,7 @@ type saveItem struct {
 func New() *Engine {
 	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10} // allocators start at 10
 	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                            // plain TeX \hsize = 6.5in
+	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                            // plain TeX \vsize = 8.9in
 	e.baselineskip = 12 * unity                                                       // 12pt
 	e.lineskip = unity                                                                // 1pt
 	e.prevDepth = ignoreDepth
