@@ -65,6 +65,17 @@ const MiniLaTeXKernel = `
 \def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
 \def\endthebibliography{\par\endgroup\smallskip}
 \def\bibitem#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+\newcount\c@figure
+\newcount\c@table
+\def\thefigure{\the\c@figure}
+\def\thetable{\the\c@table}
+\def\fnum@figure{Figure \thefigure}
+\def\fnum@table{Table \thetable}
+\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
+\def\endfigure{\par\endgroup\bigskip}
+\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
+\def\endtable{\par\endgroup\bigskip}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\bf\csname fnum@\@captype\endcsname:} #1\par}
 \def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \def\endquote{\par\endgroup\smallskip}
 \def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
