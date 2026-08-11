@@ -147,6 +147,7 @@ func compile(src []byte, opt Options) (*Engine, error) {
 			return nil, err
 		}
 		aux.finalizeTOCPages()
+		aux.finalizeIndexPages()
 		e, err := buildEngine(opt, true)
 		if err != nil {
 			return nil, err
@@ -155,6 +156,7 @@ func compile(src []byte, opt Options) (*Engine, error) {
 		e.refTypes = aux.refTypes
 		e.refNames = aux.refNames
 		e.tocSource = aux.tocEntries
+		e.indexSource = aux.indexEntries
 		if _, err := e.Run(string(src)); err != nil {
 			return nil, err
 		}

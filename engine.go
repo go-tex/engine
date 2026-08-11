@@ -127,6 +127,13 @@ type Engine struct {
 	tocEntries []tocEntry // recorded during the current run
 	tocSource  []tocEntry // entries carried from the aux pass, rendered by \tableofcontents
 
+	// index (see index.go): \makeindex enables collection, \index records entries
+	// (carried from the aux pass into the render pass exactly like tocEntries),
+	// and \printindex typesets a sorted, grouped index — LaTeX's .idx two-pass.
+	indexEnabled bool         // set by \makeindex; when false \index is a no-op
+	indexEntries []indexEntry // recorded during the current run
+	indexSource  []indexEntry // entries carried from the aux pass, rendered by \printindex
+
 	// footnotes (see footnote.go): a counter, bodies awaiting attachment to the
 	// vertical list, and a guard so a footnote's own paragraph build doesn't
 	// recursively flush pending footnotes.

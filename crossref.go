@@ -68,13 +68,16 @@ func (e *Engine) doCite() {
 // \label or a \bibitem whose number a \ref or \cite may use before the
 // definition is seen, or it requests a \tableofcontents / \listoffigures /
 // \listoftables, whose entries are only known once the whole document has run
-// (LaTeX's .toc/.lof/.lot mechanism — see toc.go).
+// (LaTeX's .toc/.lof/.lot mechanism — see toc.go), or it requests a \printindex,
+// whose \index entries and their page numbers are only known after a full run
+// (LaTeX's .idx mechanism — see index.go).
 func needsTwoPass(src []byte) bool {
 	return indexOf(src, `\label`) >= 0 ||
 		indexOf(src, `\bibitem`) >= 0 ||
 		indexOf(src, `\tableofcontents`) >= 0 ||
 		indexOf(src, `\listoffigures`) >= 0 ||
-		indexOf(src, `\listoftables`) >= 0
+		indexOf(src, `\listoftables`) >= 0 ||
+		indexOf(src, `\printindex`) >= 0
 }
 
 // splitComma splits a comma-separated key list, trimming spaces around each key.

@@ -984,6 +984,12 @@ func (e *Engine) loadMore() {
 	e.prim("tableofcontents", func(e *Engine) { e.doTableOfContents() })
 	e.prim("listoffigures", func(e *Engine) { e.doListOfFigures() })
 	e.prim("listoftables", func(e *Engine) { e.doListOfTables() })
+	// index mechanism (see index.go): \makeindex enables collection, \index
+	// records an entry (a no-op until \makeindex), \printindex typesets the sorted
+	// index; carried through the two-pass beside the TOC entries.
+	e.prim("makeindex", func(e *Engine) { e.doMakeIndex() })
+	e.prim("index", func(e *Engine) { e.doIndex() })
+	e.prim("printindex", func(e *Engine) { e.doPrintIndex() })
 	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketToks() }) // eat an optional [placement] (figure/table)
 	// \@ifnextbracket{THEN}{ELSE}: a \@ifnextchar[ built without \futurelet (which
 	// this kernel lacks). It grabs two brace groups, then peeks — without
