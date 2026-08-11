@@ -968,7 +968,9 @@ func (e *Engine) loadMore() {
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	e.prim("nocite", func(e *Engine) { e.readBraceName() })         // affects only a real .bib run; gobble the keys
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
-	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
+	e.prim("endtabular", func(e *Engine) {}) // consumed by doTabular; defined for safety
+	e.prim("minipage", func(e *Engine) { e.doMinipage() })
+	e.prim("endminipage", func(e *Engine) {})                          // consumed by doMinipage; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
 	for _, acc := range []string{"'", "`", "^", "\"", "~", "=", ".", "u", "v", "H", "r", "c", "k", "b", "d"} {
 		a := acc
