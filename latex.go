@@ -226,6 +226,27 @@ const MiniLaTeXKernel = `
 \def\midrule{}
 \def\bottomrule{}
 \def\cmidrule#1{}
+% ─── typed cross-references (feat/typedrefs) ─────────────────────────────────
+% \autoref/\nameref (hyperref) and \cref/\Cref (cleveref) print a reference with
+% the NAME of what it points to ("Section 1", "Equation (1)"). To type a ref, the
+% engine must record — beside the number (\@currentlabel) — the KIND of thing the
+% last counter-stepping command produced (\@currentreftype) and its title text
+% (\@currentlabelname, for \nameref). Rather than touch the originals, the
+% number-freezing macros are redefined here as NEW \def lines (later definition
+% wins) that additionally set those two macros; \label freezes all three (see
+% typedrefs.go). The sectioning/caption redefinitions preserve the \@tocentry call
+% that feat/toc bound, so the table of contents is unaffected. \@currentreftype
+% and \@currentlabelname default to empty so a \label with no typed context still
+% resolves (\autoref/\cref then fall back to a bare number).
+\def\@currentreftype{}
+\def\@currentlabelname{}
+\def\equation{\global\advance\c@equation by1\relax\edef\@currentlabel{\theequation}\def\@currentreftype{equation}\def\@currentlabelname{}\@equationbody}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\def\@currentreftype{section}\def\@currentlabelname{#1}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\def\@currentreftype{subsection}\def\@currentlabelname{#1}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
+\def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
+\def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

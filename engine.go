@@ -114,7 +114,11 @@ type Engine struct {
 
 	out    strings.Builder   // \message output
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
-	err    error
+	// typed cross-references (see typedrefs.go): recorded beside labels at \label
+	// time and carried through the two-pass compile exactly like labels.
+	refTypes map[string]string // \label → \@currentreftype, used by \autoref / \cref
+	refNames map[string]string // \label → \@currentlabelname (title), used by \nameref
+	err      error
 
 	// table of contents (see toc.go): entries recorded as \section/\subsection and
 	// \caption run (via the \@tocentry prim), carried from the aux pass into the

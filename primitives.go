@@ -1085,6 +1085,12 @@ func (e *Engine) loadMore() {
 	e.prim("settowidth", func(e *Engine) { e.doSettodim('w') })
 	e.prim("settoheight", func(e *Engine) { e.doSettodim('h') })
 	e.prim("settodepth", func(e *Engine) { e.doSettodim('d') })
+	// Typed cross-references (see typedrefs.go): hyperref \autoref/\nameref and
+	// cleveref \cref/\Cref, which print the reference type together with the number.
+	e.prim("autoref", func(e *Engine) { e.doAutoref() })
+	e.prim("nameref", func(e *Engine) { e.doNameref() })
+	e.prim("cref", func(e *Engine) { e.doCref(false) })
+	e.prim("Cref", func(e *Engine) { e.doCref(true) })
 	e.loadStomach()
 }
 
