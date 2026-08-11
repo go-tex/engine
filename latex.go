@@ -313,6 +313,64 @@ const MiniLaTeXKernel = `
 \def\squared{²}
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
+% ─── sub-captions / \captionof / \captionsetup (feat/subcaption) ─────────────
+% A pragmatic subset of the caption / subcaption packages. Everything here is
+% pure macro glue that REUSES the existing counter, \caption and \parbox
+% machinery — none of the \caption / \figure / \table / \c@figure lines above are
+% edited; the two environment openers are only re-\def'd additively (later
+% definition wins) to zero the sub-panel counter.
+%
+%   \captionof{TYPE}{TEXT}
+%       A caption used OUTSIDE a float. It sets \@captype to TYPE (figure/table)
+%       and defers to \caption, so it steps \c@TYPE, prints "Figure N: TEXT" and
+%       freezes \@currentlabel — \label/\ref then resolve to the plain number "N",
+%       exactly as an in-float \caption does. This is the caption package's key
+%       feature (a caption for non-float material, e.g. inside a minipage).
+%
+%   \subcaptionbox{SUBCAP}{CONTENT}
+%       One lettered sub-panel of a figure. It steps \c@subfigure and typesets
+%       CONTENT (typically an \includegraphics, \fbox or \rule) above a centred
+%       "(a) SUBCAP" inside a \parbox whose width is the NATURAL width of CONTENT
+%       (measured with \settowidth into \subcaptionwidth), so several panels
+%       placed in a row sit side by side and the sub-caption wraps to the panel.
+%       A \label inside the panel resolves to parent+letter ("1a"): the
+%       frozen \@currentlabel is \the\@subparent\thesubfigure, where \@subparent
+%       is the number the pending main \caption will assign to the figure
+%       (\c@figure + 1) and \thesubfigure is \alph{subfigure}. The reference type
+%       is recorded as "subfigure" (for \autoref/\cref). This is the sub-panel
+%       command that is FULLY implemented; \subfloat (below) is an alias.
+%
+%   \subfloat[SUBCAP]{CONTENT}
+%       subfig-package spelling, mapped onto \subcaptionbox. The sub-caption is
+%       the OPTIONAL argument (\subfloat{CONTENT} gives an unlettered-caption
+%       panel that still steps the counter), matching subfig's signature.
+%
+%   \captionsetup[FLOAT]{OPTIONS}
+%       Accepted and ignored: it gobbles an optional [float type] and the required
+%       {options} group so caption-configuring documents do not break. Caption
+%       STYLING options are not modelled (LIMITATION).
+%
+% CONVENTIONS & LIMITATIONS. Sub-panels must appear BEFORE the figure's main
+% \caption (the usual layout), so that \c@figure + 1 is the figure's eventual
+% number; the panel is sized to the natural width of its content (a caption
+% longer than the content wraps to that width, with no manual [width] option);
+% and caption styling requested through \captionsetup is not modelled.
+\newcount\c@subfigure
+\newcount\@subparent
+\newdimen\subcaptionwidth
+\def\thesubfigure{\@alph\c@subfigure}
+\def\p@subfigure{\the\@subparent}
+\def\captionof#1#2{\def\@captype{#1}\caption{#2}}
+\def\captionsetup{\@ifnextbracket{\@captionsetupopt}{\@captionsetupnoopt}}
+\def\@captionsetupopt[#1]#2{}
+\def\@captionsetupnoopt#1{}
+\def\subcaptionbox#1#2{\global\advance\c@subfigure by1\relax\@subparent=\c@figure \advance\@subparent by1\relax\edef\@currentlabel{\p@subfigure\thesubfigure}\def\@currentreftype{subfigure}\def\@currentlabelname{}\settowidth\subcaptionwidth{#2}\noindent\parbox[b]{\subcaptionwidth}{\centering #2\\{\small(\thesubfigure) #1}}\quad}
+\def\subfloat{\@ifnextbracket{\@subfloatopt}{\@subfloatnoopt}}
+\def\@subfloatopt[#1]#2{\subcaptionbox{#1}{#2}}
+\def\@subfloatnoopt#1{\subcaptionbox{}{#1}}
+\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+% ─── end sub-captions / \captionof / \captionsetup ───────────────────────────
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
