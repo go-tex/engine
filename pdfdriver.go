@@ -218,14 +218,20 @@ func (d *pdfDraw) transform(tn transformNode, x, baseline float64) {
 	d.curColor, d.cur = savedColor, savedSize
 }
 
-// drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
-// decoded and re-encoded by go-pdfkit.
+// drawImage embeds an image XObject: PNG/JPEG go in verbatim, an SVG is drawn as
+// vector paths (drawSVGImage, see svgimage.go), anything else is decoded and
+// re-encoded by go-pdfkit. drawSVGImage changes the page fill colour as it selects
+// per-shape fills, so afterwards the tracked colour is re-selected to keep later
+// text/rule colours correct.
 func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
 	switch n.format {
 	case "png":
 		_ = d.p.DrawPNG(n.data, r)
 	case "jpeg":
 		_ = d.p.DrawJPEG(n.data, r)
+	case "svg":
+		drawSVGImage(d.p, n.data, r)
+		d.p.SetFillColor(pdfkit.RGB8(uint8(d.curColor>>16), uint8(d.curColor>>8), uint8(d.curColor)))
 	default:
 		if img, _, err := image.Decode(bytes.NewReader(n.data)); err == nil {
 			d.p.DrawImage(img, r)

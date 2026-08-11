@@ -4,10 +4,12 @@
 package engine
 
 // This file implements LaTeX's \includegraphics (the graphicx package): it loads a
-// PNG or JPEG — from disk, or straight from a data: URI so the browser build needs
-// no filesystem — sizes it from the [width=…, height=…, scale=…] options (or its
-// intrinsic pixels), and places it as an image box. The SVG driver embeds it as a
-// data-URI <image>; the PDF driver draws it as an image XObject via go-pdfkit.
+// PNG, JPEG or SVG — from disk, or straight from a data: URI so the browser build
+// needs no filesystem — sizes it from the [width=…, height=…, scale=…] options (or
+// its intrinsic pixels), and places it as an image box. Both drivers embed a raster
+// image verbatim (SVG driver: a data-URI <image>; PDF driver: an image XObject). An
+// SVG image is embedded verbatim by the SVG driver (nested data-URI <image>) and
+// drawn as vector paths by the PDF driver — see svgimage.go.
 
 import (
 	"bytes"
@@ -15,16 +17,19 @@ import (
 	"image"
 	_ "image/jpeg" // register JPEG for image.DecodeConfig
 	_ "image/png"  // register PNG for image.DecodeConfig
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
-// imageNode is a placed raster image: the original file bytes (PNG/JPEG, embedded
-// verbatim by both drivers) and the box it occupies (sp), sitting on the baseline.
+// imageNode is a placed image: the original file bytes (PNG/JPEG embedded verbatim;
+// SVG embedded verbatim by the SVG driver, vector-drawn by the PDF driver) and the
+// box it occupies (sp), sitting on the baseline.
 type imageNode struct {
 	data          []byte
-	format        string // "png" or "jpeg"
+	format        string // "png", "jpeg" or "svg"
 	width, height int
 	depth         int
 	srcLine       int
@@ -34,8 +39,11 @@ func (imageNode) isNode() {}
 
 // mime returns the data-URI media type for the image format.
 func (n imageNode) mime() string {
-	if n.format == "jpeg" {
+	switch n.format {
+	case "jpeg":
 		return "image/jpeg"
+	case "svg":
+		return "image/svg+xml"
 	}
 	return "image/png"
 }
@@ -98,15 +106,23 @@ func graphicsSize(iw, ih, wReq, hReq int, scale float64) (w, h int) {
 }
 
 // loadImage reads an image from a data: URI or a file path and returns its bytes,
-// format ("png"/"jpeg") and intrinsic pixel dimensions.
+// format ("png"/"jpeg"/"svg") and intrinsic pixel dimensions. An SVG source (a
+// ".svg" file, a data:image/svg+xml URI, or content sniffed as SVG) is handled by
+// loadSVGImage; everything else goes through image.DecodeConfig (PNG/JPEG).
 func loadImage(name string) (data []byte, format string, iw, ih int, err error) {
+	svgHint := false
 	if strings.HasPrefix(name, "data:") {
+		svgHint = svgDataURI(name)
 		data, err = decodeDataURI(name)
 	} else {
+		svgHint = strings.EqualFold(filepath.Ext(name), ".svg")
 		data, err = os.ReadFile(name)
 	}
 	if err != nil {
 		return nil, "", 0, 0, err
+	}
+	if svgHint || looksLikeSVG(data) {
+		return loadSVGImage(data)
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -115,13 +131,22 @@ func loadImage(name string) (data []byte, format string, iw, ih int, err error) 
 	return data, format, cfg.Width, cfg.Height, nil
 }
 
-// decodeDataURI extracts the bytes from a base64 data: URI.
+// decodeDataURI extracts the bytes from a data: URI. A ";base64" payload is base64-
+// decoded; any other payload (e.g. data:image/svg+xml,<svg…>) is treated as
+// percent-encoded text, so both encodings of an inline SVG are accepted.
 func decodeDataURI(uri string) ([]byte, error) {
 	comma := strings.IndexByte(uri, ',')
 	if comma < 0 {
 		return nil, errDataURI
 	}
-	return base64.StdEncoding.DecodeString(uri[comma+1:])
+	meta, payload := uri[:comma], uri[comma+1:]
+	if strings.Contains(meta, ";base64") {
+		return base64.StdEncoding.DecodeString(payload)
+	}
+	if s, err := url.PathUnescape(payload); err == nil {
+		return []byte(s), nil
+	}
+	return []byte(payload), nil
 }
 
 var errDataURI = &graphicsError{"malformed data: URI"}
