@@ -950,6 +950,12 @@ func (e *Engine) loadMore() {
 	e.prim("hphantom", func(e *Engine) { e.place(e.makePhantom(phantomH)) })
 	e.prim("vphantom", func(e *Engine) { e.place(e.makePhantom(phantomV)) })
 	e.prim("smash", func(e *Engine) { e.place(e.makeSmash()) })
+	// graphicx box transformations: scale, mirror, resize and rotate the content,
+	// which the SVG/PDF drivers realise with native affine transforms.
+	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
+	e.prim("reflectbox", func(e *Engine) { e.place(e.doReflectbox()) })
+	e.prim("resizebox", func(e *Engine) { e.place(e.doResizebox()) })
+	e.prim("rotatebox", func(e *Engine) { e.place(e.doRotatebox()) })
 	e.prim("color", func(e *Engine) { e.doColor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })

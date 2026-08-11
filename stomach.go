@@ -159,6 +159,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			if c.depth() > d {
 				d = c.depth()
 			}
+		case transformNode:
+			natural += c.width()
+			if c.height() > h {
+				h = c.height()
+			}
+			if c.depth() > d {
+				d = c.depth()
+			}
 		case linkNode:
 			natural += c.width()
 			if c.height() > h {
@@ -218,6 +226,12 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			x += d + c.height()
 			d = c.depth()
 		case decoNode:
+			if c.width() > w {
+				w = c.width()
+			}
+			x += d + c.height()
+			d = c.depth()
+		case transformNode:
 			if c.width() > w {
 				w = c.width()
 			}
@@ -519,6 +533,14 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.makePhantom(phantomV), true
 	case "smash":
 		return e.makeSmash(), true
+	case "scalebox":
+		return e.doScalebox(), true
+	case "reflectbox":
+		return e.doReflectbox(), true
+	case "resizebox":
+		return e.doResizebox(), true
+	case "rotatebox":
+		return e.doRotatebox(), true
 	case "penalty":
 		return penaltyNode{penalty: e.scanInt()}, true
 	case "char":
