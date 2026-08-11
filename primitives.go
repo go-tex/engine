@@ -936,6 +936,25 @@ func (e *Engine) loadMore() {
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
 	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketToks() }) // eat an optional [placement] (figure/table)
+	// \@ifnextbracket{THEN}{ELSE}: a \@ifnextchar[ built without \futurelet (which
+	// this kernel lacks). It grabs two brace groups, then peeks — without
+	// expanding — at the next non-space token. When that token is a '[', the THEN
+	// tokens are pushed back (a delimited macro there can then read the optional
+	// [label]); otherwise the ELSE tokens are pushed. The peeked token is always
+	// put back, so no input is consumed.
+	e.prim("@ifnextbracket", func(e *Engine) {
+		thenToks := e.grabUndelimited()
+		elseToks := e.grabUndelimited()
+		e.skipOptSpace()
+		chosen := elseToks
+		if t, ok := e.getNext(); ok {
+			if !t.cs_ && t.ch == '[' {
+				chosen = thenToks
+			}
+			e.back(t)
+		}
+		e.push(chosen)
+	})
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	e.prim("verb", func(e *Engine) { e.doVerb() })

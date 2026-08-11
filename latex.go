@@ -89,10 +89,22 @@ const MiniLaTeXKernel = `
 \def\labelitemiv{\cdot}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
 \def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
-\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@bulletitem\labelitemi}\or\def\item{\@bulletitem\labelitemii}\or\def\item{\@bulletitem\labelitemiii}\else\def\item{\@bulletitem\labelitemiv}\fi}
+% \@itemopt reads the optional [label] of an \item in itemize/enumerate and uses
+% it verbatim in place of the default bullet/number. \@descitem does the same for
+% description, but emboldens the term. Both are delimited macros, so they consume
+% the bracket that \@ifnextbracket has already confirmed is present.
+\def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
+\def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
+\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi}
 \def\enditemize{\par\endgroup\smallskip}
-\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@listitem\c@enumi\theenumi}\or\c@enumii=0\relax\def\item{\@listitem\c@enumii\theenumii}\or\c@enumiii=0\relax\def\item{\@listitem\c@enumiii\theenumiii}\else\c@enumiv=0\relax\def\item{\@listitem\c@enumiv\theenumiv}\fi}
+\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi}
 \def\endenumerate{\par\endgroup\smallskip}
+% description: each \item[term] sets the bold term in the left margin, with the
+% following text indented like the other list environments. \item here always
+% takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
+% separate line as full LaTeX would) — acceptable for this kernel.
+\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}}
+\def\enddescription{\par\endgroup\smallskip}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
 \def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
