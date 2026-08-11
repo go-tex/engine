@@ -30,6 +30,9 @@ func (e *Engine) endParagraph() {
 			e.layoutSegment(seg)
 		}
 	}
+	// Attach any footnotes referenced in this paragraph to the vertical list,
+	// just after it, so they land on (and reserve room in) the same page.
+	e.flushFootnotes()
 }
 
 // splitAtForcedBreaks divides a paragraph's horizontal list at explicit forced

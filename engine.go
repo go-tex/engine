@@ -108,13 +108,20 @@ type Engine struct {
 	save   []saveItem
 	groups []int // save-stack length at each group's start
 
-	out      strings.Builder   // \message output
-	labels   map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
-	err      error
-	noBase   bool // when true, getNext does not fall through to the base string
-	allocCnt int  // next free \count register handed out by \newcount
-	allocDim int  // next free \dimen register handed out by \newdimen
-	allocSkp int  // next free \skip register handed out by \newskip
+	out    strings.Builder   // \message output
+	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
+	err    error
+
+	// footnotes (see footnote.go): a counter, bodies awaiting attachment to the
+	// vertical list, and a guard so a footnote's own paragraph build doesn't
+	// recursively flush pending footnotes.
+	footnoteCounter  int
+	pendingFootnotes []*boxNode
+	buildingFootnote bool
+	noBase           bool // when true, getNext does not fall through to the base string
+	allocCnt         int  // next free \count register handed out by \newcount
+	allocDim         int  // next free \dimen register handed out by \newdimen
+	allocSkp         int  // next free \skip register handed out by \newskip
 }
 
 type mkind uint8
@@ -633,27 +640,35 @@ func (e *Engine) mainLoop() {
 			e.endParagraph() // flush a trailing paragraph at end of input
 			return
 		}
-		if !t.cs_ {
-			switch t.cat {
-			case catBegin:
-				e.beginGroup()
-			case catEnd:
-				e.endGroup()
-			case catLetter, catOther:
-				e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
-			case catSpace:
-				if e.inPar && e.curFont != nil {
-					e.parList = append(e.parList, glueNode{spec: e.curFont.spaceSP()})
-				}
-			case catMath:
-				e.doMath()
-			}
-			continue
-		}
-		if !e.execCS(t) {
+		if !e.stepToken(t) {
 			return
 		}
 	}
+}
+
+// stepToken processes one already-expanded token in the main horizontal/vertical
+// loop: grouping, characters, interword space, math shift, or a control sequence.
+// It returns false when a primitive asks the loop to stop. Shared by mainLoop and
+// the sandboxed builds (e.g. a footnote body) that run material to completion.
+func (e *Engine) stepToken(t tok) bool {
+	if !t.cs_ {
+		switch t.cat {
+		case catBegin:
+			e.beginGroup()
+		case catEnd:
+			e.endGroup()
+		case catLetter, catOther:
+			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
+		case catSpace:
+			if e.inPar && e.curFont != nil {
+				e.parList = append(e.parList, glueNode{spec: e.curFont.spaceSP()})
+			}
+		case catMath:
+			e.doMath()
+		}
+		return true
+	}
+	return e.execCS(t)
 }
 
 // startChar appends a measured character to the current paragraph, starting one

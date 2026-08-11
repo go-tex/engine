@@ -28,6 +28,11 @@ func vContribution(n node) int {
 		return c.height + c.depth
 	case mathNode:
 		return c.height + c.depth
+	case footnoteNode:
+		// Reserve the note's height (plus rule + gaps) so the page breaks early
+		// enough to leave room for the foot area, even though the note is not
+		// painted inline (assemblePage lifts it to the page bottom).
+		return c.body.height + c.body.depth + footnoteReserve
 	}
 	return 0
 }
@@ -43,7 +48,7 @@ func (e *Engine) Pages() []*boxNode {
 	for start := 0; start < len(list); {
 		end := e.findPageBreak(list, start)
 		if page := trimTrailingGlue(list[start:end]); len(page) > 0 {
-			pages = append(pages, vpackSP(page, packNatural, 0))
+			pages = append(pages, e.assemblePage(page))
 		}
 		start = skipDiscardable(list, end)
 		if end <= start-1 { // safety: always make progress
