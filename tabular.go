@@ -25,12 +25,19 @@ type tabItem struct {
 
 // builtCell is one built table cell: its aligned node list plus how many columns
 // it spans. A \multicolumn cell has span>1, its own alignment, and | borders taken
-// from its {spec} rather than the table's column spec.
+// from its {spec} rather than the table's column spec. A \multirow cell has
+// multirow set, spans mrows rows vertically (one column), and carries its content
+// in mrbox — a single box whose .shift is computed once the spanned rows' heights
+// are known, so the box is vertically centred over the block it covers.
 type builtCell struct {
 	nodes          []node
 	span           int  // columns spanned (1 for an ordinary cell)
 	multicol       bool // built from \multicolumn
 	lvrule, rvrule bool // \multicolumn's own left/right | borders
+	multirow       bool // built from \multirow
+	mrows          int  // rows spanned (>=1)
+	mralign        byte // column alignment the content is set to (l/c/r/p)
+	mrbox          *boxNode
 }
 
 // tabBuilt is a tabItem with its cells turned into aligned node lists.
@@ -63,6 +70,16 @@ func (e *Engine) doTabular() {
 		for _, toks := range it.cells {
 			if isMulticolumn(toks) {
 				bc := e.buildMulticolumn(toks)
+				cells = append(cells, bc)
+				col += bc.span
+				continue
+			}
+			if isMultirow(toks) {
+				a := byte('l')
+				if col < ncol {
+					a = aligns[col]
+				}
+				bc := e.buildMultirow(toks, a)
 				cells = append(cells, bc)
 				col += bc.span
 				continue
@@ -119,6 +136,52 @@ func (e *Engine) buildMulticolumn(toks []tok) builtCell {
 		lvrule:   lv,
 		rvrule:   rv,
 	}
+}
+
+// isMultirow reports whether a raw cell begins with \multirow (past any leading
+// space — the newline after a row's \\ lands in the next cell as one).
+func isMultirow(toks []tok) bool {
+	for _, t := range toks {
+		if !t.cs_ && t.cat == catSpace {
+			continue
+		}
+		return t.cs_ && t.cs == "multirow"
+	}
+	return false
+}
+
+// buildMultirow parses a \multirow{n}{width}{content} cell into a spanning
+// builtCell. n is the number of rows the cell covers (>=1); width is a dimension
+// or `*` (natural width, parsed as 0); content is set to that width (line-broken
+// like a p{} column when a fixed width is given, natural otherwise). The cell holds
+// one column (span 1); assembleTabular later shifts mrbox so it is vertically
+// centred over the n rows. align is the alignment the content is placed with inside
+// its column (the table's column alignment, matching an ordinary cell).
+func (e *Engine) buildMultirow(toks []tok, align byte) builtCell {
+	i := 0
+	for i < len(toks) && !toks[i].cs_ && toks[i].cat == catSpace {
+		i++ // skip the leading space (the newline after the previous row's \\)
+	}
+	i++ // skip \multirow
+	var nTok, wTok, cTok []tok
+	nTok, i = grabBraceGroup(toks, i)
+	wTok, i = grabBraceGroup(toks, i)
+	cTok, _ = grabBraceGroup(toks, i)
+	n := toksToInt(nTok)
+	if n < 1 {
+		n = 1
+	}
+	// parseDimenStr yields 0 for `*` (and for an empty/malformed width): a
+	// non-positive width means "natural", a positive one packs to that width.
+	width := parseDimenStr(e.toksToString(wTok))
+	content := e.buildCellHList(trimSpaceToks(cTok))
+	var box *boxNode
+	if width > 0 {
+		box = e.breakToVbox(content, width)
+	} else {
+		box = hpackSP(content, packNatural, 0)
+	}
+	return builtCell{span: 1, multirow: true, mrows: n, mralign: align, mrbox: box}
 }
 
 // grabBraceGroup reads a {…} group from a token slice starting at i (skipping
@@ -403,7 +466,13 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 				break
 			}
 			if cell.span <= 1 {
-				if w := hpackSP(cell.nodes, packNatural, 0).width; w > colw[col] {
+				w := 0
+				if cell.multirow {
+					w = cell.mrbox.width // sized to its content or the given width
+				} else {
+					w = hpackSP(cell.nodes, packNatural, 0).width
+				}
+				if w > colw[col] {
 					colw[col] = w
 				}
 				col++
@@ -422,6 +491,8 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 	vrule := func() ruleNode { return ruleNode{width: defaultRule, heightRun: true, depthRun: true} }
 
 	// First pass: build each data-row hbox and find the widest (the table width).
+	// A \multirow slot is smashed to zero height here (so it never inflates its own
+	// row); its content box is shifted vertically in the pass below.
 	rowBoxes := make([]*boxNode, len(built))
 	maxW := 0
 	for i, b := range built {
@@ -431,6 +502,27 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 		rowBoxes[i] = buildTabRow(b.cells, ncol, colw, hasRule, vrule)
 		if rowBoxes[i].width > maxW {
 			maxW = rowBoxes[i].width
+		}
+	}
+
+	// Vertical-centring pass: now that every row's height/depth is known, shift each
+	// \multirow content box so it is centred over the block of rows it spans. The
+	// block runs from the top of the multirow's own row to the bottom of its last
+	// spanned row, counting interior \hline/\cline rules (defaultRule each).
+	for i, b := range built {
+		if b.hline || b.cline {
+			continue
+		}
+		for j := range b.cells {
+			c := b.cells[j]
+			if !c.multirow || c.mrbox == nil {
+				continue
+			}
+			extent := spannedExtent(built, rowBoxes, i, c.mrows)
+			// Content centre (relative to this row's baseline, +down) must equal the
+			// block centre: shift + (Dc-Hc)/2 = -Hr + extent/2.
+			hr := rowBoxes[i].height
+			c.mrbox.shift = -hr + extent/2 + (c.mrbox.height-c.mrbox.depth)/2
 		}
 	}
 
@@ -449,6 +541,51 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 		}
 	}
 	return vpackSP(vlist, packNatural, 0)
+}
+
+// spannedExtent returns the total vertical extent (sp) of the block a \multirow
+// covers: the sum of the heights+depths of the n data rows starting at built index
+// `start`, plus the thickness of every \hline/\cline rule sitting between them. It
+// stops at the n-th data row (or the end of the table), so a rule after the block
+// is excluded; an over-long span (n past the last row) simply sums what exists.
+func spannedExtent(built []tabBuilt, rowBoxes []*boxNode, start, n int) int {
+	total, seen := 0, 0
+	for k := start; k < len(built) && seen < n; k++ {
+		b := built[k]
+		if b.hline || b.cline {
+			if seen > 0 {
+				total += defaultRule
+			}
+			continue
+		}
+		total += rowBoxes[k].height + rowBoxes[k].depth
+		seen++
+	}
+	return total
+}
+
+// multirowSlot builds the column slot for a \multirow cell: the content box is
+// aligned within the column (l/c/r via \hfil, matching an ordinary cell) and the
+// slot is then smashed to zero height and depth so it contributes nothing to its
+// own row. The content box's .shift (set by assembleTabular) carries it down into
+// the rows below, where the covered cells are left blank. Simplification vs. the
+// real multirow package: an \hline between spanned rows still draws its full width
+// across the cell (plain multirow's default behaviour; \cline is used upstream to
+// carve gaps — not emulated here).
+func multirowSlot(cell builtCell, innerW int) *boxNode {
+	fil := glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}
+	var aligned []node
+	switch cell.mralign {
+	case 'r':
+		aligned = []node{fil, cell.mrbox}
+	case 'c':
+		aligned = []node{fil, cell.mrbox, fil}
+	default: // 'l', 'p' and anything else: flush left
+		aligned = []node{cell.mrbox, fil}
+	}
+	slot := hpackSP(aligned, packTo, innerW)
+	slot.height, slot.depth = 0, 0 // smash: the row's height ignores the spanning box
+	return slot
 }
 
 // buildTabRow lays one data row into an hbox using a column cursor so \multicolumn
@@ -487,7 +624,13 @@ func buildTabRow(cells []builtCell, ncol int, colw []int, hasRule func(int) bool
 				innerW += defaultRule
 			}
 		}
-		rn = append(rn, kernNode{width: tabColSep}, hpackSP(cell.nodes, packTo, innerW), kernNode{width: tabColSep})
+		var slot *boxNode
+		if cell.multirow {
+			slot = multirowSlot(cell, innerW)
+		} else {
+			slot = hpackSP(cell.nodes, packTo, innerW)
+		}
+		rn = append(rn, kernNode{width: tabColSep}, slot, kernNode{width: tabColSep})
 		col += span
 		lastSpanToEnd = cell.multicol && col == ncol
 		lastRvrule = cell.rvrule
