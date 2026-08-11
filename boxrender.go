@@ -70,15 +70,24 @@ func paintBoxSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontF
 // by each item's (set) width.
 func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace) {
 	cx := x
+	// Group consecutive glyphs sharing a source line into a <g data-l="N"> so the
+	// SVG preview can map a click → source line (and a line → its output). Kerns
+	// and inter-word glue are transparent (they stay inside a run); boxes, rules
+	// and math close the current run (they manage their own annotation).
+	lg := lineGrouper{sb: sb, line: -1}
 	for _, n := range b.list {
 		switch c := n.(type) {
 		case kernNode:
 			cx += spToPt(c.width)
 		case glueNode:
 			w := spToPt(b.setWidth(c.spec))
+			if c.leader != leaderNone {
+				lg.close()
+			}
 			paintLeader(sb, c.leader, cx, baseline, w, font)
 			cx += w
 		case charNode:
+			lg.set(c.srcLine)
 			if font != nil {
 				if d := font.glyphPathAt(c.ch); d != "" {
 					fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
@@ -86,19 +95,51 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			}
 			cx += spToPt(c.width)
 		case mathNode:
+			lg.close()
 			// embed the math SVG with its top at (cx, baseline-height): centred
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
 			cx += spToPt(c.width)
 		case ruleNode:
+			lg.close()
 			h := ruleHeight(c, b)
 			d := ruleDepth(c, b)
 			w := spToPt(c.width) // an hbox never has a running-width rule
 			rect(sb, cx, baseline-spToPt(h), w, spToPt(h+d))
 			cx += w
 		case *boxNode:
+			lg.close()
 			paintBoxSP(sb, c, cx, baseline+spToPt(c.shift), font) // shift>0 lowers the box
 			cx += spToPt(c.width)
 		}
+	}
+	lg.close()
+}
+
+// lineGrouper emits <g data-l="N"> … </g> wrappers around runs of glyphs that
+// share a source line, opening a new group only when the line changes and closing
+// on demand. A line of 0 (unknown) still groups, without the attribute.
+type lineGrouper struct {
+	sb   *strings.Builder
+	line int // current open group's line; -1 = none open
+}
+
+func (g *lineGrouper) set(line int) {
+	if g.line == line && g.line != -1 {
+		return
+	}
+	g.close()
+	if line > 0 {
+		fmt.Fprintf(g.sb, `<g data-l="%d">`, line)
+	} else {
+		g.sb.WriteString(`<g>`)
+	}
+	g.line = line
+}
+
+func (g *lineGrouper) close() {
+	if g.line != -1 {
+		g.sb.WriteString(`</g>`)
+		g.line = -1
 	}
 }
 
