@@ -144,12 +144,18 @@ type meaning struct {
 	kind   mkind
 	params []tok // macro parameter text
 	body   []tok // macro replacement text
-	prim   func(e *Engine)
-	name   string // primitive name (for \meaning/\string)
-	ch     rune   // let-char / chardef code
-	cat    cat
-	code   int
-	font   fontFace // mFont: the font this cs selects
+
+	// optArg marks a LaTeX-style macro whose first parameter is optional: at call
+	// time #1 is taken from a bracketed [..] argument if one is present, otherwise
+	// from optDefault. The remaining params[1:] are grabbed as usual.
+	optArg     bool
+	optDefault []tok
+	prim       func(e *Engine)
+	name       string // primitive name (for \meaning/\string)
+	ch         rune   // let-char / chardef code
+	cat        cat
+	code       int
+	font       fontFace // mFont: the font this cs selects
 }
 
 type saveItem struct {
@@ -466,7 +472,15 @@ func (e *Engine) getXToken() (tok, bool) {
 // expandMacro matches the macro's parameters against the input and pushes the
 // substituted body.
 func (e *Engine) expandMacro(m *meaning) {
-	args := e.matchParams(m.params)
+	var args [][]tok
+	if m.optArg && len(m.params) > 0 {
+		// #1 is optional: read a bracketed [..] argument if present, else the
+		// default. The rest of the parameters are grabbed normally.
+		args = append(args, e.grabOptArg(m.optDefault))
+		args = append(args, e.matchParams(m.params[1:])...)
+	} else {
+		args = e.matchParams(m.params)
+	}
 	var body []tok
 	for i := 0; i < len(m.body); i++ {
 		b := m.body[i]
@@ -510,6 +524,15 @@ func (e *Engine) matchParams(params []tok) [][]tok {
 		i++
 	}
 	return args
+}
+
+// grabOptArg reads the optional first argument of a LaTeX macro: the content of a
+// bracketed [..] group when one follows, otherwise the supplied default tokens.
+func (e *Engine) grabOptArg(def []tok) []tok {
+	if toks, ok := e.scanOptBracketToks(); ok {
+		return toks
+	}
+	return def
 }
 
 func (e *Engine) grabUndelimited() []tok {
