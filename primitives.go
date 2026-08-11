@@ -1043,6 +1043,8 @@ func (e *Engine) loadMore() {
 	e.prim("bibliography", func(e *Engine) { e.doBibliography() })           // read .bib, emit thebibliography
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {}) // consumed by doTabular; defined for safety
+	e.prim("tabularx", func(e *Engine) { e.doTabularx() })
+	e.prim("endtabularx", func(e *Engine) {}) // consumed by doTabularx; defined for safety
 	e.prim("minipage", func(e *Engine) { e.doMinipage() })
 	e.prim("endminipage", func(e *Engine) {})                          // consumed by doMinipage; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
