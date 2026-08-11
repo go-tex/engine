@@ -905,7 +905,10 @@ func (e *Engine) loadMore() {
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
 	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketSkip() }) // eat an optional [placement] (figure/table)
-	e.prim("nocite", func(e *Engine) { e.readBraceName() })           // affects only a real .bib run; gobble the keys
+	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
+	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
+	e.prim("verb", func(e *Engine) { e.doVerb() })
+	e.prim("nocite", func(e *Engine) { e.readBraceName() }) // affects only a real .bib run; gobble the keys
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
