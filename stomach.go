@@ -587,6 +587,12 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 	case "lower":
 		d := e.scanDimen()
 		return boxOrNil(e.scanShiftedBox(d))
+	case "makebox":
+		return boxOrNil(e.doMakebox())
+	case "raisebox":
+		return boxOrNil(e.doRaisebox())
+	case "usebox":
+		return boxOrNil(e.doUsebox())
 	}
 	return nil, false
 }

@@ -137,6 +137,7 @@ type Engine struct {
 	allocCnt         int  // next free \count register handed out by \newcount
 	allocDim         int  // next free \dimen register handed out by \newdimen
 	allocSkp         int  // next free \skip register handed out by \newskip
+	allocBox         int  // next free \box register handed out by \newsavebox
 
 	// page style (see pagenum.go): the page builder places a centred page number at
 	// the foot of each page when pageStyle is not "empty". pageNumStyle formats it.
@@ -160,6 +161,7 @@ const (
 	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
 	mDimenRef // \dimendef / \newdimen — an alias for a \dimen register (code = index)
 	mSkipRef  // \skipdef / \newskip — an alias for a \skip register (code = index)
+	mBoxRef   // \newsavebox — an alias for a \box register (code = index)
 	mFont     // a font-switching control sequence defined by \font
 	mUndef
 )
@@ -196,13 +198,13 @@ type saveItem struct {
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10} // allocators start at 10
-	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                            // plain TeX \hsize = 6.5in
-	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                            // plain TeX \vsize = 8.9in
-	e.baselineskip = 12 * unity                                                       // 12pt
-	e.lineskip = unity                                                                // 1pt
-	e.parindent = 20 * unity                                                          // plain TeX \parindent = 20pt
-	e.hyphenpenalty = 50                                                              // plain TeX \hyphenpenalty
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10} // allocators start at 10
+	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                                          // plain TeX \hsize = 6.5in
+	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                                          // plain TeX \vsize = 8.9in
+	e.baselineskip = 12 * unity                                                                     // 12pt
+	e.lineskip = unity                                                                              // 1pt
+	e.parindent = 20 * unity                                                                        // plain TeX \parindent = 20pt
+	e.hyphenpenalty = 50                                                                            // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
 	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
 	e.pageNumStyle = 'a'  // arabic page numbers by default
