@@ -23,13 +23,23 @@ type tabItem struct {
 	cells [][]tok
 }
 
+// builtCell is one built table cell: its aligned node list plus how many columns
+// it spans. A \multicolumn cell has span>1, its own alignment, and | borders taken
+// from its {spec} rather than the table's column spec.
+type builtCell struct {
+	nodes          []node
+	span           int  // columns spanned (1 for an ordinary cell)
+	multicol       bool // built from \multicolumn
+	lvrule, rvrule bool // \multicolumn's own left/right | borders
+}
+
 // tabBuilt is a tabItem with its cells turned into aligned node lists.
 type tabBuilt struct {
 	hline bool
 	cline bool
 	cfrom int
 	cto   int
-	cells [][]node
+	cells []builtCell
 }
 
 // doTabular typesets a tabular environment onto the current list.
@@ -48,19 +58,134 @@ func (e *Engine) doTabular() {
 			built = append(built, tabBuilt{cline: true, cfrom: it.cfrom, cto: it.cto})
 			continue
 		}
-		var cells [][]node
-		for j, toks := range it.cells {
+		var cells []builtCell
+		col := 0 // column this cell starts at (advanced by spans)
+		for _, toks := range it.cells {
+			if isMulticolumn(toks) {
+				bc := e.buildMulticolumn(toks)
+				cells = append(cells, bc)
+				col += bc.span
+				continue
+			}
 			a := byte('l')
 			pw := 0
-			if j < ncol {
-				a = aligns[j]
-				pw = pwidths[j]
+			if col < ncol {
+				a = aligns[col]
+				pw = pwidths[col]
 			}
-			cells = append(cells, e.buildAlignedCell(toks, a, pw))
+			cells = append(cells, builtCell{nodes: e.buildAlignedCell(toks, a, pw), span: 1})
+			col++
 		}
 		built = append(built, tabBuilt{cells: cells})
 	}
 	e.place(assembleTabular(built, ncol, pwidths, vrules))
+}
+
+// isMulticolumn reports whether a raw cell begins with \multicolumn (past any
+// leading space — the newline after a row's \\ lands in the next cell as one).
+func isMulticolumn(toks []tok) bool {
+	for _, t := range toks {
+		if !t.cs_ && t.cat == catSpace {
+			continue
+		}
+		return t.cs_ && t.cs == "multicolumn"
+	}
+	return false
+}
+
+// buildMulticolumn parses a \multicolumn{n}{spec}{content} cell (the tokens are
+// raw, collected by collectTabularBody) into a spanning builtCell: the content is
+// built aligned per its own spec, and the spec's leading/trailing | become the
+// cell's borders.
+func (e *Engine) buildMulticolumn(toks []tok) builtCell {
+	i := 0
+	for i < len(toks) && !toks[i].cs_ && toks[i].cat == catSpace {
+		i++ // skip the leading space (the newline after the previous row's \\)
+	}
+	i++ // skip \multicolumn
+	var nTok, specTok, contentTok []tok
+	nTok, i = grabBraceGroup(toks, i)
+	specTok, i = grabBraceGroup(toks, i)
+	contentTok, _ = grabBraceGroup(toks, i)
+	span := toksToInt(nTok)
+	if span < 1 {
+		span = 1
+	}
+	align, lv, rv := parseColSpecToks(specTok)
+	return builtCell{
+		nodes:    e.buildAlignedCell(contentTok, align, 0),
+		span:     span,
+		multicol: true,
+		lvrule:   lv,
+		rvrule:   rv,
+	}
+}
+
+// grabBraceGroup reads a {…} group from a token slice starting at i (skipping
+// leading spaces), returning the inner tokens and the index just past the '}'.
+func grabBraceGroup(toks []tok, i int) ([]tok, int) {
+	for i < len(toks) && !toks[i].cs_ && toks[i].cat == catSpace {
+		i++
+	}
+	if i >= len(toks) || toks[i].cs_ || toks[i].cat != catBegin {
+		return nil, i
+	}
+	i++ // past '{'
+	depth := 0
+	var inner []tok
+	for i < len(toks) {
+		t := toks[i]
+		if !t.cs_ && t.cat == catBegin {
+			depth++
+		} else if !t.cs_ && t.cat == catEnd {
+			if depth == 0 {
+				i++
+				break
+			}
+			depth--
+		}
+		inner = append(inner, t)
+		i++
+	}
+	return inner, i
+}
+
+// toksToInt parses a run of digit character tokens into an integer.
+func toksToInt(toks []tok) int {
+	n := 0
+	for _, t := range toks {
+		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
+			n = n*10 + int(t.ch-'0')
+		}
+	}
+	return n
+}
+
+// parseColSpecToks reads a single-column \multicolumn spec ({|c|}, {r}, …):
+// the l/c/r alignment (first found; default l) and whether a | precedes the
+// alignment (left border) or follows it (right border).
+func parseColSpecToks(toks []tok) (align byte, lvrule, rvrule bool) {
+	align = 'l'
+	seenAlign := false
+	for _, t := range toks {
+		if t.cs_ {
+			continue
+		}
+		switch t.ch {
+		case 'l', 'c', 'r':
+			if !seenAlign {
+				align = byte(t.ch)
+				seenAlign = true
+			}
+		case '|':
+			if seenAlign {
+				rvrule = true
+			} else {
+				lvrule = true
+			}
+		}
+	}
+	return align, lvrule, rvrule
 }
 
 // scanColSpec reads the {…} column specification, returning the l/c/r/p alignments,
@@ -264,16 +389,26 @@ func (e *Engine) buildAlignedCell(toks []tok, align byte, pwidth int) []node {
 // their column width, inter-column separation, and | vertical rules), and stacks
 // the rows with \hline full-width rules into a vbox.
 func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *boxNode {
+	// Column widths come from single-column cells only (a \multicolumn spans several
+	// and is sized to their total). A column cursor tracks the real column each cell
+	// occupies, since a span makes the cell index diverge from the column index.
 	colw := make([]int, ncol)
 	for _, b := range built {
-		if b.hline {
+		if b.hline || b.cline {
 			continue
 		}
-		for j, cell := range b.cells {
-			if j < ncol {
-				if w := hpackSP(cell, packNatural, 0).width; w > colw[j] {
-					colw[j] = w
+		col := 0
+		for _, cell := range b.cells {
+			if col >= ncol {
+				break
+			}
+			if cell.span <= 1 {
+				if w := hpackSP(cell.nodes, packNatural, 0).width; w > colw[col] {
+					colw[col] = w
 				}
+				col++
+			} else {
+				col += cell.span
 			}
 		}
 	}
@@ -290,30 +425,12 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 	rowBoxes := make([]*boxNode, len(built))
 	maxW := 0
 	for i, b := range built {
-		if b.hline {
+		if b.hline || b.cline {
 			continue
 		}
-		var rn []node
-		for j := 0; j <= ncol; j++ {
-			if hasRule(j) {
-				rn = append(rn, vrule())
-			}
-			if j < ncol {
-				// \tabcolsep on both sides of every column keeps the content off
-				// the vertical rules and gives 2·\tabcolsep between columns.
-				var cell []node
-				if j < len(b.cells) {
-					cell = b.cells[j]
-				}
-				rn = append(rn, kernNode{width: tabColSep})
-				rn = append(rn, hpackSP(cell, packTo, colw[j]))
-				rn = append(rn, kernNode{width: tabColSep})
-			}
-		}
-		box := hpackSP(rn, packNatural, 0)
-		rowBoxes[i] = box
-		if box.width > maxW {
-			maxW = box.width
+		rowBoxes[i] = buildTabRow(b.cells, ncol, colw, hasRule, vrule)
+		if rowBoxes[i].width > maxW {
+			maxW = rowBoxes[i].width
 		}
 	}
 
@@ -332,6 +449,65 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 		}
 	}
 	return vpackSP(vlist, packNatural, 0)
+}
+
+// buildTabRow lays one data row into an hbox using a column cursor so \multicolumn
+// spans align with ordinary rows. Each cell emits its left | border (its own for a
+// \multicolumn, the table's otherwise) then a \tabcolsep-padded content block sized
+// to its column(s); a final spanning cell's right | overrides the table's trailing
+// border. Short rows are padded with empty columns so every row is the same width.
+func buildTabRow(cells []builtCell, ncol int, colw []int, hasRule func(int) bool, vrule func() ruleNode) *boxNode {
+	var rn []node
+	col := 0
+	lastSpanToEnd, lastRvrule := false, false
+	for _, cell := range cells {
+		if col >= ncol {
+			break
+		}
+		span := cell.span
+		if span < 1 {
+			span = 1
+		}
+		if col+span > ncol {
+			span = ncol - col
+		}
+		if cell.multicol {
+			if cell.lvrule {
+				rn = append(rn, vrule())
+			}
+		} else if hasRule(col) {
+			rn = append(rn, vrule())
+		}
+		innerW := 2 * (span - 1) * tabColSep
+		for k := col; k < col+span; k++ {
+			innerW += colw[k]
+		}
+		for g := col + 1; g < col+span; g++ {
+			if hasRule(g) {
+				innerW += defaultRule
+			}
+		}
+		rn = append(rn, kernNode{width: tabColSep}, hpackSP(cell.nodes, packTo, innerW), kernNode{width: tabColSep})
+		col += span
+		lastSpanToEnd = cell.multicol && col == ncol
+		lastRvrule = cell.rvrule
+	}
+	for col < ncol { // pad a short row so all rows share the table width
+		if hasRule(col) {
+			rn = append(rn, vrule())
+		}
+		rn = append(rn, kernNode{width: tabColSep}, hpackSP(nil, packTo, colw[col]), kernNode{width: tabColSep})
+		col++
+	}
+	switch {
+	case lastSpanToEnd:
+		if lastRvrule {
+			rn = append(rn, vrule())
+		}
+	case hasRule(ncol):
+		rn = append(rn, vrule())
+	}
+	return hpackSP(rn, packNatural, 0)
 }
 
 // clineRule builds the partial horizontal rule for \cline{from-to} (1-based,

@@ -125,6 +125,61 @@ func TestParseCline(t *testing.T) {
 	}
 }
 
+// \multicolumn{n}{spec}{content} spans n columns: its block occupies exactly the
+// space n ordinary cells would, so every row keeps the same width, and its content
+// is aligned per its own spec.
+func TestMulticolumn(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\begin{tabular}{lll}\multicolumn{2}{c}{AB} & C \\ D & E & F\end{tabular}`); err != nil {
+		t.Fatal(err)
+	}
+	tb := lastVbox(e)
+	var rows []*boxNode
+	for _, n := range tb.list {
+		if b, ok := n.(*boxNode); ok && b.kind == hbox {
+			rows = append(rows, b)
+		}
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	if rows[0].width != rows[1].width {
+		t.Errorf("row widths differ (%d vs %d) — a multicolumn must align with normal rows", rows[0].width, rows[1].width)
+	}
+	if got := mvlText(e.mvl); got != "ABCDEF" {
+		t.Errorf("text = %q, want ABCDEF", got)
+	}
+}
+
+// Regression: a \multicolumn on a row that follows another row must be recognised —
+// the newline after the previous row's \\ lands in the cell as a leading space.
+func TestMulticolumnAfterRow(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	src := "\\begin{tabular}{lll}\na & b & c \\\\\n\\multicolumn{2}{c}{S} & d \\\\\n\\end{tabular}"
+	if _, err := e.Run(src); err != nil {
+		t.Fatalf("multicolumn after a normal row must not error, got: %v", err)
+	}
+}
+
+// The \multicolumn argument parsers: span count and a single-column spec's
+// alignment and | borders.
+func TestMulticolumnParse(t *testing.T) {
+	if n := toksToInt([]tok{{ch: '1', cat: catOther}, {ch: '2', cat: catOther}}); n != 12 {
+		t.Errorf("toksToInt = %d, want 12", n)
+	}
+	spec := []tok{{ch: '|', cat: catOther}, {ch: 'c', cat: catOther}, {ch: '|', cat: catOther}}
+	if a, lv, rv := parseColSpecToks(spec); a != 'c' || !lv || !rv {
+		t.Errorf("parseColSpecToks(|c|) = %c,%v,%v, want c,true,true", a, lv, rv)
+	}
+	if a, lv, rv := parseColSpecToks([]tok{{ch: 'r', cat: catOther}}); a != 'r' || lv || rv {
+		t.Errorf("parseColSpecToks(r) = %c,%v,%v, want r,false,false", a, lv, rv)
+	}
+}
+
 // Right alignment puts the fil before the content so the cell is flush right.
 func TestTabularRightAlign(t *testing.T) {
 	e := New()
