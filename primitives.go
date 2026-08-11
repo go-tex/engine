@@ -1184,6 +1184,11 @@ func (e *Engine) loadStomach() {
 	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
 	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
+	// multicols: the environment, its \end sentinel, and its two length parameters.
+	e.prim("multicols", func(e *Engine) { e.doMulticols() })
+	e.prim("endmulticols", func(e *Engine) {}) // consumed by doMulticols; defined for safety
+	e.prim("columnsep", func(e *Engine) { e.scanEquals(); e.columnsep = e.scanDimen() })
+	e.prim("columnseprule", func(e *Engine) { e.scanEquals(); e.columnseprule = e.scanDimen() })
 	e.loadBoxCmds()
 }
 

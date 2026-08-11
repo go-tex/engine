@@ -107,6 +107,8 @@ type Engine struct {
 	hyphenpenalty int         // penalty at a discretionary hyphen
 	leftskip      glueSpec    // glue at the left of every line
 	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
+	columnsep     int         // \columnsep: gap between multicols columns (sp)
+	columnseprule int         // \columnseprule: rule thickness between columns (sp, 0 = none)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
@@ -220,6 +222,7 @@ func New() *Engine {
 	e.baselineskip = 12 * unity                                                                     // 12pt
 	e.lineskip = unity                                                                              // 1pt
 	e.parindent = 20 * unity                                                                        // plain TeX \parindent = 20pt
+	e.columnsep = 10 * unity                                                                        // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
 	e.hyphenpenalty = 50                                                                            // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
 	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
