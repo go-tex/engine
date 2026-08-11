@@ -126,9 +126,23 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			paintFrameSP(sb, c, cx, baseline, font)
 			cx += spToPt(c.width())
+		case linkNode:
+			lg.close()
+			paintLinkSP(sb, c, cx, baseline, font)
+			cx += spToPt(c.width())
 		}
 	}
 	lg.close()
+}
+
+// paintLinkSP paints a hyperlink: an SVG <a href="URL"> element wrapping the inner
+// box, so a click on the content opens the URL. SVG supports <a> natively, which
+// makes the engine's SVG a genuinely clickable document in a browser. x is the
+// link's left edge; baseline is the content baseline.
+func paintLinkSP(sb *strings.Builder, ln linkNode, x, baseline float64, font fontFace) {
+	fmt.Fprintf(sb, `<a href="%s" target="_blank" rel="noopener">`, escapeXMLAttr(ln.url))
+	paintBoxSP(sb, ln.inner, x, baseline, font)
+	sb.WriteString(`</a>`)
 }
 
 // paintFrameSP draws a framed box: four thin rules of thickness fr.rule form the
@@ -194,6 +208,9 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			cy += spToPt(c.height + c.depth)
 		case frameNode:
 			paintFrameSP(sb, c, x, cy+spToPt(c.height()), font)
+			cy += spToPt(c.height() + c.depth())
+		case linkNode:
+			paintLinkSP(sb, c, x, cy+spToPt(c.height()), font)
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
