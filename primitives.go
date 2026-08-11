@@ -919,15 +919,19 @@ func (e *Engine) loadMore() {
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[
 	e.prim(")", func(e *Engine) {})                                 // consumed by \(
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
-	// amsmath multi-line displays: align/gather (numbered) and their starred forms.
-	e.prim("align", func(e *Engine) { e.doAlignEnv("align", true, true) })
-	e.prim("align*", func(e *Engine) { e.doAlignEnv("align*", false, true) })
-	e.prim("gather", func(e *Engine) { e.doAlignEnv("gather", true, false) })
-	e.prim("gather*", func(e *Engine) { e.doAlignEnv("gather*", false, false) })
-	e.prim("endalign", func(e *Engine) {})
-	e.prim("endalign*", func(e *Engine) {})
-	e.prim("endgather", func(e *Engine) {})
-	e.prim("endgather*", func(e *Engine) {})
+	// amsmath multi-line displays: align/eqnarray/gather/multline and starred forms.
+	e.prim("align", func(e *Engine) { e.doAlignEnv("align", true, alignPairs) })
+	e.prim("align*", func(e *Engine) { e.doAlignEnv("align*", false, alignPairs) })
+	e.prim("eqnarray", func(e *Engine) { e.doAlignEnv("eqnarray", true, eqnarrayCols) })
+	e.prim("eqnarray*", func(e *Engine) { e.doAlignEnv("eqnarray*", false, eqnarrayCols) })
+	e.prim("gather", func(e *Engine) { e.doAlignEnv("gather", true, nil) })
+	e.prim("gather*", func(e *Engine) { e.doAlignEnv("gather*", false, nil) })
+	e.prim("multline", func(e *Engine) { e.doMultline("multline", true) })
+	e.prim("multline*", func(e *Engine) { e.doMultline("multline*", false) })
+	for _, n := range []string{"endalign", "endalign*", "endeqnarray", "endeqnarray*",
+		"endgather", "endgather*", "endmultline", "endmultline*"} {
+		e.prim(n, func(e *Engine) {})
+	}
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("renewcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("providecommand", func(e *Engine) { e.doNewcommand() })

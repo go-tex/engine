@@ -27,13 +27,40 @@ type alignRow struct {
 	labels   []string
 }
 
-// doAlignEnv typesets an align/align*/gather/gather* environment. numbered is false
-// for the starred forms; aligned is true for align (split at &), false for gather.
-func (e *Engine) doAlignEnv(name string, numbered, aligned bool) {
+// alignColumn maps a 0-based cell column to its horizontal alignment within the
+// column: 'r' flush right, 'l' flush left, 'c' centred. align uses right/left
+// alternating pairs; eqnarray uses right/centre/left triples.
+type alignColumn func(j int) byte
+
+// alignPairs is the amsmath align column rule: even columns flush right, odd flush
+// left (the & sits between an rl pair).
+func alignPairs(j int) byte {
+	if j%2 == 0 {
+		return 'r'
+	}
+	return 'l'
+}
+
+// eqnarrayCols is the classic eqnarray {rcl} rule: right, centre, left, repeating.
+func eqnarrayCols(j int) byte {
+	switch j % 3 {
+	case 0:
+		return 'r'
+	case 1:
+		return 'c'
+	default:
+		return 'l'
+	}
+}
+
+// doAlignEnv typesets an align/eqnarray/gather family environment. numbered is false
+// for the starred forms. colAlign is nil for gather (a single centred column);
+// otherwise it gives each &-separated column's alignment, and rows are lined up on a
+// shared set of column widths so the alignment points coincide across rows.
+func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 	rows := e.collectAlignBody(name)
 	e.endParagraph()
 
-	// Render every cell to a math box and remember per-column widths.
 	type builtRow struct {
 		cells    []mathNode
 		nonumber bool
@@ -49,7 +76,7 @@ func (e *Engine) doAlignEnv(name string, numbered, aligned bool) {
 				m = e.makeMath(c, true)
 			}
 			br.cells = append(br.cells, m)
-			if aligned {
+			if colAlign != nil {
 				if j >= len(colw) {
 					colw = append(colw, 0)
 				}
@@ -61,15 +88,9 @@ func (e *Engine) doAlignEnv(name string, numbered, aligned bool) {
 		built = append(built, br)
 	}
 
-	quad := e.mathSize() * unity // 1em inter-pair gap
 	blockWidth := 0
-	if aligned {
-		for j, w := range colw {
-			blockWidth += w
-			if j%2 == 1 && j != len(colw)-1 {
-				blockWidth += quad // gap after each rl pair, except the last
-			}
-		}
+	for _, w := range colw {
+		blockWidth += w
 	}
 	leftPad := (e.hsize - blockWidth) / 2
 	if leftPad < 0 {
@@ -90,23 +111,20 @@ func (e *Engine) doAlignEnv(name string, numbered, aligned bool) {
 			}
 		}
 		var row []node
-		if aligned {
+		if colAlign != nil {
 			row = append(row, kernNode{width: leftPad})
 			for j, m := range br.cells {
 				pad := colw[j] - m.width
-				if j%2 == 0 { // even column: flush right
-					if pad > 0 {
-						row = append(row, kernNode{width: pad})
-					}
-					row = append(row, m)
-				} else { // odd column: flush left
-					row = append(row, m)
-					if pad > 0 {
-						row = append(row, kernNode{width: pad})
-					}
-					if j != len(br.cells)-1 {
-						row = append(row, kernNode{width: quad})
-					}
+				if pad < 0 {
+					pad = 0
+				}
+				switch colAlign(j) {
+				case 'r':
+					row = append(row, kernNode{width: pad}, m)
+				case 'l':
+					row = append(row, m, kernNode{width: pad})
+				default: // 'c'
+					row = append(row, kernNode{width: pad / 2}, m, kernNode{width: pad - pad/2})
 				}
 			}
 		} else { // gather: single centred cell
@@ -118,6 +136,60 @@ func (e *Engine) doAlignEnv(name string, numbered, aligned bool) {
 		row = append(row, e.hfil())
 		if number != "" {
 			row = append(row, e.textToHbox("("+number+")"))
+		}
+		e.contribute(hpackSP(row, packTo, e.hsize))
+	}
+}
+
+// doMultline typesets a multline/multline* environment: one long equation split
+// across lines with no alignment points. The first line is flush left, the last
+// flush right, intermediate lines centred; a single number (on the last line) is
+// placed when numbered.
+func (e *Engine) doMultline(name string, numbered bool) {
+	rows := e.collectAlignBody(name)
+	e.endParagraph()
+
+	// Flatten to one cell per row (multline has no &); render each as display math.
+	var lines []mathNode
+	var labels []string
+	for _, r := range rows {
+		src := ""
+		if len(r.cells) > 0 {
+			src = r.cells[0]
+		}
+		var m mathNode
+		if strings.TrimSpace(src) != "" {
+			m = e.makeMath(src, true)
+		}
+		lines = append(lines, m)
+		labels = append(labels, r.labels...)
+	}
+
+	number := ""
+	if numbered {
+		number = e.stepEquationCounter()
+	}
+	for _, k := range labels {
+		if number != "" {
+			e.setLabel(k, number)
+		} else {
+			e.setLabel(k, e.currentLabel())
+		}
+	}
+
+	last := len(lines) - 1
+	for i, m := range lines {
+		var row []node
+		switch {
+		case i == 0: // first line flush left
+			row = append(row, m, e.hfil())
+		case i == last: // last line flush right (+ number)
+			row = append(row, e.hfil(), m)
+		default: // centred
+			row = append(row, e.hfil(), m, e.hfil())
+		}
+		if i == last && number != "" {
+			row = append(row, e.hfil(), e.textToHbox("("+number+")"))
 		}
 		e.contribute(hpackSP(row, packTo, e.hsize))
 	}
