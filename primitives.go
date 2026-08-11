@@ -1140,6 +1140,11 @@ func (e *Engine) loadMore() {
 	// margin (see geometry.go). \usepackage[..]{geometry} is intercepted in
 	// doUsepackage; \geometry{..} re-applies at any point.
 	e.prim("geometry", func(e *Engine) { e.doGeometry() })
+	// enumitem subset (see enumitem.go): \@enumitemopt{<kind>} reads the optional
+	// [key=value] argument of a list environment and reconfigures the current list
+	// group; \@enumitemrec records an enumerate's final counter value for [resume].
+	e.prim("@enumitemopt", func(e *Engine) { e.doEnumitemOpt() })
+	e.prim("@enumitemrec", func(e *Engine) { e.recordEnumitemResume() })
 	e.loadStomach()
 }
 

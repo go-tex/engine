@@ -98,15 +98,15 @@ const MiniLaTeXKernel = `
 % the bracket that \@ifnextbracket has already confirmed is present.
 \def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
-\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi}
+\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
 \def\enditemize{\par\endgroup\smallskip}
-\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi}
-\def\endenumerate{\par\endgroup\smallskip}
+\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
+\def\endenumerate{\par\@enumitemrec\endgroup\smallskip}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
-\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}}
+\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
 \def\enddescription{\par\endgroup\smallskip}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}

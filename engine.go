@@ -181,6 +181,11 @@ type Engine struct {
 	headRule   int      // \headrulewidth (sp; a rule under the header)
 	footRule   int      // \footrulewidth (sp; a rule over the footer)
 	curPageNum int      // page ordinal during assembly (0 ⇒ unknown ⇒ 1)
+
+	// enumitem (see enumitem.go): the last counter value each enumerate nesting
+	// level reached, keyed by the kernel suffix (i, ii, …), so a [resume] list can
+	// continue from it. Recorded by \@enumitemrec at every \end{enumerate}.
+	enumitemLast map[string]int
 }
 
 type mkind uint8
