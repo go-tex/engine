@@ -127,6 +127,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case linkNode:
 			d.link(c, cx, baseline)
 			cx += spToPt(c.width())
+		case internalLinkNode:
+			d.internalLink(c, cx, baseline)
+			cx += spToPt(c.width())
 		case decoNode:
 			d.deco(c, cx, baseline)
 			cx += spToPt(c.width())
@@ -259,6 +262,9 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
 			d.link(c, x, cy+spToPt(c.height()))
+			cy += spToPt(c.height() + c.depth())
+		case internalLinkNode:
+			d.internalLink(c, x, cy+spToPt(c.height()))
 			cy += spToPt(c.height() + c.depth())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))
