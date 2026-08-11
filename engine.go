@@ -116,6 +116,13 @@ type Engine struct {
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
 	err    error
 
+	// table of contents (see toc.go): entries recorded as \section/\subsection and
+	// \caption run (via the \@tocentry prim), carried from the aux pass into the
+	// render pass exactly like labels, and consumed by \tableofcontents /
+	// \listoffigures / \listoftables — LaTeX's .toc/.lof/.lot two-pass mechanism.
+	tocEntries []tocEntry // recorded during the current run
+	tocSource  []tocEntry // entries carried from the aux pass, rendered by \tableofcontents
+
 	// footnotes (see footnote.go): a counter, bodies awaiting attachment to the
 	// vertical list, and a guard so a footnote's own paragraph build doesn't
 	// recursively flush pending footnotes.

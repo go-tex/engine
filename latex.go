@@ -166,6 +166,16 @@ const MiniLaTeXKernel = `
 \def\@stdproof{\noindent{\it Proof.}\ }
 \def\@opargproof[#1]{\noindent{\it #1.}\ }
 \def\endproof{\qed\endgroup\medskip}
+% ─── table of contents (feat/toc) ───────────────────────────────────────────
+% \@tocentry{kind}{level}{number}{title} (a Go primitive) records one contents
+% line on the auxiliary pass. The numbered sectioning and caption macros are
+% redefined here — as new \def lines, to avoid touching the originals above — so
+% they emit an entry in addition to typesetting their heading. Starred forms
+% (\@ssection/\@ssubsection) are untouched and never record, matching LaTeX.
+\newcount\c@tocdepth
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
