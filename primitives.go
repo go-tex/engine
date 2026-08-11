@@ -914,10 +914,11 @@ func (e *Engine) loadMore() {
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
 	e.prim("documentclass", func(e *Engine) { e.doGobbleOptAndGroup() })
 	e.prim("usepackage", func(e *Engine) { e.doGobbleOptAndGroup() })
-	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })  // \[ … \] display math
-	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) }) // \( … \) inline math
-	e.prim("]", func(e *Engine) {})                                // consumed by \[
-	e.prim(")", func(e *Engine) {})                                // consumed by \(
+	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })   // \[ … \] display math
+	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) })  // \( … \) inline math
+	e.prim("]", func(e *Engine) {})                                 // consumed by \[
+	e.prim(")", func(e *Engine) {})                                 // consumed by \(
+	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("renewcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("providecommand", func(e *Engine) { e.doNewcommand() })

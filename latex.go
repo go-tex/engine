@@ -45,6 +45,10 @@ const MiniLaTeXKernel = `
 \def\mbox#1{\hbox{#1}}
 \newcount\c@section
 \newcount\c@subsection
+\newcount\c@equation
+\def\theequation{\the\c@equation}
+\def\equation{\global\advance\c@equation by1\relax\edef\@currentlabel{\theequation}\@equationbody}
+\def\endequation{}
 \def\@currentlabel{}
 \def\thesection{\the\c@section}
 \def\thesubsection{\the\c@section.\the\c@subsection}
