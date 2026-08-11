@@ -217,6 +217,15 @@ const MiniLaTeXKernel = `
 \def\endabstract{\par\endgroup\bigskip}
 \def\titlepage{\par\penalty-10000 \begingroup}
 \def\endtitlepage{\par\endgroup\penalty-10000 }
+% ─── booktabs rules (feat/booktabs) ──────────────────────────────────────────
+% \toprule/\midrule/\bottomrule/\cmidrule are consumed raw inside the tabular
+% body (collectTabularBody matches them by name and draws the rules directly), so
+% these definitions are only a harmless fallback that keeps the commands from
+% being "undefined" if they appear outside a tabular — mirroring \hline/\cline.
+\def\toprule{}
+\def\midrule{}
+\def\bottomrule{}
+\def\cmidrule#1{}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
