@@ -10,8 +10,16 @@
 //
 // It registers two globals:
 //
-//	gotexToSVG(source [, {size, margin}])  → { pages: [svgString, …] }  | { error }
+//	gotexToSVG(source [, {size, margin}])
+//	    → { pages: [svgString, …] }
+//	    | { error, errorLine?, errorCol?, errorMessage? }
 //	gotexVersion()                         → a short identifier string
+//
+// On failure `error` is always a human string; when the failure has a source
+// location it also carries errorLine (1-based), errorCol (0-based) and
+// errorMessage so the editor can point at the exact spot. Each rendered page's
+// SVG groups glyphs under <g data-l="N"> (N = source line) for click-to-source
+// and jump-to-line navigation.
 //
 // The built-in font is embedded, so it runs with no assets. \input and \font
 // from disk are unavailable in the browser sandbox (no filesystem); a document's
@@ -19,6 +27,7 @@
 package main
 
 import (
+	"errors"
 	"syscall/js"
 
 	engine "github.com/go-tex/engine"
@@ -49,7 +58,17 @@ func toSVG(_ js.Value, args []js.Value) any {
 	}
 	pages, err := engine.CompileToSVGPages([]byte(args[0].String()), opt)
 	if err != nil {
-		return map[string]any{"error": err.Error()}
+		// Keep `error` a string for existing callers; add the structured source
+		// location (1-based line, 0-based column) when the failure carries one so
+		// the editor can point at the exact spot.
+		res := map[string]any{"error": err.Error()}
+		var se engine.SourceError
+		if errors.As(err, &se) && se.Line > 0 {
+			res["errorLine"] = se.Line
+			res["errorCol"] = se.Col
+			res["errorMessage"] = se.Msg
+		}
+		return res
 	}
 	out := make([]any, len(pages))
 	for i, p := range pages {
