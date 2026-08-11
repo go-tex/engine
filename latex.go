@@ -199,6 +199,15 @@ const MiniLaTeXKernel = `
 % \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
 % like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
 \def\stretch#1{0pt plus #1fil}
+% ─── booktabs rules (feat/booktabs) ──────────────────────────────────────────
+% \toprule/\midrule/\bottomrule/\cmidrule are consumed raw inside the tabular
+% body (collectTabularBody matches them by name and draws the rules directly), so
+% these definitions are only a harmless fallback that keeps the commands from
+% being "undefined" if they appear outside a tabular — mirroring \hline/\cline.
+\def\toprule{}
+\def\midrule{}
+\def\bottomrule{}
+\def\cmidrule#1{}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

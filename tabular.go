@@ -13,6 +13,23 @@ package engine
 
 const tabColSep = 6 * unity // \tabcolsep default (added on each side of a column)
 
+// booktabs rule weights and spacing (all in sp). booktabs' \heavyrulewidth
+// defaults to 0.08em (≈0.8pt at a 10pt base) and \lightrulewidth to 0.05em; we
+// approximate the heavy rule (\toprule/\bottomrule) at 0.8pt = 2×defaultRule and
+// the light rule (\midrule and \cmidrule) at 0.4pt = defaultRule, so the heavy
+// rule is visibly twice the mid rule. bookRuleSep is the vertical breathing room
+// booktabs adds around every rule (\abovetopsep/\aboverulesep/\belowrulesep are a
+// few tenths of an ex each); a fixed 2pt glue above and below each rule
+// reproduces booktabs' airier look versus \hline's tight rules. cmidTrim is the
+// fixed kern shaved off a \cmidrule's trimmed side — booktabs uses \cmidrulekern
+// = 0.5em, which we lightly honour with a fixed 3pt.
+const (
+	heavyRuleWidth = 2 * defaultRule // 0.8pt: \toprule, \bottomrule
+	lightRuleWidth = defaultRule     // 0.4pt: \midrule, \cmidrule
+	bookRuleSep    = 2 * unity       // 2pt vertical space above and below a rule
+	cmidTrim       = 3 * unity       // 3pt (l)/(r)/(lr) trimming kern
+)
+
 // tabItem is one item of a tabular body: a full rule (\hline), a partial rule
 // (\cline{from-to}, 1-based inclusive column range), or a data row.
 type tabItem struct {
@@ -21,6 +38,15 @@ type tabItem struct {
 	cfrom int
 	cto   int
 	cells [][]tok
+	// booktabs rules: brule is a full-width \toprule/\midrule/\bottomrule, bcmid
+	// is a partial \cmidrule (reusing cfrom/cto as its 1-based column range).
+	// weight is the rule thickness in sp; btrimL/btrimR carry \cmidrule's (l)/(r)
+	// trimming.
+	brule  bool
+	bcmid  bool
+	weight int
+	btrimL bool
+	btrimR bool
 }
 
 // builtCell is one built table cell: its aligned node list plus how many columns
@@ -47,7 +73,17 @@ type tabBuilt struct {
 	cfrom int
 	cto   int
 	cells []builtCell
+	// booktabs rules (see tabItem): brule = full-width, bcmid = partial \cmidrule.
+	brule  bool
+	bcmid  bool
+	weight int
+	btrimL bool
+	btrimR bool
 }
+
+// isRule reports whether this item is any horizontal rule (an \hline/\cline or a
+// booktabs \toprule/\midrule/\bottomrule/\cmidrule) rather than a data row.
+func (b tabBuilt) isRule() bool { return b.hline || b.cline || b.brule || b.bcmid }
 
 // doTabular typesets a tabular environment onto the current list.
 func (e *Engine) doTabular() {
@@ -63,6 +99,15 @@ func (e *Engine) doTabular() {
 		}
 		if it.cline {
 			built = append(built, tabBuilt{cline: true, cfrom: it.cfrom, cto: it.cto})
+			continue
+		}
+		if it.brule {
+			built = append(built, tabBuilt{brule: true, weight: it.weight})
+			continue
+		}
+		if it.bcmid {
+			built = append(built, tabBuilt{bcmid: true, cfrom: it.cfrom, cto: it.cto,
+				weight: it.weight, btrimL: it.btrimL, btrimR: it.btrimR})
 			continue
 		}
 		var cells []builtCell
@@ -390,6 +435,25 @@ func (e *Engine) collectTabularBody() []tabItem {
 			endRow()
 			from, to := parseCline(e.readBraceName())
 			items = append(items, tabItem{cline: true, cfrom: from, cto: to})
+		case depth == 0 && t.cs_ && (t.cs == "toprule" || t.cs == "midrule" || t.cs == "bottomrule"):
+			endRow()
+			w := heavyRuleWidth
+			if t.cs == "midrule" {
+				w = lightRuleWidth
+			}
+			if d, ok := e.readOptBracketDimen(); ok && d > 0 {
+				w = d // \toprule[<dimen>] weight override
+			}
+			items = append(items, tabItem{brule: true, weight: w})
+		case depth == 0 && t.cs_ && t.cs == "cmidrule":
+			endRow()
+			w := lightRuleWidth
+			if d, ok := e.readOptBracketDimen(); ok && d > 0 {
+				w = d // \cmidrule[<dimen>] weight override
+			}
+			tl, tr := e.readCmidTrim() // optional (l)/(r)/(lr) trimming
+			from, to := parseCline(e.readBraceName())
+			items = append(items, tabItem{bcmid: true, cfrom: from, cto: to, weight: w, btrimL: tl, btrimR: tr})
 		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
 			endRow()
 		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
@@ -429,6 +493,74 @@ func (e *Engine) readBraceName() string {
 	return string(b)
 }
 
+// readOptDelimited reads an optional argument delimited by the given open/close
+// characters (e.g. '['..']' or '('..')'), skipping leading spaces. It returns the
+// inner text and true when the group is present; otherwise it pushes every token
+// it inspected back onto the input (leaving the stream untouched) and returns
+// false, so a rule with no optional argument is followed cleanly by the next row.
+func (e *Engine) readOptDelimited(open, close rune) (string, bool) {
+	var skipped []tok
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			for i := len(skipped) - 1; i >= 0; i-- {
+				e.back(skipped[i])
+			}
+			return "", false
+		}
+		if !t.cs_ && t.cat == catSpace {
+			skipped = append(skipped, t)
+			continue
+		}
+		if !t.cs_ && t.ch == open {
+			var b []rune
+			for {
+				u, ok := e.getNext()
+				if !ok || (!u.cs_ && u.ch == close) {
+					break
+				}
+				if !u.cs_ {
+					b = append(b, u.ch)
+				}
+			}
+			return string(b), true
+		}
+		e.back(t) // not the opener: restore this token then the skipped spaces
+		for i := len(skipped) - 1; i >= 0; i-- {
+			e.back(skipped[i])
+		}
+		return "", false
+	}
+}
+
+// readOptBracketDimen reads an optional [<dimen>] weight override (booktabs allows
+// \toprule[<wd>] etc.) into scaled points, returning (0,false) when absent.
+func (e *Engine) readOptBracketDimen() (int, bool) {
+	s, ok := e.readOptDelimited('[', ']')
+	if !ok {
+		return 0, false
+	}
+	return parseDimenStr(s), true
+}
+
+// readCmidTrim reads \cmidrule's optional (l)/(r)/(lr) trimming specifier,
+// returning which side(s) to shave. An absent specifier trims neither side.
+func (e *Engine) readCmidTrim() (trimL, trimR bool) {
+	s, ok := e.readOptDelimited('(', ')')
+	if !ok {
+		return false, false
+	}
+	for _, r := range s {
+		switch r {
+		case 'l':
+			trimL = true
+		case 'r':
+			trimR = true
+		}
+	}
+	return trimL, trimR
+}
+
 // buildAlignedCell builds a cell's horizontal list and wraps it with \hfil glue
 // so it aligns left, centre or right when packed to the column width.
 func (e *Engine) buildAlignedCell(toks []tok, align byte, pwidth int) []node {
@@ -457,7 +589,7 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 	// occupies, since a span makes the cell index diverge from the column index.
 	colw := make([]int, ncol)
 	for _, b := range built {
-		if b.hline || b.cline {
+		if b.isRule() {
 			continue
 		}
 		col := 0
@@ -496,7 +628,7 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 	rowBoxes := make([]*boxNode, len(built))
 	maxW := 0
 	for i, b := range built {
-		if b.hline || b.cline {
+		if b.isRule() {
 			continue
 		}
 		rowBoxes[i] = buildTabRow(b.cells, ncol, colw, hasRule, vrule)
@@ -510,7 +642,7 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 	// block runs from the top of the multirow's own row to the bottom of its last
 	// spanned row, counting interior \hline/\cline rules (defaultRule each).
 	for i, b := range built {
-		if b.hline || b.cline {
+		if b.isRule() {
 			continue
 		}
 		for j := range b.cells {
@@ -536,6 +668,17 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 			if r := clineRule(b.cfrom, b.cto, ncol, colw, hasRule); r != nil {
 				vlist = append(vlist, r)
 			}
+		case b.brule: // booktabs \toprule/\midrule/\bottomrule: full-width, weighted, airy
+			vlist = append(vlist,
+				glueNode{spec: glueSpec{width: bookRuleSep}},
+				ruleNode{width: maxW, height: b.weight},
+				glueNode{spec: glueSpec{width: bookRuleSep}})
+		case b.bcmid: // booktabs \cmidrule: partial rule with the same breathing room
+			if r := partialColRule(b.cfrom, b.cto, ncol, colw, hasRule, b.weight, b.btrimL, b.btrimR); r != nil {
+				vlist = append(vlist,
+					glueNode{spec: glueSpec{width: bookRuleSep}}, r,
+					glueNode{spec: glueSpec{width: bookRuleSep}})
+			}
 		default:
 			vlist = append(vlist, rowBoxes[i])
 		}
@@ -552,9 +695,15 @@ func spannedExtent(built []tabBuilt, rowBoxes []*boxNode, start, n int) int {
 	total, seen := 0, 0
 	for k := start; k < len(built) && seen < n; k++ {
 		b := built[k]
-		if b.hline || b.cline {
+		if b.isRule() {
 			if seen > 0 {
-				total += defaultRule
+				// booktabs rules add their own weight plus the breathing glue
+				// above and below; \hline/\cline are a single defaultRule.
+				if b.brule || b.bcmid {
+					total += b.weight + 2*bookRuleSep
+				} else {
+					total += defaultRule
+				}
 			}
 			continue
 		}
@@ -657,6 +806,18 @@ func buildTabRow(cells []builtCell, ncol int, colw []int, hasRule func(int) bool
 // inclusive): a left kern to the start of column `from` followed by a rule that
 // spans columns from..to (their \tabcolsep padding and any interior | rules).
 func clineRule(from, to, ncol int, colw []int, hasRule func(int) bool) node {
+	return partialColRule(from, to, ncol, colw, hasRule, defaultRule, false, false)
+}
+
+// partialColRule builds a partial horizontal rule spanning columns from..to
+// (1-based, inclusive) at the given thickness: a left kern to the start of column
+// `from` followed by a rule covering those columns' \tabcolsep padding and any
+// interior | rules. It backs both \cline (thickness defaultRule, no trimming) and
+// booktabs' \cmidrule (\lightrulewidth, optional trimming). trimL/trimR shave a
+// fixed cmidTrim off the named side(s) — booktabs' (l)/(r)/(lr) trimming, lightly
+// honoured with a fixed kern so abutting \cmidrules do not touch. An empty or
+// out-of-range range renders nothing (nil).
+func partialColRule(from, to, ncol int, colw []int, hasRule func(int) bool, thick int, trimL, trimR bool) node {
 	if from < 1 || to < from || from > ncol {
 		return nil
 	}
@@ -682,7 +843,17 @@ func clineRule(from, to, ncol int, colw []int, hasRule func(int) bool) node {
 			w += defaultRule
 		}
 	}
-	return hpackSP([]node{kernNode{width: left}, ruleNode{width: w, height: defaultRule}}, packNatural, 0)
+	if trimL { // shave the left side and push the rule inward by the trim kern
+		left += cmidTrim
+		w -= cmidTrim
+	}
+	if trimR {
+		w -= cmidTrim
+	}
+	if w < 0 {
+		w = 0
+	}
+	return hpackSP([]node{kernNode{width: left}, ruleNode{width: w, height: thick}}, packNatural, 0)
 }
 
 // parseCline parses \cline's "from-to" argument (e.g. "2-3") into 1-based column
