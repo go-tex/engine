@@ -46,6 +46,7 @@ type ruleNode struct {                 // \hrule/\vrule
 type charNode struct { // a set character from the current font (metrics in sp)
 	ch                   rune
 	width, height, depth int
+	srcLine              int // 1-based source line this glyph came from (0 = unknown)
 }
 type discNode struct{ penalty int } // a discretionary hyphen point (Liang)
 
@@ -74,6 +75,7 @@ type boxNode struct {
 	glueSet              float64 // set ratio applied to matching-order glue
 	glueOrder            int     // order (0..3) the set applies to
 	glueSign             int     // 0 normal, 1 stretching, 2 shrinking
+	srcLine              int     // 1-based source line (first stamped child; 0 = unknown)
 }
 
 type packMode uint8
@@ -133,7 +135,7 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			}
 		}
 	}
-	b := &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list}
+	b := &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list, srcLine: firstSrcLine(list)}
 	setGlue(b, b.width-natural, list)
 	return b
 }
@@ -177,7 +179,7 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			d = c.depth
 		}
 	}
-	b := &boxNode{kind: vbox, width: w, height: packWidth(x, mode, target), depth: d, list: list}
+	b := &boxNode{kind: vbox, width: w, height: packWidth(x, mode, target), depth: d, list: list, srcLine: firstSrcLine(list)}
 	setGlue(b, b.height-x, list)
 	return b
 }

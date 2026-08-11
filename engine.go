@@ -12,7 +12,6 @@
 package engine
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -75,13 +74,20 @@ type Engine struct {
 
 	catcode [256]cat
 	eq      map[string]*meaning
-	count   [256]int
-	dimen   [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
-	skip    [256]glueSpec // \skip (glue) registers
-	box     [256]*boxNode // \box registers (nil = void)
-	mvl     []node        // main vertical list (top-level contributions)
-	curFont fontFace      // current font for measuring/rendering characters
-	mathR   mathRendererT // lazily-built go-tex/math renderer (see math.go)
+
+	// source-position tracking (see srcmap.go): where the mouth is reading, so
+	// glyphs/boxes can be stamped with their origin line for errors + navigation.
+	lineStarts []int // rune offset of each source line's start
+	srcPos     int   // rune offset where the current token began
+	curSrcLine int   // 1-based line of the current token (0 = unknown)
+	curSrcCol  int   // 0-based column of the current token
+	count      [256]int
+	dimen      [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
+	skip       [256]glueSpec // \skip (glue) registers
+	box        [256]*boxNode // \box registers (nil = void)
+	mvl        []node        // main vertical list (top-level contributions)
+	curFont    fontFace      // current font for measuring/rendering characters
+	mathR      mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
 	inPar        bool   // a paragraph is being accumulated
@@ -191,6 +197,7 @@ func New() *Engine {
 func (e *Engine) Run(src string) (string, error) {
 	e.base = []rune(src)
 	e.bpos = 0
+	e.buildLineStarts()
 	e.mainLoop()
 	return e.out.String(), e.err
 }
@@ -233,10 +240,12 @@ func (e *Engine) back(t tok) { e.lists = append(e.lists, []tok{t}) }
 // scan reads the next token from the base string using current catcodes.
 func (e *Engine) scan() (tok, bool) {
 	for e.bpos < len(e.base) {
+		start := e.bpos
 		r := e.base[e.bpos]
 		c := e.catOf(r)
 		switch c {
 		case catEsc:
+			e.setSrcPos(start)
 			e.bpos++
 			return e.scanCS(), true
 		case catComment:
@@ -244,6 +253,7 @@ func (e *Engine) scan() (tok, bool) {
 				e.bpos++
 			}
 		case catSpace, catEOL:
+			e.setSrcPos(start)
 			// Collapse a run of spaces and line-endings into one token. A single
 			// line-ending is interword space; two or more (a blank line) is a
 			// paragraph break, which TeX turns into \par.
@@ -269,6 +279,7 @@ func (e *Engine) scan() (tok, bool) {
 		case catIgnore:
 			e.bpos++
 		default:
+			e.setSrcPos(start)
 			e.bpos++
 			return chTok(r, c), true
 		}
@@ -665,7 +676,7 @@ func (e *Engine) charNodeFor(ch rune) (charNode, bool) {
 		return charNode{}, false
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return charNode{ch: ch, width: w, height: h, depth: d}, true
+	return charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine}, true
 }
 
 // appendChar appends a measured character to a horizontal list, inserting the
@@ -678,7 +689,7 @@ func (e *Engine) appendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return append(list, charNode{ch: ch, width: w, height: h, depth: d})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine})
 }
 
 // lastChar returns the rune of the trailing character node, if the list ends in
@@ -730,7 +741,7 @@ func (e *Engine) execCS(t tok) bool {
 
 func (e *Engine) fail(msg string) {
 	if e.err == nil {
-		e.err = fmt.Errorf("texengine: %s", msg)
+		e.err = SourceError{Line: e.curSrcLine, Col: e.curSrcCol, Msg: msg}
 	}
 }
 

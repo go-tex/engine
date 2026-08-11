@@ -60,6 +60,7 @@ func (e *Engine) doInput() {
 	insert := []rune(string(data) + " ") // TeX appends a space at end of file
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
+	e.buildLineStarts() // the splice shifted every offset; rebuild the line table
 }
 
 // scanFileName reads a filename: optional spaces, then either a {braced} name

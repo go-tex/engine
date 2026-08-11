@@ -85,10 +85,15 @@ func (e *Engine) LoadPlain() error { return e.LoadFormat(Plain) }
 // LoadFormat executes a string of TeX definitions (a format/preamble) through
 // the gullet, defining its macros in the engine's eqtb without typesetting.
 func (e *Engine) LoadFormat(src string) error {
-	// Save/restore the base input so a subsequent Typeset starts clean.
+	// Save/restore the base input (and its source-position state) so a subsequent
+	// Run/Typeset starts clean and reports its own line numbers.
 	oldBase, oldPos := e.base, e.bpos
+	oldStarts, oldSP, oldLine, oldCol := e.lineStarts, e.srcPos, e.curSrcLine, e.curSrcCol
 	e.base, e.bpos = []rune(src), 0
+	e.lineStarts = nil
+	e.buildLineStarts()
 	e.mainLoop()
 	e.base, e.bpos = oldBase, oldPos
+	e.lineStarts, e.srcPos, e.curSrcLine, e.curSrcCol = oldStarts, oldSP, oldLine, oldCol
 	return e.err
 }

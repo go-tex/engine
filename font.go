@@ -128,6 +128,7 @@ func (e *Engine) SetFont(f fontFace) { e.curFont = f }
 func (e *Engine) Typeset(src string, m FontMetrics, lineWidth, tolerance, linePenalty, baselineskip float64) (Paragraph, bool) {
 	e.base = []rune(src)
 	e.bpos = 0
+	e.buildLineStarts()
 	var hl []Item
 	for {
 		t, ok := e.getXToken()
