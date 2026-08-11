@@ -82,14 +82,16 @@ type Engine struct {
 	curSrcLine int   // 1-based line of the current token (0 = unknown)
 	curSrcCol  int   // 0-based column of the current token
 	count      [256]int
-	dimen      [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
-	skip       [256]glueSpec // \skip (glue) registers
-	box        [256]*boxNode // \box registers (nil = void)
-	mvl        []node        // main vertical list (top-level contributions)
-	curFont    fontFace      // current font for measuring/rendering characters
-	baseFont   fontFace      // the \normalsize font — glyph source + size reference for scaling
-	baseFontPx int           // \normalsize size in px/pt (the 100% for \large/\small/…)
-	mathR      mathRendererT // lazily-built go-tex/math renderer (see math.go)
+	dimen      [256]int          // \dimen registers, in scaled points (1pt = 65536sp)
+	skip       [256]glueSpec     // \skip (glue) registers
+	box        [256]*boxNode     // \box registers (nil = void)
+	mvl        []node            // main vertical list (top-level contributions)
+	curFont    fontFace          // current font for measuring/rendering characters
+	baseFont   fontFace          // the \normalsize font — glyph source + size reference for scaling
+	baseFontPx int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	curColor   uint32            // current text colour (0xRRGGBB; 0 = default black)
+	colors     map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
+	mathR      mathRendererT     // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
 	inPar        bool   // a paragraph is being accumulated
@@ -426,6 +428,8 @@ func (e *Engine) endGroup() {
 			e.leftskip = s.oldg
 		case 7:
 			e.rightskip = s.oldg
+		case 8:
+			e.curColor = uint32(s.oldi)
 		}
 	}
 }
@@ -718,7 +722,7 @@ func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt()})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), color: e.curColor})
 }
 
 // lastChar returns the rune of the trailing character node, if the list ends in

@@ -90,12 +90,16 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.set(c.srcLine)
 			if font != nil {
 				if d := font.glyphPathAt(c.ch); d != "" {
+					fill := ""
+					if c.color != 0 { // override the enclosing <g fill="black">
+						fill = ` fill="` + hexColor(c.color) + `"`
+					}
 					// The glyph path is at the render font's size; scale it to the
 					// glyph's own size (from \large/\small/…) about the baseline.
 					if sc := glyphScale(c, font); sc != 1 {
-						fmt.Fprintf(sb, `<path transform="translate(%s,%s) scale(%s)" d="%s"/>`, f(cx), f(baseline), f(sc), d)
+						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
 					} else {
-						fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
 					}
 				}
 			}
@@ -138,12 +142,27 @@ func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font f
 	w := spToPt(fr.width())
 	top := baseline - spToPt(fr.height())
 	total := spToPt(fr.height() + fr.depth())
-	ru := spToPt(fr.rule)
-	rect(sb, x, top, w, ru)          // top edge
-	rect(sb, x, top+total-ru, w, ru) // bottom edge
-	rect(sb, x, top, ru, total)      // left edge
-	rect(sb, x+w-ru, top, ru, total) // right edge
+	if fr.bg != 0 { // \colorbox/\fcolorbox background fills the whole box first
+		crect(sb, x, top, w, total, fr.bg)
+	}
+	if fr.rule > 0 { // the border (\fbox/\framebox black, \fcolorbox coloured)
+		ru := spToPt(fr.rule)
+		crect(sb, x, top, w, ru, fr.ruleColor)          // top edge
+		crect(sb, x, top+total-ru, w, ru, fr.ruleColor) // bottom edge
+		crect(sb, x, top, ru, total, fr.ruleColor)      // left edge
+		crect(sb, x+w-ru, top, ru, total, fr.ruleColor) // right edge
+	}
 	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font)
+}
+
+// crect fills a rectangle in the given colour (0xRRGGBB), or black when color is 0
+// (using the enclosing <g fill="black">).
+func crect(sb *strings.Builder, x, y, w, h float64, color uint32) {
+	if color == 0 {
+		rect(sb, x, y, w, h)
+		return
+	}
+	fmt.Fprintf(sb, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>`, f(x), f(y), f(w), f(h), hexColor(color))
 }
 
 // lineGrouper emits <g data-l="N"> … </g> wrappers around runs of glyphs that

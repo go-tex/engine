@@ -46,8 +46,9 @@ type ruleNode struct {                 // \hrule/\vrule
 type charNode struct { // a set character from the current font (metrics in sp)
 	ch                   rune
 	width, height, depth int
-	srcLine              int // 1-based source line this glyph came from (0 = unknown)
-	size                 int // font size (px/pt) this glyph was set at (0 = base)
+	srcLine              int    // 1-based source line this glyph came from (0 = unknown)
+	size                 int    // font size (px/pt) this glyph was set at (0 = base)
+	color                uint32 // 0xRRGGBB fill colour (0 = default black)
 }
 type discNode struct{ penalty int } // a discretionary hyphen point (Liang)
 

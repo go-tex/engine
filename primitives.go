@@ -926,6 +926,10 @@ func (e *Engine) loadMore() {
 	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
 	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
 	e.prim("framebox", func(e *Engine) { e.place(e.doFramebox()) })
+	e.prim("color", func(e *Engine) { e.doColor() })
+	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
+	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })
+	e.prim("fcolorbox", func(e *Engine) { e.place(e.doFcolorbox()) })
 	e.prim("label", func(e *Engine) { e.doLabel() })
 	e.prim("ref", func(e *Engine) { e.doRef() })
 	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text

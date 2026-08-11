@@ -30,6 +30,7 @@ const MiniLaTeXKernel = `
 \def\textsf#1{{\sf #1}}
 \def\textrm#1{{\rm #1}}
 \def\emph#1{{\it #1}}
+\def\textcolor#1#2{{\color{#1}#2}}
 \def\tiny{\gotexsize500\relax}
 \def\scriptsize{\gotexsize700\relax}
 \def\footnotesize{\gotexsize800\relax}

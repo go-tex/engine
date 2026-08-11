@@ -27,6 +27,8 @@ const (
 type frameNode struct {
 	inner     *boxNode
 	sep, rule int
+	bg        uint32 // background fill colour (0xRRGGBB; 0 = none) — \colorbox/\fcolorbox
+	ruleColor uint32 // frame colour (0xRRGGBB; 0 = black) — \fcolorbox
 }
 
 func (frameNode) isNode() {}

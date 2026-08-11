@@ -48,11 +48,12 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 
 // pdfDraw carries the drawing state for one page.
 type pdfDraw struct {
-	p     *pdfkit.Page
-	face  *pdfkit.Font
-	size  float64 // base (\normalsize) size
-	cur   float64 // font size currently selected in the content stream
-	pageH float64
+	p        *pdfkit.Page
+	face     *pdfkit.Font
+	size     float64 // base (\normalsize) size
+	cur      float64 // font size currently selected in the content stream
+	curColor uint32  // fill colour currently selected (0xRRGGBB; 0 = black)
+	pageH    float64
 }
 
 // setSize switches the PDF text size when a glyph's size differs from what's
@@ -65,6 +66,16 @@ func (d *pdfDraw) setSize(sz float64) {
 		d.p.SetFont(d.face, sz)
 		d.cur = sz
 	}
+}
+
+// setColor switches the PDF fill colour (used by both text and rectangles) when it
+// differs from what's selected. Colour 0 means black.
+func (d *pdfDraw) setColor(c uint32) {
+	if c == d.curColor {
+		return
+	}
+	d.curColor = c
+	d.p.SetFillColor(pdfkit.RGB8(uint8(c>>16), uint8(c>>8), uint8(c)))
 }
 
 // y flips an engine (top-down) y coordinate into PDF (bottom-up) space.
@@ -92,9 +103,11 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			cx += w
 		case charNode:
 			d.setSize(float64(c.size))
+			d.setColor(c.color)
 			d.p.Text(cx, d.y(baseline), string(c.ch))
 			cx += spToPt(c.width)
 		case ruleNode:
+			d.setColor(0)
 			h := spToPt(ruleHeight(c, b))
 			dp := spToPt(ruleDepth(c, b))
 			w := spToPt(c.width)
@@ -126,11 +139,18 @@ func (d *pdfDraw) frame(fr frameNode, x, baseline float64) {
 	w := spToPt(fr.width())
 	top := baseline - spToPt(fr.height())
 	total := spToPt(fr.height() + fr.depth())
-	ru := spToPt(fr.rule)
-	d.rect(x, top, w, ru)          // top edge
-	d.rect(x, top+total-ru, w, ru) // bottom edge
-	d.rect(x, top, ru, total)      // left edge
-	d.rect(x+w-ru, top, ru, total) // right edge
+	if fr.bg != 0 { // \colorbox/\fcolorbox background
+		d.setColor(fr.bg)
+		d.rect(x, top, w, total)
+	}
+	if fr.rule > 0 { // border (black for \fbox, coloured for \fcolorbox)
+		d.setColor(fr.ruleColor)
+		ru := spToPt(fr.rule)
+		d.rect(x, top, w, ru)          // top edge
+		d.rect(x, top+total-ru, w, ru) // bottom edge
+		d.rect(x, top, ru, total)      // left edge
+		d.rect(x+w-ru, top, ru, total) // right edge
+	}
 	d.box(fr.inner, x+spToPt(fr.rule+fr.sep), baseline)
 }
 
@@ -159,6 +179,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case glueNode:
 			cy += spToPt(b.setWidth(c.spec))
 		case ruleNode:
+			d.setColor(0)
 			w := spToPt(ruleWidth(c, b))
 			hd := spToPt(c.height + c.depth)
 			d.rect(x, cy, w, hd)
@@ -181,6 +202,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 func (d *pdfDraw) leader(kind glueLeader, x, baseline, w float64) {
 	switch kind {
 	case leaderRule:
+		d.setColor(0)
 		th := spToPt(defaultRule)
 		d.rect(x, baseline-th, w, th)
 	case leaderDots:
