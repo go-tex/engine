@@ -1126,6 +1126,11 @@ func (e *Engine) loadMore() {
 	e.prim("lstlisting", func(e *Engine) { e.doLstlisting() })
 	e.prim("endlstlisting", func(e *Engine) {})
 	e.prim("lstinline", func(e *Engine) { e.doLstinline() })
+	// enumitem subset (see enumitem.go): \@enumitemopt{<kind>} reads the optional
+	// [key=value] argument of a list environment and reconfigures the current list
+	// group; \@enumitemrec records an enumerate's final counter value for [resume].
+	e.prim("@enumitemopt", func(e *Engine) { e.doEnumitemOpt() })
+	e.prim("@enumitemrec", func(e *Engine) { e.recordEnumitemResume() })
 	e.loadStomach()
 }
 
