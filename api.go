@@ -155,6 +155,7 @@ func compile(src []byte, opt Options) (*Engine, error) {
 		e.labels = aux.labels
 		e.refTypes = aux.refTypes
 		e.refNames = aux.refNames
+		e.bibAuthor = aux.bibAuthor // \citet author labels, gathered by the aux \bibliography
 		e.tocSource = aux.tocEntries
 		e.indexSource = aux.indexEntries
 		if _, err := e.Run(string(src)); err != nil {

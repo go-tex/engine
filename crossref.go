@@ -58,6 +58,7 @@ func (e *Engine) refText(key string) string {
 // the second pass. \nocite is a no-op here (it only affects a real .bib run).
 func (e *Engine) doCite() {
 	keys := splitComma(e.readBraceName())
+	e.recordCites(keys) // remember the keys so an auto \bibliography emits them
 	for i, k := range keys {
 		keys[i] = e.refText(k)
 	}
@@ -74,6 +75,7 @@ func (e *Engine) doCite() {
 func needsTwoPass(src []byte) bool {
 	return indexOf(src, `\label`) >= 0 ||
 		indexOf(src, `\bibitem`) >= 0 ||
+		indexOf(src, `\bibliography`) >= 0 || // \cite forward-references an auto bibliography
 		indexOf(src, `\tableofcontents`) >= 0 ||
 		indexOf(src, `\listoffigures`) >= 0 ||
 		indexOf(src, `\listoftables`) >= 0 ||

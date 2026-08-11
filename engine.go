@@ -122,6 +122,17 @@ type Engine struct {
 	refNames map[string]string // \label → \@currentlabelname (title), used by \nameref
 	err      error
 
+	// BibTeX bibliography (see bibtex.go): which keys were \cite'd/\nocite'd (and
+	// their first-citation order), whether \nocite{*} requested every entry, the
+	// accepted \bibliographystyle name, and the first-author label per key used by
+	// natbib's \citet — carried from the aux pass so a \citet before the
+	// \bibliography resolves, exactly like labels.
+	citedKeys map[string]bool
+	citeOrder []string
+	nociteAll bool
+	bibStyle  string
+	bibAuthor map[string]string
+
 	// table of contents (see toc.go): entries recorded as \section/\subsection and
 	// \caption run (via the \@tocentry prim), carried from the aux pass into the
 	// render pass exactly like labels, and consumed by \tableofcontents /
