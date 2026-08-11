@@ -134,6 +134,10 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			paintLinkSP(sb, c, cx, baseline, font)
 			cx += spToPt(c.width())
+		case internalLinkNode:
+			lg.close()
+			paintInternalLinkSP(sb, c, cx, baseline, font)
+			cx += spToPt(c.width())
 		case decoNode:
 			lg.close()
 			paintDecoSP(sb, c, cx, baseline, font)
@@ -251,6 +255,9 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
 			paintLinkSP(sb, c, x, cy+spToPt(c.height()), font)
+			cy += spToPt(c.height() + c.depth())
+		case internalLinkNode:
+			paintInternalLinkSP(sb, c, x, cy+spToPt(c.height()), font)
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)

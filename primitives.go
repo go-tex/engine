@@ -1000,9 +1000,11 @@ func (e *Engine) loadMore() {
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	e.prim("verb", func(e *Engine) { e.doVerb() })
-	e.prim("url", func(e *Engine) { e.doURL() })             // hyperref: literal, clickable URL
-	e.prim("href", func(e *Engine) { e.doHref() })           // hyperref: text clickable to a URL
-	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() }) // hyperref: literal URL, no link
+	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
+	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
+	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })     // hyperref: literal URL, no link
+	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() }) // hyperref: named in-document destination
+	e.prim("hyperlink", func(e *Engine) { e.doHyperlink() })     // hyperref: same-document link to a target
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })

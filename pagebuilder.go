@@ -38,6 +38,8 @@ func vContribution(n node) int {
 		return c.height() + c.depth()
 	case linkNode:
 		return c.height() + c.depth()
+	case internalLinkNode:
+		return c.height() + c.depth()
 	case footnoteNode:
 		// Reserve the note's height (plus rule + gaps) so the page breaks early
 		// enough to leave room for the foot area, even though the note is not
