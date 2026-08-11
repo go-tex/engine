@@ -176,6 +176,11 @@ const MiniLaTeXKernel = `
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+% ─── length interface (feat/lengths) ─────────────────────────────────────────
+% \stretch{n} is a rubber length "0pt plus n fil" (order-1 infinite stretch), so
+% \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
+% like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
+\def\stretch#1{0pt plus #1fil}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

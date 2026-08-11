@@ -1038,6 +1038,16 @@ func (e *Engine) loadMore() {
 	e.prim("newtheorem", func(e *Engine) { e.doNewtheorem() })    // amsthm \newtheorem{env}{Heading}[within]/[shared]
 	e.prim("newtheorem*", func(e *Engine) { e.doNewtheorem() })   // starred form: same here (number is still generated)
 	e.prim("theoremstyle", func(e *Engine) { e.readBraceName() }) // style selector accepted; only "plain" is modelled
+	// LaTeX length interface: \newlength allocates a skip register (a rubber
+	// length) and aliases the given cs to it; \setlength/\addtolength assign or
+	// advance it (or a \newdimen register / engine parameter); \settoX measure
+	// content typeset as an hbox. See lengths.go.
+	e.prim("newlength", func(e *Engine) { e.doNewlength() })
+	e.prim("setlength", func(e *Engine) { e.doSetlength(false) })
+	e.prim("addtolength", func(e *Engine) { e.doSetlength(true) })
+	e.prim("settowidth", func(e *Engine) { e.doSettodim('w') })
+	e.prim("settoheight", func(e *Engine) { e.doSettodim('h') })
+	e.prim("settodepth", func(e *Engine) { e.doSettodim('d') })
 	e.loadStomach()
 }
 
