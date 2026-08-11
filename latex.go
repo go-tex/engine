@@ -194,6 +194,11 @@ const MiniLaTeXKernel = `
 \def\Alph#1{\expandafter\@Alph\csname c@#1\endcsname}
 \def\@fnsymbol#1{\ifcase#1\or *\or †\or ‡\or §\or ¶\or ‖\or **\or ††\or ‡‡\fi}
 \def\fnsymbol#1{\expandafter\@fnsymbol\csname c@#1\endcsname}
+% ─── length interface (feat/lengths) ─────────────────────────────────────────
+% \stretch{n} is a rubber length "0pt plus n fil" (order-1 infinite stretch), so
+% \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
+% like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
+\def\stretch#1{0pt plus #1fil}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

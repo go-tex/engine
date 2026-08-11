@@ -923,6 +923,13 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 			switch {
 			case m.kind == mDimenRef:
 				return e.dimen[m.code], 0
+			// A skip register / LaTeX length used where a rigid <dimen> is wanted
+			// coerces to its natural width component (TeX's glue→dimen coercion),
+			// so \parbox{\len}, \framebox[\len] and \setlength{\x}{\len} all work.
+			case m.kind == mSkipRef:
+				return e.skip[m.code].width, 0
+			case m.kind == mPrim && m.name == "skip":
+				return e.skip[e.scanInt()].width, 0
 			case m.kind == mPrim && m.name == "dimen":
 				return e.dimen[e.scanInt()], 0
 			case m.kind == mPrim && m.name == "wd":
