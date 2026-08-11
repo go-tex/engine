@@ -1,0 +1,16 @@
+\documentclass{article}
+\begin{document}
+\hsize=380pt
+\section{Displays multi-lignes}
+\texttt{eqnarray} (colonnes rcl, chaque ligne num\'erot\'ee) :
+\begin{eqnarray}
+f(x) &=& x^2 + 2x + 1 \\
+     &=& (x+1)^2
+\end{eqnarray}
+\texttt{multline} (1re ligne \`a gauche, derni\`ere \`a droite, un seul num\'ero) :
+\begin{multline}
+a_1 + a_2 + a_3 + a_4 \\
++ a_5 + a_6 = \sum_{i=1}^{6} a_i \label{eq:s}
+\end{multline}
+R\'ef\'erence \eqref{eq:s}.
+\end{document}

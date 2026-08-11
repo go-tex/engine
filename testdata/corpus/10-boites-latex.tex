@@ -1,0 +1,9 @@
+\documentclass{article}
+\begin{document}
+\hsize=380pt
+\section{Commandes de bo\^ites}
+\makebox[120pt][r]{align\'e \`a droite} dans une bo\^ite de 120pt.\par
+Du texte \raisebox{5pt}{relev\'e} et \raisebox{-4pt}{abaiss\'e} sur la ligne.\par
+\newsavebox{\ma}\sbox{\ma}{[contenu sauvegard\'e]}%
+R\'eutilis\'e : \usebox{\ma} puis \usebox{\ma}.
+\end{document}

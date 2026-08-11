@@ -1,0 +1,10 @@
+\documentclass{article}
+\begin{document}
+\hsize=380pt
+\section{Images vectorielles}
+Le moteur ins\`ere des SVG nativement (rendu vectoriel, pas de raster) :
+
+\includegraphics[width=90pt]{data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='40' viewBox='0 0 60 40'><rect width='60' height='40' fill='%23e0e8ff'/><circle cx='20' cy='20' r='14' fill='%23d03030'/><polygon points='35,32 55,32 45,10' fill='%23209020'/></svg>}
+
+Une figure au fil du texte : \includegraphics[width=40pt]{data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='30' viewBox='0 0 40 30'><path d='M2 28 L20 2 L38 28 Z' fill='%23804090'/></svg>} et la suite.
+\end{document}

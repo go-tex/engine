@@ -1,0 +1,10 @@
+\documentclass{article}
+\newcounter{step}
+\begin{document}
+\hsize=380pt
+\setcounter{section}{4}
+\section{Compteurs et longueurs}
+\newlength{\gap}\setlength{\gap}{40pt}
+\stepcounter{step}\'Etape \Roman{step}, \stepcounter{step}\'etape \Roman{step} (lettre \alph{step}).\par
+\addtolength{\gap}{20pt}Espace de \the\gap: [A\hskip\gap B].
+\end{document}

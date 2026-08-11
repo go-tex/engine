@@ -1,0 +1,11 @@
+\documentclass{article}
+\begin{document}
+\hsize=380pt
+\section{Navigation intra-document}
+Le SVG rendu est navigable : \hyperlink{cible}{\textcolor{blue}{aller \`a la cible}}
+produit une ancre \texttt{<a href="\#cible">}.
+
+\vspace{40pt}
+\hypertarget{cible}{\textcolor{teal}{Ceci est la cible}} — rendue
+en \texttt{<g id="cible">}.
+\end{document}
