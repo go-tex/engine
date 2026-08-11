@@ -136,11 +136,13 @@ func compile(src []byte, opt Options) (*Engine, error) {
 		if _, err := aux.Run(string(src)); err != nil {
 			return nil, err
 		}
+		aux.finalizeTOCPages()
 		e, err := buildEngine(opt, true)
 		if err != nil {
 			return nil, err
 		}
 		e.labels = aux.labels
+		e.tocSource = aux.tocEntries
 		if _, err := e.Run(string(src)); err != nil {
 			return nil, err
 		}

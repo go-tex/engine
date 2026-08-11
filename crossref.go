@@ -61,11 +61,17 @@ func (e *Engine) doCite() {
 	e.pushString("[" + joinComma(keys) + "]")
 }
 
-// needsTwoPass reports whether the source must be compiled twice for forward
-// references to resolve: it defines a \label or a \bibitem whose number a \ref or
-// \cite may use before the definition is seen.
+// needsTwoPass reports whether the source must be compiled twice: it defines a
+// \label or a \bibitem whose number a \ref or \cite may use before the
+// definition is seen, or it requests a \tableofcontents / \listoffigures /
+// \listoftables, whose entries are only known once the whole document has run
+// (LaTeX's .toc/.lof/.lot mechanism — see toc.go).
 func needsTwoPass(src []byte) bool {
-	return indexOf(src, `\label`) >= 0 || indexOf(src, `\bibitem`) >= 0
+	return indexOf(src, `\label`) >= 0 ||
+		indexOf(src, `\bibitem`) >= 0 ||
+		indexOf(src, `\tableofcontents`) >= 0 ||
+		indexOf(src, `\listoffigures`) >= 0 ||
+		indexOf(src, `\listoftables`) >= 0
 }
 
 // splitComma splits a comma-separated key list, trimming spaces around each key.

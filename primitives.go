@@ -937,6 +937,10 @@ func (e *Engine) loadMore() {
 	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
+	e.prim("@tocentry", func(e *Engine) { e.doTOCEntry() })
+	e.prim("tableofcontents", func(e *Engine) { e.doTableOfContents() })
+	e.prim("listoffigures", func(e *Engine) { e.doListOfFigures() })
+	e.prim("listoftables", func(e *Engine) { e.doListOfTables() })
 	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketToks() }) // eat an optional [placement] (figure/table)
 	// \@ifnextbracket{THEN}{ELSE}: a \@ifnextchar[ built without \futurelet (which
 	// this kernel lacks). It grabs two brace groups, then peeks — without
