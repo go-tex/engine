@@ -14,8 +14,11 @@ func TestNewcommand(t *testing.T) {
 		{`\newcommand\greet[1]{Hi #1!}\message{\greet{Bob}}`, "Hi Bob!"},
 		// \renewcommand overrides
 		{`\newcommand{\X}{one}\renewcommand{\X}{two}\message{\X}`, "two"},
-		// optional-default bracket is consumed (arg treated as mandatory)
-		{`\newcommand{\opt}[1][d]{[#1]}\message{\opt{z}}`, "[z]"},
+		// first argument optional: no bracket → #1 is the default; the {z} group
+		// is leftover text (shown with its braces in \message serialization)
+		{`\newcommand{\opt}[1][d]{[#1]}\message{\opt{z}}`, "[d]{z}"},
+		// first argument optional: bracket supplies #1
+		{`\newcommand{\opt}[1][d]{[#1]}\message{\opt[z]}`, "[z]"},
 		// nested use of a 2-arg command
 		{`\newcommand{\add}[2]{#1 plus #2}\message{\add{x}{\add{y}{z}}}`, "x plus y plus z"},
 	}

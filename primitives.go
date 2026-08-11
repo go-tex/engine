@@ -935,7 +935,7 @@ func (e *Engine) loadMore() {
 	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
-	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketSkip() }) // eat an optional [placement] (figure/table)
+	e.prim("@discardopt", func(e *Engine) { e.scanOptBracketToks() }) // eat an optional [placement] (figure/table)
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	e.prim("verb", func(e *Engine) { e.doVerb() })

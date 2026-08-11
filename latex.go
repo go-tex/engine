@@ -148,12 +148,13 @@ func (e *Engine) LoadLaTeX() error {
 //	\newcommand{\name}[nargs][default]{body}   (braces optional around \name)
 //
 // It defines \name as a macro of nargs undelimited parameters (#1…#nargs in the
-// body). An optional-argument default ([default]) is consumed but not yet honoured
-// (the arg is treated as mandatory), which covers the common no-optional-arg use.
+// body). When a second bracket [default] is present, the FIRST of the nargs
+// parameters becomes optional: at call time #1 comes from a bracketed [..]
+// argument if one is supplied, otherwise from default (standard LaTeX semantics).
 func (e *Engine) doNewcommand() {
 	name := e.scanCmdName()
 	nargs := e.scanOptBracketInt()
-	e.scanOptBracketSkip() // optional [default] — consumed; optional-arg not modelled
+	optDefault, optArg := e.scanOptBracketToks() // optional [default]: 1st arg optional
 	e.skipOptSpace()
 	t, ok := e.getXToken()
 	if !ok || !(t.cat == catBegin && !t.cs_) {
@@ -168,19 +169,22 @@ func (e *Engine) doNewcommand() {
 		params = append(params, tok{ch: rune('0' + i), cat: catParam})
 	}
 	if name != "" {
-		e.define(name, &meaning{kind: mMacro, params: params, body: body}, false)
+		e.define(name, &meaning{
+			kind: mMacro, params: params, body: body,
+			optArg: optArg && nargs >= 1, optDefault: optDefault,
+		}, false)
 	}
 }
 
 // doNewenvironment implements \newenvironment{name}[nargs][default]{begin}{end}:
 // it defines \name (a macro of nargs parameters whose body is the begin-code) and
 // \endname (a 0-parameter macro whose body is the end-code), so \begin{name} and
-// \end{name} run them via \csname. The optional-argument default is consumed but
-// not modelled (as for \newcommand).
+// \end{name} run them via \csname. When a [default] bracket follows [nargs], the
+// environment's first argument is optional (as for \newcommand).
 func (e *Engine) doNewenvironment() {
 	name := e.readBraceName()
 	nargs := e.scanOptBracketInt()
-	e.scanOptBracketSkip()
+	optDefault, optArg := e.scanOptBracketToks()
 	begin := e.readBodyGroup()
 	end := e.readBodyGroup()
 	if name == "" {
@@ -190,7 +194,10 @@ func (e *Engine) doNewenvironment() {
 	for i := 1; i <= nargs && i <= 9; i++ {
 		params = append(params, tok{ch: rune('0' + i), cat: catParam})
 	}
-	e.define(name, &meaning{kind: mMacro, params: params, body: begin}, false)
+	e.define(name, &meaning{
+		kind: mMacro, params: params, body: begin,
+		optArg: optArg && nargs >= 1, optDefault: optDefault,
+	}, false)
 	e.define("end"+name, &meaning{kind: mMacro, body: end}, false)
 }
 
@@ -289,22 +296,40 @@ func (e *Engine) scanOptBracketInt() int {
 	return 0
 }
 
-// scanOptBracketSkip consumes an optional [...] group (its content is ignored).
-func (e *Engine) scanOptBracketSkip() {
+// scanOptBracketToks reads an optional [...] group and returns its token content
+// together with whether the bracket was present. Brace groups nested inside are
+// tracked by depth so that a ] appearing within {…} does not close the group
+// early. When no bracket follows, it pushes back the peeked token and reports
+// (nil, false).
+func (e *Engine) scanOptBracketToks() ([]tok, bool) {
 	e.skipOptSpace()
 	t, ok := e.getXToken()
 	if !ok {
-		return
+		return nil, false
 	}
 	if !t.cs_ && t.ch == '[' {
+		var toks []tok
+		depth := 0
 		for {
 			u, ok := e.getNext()
-			if !ok || (!u.cs_ && u.ch == ']') {
-				return
+			if !ok {
+				return toks, true
 			}
+			switch {
+			case !u.cs_ && u.cat == catBegin:
+				depth++
+			case !u.cs_ && u.cat == catEnd:
+				if depth > 0 {
+					depth--
+				}
+			case depth == 0 && !u.cs_ && u.ch == ']':
+				return toks, true
+			}
+			toks = append(toks, u)
 		}
 	}
 	e.back(t)
+	return nil, false
 }
 
 // doDocumentClass gobbles \documentclass[options]{class} (both parts optional in
