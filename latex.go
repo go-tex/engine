@@ -148,6 +148,24 @@ const MiniLaTeXKernel = `
 \def\clearpage{\par\penalty-10000 }
 \def\hline{}
 \def\cline#1{}
+% amsthm-style theorem support. \newtheorem (a Go primitive) generates, per
+% environment, \the<env> and the \<env>/\end<env> macros; those hand the shared
+% formatting to the fixed macros below. \@begintheorem sets the bold heading
+% "Heading N", then \@ifnextbracket picks the with-note or plain continuation —
+% both switch to italic for the body (amsthm's "plain" style). \@endtheorem ends
+% the paragraph, closes the environment group (reverting \it) and adds space.
+\def\@begintheorem#1#2{\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+\def\@stdbegintheorem{{\bf .}\ \it }
+\def\@opargbegintheorem[#1]{{\bf\ (#1).}\ \it }
+\def\@endtheorem{\par\endgroup\medskip}
+% proof: an italic "Proof." head (overridable via \begin{proof}[Proof of …]), a
+% roman body, and a QED box flushed to the right margin at \end{proof}.
+\def\qedsymbol{\rule{6pt}{6pt}}
+\def\qed{\hfill\qedsymbol\par}
+\def\proof{\par\medskip\begingroup\@ifnextbracket{\@opargproof}{\@stdproof}}
+\def\@stdproof{\noindent{\it Proof.}\ }
+\def\@opargproof[#1]{\noindent{\it #1.}\ }
+\def\endproof{\qed\endgroup\medskip}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
