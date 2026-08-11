@@ -368,6 +368,31 @@ func (e *Engine) skipIndex() (int, bool) {
 }
 
 func (e *Engine) doAdvance(global bool) {
+	// \advance\leftskip / \advance\rightskip: the special per-line glue
+	// parameters are primitives, not skip registers, so the register paths
+	// below never match them. Handle them explicitly so nested list
+	// environments can accumulate indentation with \advance\leftskip by24pt.
+	if t, ok := e.getXToken(); ok {
+		if t.cs_ {
+			if m := e.eq[t.cs]; m != nil && m.kind == mPrim && (m.name == "leftskip" || m.name == "rightskip") {
+				e.skipByKeyword()
+				g := e.scanGlue()
+				if m.name == "leftskip" {
+					if !global && len(e.groups) > 0 {
+						e.save = append(e.save, saveItem{kind: 6, oldg: e.leftskip})
+					}
+					e.leftskip = addGlue(e.leftskip, g)
+				} else {
+					if !global && len(e.groups) > 0 {
+						e.save = append(e.save, saveItem{kind: 7, oldg: e.rightskip})
+					}
+					e.rightskip = addGlue(e.rightskip, g)
+				}
+				return
+			}
+		}
+		e.back(t)
+	}
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt()
