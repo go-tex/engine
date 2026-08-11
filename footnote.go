@@ -148,8 +148,13 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	if e.pageStyle == "empty" {
 		return vpackSP(vlist, packNatural, 0)
 	}
-	// A page number is shown: push it to the foot with vertical fil, filling the
-	// page to \vsize so the number sits at the bottom of the text area.
+	e.curPageNum = pageNum // so \thepage in a header/footer field is this page
+
+	if e.pageStyle == "fancy" {
+		return e.assembleFancyPage(vlist)
+	}
+	// "plain": a centred page number pushed to the foot with vertical fil, filling
+	// the page to \vsize so the number sits at the bottom of the text area.
 	vlist = append(vlist,
 		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, // vfil
 		e.pageFooter(pageNum),
@@ -158,4 +163,36 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 		return vpackSP(vlist, packTo, e.vsize)
 	}
 	return vpackSP(vlist, packNatural, 0)
+}
+
+// assembleFancyPage builds a \pagestyle{fancy} page: the running header (with its
+// rule) above the content, and the running footer (with its rule) at the foot, the
+// content stretched to \vsize between them. body is the content+footnotes vlist.
+func (e *Engine) assembleFancyPage(body []node) *boxNode {
+	var top []node
+	if h := e.fancyHeader(); h != nil {
+		top = append(top, h)
+		if e.headRule > 0 {
+			top = append(top,
+				glueNode{spec: glueSpec{width: 2 * unity}},
+				ruleNode{width: e.hsize, height: e.headRule},
+			)
+		}
+		top = append(top, glueNode{spec: glueSpec{width: 6 * unity}}) // gap below header
+	}
+	page := append(top, body...)
+	page = append(page, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}) // vfil
+	if f := e.fancyFooter(); f != nil {
+		if e.footRule > 0 {
+			page = append(page,
+				ruleNode{width: e.hsize, height: e.footRule},
+				glueNode{spec: glueSpec{width: 2 * unity}},
+			)
+		}
+		page = append(page, f)
+	}
+	if e.vsize > 0 {
+		return vpackSP(page, packTo, e.vsize)
+	}
+	return vpackSP(page, packNatural, 0)
 }

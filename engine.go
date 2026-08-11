@@ -149,6 +149,15 @@ type Engine struct {
 	// paint it behind the content. hasPageColor distinguishes "unset" from black.
 	pageColor    uint32
 	hasPageColor bool
+
+	// running headers/footers (see fancyhdr.go): with \pagestyle{fancy}, six fields
+	// (header/footer × left/centre/right) are typeset at the top and foot of each
+	// page. curPageNum is the ordinal being assembled, so \thepage in a field (or in
+	// the plain foot number) reflects the real page.
+	fancyHF    [6][]tok // 0 hl,1 hc,2 hr,3 fl,4 fc,5 fr
+	headRule   int      // \headrulewidth (sp; a rule under the header)
+	footRule   int      // \footrulewidth (sp; a rule over the footer)
+	curPageNum int      // page ordinal during assembly (0 ⇒ unknown ⇒ 1)
 }
 
 type mkind uint8

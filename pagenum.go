@@ -26,10 +26,15 @@ import (
 // vs no-number distinction is modelled (plain/headings/myheadings all show the
 // bottom-centred number; empty shows none).
 func (e *Engine) doPagestyle() {
-	name := e.readBraceName()
-	if name == "empty" {
+	switch e.readBraceName() {
+	case "empty":
 		e.pageStyle = "empty"
-	} else {
+	case "fancy":
+		e.pageStyle = "fancy"
+		if e.headRule == 0 { // fancyhdr default: a rule under the header, none over the foot
+			e.headRule = defaultRule
+		}
+	default:
 		e.pageStyle = "plain"
 	}
 }
@@ -81,6 +86,15 @@ func alphaLabel(n int, base byte) string {
 		n /= 26
 	}
 	return string(b)
+}
+
+// pageOrdinal is the page number currently being assembled (1 when unknown), used
+// by \thepage.
+func (e *Engine) pageOrdinal() int {
+	if e.curPageNum > 0 {
+		return e.curPageNum
+	}
+	return 1
 }
 
 // pageFooter builds the centred page-number line placed at the foot of a page.

@@ -959,8 +959,19 @@ func (e *Engine) loadMore() {
 	e.prim("pagenumbering", func(e *Engine) { e.doPagenumbering() })
 	e.prim("today", func(e *Engine) { e.pushString(e.today) })
 	// \thepage in running text is best-effort (this single-pass engine cannot know
-	// the page in advance); the per-page foot number is always correct.
-	e.prim("thepage", func(e *Engine) { e.pushString(formatPageNumber(1, e.pageNumStyle)) })
+	// the page in advance); in a header/footer field it reflects the real page
+	// (curPageNum set during assembly), and the per-page foot number is always correct.
+	e.prim("thepage", func(e *Engine) { e.pushString(formatPageNumber(e.pageOrdinal(), e.pageNumStyle)) })
+	// fancyhdr running headers/footers (see fancyhdr.go).
+	e.prim("lhead", func(e *Engine) { e.setFancyField(fldHL) })
+	e.prim("chead", func(e *Engine) { e.setFancyField(fldHC) })
+	e.prim("rhead", func(e *Engine) { e.setFancyField(fldHR) })
+	e.prim("lfoot", func(e *Engine) { e.setFancyField(fldFL) })
+	e.prim("cfoot", func(e *Engine) { e.setFancyField(fldFC) })
+	e.prim("rfoot", func(e *Engine) { e.setFancyField(fldFR) })
+	e.prim("fancyhead", func(e *Engine) { e.doFancyPos(fldHL) })
+	e.prim("fancyfoot", func(e *Engine) { e.doFancyPos(fldFL) })
+	e.prim("fancyhf", func(e *Engine) { e.doFancyhf() })
 	// graphicx box transformations: scale, mirror, resize and rotate the content,
 	// which the SVG/PDF drivers realise with native affine transforms.
 	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
