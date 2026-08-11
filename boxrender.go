@@ -21,7 +21,7 @@ func spToPt(sp int) float64 { return float64(sp) / float64(unity) }
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
 func (e *Engine) RenderBox(i int, margin float64) string {
-	return renderBoxSVG(e.getBox(i), margin, e.curFont)
+	return renderBoxSVG(e.getBox(i), margin, e.renderFont())
 }
 
 // Page vpacks the main vertical list (everything contributed at top level) into a
@@ -35,7 +35,7 @@ func (e *Engine) Page() *boxNode {
 
 // RenderPage renders the main vertical list to an SVG page with the given margin.
 func (e *Engine) RenderPage(margin float64) string {
-	return renderBoxSVG(e.Page(), margin, e.curFont)
+	return renderBoxSVG(e.Page(), margin, e.renderFont())
 }
 
 // renderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
@@ -90,7 +90,13 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.set(c.srcLine)
 			if font != nil {
 				if d := font.glyphPathAt(c.ch); d != "" {
-					fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+					// The glyph path is at the render font's size; scale it to the
+					// glyph's own size (from \large/\small/…) about the baseline.
+					if sc := glyphScale(c, font); sc != 1 {
+						fmt.Fprintf(sb, `<path transform="translate(%s,%s) scale(%s)" d="%s"/>`, f(cx), f(baseline), f(sc), d)
+					} else {
+						fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+					}
 				}
 			}
 			cx += spToPt(c.width)
@@ -211,6 +217,16 @@ func paintDotLeader(sb *strings.Builder, x, baseline, w float64, font fontFace) 
 		cx := x + float64(i)*cell + (cell-dotW)/2
 		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
 	}
+}
+
+// glyphScale is the factor applied to a glyph path so it renders at the char's own
+// size instead of the render font's size (1 when they match or the size is unset).
+func glyphScale(c charNode, font fontFace) float64 {
+	base := font.sizePt()
+	if c.size <= 0 || base <= 0 || c.size == base {
+		return 1
+	}
+	return float64(c.size) / float64(base)
 }
 
 // A running rule dimension follows the enclosing box; these resolve it.

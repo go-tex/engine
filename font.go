@@ -119,7 +119,56 @@ func (o *OpenTypeFont) sizePt() int { return o.px }
 // SetFont sets the current font used to measure and render characters in
 // horizontal mode. Passing an *OpenTypeFont (or any fontFace) is the Go-level
 // stand-in for TeX's \font primitive until font-file loading via \font lands.
-func (e *Engine) SetFont(f fontFace) { e.curFont = f }
+func (e *Engine) SetFont(f fontFace) {
+	e.curFont = f
+	e.baseFont = f // the size set here is \normalsize — the 100% for \large/\small/…
+	if f != nil {
+		e.baseFontPx = f.sizePt()
+	}
+}
+
+// renderFont is the font the drivers use as the glyph source and size reference:
+// the \normalsize base (so per-glyph sizes scale relative to a fixed 100%), or the
+// current font when no base was set.
+func (e *Engine) renderFont() fontFace {
+	if e.baseFont != nil {
+		return e.baseFont
+	}
+	return e.curFont
+}
+
+// doFontSize implements the \gotexsize primitive: it reads a permille factor and
+// switches the current font to the base (\normalsize) font scaled by that factor,
+// so \large (1200) is 1.2× the base size. selectFont scopes the change to the
+// current group. A font that can't rescale leaves the size unchanged.
+func (e *Engine) doFontSize() {
+	permille := e.scanInt()
+	if e.baseFont == nil || e.baseFontPx == 0 {
+		return
+	}
+	sf, ok := e.baseFont.(scalableFont)
+	if !ok {
+		return
+	}
+	px := (e.baseFontPx*permille + 500) / 1000
+	if px < 1 {
+		px = 1
+	}
+	e.selectFont(sf.atSizePx(px))
+}
+
+// scalableFont is a font that can produce a copy of itself at a different pixel
+// size (same shapes, scaled metrics) — the basis for \large/\small/… . Only real
+// fonts implement it; a mock or a font that can't rescale simply keeps its size.
+type scalableFont interface {
+	atSizePx(px int) fontFace
+}
+
+// atSizePx returns the same font re-faced at px, sharing the parsed tables and
+// embeddable bytes (a new face is cheap; no re-parse).
+func (o *OpenTypeFont) atSizePx(px int) fontFace {
+	return &OpenTypeFont{f: o.f, fc: o.f.NewFace(px), upem: o.upem, px: px, data: o.data}
+}
 
 // Typeset runs the gullet over src (expanding macros), builds a horizontal list
 // with the given font's metrics (glyph boxes and interword glue), and breaks it

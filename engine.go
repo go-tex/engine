@@ -87,6 +87,8 @@ type Engine struct {
 	box        [256]*boxNode // \box registers (nil = void)
 	mvl        []node        // main vertical list (top-level contributions)
 	curFont    fontFace      // current font for measuring/rendering characters
+	baseFont   fontFace      // the \normalsize font — glyph source + size reference for scaling
+	baseFontPx int           // \normalsize size in px/pt (the 100% for \large/\small/…)
 	mathR      mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
@@ -716,7 +718,7 @@ func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt()})
 }
 
 // lastChar returns the rune of the trailing character node, if the list ends in

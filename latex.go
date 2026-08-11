@@ -30,6 +30,16 @@ const MiniLaTeXKernel = `
 \def\textsf#1{{\sf #1}}
 \def\textrm#1{{\rm #1}}
 \def\emph#1{{\it #1}}
+\def\tiny{\gotexsize500\relax}
+\def\scriptsize{\gotexsize700\relax}
+\def\footnotesize{\gotexsize800\relax}
+\def\small{\gotexsize900\relax}
+\def\normalsize{\gotexsize1000\relax}
+\def\large{\gotexsize1200\relax}
+\def\Large{\gotexsize1440\relax}
+\def\LARGE{\gotexsize1728\relax}
+\def\huge{\gotexsize2074\relax}
+\def\Huge{\gotexsize2488\relax}
 \def\underline#1{#1}
 \def\mbox#1{\hbox{#1}}
 \newcount\c@section
@@ -38,11 +48,11 @@ const MiniLaTeXKernel = `
 \def\thesection{\the\c@section}
 \def\thesubsection{\the\c@section.\the\c@subsection}
 \def\section{\@ifstar\@ssection\@nsection}
-\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\noindent\thesection\quad#1\par\nobreak\smallskip}
-\def\@ssection#1{\par\medskip\noindent#1\par\nobreak\smallskip}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
+\def\@ssection#1{\par\medskip\noindent{\Large\bf#1}\par\nobreak\smallskip}
 \def\subsection{\@ifstar\@ssubsection\@nsubsection}
-\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\noindent\thesubsection\quad#1\par\nobreak}
-\def\@ssubsection#1{\par\smallskip\noindent#1\par\nobreak}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
+\def\@ssubsection#1{\par\smallskip\noindent{\large\bf#1}\par\nobreak}
 \def\subsubsection{\@ifstar\@ssubsubsection\@nsubsubsection}
 \def\@nsubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\@ssubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
@@ -75,7 +85,7 @@ const MiniLaTeXKernel = `
 \def\endfigure{\par\endgroup\bigskip}
 \def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
 \def\endtable{\par\endgroup\bigskip}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\bf\csname fnum@\@captype\endcsname:} #1\par}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 \def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \def\endquote{\par\endgroup\smallskip}
 \def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}

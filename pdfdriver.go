@@ -23,7 +23,7 @@ import (
 // Each page is (content width + 2·margin) × (content height + 2·margin) points.
 // A current OpenType font (with embeddable bytes) is required to draw text.
 func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
-	ef, ok := e.curFont.(embeddableFont)
+	ef, ok := e.renderFont().(embeddableFont)
 	if !ok {
 		return fmt.Errorf("texengine: RenderPDF needs an embeddable font (set via \\font)")
 	}
@@ -38,7 +38,7 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		ph := spToPt(page.height+page.depth) + 2*margin
 		p := doc.AddPage(pdfkit.NewPageSize(pw, ph))
 		p.SetFont(face, size)
-		d := &pdfDraw{p: p, face: face, size: size, pageH: ph}
+		d := &pdfDraw{p: p, face: face, size: size, cur: size, pageH: ph}
 		d.box(page, margin, margin+spToPt(page.height))
 	}
 	return doc.Write(w)
@@ -48,8 +48,21 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 type pdfDraw struct {
 	p     *pdfkit.Page
 	face  *pdfkit.Font
-	size  float64
+	size  float64 // base (\normalsize) size
+	cur   float64 // font size currently selected in the content stream
 	pageH float64
+}
+
+// setSize switches the PDF text size when a glyph's size differs from what's
+// currently selected (same embedded face, different Tf size).
+func (d *pdfDraw) setSize(sz float64) {
+	if sz <= 0 {
+		sz = d.size
+	}
+	if sz != d.cur {
+		d.p.SetFont(d.face, sz)
+		d.cur = sz
+	}
 }
 
 // y flips an engine (top-down) y coordinate into PDF (bottom-up) space.
@@ -76,6 +89,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			d.leader(c.leader, cx, baseline, w)
 			cx += w
 		case charNode:
+			d.setSize(float64(c.size))
 			d.p.Text(cx, d.y(baseline), string(c.ch))
 			cx += spToPt(c.width)
 		case ruleNode:

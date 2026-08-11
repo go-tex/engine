@@ -37,8 +37,11 @@ func (e *Engine) doFootnote() {
 	e.footnoteCounter++
 	n := e.footnoteCounter
 
-	// Body = "N. " + text, set as a mini-paragraph to the body width.
-	label := append(numberToks(n), chTok('.', catOther), chTok(' ', catSpace))
+	// Body = \footnotesize "N. " + text, set as a mini-paragraph to the body
+	// width (the size is scoped to the sandbox by typesetGroupToVbox).
+	label := []tok{csTok("footnotesize")}
+	label = append(label, numberToks(n)...)
+	label = append(label, chTok('.', catOther), chTok(' ', catSpace))
 	body := e.typesetGroupToVbox(append(label, text...))
 	e.pendingFootnotes = append(e.pendingFootnotes, body)
 
@@ -79,7 +82,7 @@ func numberToks(n int) []tok {
 // guards endParagraph from flushing pending notes into this sandbox.
 func (e *Engine) typesetGroupToVbox(toks []tok) *boxNode {
 	savedMvl, savedPar, savedIn, savedPD := e.mvl, e.parList, e.inPar, e.prevDepth
-	savedBuilding := e.buildingFootnote
+	savedBuilding, savedFont := e.buildingFootnote, e.curFont
 	e.mvl, e.parList, e.inPar, e.prevDepth = nil, nil, false, ignoreDepth
 	e.buildingFootnote = true
 
@@ -97,7 +100,7 @@ func (e *Engine) typesetGroupToVbox(toks []tok) *boxNode {
 	body := vpackSP(e.mvl, packNatural, 0)
 
 	e.mvl, e.parList, e.inPar, e.prevDepth = savedMvl, savedPar, savedIn, savedPD
-	e.buildingFootnote = savedBuilding
+	e.buildingFootnote, e.curFont = savedBuilding, savedFont
 	return body
 }
 
