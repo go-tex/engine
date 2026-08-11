@@ -1016,7 +1016,14 @@ func (e *Engine) loadMore() {
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
-	e.prim("nocite", func(e *Engine) { e.readBraceName() })         // affects only a real .bib run; gobble the keys
+	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
+	// natbib's variants, \bibliographystyle is accepted, and \bibliography reads the
+	// .bib file and emits a thebibliography list.
+	e.prim("nocite", func(e *Engine) { e.doNocite() })                       // record keys (or * = all) for \bibliography
+	e.prim("citep", func(e *Engine) { e.doCitep() })                         // natbib: "[n]"
+	e.prim("citet", func(e *Engine) { e.doCitet() })                         // natbib: "Author [n]"
+	e.prim("bibliographystyle", func(e *Engine) { e.doBibliographyStyle() }) // accepted; only plain modelled
+	e.prim("bibliography", func(e *Engine) { e.doBibliography() })           // read .bib, emit thebibliography
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {}) // consumed by doTabular; defined for safety
 	e.prim("minipage", func(e *Engine) { e.doMinipage() })
