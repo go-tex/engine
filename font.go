@@ -5,15 +5,9 @@ package engine
 
 import "github.com/go-opentype/opentype"
 
-// FontMetrics supplies box dimensions to the typesetter: the advance/height/
-// depth of a glyph, and the interword glue.
-type FontMetrics interface {
-	CharDims(r rune) (w, h, d float64)
-	Space() (w, stretch, shrink float64)
-}
-
-// OpenTypeFont adapts a go-opentype face to FontMetrics (pdftex uses TFM; a
-// future TFM backend will satisfy the same interface).
+// OpenTypeFont adapts a go-opentype face for the engine: it measures glyphs (in
+// points via CharDims and in scaled points via charDimsSP), supplies the interword
+// glue, and returns glyph outline paths for the SVG driver.
 type OpenTypeFont struct {
 	f    *opentype.Font
 	fc   *opentype.Face
@@ -168,49 +162,4 @@ type scalableFont interface {
 // embeddable bytes (a new face is cheap; no re-parse).
 func (o *OpenTypeFont) atSizePx(px int) fontFace {
 	return &OpenTypeFont{f: o.f, fc: o.f.NewFace(px), upem: o.upem, px: px, data: o.data}
-}
-
-// Typeset runs the gullet over src (expanding macros), builds a horizontal list
-// with the given font's metrics (glyph boxes and interword glue), and breaks it
-// into a paragraph box with Knuth–Plass. It stops at \par, end of input, or an
-// undefined control sequence.
-func (e *Engine) Typeset(src string, m FontMetrics, lineWidth, tolerance, linePenalty, baselineskip float64) (Paragraph, bool) {
-	e.base = []rune(src)
-	e.bpos = 0
-	e.buildLineStarts()
-	var hl []Item
-	for {
-		t, ok := e.getXToken()
-		if !ok {
-			break
-		}
-		if t.cs_ {
-			mm := e.meaningOf(t)
-			if mm == nil {
-				break // undefined ends the run (simplified)
-			}
-			if mm.kind == mPrim && !isExpandable(mm.name) {
-				if mm.name == "par" {
-					break
-				}
-				mm.prim(e)
-			}
-			continue
-		}
-		switch t.cat {
-		case catSpace:
-			w, st, sh := m.Space()
-			hl = append(hl, Glue(w, st, sh))
-		case catLetter, catOther:
-			w, h, d := m.CharDims(t.ch)
-			hl = append(hl, Glyph(t.ch, w, h, d))
-		case catBegin:
-			e.beginGroup()
-		case catEnd:
-			e.endGroup()
-		}
-	}
-	// \parfillskip (fills the last line) + a forced final break.
-	hl = append(hl, Glue(0, 1e6, 0), Penalty(0, -InfPenalty, false))
-	return BuildParagraph(hl, lineWidth, tolerance, linePenalty, baselineskip)
 }

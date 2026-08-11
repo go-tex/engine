@@ -5,6 +5,7 @@ package engine
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +18,14 @@ import (
 
 // spToPt converts scaled points to points as a float for output coordinates.
 func spToPt(sp int) float64 { return float64(sp) / float64(unity) }
+
+// f formats a coordinate for SVG output: two decimals with trailing zeros (and a
+// bare decimal point) trimmed, so "3.00" prints "3" and "3.50" prints "3.5".
+func f(v float64) string {
+	s := strconv.FormatFloat(v, 'f', 2, 64)
+	s = strings.TrimRight(s, "0")
+	return strings.TrimSuffix(s, ".")
+}
 
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
