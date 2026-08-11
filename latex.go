@@ -65,10 +65,32 @@ const MiniLaTeXKernel = `
 \def\@date{}
 \def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
+\def\cdot{\char183\relax}
+% Per-level counters and depth trackers for nested itemize/enumerate. Because
+% count/skip registers are group-local, \begingroup + \advance means each level
+% of nesting accumulates its indentation and its depth, then unwinds cleanly at
+% \endgroup — enclosing levels keep their own counters intact.
 \newcount\c@enumi
-\def\itemize{\par\smallskip\begingroup\leftskip=24pt\def\item{\par\noindent\llap{\bullet\enspace}}}
+\newcount\c@enumii
+\newcount\c@enumiii
+\newcount\c@enumiv
+\newcount\c@enumdepth
+\newcount\c@itemdepth
+\def\@alph#1{\ifcase#1\or a\or b\or c\or d\or e\or f\or g\or h\or i\or j\or k\or l\or m\or n\or o\or p\or q\or r\or s\or t\or u\or v\or w\or x\or y\or z\fi}
+\def\@Alph#1{\ifcase#1\or A\or B\or C\or D\or E\or F\or G\or H\or I\or J\or K\or L\or M\or N\or O\or P\or Q\or R\or S\or T\or U\or V\or W\or X\or Y\or Z\fi}
+\def\theenumi{\the\c@enumi.}
+\def\theenumii{(\@alph\c@enumii)}
+\def\theenumiii{\romannumeral\c@enumiii.}
+\def\theenumiv{\@Alph\c@enumiv.}
+\def\labelitemi{\bullet}
+\def\labelitemii{--}
+\def\labelitemiii{*}
+\def\labelitemiv{\cdot}
+\def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
+\def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
+\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@bulletitem\labelitemi}\or\def\item{\@bulletitem\labelitemii}\or\def\item{\@bulletitem\labelitemiii}\else\def\item{\@bulletitem\labelitemiv}\fi}
 \def\enditemize{\par\endgroup\smallskip}
-\def\enumerate{\par\smallskip\begingroup\leftskip=24pt\c@enumi=0\def\item{\par\noindent\advance\c@enumi by1\relax\edef\@currentlabel{\the\c@enumi}\llap{\the\c@enumi.\enspace}}}
+\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@listitem\c@enumi\theenumi}\or\c@enumii=0\relax\def\item{\@listitem\c@enumii\theenumii}\or\c@enumiii=0\relax\def\item{\@listitem\c@enumiii\theenumiii}\else\c@enumiv=0\relax\def\item{\@listitem\c@enumiv\theenumiv}\fi}
 \def\endenumerate{\par\endgroup\smallskip}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
