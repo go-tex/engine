@@ -694,10 +694,22 @@ func (e *Engine) charNodeFor(ch rune) (charNode, bool) {
 	return charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine}, true
 }
 
-// appendChar appends a measured character to a horizontal list, inserting the
-// font's inter-character kern before it when the previous node is a character
-// (TeX's font kern program). It is shared by paragraph building and box building.
+// appendChar appends a measured character to a horizontal list. First it applies
+// TeX's text ligatures and quote/dash forms (see ligature.go): a pair that forms a
+// ligature folds into the trailing character, a lone ` or ' becomes a curly quote.
+// Then rawAppendChar sets the resulting glyph with the font's inter-character kern.
 func (e *Engine) appendChar(list []node, ch rune) []node {
+	if prev, idx, ok := trailingChar(list); ok {
+		if lig, ok := e.ligature(prev, ch); ok {
+			return e.rawAppendChar(list[:idx], lig) // replace the trailing char with the ligature
+		}
+	}
+	return e.rawAppendChar(list, e.singleForm(ch))
+}
+
+// rawAppendChar sets a single glyph, inserting the font's inter-character kern
+// before it when the previous node is a character (TeX's font kern program).
+func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 	if prev, ok := lastChar(list); ok {
 		if k := e.curFont.kernSP(prev, ch); k != 0 {
 			list = append(list, kernNode{width: k})
