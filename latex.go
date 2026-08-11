@@ -176,6 +176,24 @@ const MiniLaTeXKernel = `
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+% ─── LaTeX counter interface (feat/counters) ─────────────────────────────────
+% Value-reading and counter-formatting commands. The mutating commands
+% (\newcounter/\setcounter/\addtocounter/\stepcounter/\refstepcounter) and the
+% \@Roman helper are Go primitives (see counters.go / primitives.go); these are
+% the pure-macro one-liners, added as new \def lines to avoid touching the
+% originals above. \value{c} expands to the register \c@c, so it is usable as a
+% <number> (e.g. \setcounter{x}{\value{y}}, \ifnum\value{x}>0). \arabic/\roman/
+% \Roman feed the register to a number-scanning operator (\number, \romannumeral,
+% \@Roman). \alph/\Alph/\fnsymbol feed it to an \ifcase macro, so \expandafter
+% first turns \csname c@c\endcsname into the single \c@c token that \ifcase reads.
+\def\value#1{\csname c@#1\endcsname}
+\def\arabic#1{\number\csname c@#1\endcsname}
+\def\roman#1{\romannumeral\csname c@#1\endcsname}
+\def\Roman#1{\@Roman\csname c@#1\endcsname}
+\def\alph#1{\expandafter\@alph\csname c@#1\endcsname}
+\def\Alph#1{\expandafter\@Alph\csname c@#1\endcsname}
+\def\@fnsymbol#1{\ifcase#1\or *\or †\or ‡\or §\or ¶\or ‖\or **\or ††\or ‡‡\fi}
+\def\fnsymbol#1{\expandafter\@fnsymbol\csname c@#1\endcsname}
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
