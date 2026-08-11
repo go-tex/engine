@@ -919,6 +919,15 @@ func (e *Engine) loadMore() {
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[
 	e.prim(")", func(e *Engine) {})                                 // consumed by \(
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
+	// amsmath multi-line displays: align/gather (numbered) and their starred forms.
+	e.prim("align", func(e *Engine) { e.doAlignEnv("align", true, true) })
+	e.prim("align*", func(e *Engine) { e.doAlignEnv("align*", false, true) })
+	e.prim("gather", func(e *Engine) { e.doAlignEnv("gather", true, false) })
+	e.prim("gather*", func(e *Engine) { e.doAlignEnv("gather*", false, false) })
+	e.prim("endalign", func(e *Engine) {})
+	e.prim("endalign*", func(e *Engine) {})
+	e.prim("endgather", func(e *Engine) {})
+	e.prim("endgather*", func(e *Engine) {})
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("renewcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("providecommand", func(e *Engine) { e.doNewcommand() })
