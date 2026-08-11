@@ -109,6 +109,7 @@ type Engine struct {
 	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
 	columnsep     int         // \columnsep: gap between multicols columns (sp)
 	columnseprule int         // \columnseprule: rule thickness between columns (sp, 0 = none)
+	geom          *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem

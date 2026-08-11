@@ -916,7 +916,7 @@ func (e *Engine) loadMore() {
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
 	e.prim("documentclass", func(e *Engine) { e.doGobbleOptAndGroup() })
-	e.prim("usepackage", func(e *Engine) { e.doGobbleOptAndGroup() })
+	e.prim("usepackage", func(e *Engine) { e.doUsepackage() })
 	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })   // \[ … \] display math
 	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) })  // \( … \) inline math
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[
@@ -1126,6 +1126,10 @@ func (e *Engine) loadMore() {
 	e.prim("lstlisting", func(e *Engine) { e.doLstlisting() })
 	e.prim("endlstlisting", func(e *Engine) {})
 	e.prim("lstinline", func(e *Engine) { e.doLstinline() })
+	// geometry package: page size and margins driving \hsize/\vsize and the render
+	// margin (see geometry.go). \usepackage[..]{geometry} is intercepted in
+	// doUsepackage; \geometry{..} re-applies at any point.
+	e.prim("geometry", func(e *Engine) { e.doGeometry() })
 	e.loadStomach()
 }
 

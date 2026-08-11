@@ -116,7 +116,7 @@ func CompileToPDF(src []byte, opt Options, w io.Writer) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := e.RenderPDF(w, opt.margin()); err != nil {
+	if err := e.RenderPDF(w, e.renderMargin(opt.margin())); err != nil {
 		return 0, err
 	}
 	return len(e.Pages()), nil
@@ -129,7 +129,7 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return e.RenderPages(opt.margin()), nil
+	return e.RenderPages(e.renderMargin(opt.margin())), nil
 }
 
 // compile builds an engine and runs the source, ready for rendering. When the
