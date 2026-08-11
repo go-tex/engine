@@ -910,7 +910,9 @@ func (e *Engine) loadMore() {
 	e.prim("verb", func(e *Engine) { e.doVerb() })
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
-	e.prim("nocite", func(e *Engine) { e.readBraceName() }) // affects only a real .bib run; gobble the keys
+	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
+	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
+	e.prim("nocite", func(e *Engine) { e.readBraceName() })         // affects only a real .bib run; gobble the keys
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {})                           // consumed by doTabular; defined for safety
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code

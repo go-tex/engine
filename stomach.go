@@ -114,6 +114,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			if c.depth > d {
 				d = c.depth
 			}
+		case imageNode:
+			natural += c.width
+			if c.height > h {
+				h = c.height
+			}
+			if c.depth > d {
+				d = c.depth
+			}
 		case glueNode:
 			natural += c.spec.width
 		case ruleNode:

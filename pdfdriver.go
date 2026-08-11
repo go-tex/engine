@@ -4,7 +4,9 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"io"
 
 	"github.com/go-pdfkit/pdfkit"
@@ -104,6 +106,27 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
 			cx += spToPt(c.width)
+		case imageNode:
+			// The image's lower-left corner sits on the baseline; PDF user space is
+			// y-up, so the rect origin is (cx, pageH-baseline) with height upward.
+			r := pdfkit.Rect{X: cx, Y: d.y(baseline), Width: spToPt(c.width), Height: spToPt(c.height)}
+			d.drawImage(c, r)
+			cx += spToPt(c.width)
+		}
+	}
+}
+
+// drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
+// decoded and re-encoded by go-pdfkit.
+func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
+	switch n.format {
+	case "png":
+		_ = d.p.DrawPNG(n.data, r)
+	case "jpeg":
+		_ = d.p.DrawJPEG(n.data, r)
+	default:
+		if img, _, err := image.Decode(bytes.NewReader(n.data)); err == nil {
+			d.p.DrawImage(img, r)
 		}
 	}
 }

@@ -105,6 +105,12 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			// embed the math SVG with its top at (cx, baseline-height): centred
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
 			cx += spToPt(c.width)
+		case imageNode:
+			lg.close()
+			// the image sits on the baseline: top at baseline-height, no depth
+			fmt.Fprintf(sb, `<image x="%s" y="%s" width="%s" height="%s" href="%s"/>`,
+				f(cx), f(baseline-spToPt(c.height)), f(spToPt(c.width)), f(spToPt(c.height)), c.dataURI())
+			cx += spToPt(c.width)
 		case ruleNode:
 			lg.close()
 			h := ruleHeight(c, b)
