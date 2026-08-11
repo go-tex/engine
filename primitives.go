@@ -924,6 +924,7 @@ func (e *Engine) loadMore() {
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("renewenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
+	e.prim("parbox", func(e *Engine) { e.place(e.doParbox()) })
 	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
 	e.prim("framebox", func(e *Engine) { e.place(e.doFramebox()) })
 	e.prim("color", func(e *Engine) { e.doColor() })
