@@ -22,6 +22,8 @@ type Options struct {
 	Font       []byte  // roman text font (.ttf/.otf); nil ⇒ the built-in default
 	BoldFont   []byte  // optional bold face, bound to \bf (so \textbf really bolds)
 	ItalicFont []byte  // optional italic face, bound to \it (so \textit/\emph slant)
+	MonoFont   []byte  // optional monospace face, bound to \tt (so \texttt is fixed-width)
+	SansFont   []byte  // optional sans-serif face, bound to \sf (so \textsf is sans)
 	Size       int     // font size in points (0 ⇒ 10)
 	Margin     float64 // page margin in points (0 ⇒ 72)
 	NoPlain    bool    // set to omit the Plain macros
@@ -77,6 +79,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		return nil, err
 	}
 	if err := e.bindOptionalFont("it", opt.ItalicFont, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont("tt", opt.MonoFont, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont("sf", opt.SansFont, opt.size()); err != nil {
 		return nil, err
 	}
 	return e, nil
