@@ -122,6 +122,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case linkNode:
 			d.link(c, cx, baseline)
 			cx += spToPt(c.width())
+		case decoNode:
+			d.deco(c, cx, baseline)
+			cx += spToPt(c.width())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
 			cx += spToPt(c.width)
@@ -167,6 +170,15 @@ func (d *pdfDraw) link(ln linkNode, x, baseline float64) {
 	d.box(ln.inner, x, baseline)
 }
 
+// deco draws a text decoration: the inner box on the baseline, then a rule of
+// thickness decoRule at the decoration's y position, in its colour.
+func (d *pdfDraw) deco(dn decoNode, x, baseline float64) {
+	d.box(dn.inner, x, baseline)
+	d.setColor(dn.color)
+	d.rect(x, baseline+spToPt(dn.decoRuleTop()), spToPt(dn.width()), spToPt(decoRule))
+	d.setColor(0)
+}
+
 // drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
 // decoded and re-encoded by go-pdfkit.
 func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
@@ -202,6 +214,9 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			cy += spToPt(c.height + c.depth)
 		case frameNode:
 			d.frame(c, x, cy+spToPt(c.height()))
+			cy += spToPt(c.height() + c.depth())
+		case decoNode:
+			d.deco(c, x, cy+spToPt(c.height()))
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
 			d.link(c, x, cy+spToPt(c.height()))

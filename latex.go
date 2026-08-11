@@ -41,7 +41,6 @@ const MiniLaTeXKernel = `
 \def\LARGE{\gotexsize1728\relax}
 \def\huge{\gotexsize2074\relax}
 \def\Huge{\gotexsize2488\relax}
-\def\underline#1{#1}
 \def\mbox#1{\hbox{#1}}
 \newcount\c@section
 \newcount\c@subsection

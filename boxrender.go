@@ -134,9 +134,20 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			paintLinkSP(sb, c, cx, baseline, font)
 			cx += spToPt(c.width())
+		case decoNode:
+			lg.close()
+			paintDecoSP(sb, c, cx, baseline, font)
+			cx += spToPt(c.width())
 		}
 	}
 	lg.close()
+}
+
+// paintDecoSP paints an under/over/strike-out decoration: the inner box on the
+// baseline, then a thin rule at the decoration's y position, in the rule's colour.
+func paintDecoSP(sb *strings.Builder, dn decoNode, x, baseline float64, font fontFace) {
+	paintBoxSP(sb, dn.inner, x, baseline, font)
+	crect(sb, x, baseline+spToPt(dn.decoRuleTop()), spToPt(dn.width()), spToPt(decoRule), dn.color)
 }
 
 // paintLinkSP paints a hyperlink: an SVG <a href="URL"> element wrapping the inner
@@ -227,6 +238,9 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			cy += spToPt(c.height + c.depth)
 		case frameNode:
 			paintFrameSP(sb, c, x, cy+spToPt(c.height()), font)
+			cy += spToPt(c.height() + c.depth())
+		case decoNode:
+			paintDecoSP(sb, c, x, cy+spToPt(c.height()), font)
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
 			paintLinkSP(sb, c, x, cy+spToPt(c.height()), font)

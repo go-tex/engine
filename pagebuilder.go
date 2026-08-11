@@ -32,6 +32,8 @@ func vContribution(n node) int {
 		return c.height + c.depth
 	case frameNode:
 		return c.height() + c.depth()
+	case decoNode:
+		return c.height() + c.depth()
 	case linkNode:
 		return c.height() + c.depth()
 	case footnoteNode:

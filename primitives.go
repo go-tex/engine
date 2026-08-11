@@ -937,6 +937,10 @@ func (e *Engine) loadMore() {
 	e.prim("parbox", func(e *Engine) { e.place(e.doParbox()) })
 	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
 	e.prim("framebox", func(e *Engine) { e.place(e.doFramebox()) })
+	// Text decorations: a rule under (\underline), through (\sout) or over the text.
+	e.prim("underline", func(e *Engine) { e.place(e.makeDeco('u')) })
+	e.prim("sout", func(e *Engine) { e.place(e.makeDeco('s')) })
+	e.prim("textoverline", func(e *Engine) { e.place(e.makeDeco('o')) })
 	e.prim("color", func(e *Engine) { e.doColor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })
