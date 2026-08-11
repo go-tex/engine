@@ -199,6 +199,24 @@ const MiniLaTeXKernel = `
 % \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
 % like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
 \def\stretch#1{0pt plus #1fil}
+% ─── sectioning extensions (feat/sectioning) ─────────────────────────────────
+% \part, \appendix and the abstract/titlepage environments. All are new \def
+% lines (later definition wins), so the \section/\@nsection/\thesection lines
+% above are left untouched. In particular \appendix retargets numbering purely
+% by REDEFINING the formatting macros \thesection/\thesubsection to letters — it
+% never touches \@nsection (which a later block bound to \@tocentry), so both the
+% heading and the contents line pick up "A"/"A.1" unchanged. \part numbers with
+% \c@part (Roman) and freezes \@currentlabel so \label/\ref resolve to "I".
+\newcount\c@part
+\def\thepart{\@Roman\c@part}
+\def\part{\@ifstar\@spart\@npart}
+\def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
+\def\@spart#1{\par\bigskip\centerline{\Large\bf#1}\par\bigskip}
+\def\appendix{\par\c@section=0 \c@subsection=0 \def\thesection{\@Alph\c@section}\def\thesubsection{\thesection.\the\c@subsection}}
+\def\abstract{\par\bigskip\begingroup\centerline{\small\bf Abstract}\smallskip\leftskip=20pt\rightskip=20pt\small}
+\def\endabstract{\par\endgroup\bigskip}
+\def\titlepage{\par\penalty-10000 \begingroup}
+\def\endtitlepage{\par\endgroup\penalty-10000 }
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
