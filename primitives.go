@@ -958,6 +958,12 @@ func (e *Engine) loadMore() {
 	// \thepage in running text is best-effort (this single-pass engine cannot know
 	// the page in advance); the per-page foot number is always correct.
 	e.prim("thepage", func(e *Engine) { e.pushString(formatPageNumber(1, e.pageNumStyle)) })
+	// graphicx box transformations: scale, mirror, resize and rotate the content,
+	// which the SVG/PDF drivers realise with native affine transforms.
+	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
+	e.prim("reflectbox", func(e *Engine) { e.place(e.doReflectbox()) })
+	e.prim("resizebox", func(e *Engine) { e.place(e.doResizebox()) })
+	e.prim("rotatebox", func(e *Engine) { e.place(e.doRotatebox()) })
 	e.prim("color", func(e *Engine) { e.doColor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })

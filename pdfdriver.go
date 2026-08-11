@@ -125,6 +125,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case decoNode:
 			d.deco(c, cx, baseline)
 			cx += spToPt(c.width())
+		case transformNode:
+			d.transform(c, cx, baseline)
+			cx += spToPt(c.width())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
 			cx += spToPt(c.width)
@@ -179,6 +182,34 @@ func (d *pdfDraw) deco(dn decoNode, x, baseline float64) {
 	d.setColor(0)
 }
 
+// transform draws a graphicx box transformation (\scalebox/\reflectbox/
+// \resizebox/\rotatebox) using go-pdfkit's CTM: it saves the graphics state,
+// concatenates the affine map about the content reference point, paints the inner
+// box, then restores. go-pdfkit exposes a full matrix API (Save/Restore/Transform
+// — verified with `go doc github.com/go-pdfkit/pdfkit.Page`), so the PDF driver
+// realises these transforms just as faithfully as the SVG driver; unlike the
+// \href link-annotation limitation, there is no shortfall here.
+//
+// The reference point sits at engine (x+refDX, baseline); in PDF (y-up) space
+// that is Pref = (prefX, pageH-baseline). The concatenated matrix is
+// translate(Pref)·L·translate(-Pref) with L the math-space linear map — which,
+// because PDF and the math frame are both y-up, uses the coefficients unchanged.
+// pdfkit's Transform(a,b,c,d,e,f) maps (x,y) to (a*x+c*y+e, b*x+d*y+f). The saved
+// state also restores the fill colour and font size, so the tracked cur/curColor
+// fields are rewound to match, keeping later state changes correct.
+func (d *pdfDraw) transform(tn transformNode, x, baseline float64) {
+	savedColor, savedSize := d.curColor, d.cur
+	d.p.Save()
+	prefX := x + spToPt(tn.refDX)
+	prefY := d.y(baseline)
+	e := prefX - (tn.a*prefX + tn.c*prefY)
+	fY := prefY - (tn.b*prefX + tn.d*prefY)
+	d.p.Transform(tn.a, tn.b, tn.c, tn.d, e, fY)
+	d.box(tn.inner, prefX, baseline)
+	d.p.Restore()
+	d.curColor, d.cur = savedColor, savedSize
+}
+
 // drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
 // decoded and re-encoded by go-pdfkit.
 func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
@@ -217,6 +248,9 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			cy += spToPt(c.height() + c.depth())
 		case decoNode:
 			d.deco(c, x, cy+spToPt(c.height()))
+			cy += spToPt(c.height() + c.depth())
+		case transformNode:
+			d.transform(c, x, cy+spToPt(c.height()))
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
 			d.link(c, x, cy+spToPt(c.height()))
