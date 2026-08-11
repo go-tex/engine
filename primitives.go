@@ -1047,6 +1047,16 @@ func (e *Engine) loadMore() {
 	e.prim("newtheorem", func(e *Engine) { e.doNewtheorem() })    // amsthm \newtheorem{env}{Heading}[within]/[shared]
 	e.prim("newtheorem*", func(e *Engine) { e.doNewtheorem() })   // starred form: same here (number is still generated)
 	e.prim("theoremstyle", func(e *Engine) { e.readBraceName() }) // style selector accepted; only "plain" is modelled
+	// LaTeX counter interface. Counters are \count registers aliased \c@<name>;
+	// these mutate them (see counters.go). \@Roman is an expandable helper (an
+	// uppercase \romannumeral) used by the \Roman formatting macro in latex.go.
+	e.prim("newcounter", func(e *Engine) { e.doNewcounter() })
+	e.prim("setcounter", func(e *Engine) { e.doSetcounter() })
+	e.prim("addtocounter", func(e *Engine) { e.doAddtocounter() })
+	e.prim("stepcounter", func(e *Engine) { e.doStepcounter() })
+	e.prim("refstepcounter", func(e *Engine) { e.doRefstepcounter() })
+	e.prim("@Roman", func(e *Engine) { e.pushString(strings.ToUpper(roman(e.scanInt()))) })
+	expandableSet["@Roman"] = true
 	e.loadStomach()
 }
 
