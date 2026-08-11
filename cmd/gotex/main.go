@@ -31,6 +31,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fontPath := fs.String("font", "", "roman text font file (.ttf/.otf); default is built in")
 	boldPath := fs.String("boldfont", "", "bold font file, bound to \\bf (so \\textbf bolds)")
 	italicPath := fs.String("italicfont", "", "italic font file, bound to \\it (so \\emph slants)")
+	monoPath := fs.String("monofont", "", "monospace font file, bound to \\tt (so \\texttt is fixed-width)")
+	sansPath := fs.String("sansfont", "", "sans-serif font file, bound to \\sf (so \\textsf is sans)")
 	size := fs.Int("size", 10, "default text size in points")
 	margin := fs.Float64("margin", 72, "page margin in points")
 	if err := fs.Parse(args); err != nil {
@@ -62,6 +64,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
+	monoBytes, err := readIf(*monoPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
+		return 1
+	}
+	sansBytes, err := readIf(*sansPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gotex: %v\n", err)
+		return 1
+	}
 	src, err := os.ReadFile(input)
 	if err != nil {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
@@ -74,7 +86,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, Size: *size, Margin: *margin}
+	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin}
 
 	outName := *out
 	if outName == "" {
