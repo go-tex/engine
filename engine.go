@@ -94,14 +94,16 @@ type Engine struct {
 	mathR      mathRendererT     // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
-	inPar        bool   // a paragraph is being accumulated
-	parList      []node // the current paragraph's horizontal list
-	hsize        int    // line width for breaking (sp)
-	vsize        int    // page height for the page builder (sp)
-	baselineskip int    // baseline-to-baseline glue (sp)
-	lineskip     int    // minimum interline glue when baselineskip is too small (sp)
-	parindent    int    // width of the indentation box at a paragraph's start (sp)
-	prevDepth    int    // \prevdepth for interline glue (ignoreDepth = suppress)
+	inPar            bool   // a paragraph is being accumulated
+	parList          []node // the current paragraph's horizontal list
+	hsize            int    // line width for breaking (sp)
+	vsize            int    // page height for the page builder (sp)
+	baselineskip     int    // baseline-to-baseline glue (sp)
+	baseBaselineskip int    // the single-spaced baseline skip, the 1.0 reference for setspace
+	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
+	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
+	parindent        int    // width of the indentation box at a paragraph's start (sp)
+	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
 
 	hyph          *hyphenator // loaded hyphenation patterns (nil = no hyphenation)
 	hyphenpenalty int         // penalty at a discretionary hyphen
@@ -231,6 +233,7 @@ func New() *Engine {
 	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                                          // plain TeX \hsize = 6.5in
 	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                                          // plain TeX \vsize = 8.9in
 	e.baselineskip = 12 * unity                                                                     // 12pt
+	e.baseBaselineskip = e.baselineskip                                                             // setspace 1.0 ref
 	e.lineskip = unity                                                                              // 1pt
 	e.parindent = 20 * unity                                                                        // plain TeX \parindent = 20pt
 	e.columnsep = 10 * unity                                                                        // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)

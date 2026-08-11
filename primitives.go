@@ -972,6 +972,14 @@ func (e *Engine) loadMore() {
 	e.prim("fancyhead", func(e *Engine) { e.doFancyPos(fldHL) })
 	e.prim("fancyfoot", func(e *Engine) { e.doFancyPos(fldFL) })
 	e.prim("fancyhf", func(e *Engine) { e.doFancyhf() })
+	// setspace line spacing (see setspace.go).
+	e.prim("singlespacing", func(e *Engine) { e.setLineStretch(1) })
+	e.prim("onehalfspacing", func(e *Engine) { e.setLineStretch(1.5) })
+	e.prim("doublespacing", func(e *Engine) { e.setLineStretch(2) })
+	e.prim("setstretch", func(e *Engine) { e.doSetstretch() })
+	e.prim("linespread", func(e *Engine) { e.doSetstretch() })
+	e.prim("spacing", func(e *Engine) { e.doSpacing() })
+	e.prim("endspacing", func(e *Engine) { e.endSpacing() })
 	// graphicx box transformations: scale, mirror, resize and rotate the content,
 	// which the SVG/PDF drivers realise with native affine transforms.
 	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
