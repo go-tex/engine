@@ -142,6 +142,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			if dd := c.depth + c.shift; dd > d {
 				d = dd
 			}
+		case frameNode:
+			natural += c.width()
+			if c.height() > h {
+				h = c.height()
+			}
+			if c.depth() > d {
+				d = c.depth()
+			}
 		}
 	}
 	b := &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list, srcLine: firstSrcLine(list)}
@@ -186,6 +194,12 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			}
 			x += d + c.height
 			d = c.depth
+		case frameNode:
+			if c.width() > w {
+				w = c.width()
+			}
+			x += d + c.height()
+			d = c.depth()
 		}
 	}
 	b := &boxNode{kind: vbox, width: w, height: packWidth(x, mode, target), depth: d, list: list, srcLine: firstSrcLine(list)}
@@ -372,6 +386,12 @@ func (e *Engine) makeVtop() *boxNode {
 // the shared execCS dispatch. Nested { … } groups are handled with a depth count
 // so an inner '}' does not end the box (its own group is begun/ended locally).
 func (e *Engine) buildBoxList() []node {
+	// Inside a box we are in restricted horizontal mode: keep inPar set so a
+	// character-emitting command (an accent, \char, …) appends to the current
+	// list rather than opening a fresh paragraph with a \parindent box.
+	savedInPar := e.inPar
+	e.inPar = true
+	defer func() { e.inPar = savedInPar }()
 	var list []node
 	depth := 0
 	for e.err == nil {
@@ -410,8 +430,16 @@ func (e *Engine) buildBoxList() []node {
 			}
 			continue
 		}
+		// A command executed here (e.g. an accent like \'e) emits horizontal
+		// material by appending to e.parList. Capture anything it added so the
+		// glyph joins this box's list instead of leaking to the outer paragraph.
+		mark := len(e.parList)
 		if !e.execCS(t) {
 			return list
+		}
+		if len(e.parList) > mark {
+			list = append(list, e.parList[mark:]...)
+			e.parList = e.parList[:mark]
 		}
 	}
 	return list

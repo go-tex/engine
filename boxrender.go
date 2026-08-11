@@ -122,9 +122,28 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			paintBoxSP(sb, c, cx, baseline+spToPt(c.shift), font) // shift>0 lowers the box
 			cx += spToPt(c.width)
+		case frameNode:
+			lg.close()
+			paintFrameSP(sb, c, cx, baseline, font)
+			cx += spToPt(c.width())
 		}
 	}
 	lg.close()
+}
+
+// paintFrameSP draws a framed box: four thin rules of thickness fr.rule form the
+// border, then the inner box is painted on the same baseline, inset by rule+sep
+// from the left edge. x is the frame's left edge; baseline is the content baseline.
+func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font fontFace) {
+	w := spToPt(fr.width())
+	top := baseline - spToPt(fr.height())
+	total := spToPt(fr.height() + fr.depth())
+	ru := spToPt(fr.rule)
+	rect(sb, x, top, w, ru)          // top edge
+	rect(sb, x, top+total-ru, w, ru) // bottom edge
+	rect(sb, x, top, ru, total)      // left edge
+	rect(sb, x+w-ru, top, ru, total) // right edge
+	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font)
 }
 
 // lineGrouper emits <g data-l="N"> … </g> wrappers around runs of glyphs that
@@ -173,6 +192,9 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 		case *boxNode:
 			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font)
 			cy += spToPt(c.height + c.depth)
+		case frameNode:
+			paintFrameSP(sb, c, x, cy+spToPt(c.height()), font)
+			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			cy += spToPt(c.height + c.depth)

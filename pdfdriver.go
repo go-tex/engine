@@ -103,6 +103,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case *boxNode:
 			d.box(c, cx, baseline+spToPt(c.shift))
 			cx += spToPt(c.width)
+		case frameNode:
+			d.frame(c, cx, baseline)
+			cx += spToPt(c.width())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
 			cx += spToPt(c.width)
@@ -114,6 +117,21 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			cx += spToPt(c.width)
 		}
 	}
+}
+
+// frame draws a framed box: four filled rules of thickness fr.rule border the
+// content, which is then painted on the same baseline, inset by rule+sep from the
+// left edge. x is the frame's left edge; baseline is the content baseline.
+func (d *pdfDraw) frame(fr frameNode, x, baseline float64) {
+	w := spToPt(fr.width())
+	top := baseline - spToPt(fr.height())
+	total := spToPt(fr.height() + fr.depth())
+	ru := spToPt(fr.rule)
+	d.rect(x, top, w, ru)          // top edge
+	d.rect(x, top+total-ru, w, ru) // bottom edge
+	d.rect(x, top, ru, total)      // left edge
+	d.rect(x+w-ru, top, ru, total) // right edge
+	d.box(fr.inner, x+spToPt(fr.rule+fr.sep), baseline)
 }
 
 // drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
@@ -148,6 +166,9 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case *boxNode:
 			d.box(c, x+spToPt(c.shift), cy+spToPt(c.height))
 			cy += spToPt(c.height + c.depth)
+		case frameNode:
+			d.frame(c, x, cy+spToPt(c.height()))
+			cy += spToPt(c.height() + c.depth())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))
 			cy += spToPt(c.height + c.depth)

@@ -165,6 +165,8 @@ func toItems(list []node) []Item {
 			items[i] = Box(spToPt(c.width))
 		case *boxNode:
 			items[i] = Box(spToPt(c.width))
+		case frameNode:
+			items[i] = Box(spToPt(c.width()))
 		}
 	}
 	return items

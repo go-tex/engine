@@ -899,6 +899,8 @@ func (e *Engine) loadMore() {
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("renewenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
+	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
+	e.prim("framebox", func(e *Engine) { e.place(e.doFramebox()) })
 	e.prim("label", func(e *Engine) { e.doLabel() })
 	e.prim("ref", func(e *Engine) { e.doRef() })
 	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text
