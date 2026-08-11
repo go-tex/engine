@@ -35,6 +35,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	sansPath := fs.String("sansfont", "", "sans-serif font file, bound to \\sf (so \\textsf is sans)")
 	size := fs.Int("size", 10, "default text size in points")
 	margin := fs.Float64("margin", 72, "page margin in points")
+	date := fs.String("date", "", "date text bound to \\today")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -86,7 +87,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin}
+	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date}
 
 	outName := *out
 	if outName == "" {

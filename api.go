@@ -27,6 +27,7 @@ type Options struct {
 	Size       int     // font size in points (0 ⇒ 10)
 	Margin     float64 // page margin in points (0 ⇒ 72)
 	NoPlain    bool    // set to omit the Plain macros
+	Date       string  // \today text (a pure-Go wasm build has no clock; supply it here)
 }
 
 func (o Options) size() int {
@@ -74,6 +75,7 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		return nil, fmt.Errorf("texengine: font: %w", err)
 	}
 	e.SetFont(reg)
+	e.today = opt.Date
 	e.bindFont("rm", reg)
 	if err := e.bindOptionalFont("bf", opt.BoldFont, opt.size()); err != nil {
 		return nil, err

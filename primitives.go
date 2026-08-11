@@ -950,6 +950,14 @@ func (e *Engine) loadMore() {
 	e.prim("hphantom", func(e *Engine) { e.place(e.makePhantom(phantomH)) })
 	e.prim("vphantom", func(e *Engine) { e.place(e.makePhantom(phantomV)) })
 	e.prim("smash", func(e *Engine) { e.place(e.makeSmash()) })
+	// Page style and numbering (see pagenum.go): a centred foot number per page.
+	e.prim("pagestyle", func(e *Engine) { e.doPagestyle() })
+	e.prim("thispagestyle", func(e *Engine) { e.doPagestyle() })
+	e.prim("pagenumbering", func(e *Engine) { e.doPagenumbering() })
+	e.prim("today", func(e *Engine) { e.pushString(e.today) })
+	// \thepage in running text is best-effort (this single-pass engine cannot know
+	// the page in advance); the per-page foot number is always correct.
+	e.prim("thepage", func(e *Engine) { e.pushString(formatPageNumber(1, e.pageNumStyle)) })
 	e.prim("color", func(e *Engine) { e.doColor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })

@@ -56,7 +56,7 @@ func (e *Engine) Pages() []*boxNode {
 	for start := 0; start < len(list); {
 		end := e.findPageBreak(list, start)
 		if page := trimTrailingGlue(list[start:end]); len(page) > 0 {
-			pages = append(pages, e.assemblePage(page))
+			pages = append(pages, e.assemblePage(page, len(pages)+1))
 		}
 		start = skipDiscardable(list, end)
 		if end <= start-1 { // safety: always make progress

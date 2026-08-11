@@ -65,7 +65,7 @@ func TestFootnotePageAssembly(t *testing.T) {
 	e.hsize = 300 * unity
 	content := &boxNode{kind: hbox, width: 100 * unity, height: 8 * unity}
 	note := &boxNode{kind: vbox, width: 120 * unity, height: 10 * unity}
-	page := e.assemblePage([]node{content, footnoteNode{body: note}})
+	page := e.assemblePage([]node{content, footnoteNode{body: note}}, 1)
 	// The content box and the note box both appear, with a separator rule between.
 	var boxes, rules int
 	for _, n := range page.list {

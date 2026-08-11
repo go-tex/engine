@@ -119,8 +119,9 @@ func (e *Engine) flushFootnotes() {
 
 // assemblePage packs a page's slice of the vertical list, lifting footnoteNodes
 // out of the content flow and stacking their bodies below a separator rule at the
-// foot of the page.
-func (e *Engine) assemblePage(page []node) *boxNode {
+// foot of the page. pageNum is this page's 1-based ordinal; when the page style is
+// not "empty" a centred page number is placed at the very foot (see pagenum.go).
+func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	var content []node
 	var notes []*boxNode
 	for _, n := range page {
@@ -130,20 +131,31 @@ func (e *Engine) assemblePage(page []node) *boxNode {
 		}
 		content = append(content, n)
 	}
-	if len(notes) == 0 {
-		return vpackSP(content, packNatural, 0)
-	}
 	vlist := append([]node{}, content...)
-	vlist = append(vlist,
-		glueNode{spec: glueSpec{width: 10 * unity}},           // gap above the rule
-		ruleNode{width: e.hsize * 2 / 5, height: defaultRule}, // \footnoterule
-		glueNode{spec: glueSpec{width: 4 * unity}},            // gap below the rule
-	)
-	for i, b := range notes {
-		if i > 0 {
-			vlist = append(vlist, glueNode{spec: glueSpec{width: 3 * unity}})
+	if len(notes) > 0 {
+		vlist = append(vlist,
+			glueNode{spec: glueSpec{width: 10 * unity}},           // gap above the rule
+			ruleNode{width: e.hsize * 2 / 5, height: defaultRule}, // \footnoterule
+			glueNode{spec: glueSpec{width: 4 * unity}},            // gap below the rule
+		)
+		for i, b := range notes {
+			if i > 0 {
+				vlist = append(vlist, glueNode{spec: glueSpec{width: 3 * unity}})
+			}
+			vlist = append(vlist, b)
 		}
-		vlist = append(vlist, b)
+	}
+	if e.pageStyle == "empty" {
+		return vpackSP(vlist, packNatural, 0)
+	}
+	// A page number is shown: push it to the foot with vertical fil, filling the
+	// page to \vsize so the number sits at the bottom of the text area.
+	vlist = append(vlist,
+		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, // vfil
+		e.pageFooter(pageNum),
+	)
+	if e.vsize > 0 {
+		return vpackSP(vlist, packTo, e.vsize)
 	}
 	return vpackSP(vlist, packNatural, 0)
 }

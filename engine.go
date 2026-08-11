@@ -133,6 +133,12 @@ type Engine struct {
 	allocCnt         int  // next free \count register handed out by \newcount
 	allocDim         int  // next free \dimen register handed out by \newdimen
 	allocSkp         int  // next free \skip register handed out by \newskip
+
+	// page style (see pagenum.go): the page builder places a centred page number at
+	// the foot of each page when pageStyle is not "empty". pageNumStyle formats it.
+	pageStyle    string // "plain" ⇒ bottom-centred number; "empty" (default) ⇒ none
+	pageNumStyle byte   // page-number format: 'a' arabic (default), 'r'/'R' roman, 'l'/'L' alph
+	today        string // \today text (from Options.Date); empty ⇒ \today expands to nothing
 }
 
 type mkind uint8
@@ -189,6 +195,8 @@ func New() *Engine {
 	e.parindent = 20 * unity                                                          // plain TeX \parindent = 20pt
 	e.hyphenpenalty = 50                                                              // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
+	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
+	e.pageNumStyle = 'a'  // arabic page numbers by default
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
