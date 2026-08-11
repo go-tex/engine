@@ -13,6 +13,11 @@ package engine
 
 const tabColSep = 6 * unity // \tabcolsep default (added on each side of a column)
 
+// minXColWidth is the fallback width of a tabularx X column when the target width
+// leaves no room (leftover ≤ 0): a small positive width keeps the table renderable
+// instead of collapsing to zero or a negative width.
+const minXColWidth = 10 * unity // 10pt
+
 // booktabs rule weights and spacing (all in sp). booktabs' \heavyrulewidth
 // defaults to 0.08em (≈0.8pt at a 10pt base) and \lightrulewidth to 0.05em; we
 // approximate the heavy rule (\toprule/\bottomrule) at 0.8pt = 2×defaultRule and
@@ -88,7 +93,28 @@ func (b tabBuilt) isRule() bool { return b.hline || b.cline || b.brule || b.bcmi
 // doTabular typesets a tabular environment onto the current list.
 func (e *Engine) doTabular() {
 	aligns, pwidths, vrules := e.scanColSpec()
-	items := e.collectTabularBody()
+	items := e.collectTabularBody("tabular")
+	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
+}
+
+// doTabularx typesets a tabularx environment: \begin{tabularx}{W}{spec}. Unlike
+// tabular it takes a leading {width} argument (a rigid <dimen>, e.g. \hsize or
+// \linewidth); every X column in {spec} is a paragraph column whose width is
+// computed by resolveXWidths so the assembled table fills W. Once the X columns
+// have been rewritten into ordinary p{} columns the rest of the tabular machinery
+// (rules, \\, &, \multicolumn, \multirow) is reused unchanged.
+func (e *Engine) doTabularx() {
+	width := e.readBraceDimen()
+	aligns, pwidths, vrules := e.scanColSpec()
+	items := e.collectTabularBody("tabularx")
+	e.resolveXWidths(width, aligns, pwidths, vrules, items)
+	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
+}
+
+// buildTabularBox turns the parsed column spec and collected body items into the
+// assembled table vbox. Shared by tabular and tabularx (the latter after its X
+// columns have been resolved to fixed-width p columns).
+func (e *Engine) buildTabularBox(aligns []byte, pwidths []int, vrules []bool, items []tabItem) *boxNode {
 	ncol := len(aligns)
 
 	var built []tabBuilt
@@ -140,7 +166,111 @@ func (e *Engine) doTabular() {
 		}
 		built = append(built, tabBuilt{cells: cells})
 	}
-	e.place(assembleTabular(built, ncol, pwidths, vrules))
+	return assembleTabular(built, ncol, pwidths, vrules)
+}
+
+// resolveXWidths computes the width of each X (flexible paragraph) column so that a
+// tabularx of target width W is filled exactly, then rewrites every X column into an
+// ordinary p{} column of that width. The assembled table width is
+//
+//	2·ncol·\tabcolsep + Σ colw + (#vertical rules)·\defaultrule
+//
+// so the X columns share whatever is left of W once the fixed material is removed:
+//
+//	leftover  = W − 2·ncol·\tabcolsep − (#rules)·\defaultrule − Σ(non-X widths)
+//	X width   = leftover / (number of X columns)   (integer, truncated)
+//
+// Σ(non-X widths) is the declared p{} widths plus the natural (widest single-column
+// cell) width of every l/c/r column. A single X takes all the leftover, so the table
+// width matches W exactly; several X columns split it equally (any 1–(n−1) sp lost to
+// truncation leaves the total within rounding of W). If leftover ≤ 0 — the target is
+// too small to hold the fixed columns and separators — each X falls back to
+// minXColWidth so nothing collapses or panics. \multicolumn / \multirow cells are not
+// measured into column widths here (assembleTabular sizes a \multicolumn to the
+// columns it spans), matching that later sizing; this is best effort for the exotic
+// case of a column whose only content is spanned. Column decorators >{…}/<{…} are not
+// supported: an X column is treated plainly.
+func (e *Engine) resolveXWidths(width int, aligns []byte, pwidths []int, vrules []bool, items []tabItem) {
+	ncol := len(aligns)
+	var xcols []int
+	for j := 0; j < ncol; j++ {
+		if aligns[j] == 'X' {
+			xcols = append(xcols, j)
+		}
+	}
+	if len(xcols) == 0 {
+		return // no X column: an ordinary tabular with an (ignored) width argument
+	}
+	// Non-X column widths: declared p{} widths, then the widest single-column l/c/r
+	// cell measured at its natural width.
+	colw := make([]int, ncol)
+	for j := 0; j < ncol; j++ {
+		if aligns[j] != 'X' && pwidths[j] > 0 {
+			colw[j] = pwidths[j]
+		}
+	}
+	for _, it := range items {
+		if it.hline || it.cline || it.brule || it.bcmid {
+			continue
+		}
+		col := 0
+		for _, toks := range it.cells {
+			if col >= ncol {
+				break
+			}
+			if isMulticolumn(toks) {
+				col += multicolumnSpan(toks)
+				continue
+			}
+			if isMultirow(toks) {
+				col++ // multirow carries its own width; not measured as an l/c/r cell
+				continue
+			}
+			switch aligns[col] {
+			case 'l', 'c', 'r':
+				w := hpackSP(e.buildCellHList(trimSpaceToks(toks)), packNatural, 0).width
+				if w > colw[col] {
+					colw[col] = w
+				}
+			}
+			col++
+		}
+	}
+	fixed := 0
+	for j := 0; j < ncol; j++ {
+		fixed += colw[j] // X columns contribute 0 here
+	}
+	nrules := 0
+	for _, v := range vrules {
+		if v {
+			nrules++
+		}
+	}
+	leftover := width - 2*ncol*tabColSep - nrules*defaultRule - fixed
+	xw := leftover / len(xcols)
+	if xw < minXColWidth {
+		xw = minXColWidth
+	}
+	for _, j := range xcols {
+		aligns[j] = 'p'
+		pwidths[j] = xw
+	}
+}
+
+// multicolumnSpan reads just the {n} span count of a raw \multicolumn cell (used to
+// advance the column cursor while measuring X widths). A missing/invalid count is 1.
+func multicolumnSpan(toks []tok) int {
+	i := 0
+	for i < len(toks) && !toks[i].cs_ && toks[i].cat == catSpace {
+		i++ // skip the leading space (the newline after the previous row's \\)
+	}
+	i++ // skip \multicolumn
+	nTok, _ := grabBraceGroup(toks, i)
+	span := toksToInt(nTok)
+	if span < 1 {
+		span = 1
+	}
+	return span
 }
 
 // isMulticolumn reports whether a raw cell begins with \multicolumn (past any
@@ -328,6 +458,10 @@ func (e *Engine) scanColSpec() ([]byte, []int, []bool) {
 			aligns = append(aligns, 'p')
 			pwidths = append(pwidths, e.readBraceDimen())
 			col++
+		case 'X': // tabularx flexible paragraph column; width resolved later
+			aligns = append(aligns, 'X')
+			pwidths = append(pwidths, 0)
+			col++
 		case '|':
 			ruleGaps[col] = true
 		}
@@ -402,9 +536,10 @@ func (e *Engine) breakToVbox(hlist []node, width int) *boxNode {
 	return b
 }
 
-// collectTabularBody reads raw tokens up to \end{tabular}, returning the rows and
-// \hline markers. & separates cells, \\ separates rows, \hline is a rule marker.
-func (e *Engine) collectTabularBody() []tabItem {
+// collectTabularBody reads raw tokens up to \end{env} (env is "tabular" or
+// "tabularx"), returning the rows and \hline markers. & separates cells, \\ separates
+// rows, \hline is a rule marker.
+func (e *Engine) collectTabularBody(env string) []tabItem {
 	var items []tabItem
 	var cur [][]tok
 	var cell []tok
@@ -424,7 +559,7 @@ func (e *Engine) collectTabularBody() []tabItem {
 		}
 		switch {
 		case depth == 0 && t.cs_ && t.cs == "end":
-			if name := e.readBraceName(); name == "tabular" {
+			if name := e.readBraceName(); name == env {
 				endRow()
 				return items
 			}

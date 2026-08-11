@@ -313,6 +313,12 @@ const MiniLaTeXKernel = `
 \def\squared{²}
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
+% Width lengths used as the target of \begin{tabularx}{...} (and tabular*): they
+% all resolve to \hsize, the current line width, so \linewidth/\textwidth/
+% \columnwidth are accepted wherever a rigid <dimen> is scanned.
+\let\linewidth\hsize
+\let\textwidth\hsize
+\let\columnwidth\hsize
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
