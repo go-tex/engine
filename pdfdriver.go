@@ -41,6 +41,11 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		p := doc.AddPage(pdfkit.NewPageSize(pw, ph))
 		p.SetFont(face, size)
 		d := &pdfDraw{p: p, face: face, size: size, cur: size, pageH: ph}
+		if e.hasPageColor { // \pagecolor: fill the whole page behind the content
+			d.setColor(e.pageColor)
+			d.rect(0, 0, pw, ph)
+			d.setColor(0)
+		}
 		d.box(page, margin, margin+spToPt(page.height))
 	}
 	return doc.Write(w)

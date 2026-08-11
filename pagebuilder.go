@@ -212,7 +212,7 @@ func (e *Engine) RenderPages(margin float64) []string {
 	pages := e.Pages()
 	out := make([]string, len(pages))
 	for i, p := range pages {
-		out[i] = renderBoxSVG(p, margin, e.renderFont())
+		out[i] = renderBoxSVG(p, margin, e.renderFont(), e.pageFill())
 	}
 	return out
 }

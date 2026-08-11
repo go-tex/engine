@@ -21,7 +21,16 @@ func spToPt(sp int) float64 { return float64(sp) / float64(unity) }
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
 func (e *Engine) RenderBox(i int, margin float64) string {
-	return renderBoxSVG(e.getBox(i), margin, e.renderFont())
+	return renderBoxSVG(e.getBox(i), margin, e.renderFont(), e.pageFill())
+}
+
+// pageFill returns the SVG/CSS background colour for a page: the \pagecolor when
+// set, otherwise white.
+func (e *Engine) pageFill() string {
+	if e.hasPageColor {
+		return hexColor(e.pageColor)
+	}
+	return "white"
 }
 
 // Page vpacks the main vertical list (everything contributed at top level) into a
@@ -35,13 +44,14 @@ func (e *Engine) Page() *boxNode {
 
 // RenderPage renders the main vertical list to an SVG page with the given margin.
 func (e *Engine) RenderPage(margin float64) string {
-	return renderBoxSVG(e.Page(), margin, e.renderFont())
+	return renderBoxSVG(e.Page(), margin, e.renderFont(), e.pageFill())
 }
 
 // renderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
 // margin (in points). The box's reference point (left edge, baseline) sits at
-// (margin, margin+height). font (may be nil) draws character glyphs.
-func renderBoxSVG(b *boxNode, margin float64, font fontFace) string {
+// (margin, margin+height). font (may be nil) draws character glyphs; bg is the
+// page-background colour ("white" unless \pagecolor set one).
+func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	if b == nil {
 		return ""
 	}
@@ -50,7 +60,7 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
-	sb.WriteString(`<rect width="100%" height="100%" fill="white"/><g fill="black">`)
+	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black">`, bg)
 	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font)
 	sb.WriteString(`</g></svg>`)
 	return sb.String()

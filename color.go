@@ -25,9 +25,20 @@ var namedColors = map[string]uint32{
 	"violet": 0x800080, "olive": 0x808000, "teal": 0x008080, "lime": 0xBFFF00,
 }
 
-// resolveColor maps a colour name to its 0xRRGGBB value, checking user-defined
-// (\definecolor) names first, then the built-ins. Unknown → black.
-func (e *Engine) resolveColor(name string) uint32 {
+// resolveColor maps a colour expression to its 0xRRGGBB value. A bare name is
+// looked up (user \definecolor names first, then built-ins); an xcolor mix
+// expression like "red!50!blue" or "red!30" (= red!30!white) is evaluated
+// left-associatively. Unknown → black.
+func (e *Engine) resolveColor(expr string) uint32 {
+	expr = strings.TrimSpace(expr)
+	if strings.Contains(expr, "!") {
+		return e.mixExpr(expr)
+	}
+	return e.resolveNamed(expr)
+}
+
+// resolveNamed looks up a plain colour name (no mix syntax).
+func (e *Engine) resolveNamed(name string) uint32 {
 	name = strings.TrimSpace(name)
 	if e.colors != nil {
 		if c, ok := e.colors[name]; ok {
@@ -38,6 +49,41 @@ func (e *Engine) resolveColor(name string) uint32 {
 		return c
 	}
 	return 0
+}
+
+// mixExpr evaluates an xcolor "!"-mix expression. "A!p!B" mixes p% of A with the
+// rest B; "A!p" mixes with white; longer chains fold left ((A!p!B)!q!C).
+func (e *Engine) mixExpr(expr string) uint32 {
+	parts := strings.Split(expr, "!")
+	cur := e.resolveNamed(parts[0])
+	for i := 1; i < len(parts); i += 2 {
+		pct, err := strconv.ParseFloat(strings.TrimSpace(parts[i]), 64)
+		if err != nil {
+			pct = 100
+		}
+		other := uint32(0xFFFFFF) // A!p (no second colour) mixes with white
+		if i+1 < len(parts) {
+			other = e.resolveNamed(parts[i+1])
+		}
+		cur = mixRGB(cur, other, pct)
+	}
+	return cur
+}
+
+// mixRGB blends a (pct%) with b ((100-pct)%) per channel.
+func mixRGB(a, b uint32, pct float64) uint32 {
+	f := pct / 100
+	if f < 0 {
+		f = 0
+	} else if f > 1 {
+		f = 1
+	}
+	ch := func(shift uint) uint8 {
+		ca := float64((a >> shift) & 0xFF)
+		cb := float64((b >> shift) & 0xFF)
+		return uint8(f*ca + (1-f)*cb + 0.5)
+	}
+	return packRGB(ch(16), ch(8), ch(0))
 }
 
 // selectColor makes c the current text colour, saving the previous one for
@@ -106,8 +152,55 @@ func parseColorSpec(model, spec string) uint32 {
 		if v, err := strconv.ParseUint(strings.TrimSpace(spec), 16, 32); err == nil {
 			return uint32(v) & 0xFFFFFF
 		}
+	case "cmyk":
+		if len(fields) == 4 {
+			c, m, y, k := unitFloat(fields[0]), unitFloat(fields[1]), unitFloat(fields[2]), unitFloat(fields[3])
+			r := uint8(255*(1-c)*(1-k) + 0.5)
+			g := uint8(255*(1-m)*(1-k) + 0.5)
+			b := uint8(255*(1-y)*(1-k) + 0.5)
+			return packRGB(r, g, b)
+		}
 	}
 	return 0
+}
+
+// unitFloat parses a 0–1 float component, clamped (for the cmyk model).
+func unitFloat(s string) float64 {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// doColorlet implements \colorlet{name}{expr}: define a named colour equal to the
+// evaluated colour expression (so later \color{name} reuses the mix).
+func (e *Engine) doColorlet() {
+	name := e.readBraceName()
+	c := e.resolveColor(e.readBraceName())
+	if name == "" {
+		return
+	}
+	if e.colors == nil {
+		e.colors = map[string]uint32{}
+	}
+	e.colors[name] = c
+}
+
+// doPagecolor implements \pagecolor{expr}: fill the page background with the colour
+// (the drivers paint it behind the content). \nopagecolor clears it.
+func (e *Engine) doPagecolor() {
+	e.pageColor = e.resolveColor(e.readBraceName())
+	e.hasPageColor = true
+}
+
+// doNormalcolor implements \normalcolor: reset the current text colour to the
+// default (black), group-scoped like \color.
+func (e *Engine) doNormalcolor() {
+	e.selectColor(0)
 }
 
 func packRGB(r, g, b uint8) uint32 { return uint32(r)<<16 | uint32(g)<<8 | uint32(b) }

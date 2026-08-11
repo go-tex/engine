@@ -139,6 +139,11 @@ type Engine struct {
 	pageStyle    string // "plain" ⇒ bottom-centred number; "empty" (default) ⇒ none
 	pageNumStyle byte   // page-number format: 'a' arabic (default), 'r'/'R' roman, 'l'/'L' alph
 	today        string // \today text (from Options.Date); empty ⇒ \today expands to nothing
+
+	// page background colour (see color.go): \pagecolor fills the page; the drivers
+	// paint it behind the content. hasPageColor distinguishes "unset" from black.
+	pageColor    uint32
+	hasPageColor bool
 }
 
 type mkind uint8
