@@ -257,6 +257,62 @@ const MiniLaTeXKernel = `
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+% ── siunitx unit-name macros ────────────────────────────────────────────────
+% Standalone expansions for the unit/prefix/power macros. \si, \unit, \SI, \qty
+% and \ang read their arguments raw (no expansion) and resolve names in Go, so
+% these definitions matter only when a unit macro is used outside those commands.
+\def\meter{m}
+\def\metre{m}
+\def\second{s}
+\def\kilogram{kg}
+\def\gram{g}
+\def\kelvin{K}
+\def\ampere{A}
+\def\mole{mol}
+\def\candela{cd}
+\def\newton{N}
+\def\pascal{Pa}
+\def\joule{J}
+\def\watt{W}
+\def\volt{V}
+\def\ohm{Ω}
+\def\hertz{Hz}
+\def\percent{\char37\relax}
+\def\hour{h}
+\def\minute{min}
+\def\liter{L}
+\def\litre{L}
+\def\coulomb{C}
+\def\farad{F}
+\def\tesla{T}
+\def\weber{Wb}
+\def\henry{H}
+\def\siemens{S}
+\def\radian{rad}
+\def\steradian{sr}
+\def\becquerel{Bq}
+\def\gray{Gy}
+\def\sievert{Sv}
+\def\lumen{lm}
+\def\lux{lx}
+\def\kilo{k}
+\def\milli{m}
+\def\micro{µ}
+\def\centi{c}
+\def\nano{n}
+\def\mega{M}
+\def\giga{G}
+\def\deci{d}
+\def\deca{da}
+\def\hecto{h}
+\def\pico{p}
+\def\femto{f}
+\def\tera{T}
+\def\peta{P}
+\def\per{/}
+\def\squared{²}
+\def\cubed{³}
+% ── end siunitx unit-name macros ────────────────────────────────────────────
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.

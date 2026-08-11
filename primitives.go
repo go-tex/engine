@@ -109,6 +109,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("else", func(e *Engine) { e.skipToFi() })
 	e.prim("fi", func(e *Engine) {})
 	e.prim("or", func(e *Engine) { e.skipToFi() })
+
+	// siunitx subset (\num, \si, \unit, \SI/\qty, \ang) — see siunitx.go.
+	e.loadSIUnitx()
 }
 
 // ── definitions ─────────────────────────────────────────────────────────────
