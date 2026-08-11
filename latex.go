@@ -199,6 +199,16 @@ const MiniLaTeXKernel = `
 % \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
 % like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
 \def\stretch#1{0pt plus #1fil}
+% ─── amsmath subequations ────────────────────────────────────────────────────
+% \begin{subequations} numbers the equations inside as Na, Nb, … : it steps the
+% parent equation number, freezes it in \@parentequation, then temporarily reuses
+% \c@equation as the sub-counter (from 0) with \theequation set to parent+letter,
+% so every inner \begin{equation} advances the letter. \end{subequations} restores
+% \c@equation to the parent number (so the next equation is N+1) and \theequation.
+% Because \c@equation stays the active counter, \label/\eqref and \tag work inside.
+\newcount\@saveeq
+\def\subequations{\global\advance\c@equation by1\relax\edef\@parentequation{\the\c@equation}\@saveeq=\c@equation\relax\c@equation=0\relax\def\theequation{\@parentequation\@alph\c@equation}}
+\def\endsubequations{\c@equation=\@saveeq\relax\def\theequation{\the\c@equation}}
 % ─── sectioning extensions (feat/sectioning) ─────────────────────────────────
 % \part, \appendix and the abstract/titlepage environments. All are new \def
 % lines (later definition wins), so the \section/\@nsection/\thesection lines

@@ -25,6 +25,8 @@ type alignRow struct {
 	cells    []string
 	nonumber bool
 	labels   []string
+	tag      string
+	tagStar  bool
 }
 
 // alignColumn maps a 0-based cell column to its horizontal alignment within the
@@ -65,11 +67,13 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		cells    []mathNode
 		nonumber bool
 		labels   []string
+		tag      string
+		tagStar  bool
 	}
 	var built []builtRow
 	var colw []int
 	for _, r := range rows {
-		br := builtRow{nonumber: r.nonumber, labels: r.labels}
+		br := builtRow{nonumber: r.nonumber, labels: r.labels, tag: r.tag, tagStar: r.tagStar}
 		for j, c := range r.cells {
 			var m mathNode
 			if strings.TrimSpace(c) != "" {
@@ -98,16 +102,30 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 	}
 
 	for _, br := range built {
-		number := ""
-		if numbered && !br.nonumber {
-			number = e.stepEquationCounter()
-			for _, k := range br.labels {
-				e.setLabel(k, number)
+		var numBox *boxNode
+		switch {
+		case br.tag != "": // a \tag replaces the number and consumes none
+			if br.tagStar {
+				numBox = e.textToHbox(br.tag)
+			} else {
+				numBox = e.textToHbox("(" + br.tag + ")")
 			}
-		} else {
+			for _, k := range br.labels {
+				e.setLabel(k, br.tag)
+				e.recordRefMeta(k)
+			}
+		case numbered && !br.nonumber:
+			n := e.stepEquationCounter()
+			numBox = e.textToHbox("(" + n + ")")
+			for _, k := range br.labels {
+				e.setLabel(k, n)
+				e.recordRefMeta(k)
+			}
+		default:
 			// Stepped or not, a \label on an unnumbered row records the current label.
 			for _, k := range br.labels {
 				e.setLabel(k, e.currentLabel())
+				e.recordRefMeta(k)
 			}
 		}
 		var row []node
@@ -134,8 +152,8 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 			}
 		}
 		row = append(row, e.hfil())
-		if number != "" {
-			row = append(row, e.textToHbox("("+number+")"))
+		if numBox != nil {
+			row = append(row, numBox)
 		}
 		e.contribute(hpackSP(row, packTo, e.hsize))
 	}
@@ -209,6 +227,14 @@ func (e *Engine) stepEquationCounter() string {
 	return e.toksToString(e.expandList([]tok{csTok("theequation")}))
 }
 
+// unstepEquationCounter decrements \c@equation, undoing an advance for a line that
+// carries a \tag or was suppressed (\tag/\nonumber do not consume a number).
+func (e *Engine) unstepEquationCounter() {
+	if m := e.eq["c@equation"]; m != nil && m.kind == mCountRef {
+		e.setCount(m.code, e.count[m.code]-1, true)
+	}
+}
+
 // currentLabel returns the current \@currentlabel expanded to a string.
 func (e *Engine) currentLabel() string {
 	return e.toksToString(e.expandList([]tok{csTok("@currentlabel")}))
@@ -260,8 +286,10 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 			endRow()
 		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
 			endCell()
-		case depth == 0 && t.cs_ && t.cs == "nonumber":
+		case depth == 0 && t.cs_ && (t.cs == "nonumber" || t.cs == "notag"):
 			row.nonumber = true
+		case depth == 0 && t.cs_ && t.cs == "tag":
+			row.tag, row.tagStar = e.readTag()
 		case depth == 0 && t.cs_ && t.cs == "label":
 			row.labels = append(row.labels, e.readBraceName())
 		default:
@@ -285,7 +313,7 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 // rowEmpty reports whether a row has no non-blank cell (so a trailing \\ before
 // \end doesn't produce a spurious empty line).
 func rowEmpty(r alignRow) bool {
-	if len(r.labels) > 0 {
+	if len(r.labels) > 0 || r.tag != "" {
 		return false
 	}
 	for _, c := range r.cells {
