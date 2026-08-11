@@ -119,6 +119,9 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case frameNode:
 			d.frame(c, cx, baseline)
 			cx += spToPt(c.width())
+		case linkNode:
+			d.link(c, cx, baseline)
+			cx += spToPt(c.width())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
 			cx += spToPt(c.width)
@@ -152,6 +155,16 @@ func (d *pdfDraw) frame(fr frameNode, x, baseline float64) {
 		d.rect(x+w-ru, top, ru, total) // right edge
 	}
 	d.box(fr.inner, x+spToPt(fr.rule+fr.sep), baseline)
+}
+
+// link paints a hyperlink's inner box. go-pdfkit currently exposes no
+// link-annotation API — neither Page nor Document has an AddLink/Annotation/URI
+// method (verified with `go doc github.com/go-pdfkit/pdfkit`) — so the PDF renders
+// the content without a clickable rectangle; the SVG driver carries the live link
+// (see paintLinkSP). When pdfkit gains a URI link annotation, add a /Link annot
+// over Rect (x, baseline-height) .. (x+width, baseline+depth) here.
+func (d *pdfDraw) link(ln linkNode, x, baseline float64) {
+	d.box(ln.inner, x, baseline)
 }
 
 // drawImage embeds an image XObject: PNG/JPEG go in verbatim, anything else is
@@ -189,6 +202,9 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			cy += spToPt(c.height + c.depth)
 		case frameNode:
 			d.frame(c, x, cy+spToPt(c.height()))
+			cy += spToPt(c.height() + c.depth())
+		case linkNode:
+			d.link(c, x, cy+spToPt(c.height()))
 			cy += spToPt(c.height() + c.depth())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))

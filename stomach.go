@@ -151,6 +151,14 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 			if c.depth() > d {
 				d = c.depth()
 			}
+		case linkNode:
+			natural += c.width()
+			if c.height() > h {
+				h = c.height()
+			}
+			if c.depth() > d {
+				d = c.depth()
+			}
 		}
 	}
 	b := &boxNode{kind: hbox, width: packWidth(natural, mode, target), height: h, depth: d, list: list, srcLine: firstSrcLine(list)}
@@ -196,6 +204,12 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			x += d + c.height
 			d = c.depth
 		case frameNode:
+			if c.width() > w {
+				w = c.width()
+			}
+			x += d + c.height()
+			d = c.depth()
+		case linkNode:
 			if c.width() > w {
 				w = c.width()
 			}
