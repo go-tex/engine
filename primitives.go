@@ -1164,6 +1164,7 @@ func (e *Engine) loadStomach() {
 	e.prim("wd", func(e *Engine) { e.boxDimAssign('w') })
 	e.prim("ht", func(e *Engine) { e.boxDimAssign('h') })
 	e.prim("dp", func(e *Engine) { e.boxDimAssign('d') })
+	e.loadBoxCmds()
 }
 
 // shiftAndPlace reads a box, applies a shift amount, and places it: vertical=true
