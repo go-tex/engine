@@ -35,12 +35,12 @@ differences are two documented, deliberate ones:
    text layer does not include the equation characters. (Prose is real, selectable
    PDF text.)
 
-## Known PDF-text limitation (surfaced by this harness)
+## Ligature PDF text (fixed)
 
-Ligatures (fi, fl, ff, …) are drawn as the single Unicode ligature glyph and mapped
-to that codepoint (e.g. U+FB01 "ﬁ") in the PDF `/ToUnicode` CMap, whereas real LaTeX
-maps them to their ASCII components. So a copy or full-text search of a ligated word
-("first") recovers "ﬁrst" (Unicode-correct) but not the ASCII "first". The harness
-folds ligatures before comparing so the content measure is fair; making gotex's
-`/ToUnicode` decompose ligatures to ASCII (for ASCII-searchable PDFs) is tracked as
-future work in the PDF driver.
+This harness first surfaced that ligated words were not ASCII-searchable in the PDF:
+"first" was drawn with the ﬁ ligature glyph and mapped to U+FB01 in `/ToUnicode`, so
+a copy or search recovered "ﬁrst" (Unicode) but not "first" (ASCII). The PDF driver
+now draws f-ligatures through `TextShaped(components, "liga")`, so the font's liga
+feature still produces the ligature glyph while the text layer stays ASCII — the
+ligature renders identically AND "first" is searchable. (The harness still folds
+ligatures before comparing, which is harmless now that both sides are ASCII.)

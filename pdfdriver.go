@@ -86,6 +86,28 @@ func (d *pdfDraw) setColor(c uint32) {
 // y flips an engine (top-down) y coordinate into PDF (bottom-up) space.
 func (d *pdfDraw) y(engineY float64) float64 { return d.pageH - engineY }
 
+// ligatureText maps an f-ligature codepoint to its component ASCII letters. The
+// paragraph builder folds "fi"→U+FB01 etc. for shaping; drawing the ligature glyph
+// through TextShaped with those component letters as the source makes the PDF's
+// /ToUnicode CMap map the glyph back to plain ASCII, so a copy or full-text search
+// of a ligated word ("first") recovers "first", not the raw ligature codepoint.
+var ligatureText = map[rune]string{
+	'ﬀ': "ff", 'ﬁ': "fi", 'ﬂ': "fl", 'ﬃ': "ffi", 'ﬄ': "ffl",
+}
+
+// drawChar draws one character at (x, y) in PDF space. An f-ligature is drawn via
+// TextShaped from its component letters (so the ligature glyph is produced by the
+// font's liga feature while the text layer stays ASCII); any other character goes
+// through the plain cmap Text path.
+func (d *pdfDraw) drawChar(x, y float64, ch rune) {
+	if s, ok := ligatureText[ch]; ok {
+		if err := d.p.TextShaped(x, y, s, "liga"); err == nil {
+			return
+		}
+	}
+	d.p.Text(x, y, string(ch))
+}
+
 // box paints a box with left edge x and the given baseline (engine coordinates).
 func (d *pdfDraw) box(b *boxNode, x, baseline float64) {
 	if b.kind == hbox {
@@ -109,7 +131,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case charNode:
 			d.setSize(float64(c.size))
 			d.setColor(c.color)
-			d.p.Text(cx, d.y(baseline), string(c.ch))
+			d.drawChar(cx, d.y(baseline), c.ch)
 			cx += spToPt(c.width)
 		case ruleNode:
 			d.setColor(0)
