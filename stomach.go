@@ -511,6 +511,14 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return e.makeDeco('s'), true
 	case "textoverline":
 		return e.makeDeco('o'), true
+	case "phantom":
+		return e.makePhantom(phantomFull), true
+	case "hphantom":
+		return e.makePhantom(phantomH), true
+	case "vphantom":
+		return e.makePhantom(phantomV), true
+	case "smash":
+		return e.makeSmash(), true
 	case "penalty":
 		return penaltyNode{penalty: e.scanInt()}, true
 	case "char":

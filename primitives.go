@@ -945,6 +945,11 @@ func (e *Engine) loadMore() {
 	e.prim("underline", func(e *Engine) { e.place(e.makeDeco('u')) })
 	e.prim("sout", func(e *Engine) { e.place(e.makeDeco('s')) })
 	e.prim("textoverline", func(e *Engine) { e.place(e.makeDeco('o')) })
+	// Phantom and smash boxes: reserve or suppress a box's dimensions.
+	e.prim("phantom", func(e *Engine) { e.place(e.makePhantom(phantomFull)) })
+	e.prim("hphantom", func(e *Engine) { e.place(e.makePhantom(phantomH)) })
+	e.prim("vphantom", func(e *Engine) { e.place(e.makePhantom(phantomV)) })
+	e.prim("smash", func(e *Engine) { e.place(e.makeSmash()) })
 	e.prim("color", func(e *Engine) { e.doColor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorbox", func(e *Engine) { e.place(e.doColorbox()) })
