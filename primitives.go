@@ -1081,6 +1081,12 @@ func (e *Engine) loadMore() {
 	e.prim("settowidth", func(e *Engine) { e.doSettodim('w') })
 	e.prim("settoheight", func(e *Engine) { e.doSettodim('h') })
 	e.prim("settodepth", func(e *Engine) { e.doSettodim('d') })
+	// listings package: code blocks and inline verbatim (see listings.go). Reached
+	// via \begin{lstlisting}/\end{lstlisting} (endlstlisting is consumed literally by
+	// doLstlisting, defined here for safety) and \lstinline<delim>…<delim>.
+	e.prim("lstlisting", func(e *Engine) { e.doLstlisting() })
+	e.prim("endlstlisting", func(e *Engine) {})
+	e.prim("lstinline", func(e *Engine) { e.doLstinline() })
 	e.loadStomach()
 }
 
