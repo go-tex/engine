@@ -152,6 +152,8 @@ func compile(src []byte, opt Options) (*Engine, error) {
 			return nil, err
 		}
 		e.labels = aux.labels
+		e.refTypes = aux.refTypes
+		e.refNames = aux.refNames
 		e.tocSource = aux.tocEntries
 		if _, err := e.Run(string(src)); err != nil {
 			return nil, err

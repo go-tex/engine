@@ -26,6 +26,9 @@ func (e *Engine) doLabel() {
 		e.labels = map[string]string{}
 	}
 	e.labels[key] = val
+	// Additionally freeze the reference type and title name for typed references
+	// (\autoref / \nameref / \cref / \Cref); see typedrefs.go.
+	e.recordRefMeta(key)
 }
 
 // doRef pushes the recorded reference text for a key back into the input. An
