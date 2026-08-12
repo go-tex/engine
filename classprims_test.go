@@ -230,3 +230,27 @@ func TestRealClassCleanRender(t *testing.T) {
 		}
 	})
 }
+
+// A real class's \section/\subsection (via \@startsection) produce hierarchical
+// numbers — "1 Alpha", "2 Beta", "2.1 Gamma" — with the subsection counter reset
+// under each section, matching real LaTeX (this is what brought the geom fidelity
+// doc to full 24/24 word parity with tectonic).
+func TestRealClassSectionNumbering(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"demoart.cls": `\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}` +
+			`\ProcessOptions\LoadClass{article}`,
+	}, func() {
+		src := `\documentclass{demoart}\begin{document}` +
+			`\section{Alpha}x\section{Beta}y\subsection{Gamma}z\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := pageChars(e)
+		for _, w := range []string{"1Alpha", "2Beta", "2.1Gamma"} {
+			if !strings.Contains(got, w) {
+				t.Errorf("missing numbered heading %q in %q", w, got)
+			}
+		}
+	})
+}

@@ -129,11 +129,17 @@ const LaTeX2eClassLead = `
 \providecommand{\textbullet}{*}
 % ── sectioning ───────────────────────────────────────────────────────────────
 % \@startsection{name}{level}{indent}{beforeskip}{afterskip}{style} then *|[toc]|{title}.
-% The five layout arguments are accepted and ignored; the title is set in {style}.
-\def\@startsection#1#2#3#4#5#6{\par\@ifstar{\@gotexsec{#6}}{\@gotexsecx{#6}}}
-\def\@gotexsecx#1{\@ifnextchar[{\@gotexsecopt{#1}}{\@gotexsec{#1}}}
-\def\@gotexsecopt#1[#2]#3{\@gotexsec{#1}{#3}}
-\def\@gotexsec#1#2{\par\medskip\noindent{#1 #2}\par}
+% The five layout arguments are accepted (only a little vertical space is used). The
+% unstarred form NUMBERS the heading: when level<=secnumdepth it steps the name's
+% counter and prefixes \the<name>; the starred form is unnumbered. The optional
+% [toc-title] is accepted and ignored.
+\def\@startsection#1#2#3#4#5#6{\par\@ifstar{\@gxsec{#1}{#2}{#6}\@gxstar}{\@gxsec{#1}{#2}{#6}\@gxnum}}
+\def\@gxsec#1#2#3#4{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}}{\@gxsecplain{#1}{#2}{#3}{#4}}}
+\def\@gxsecopt#1#2#3#4[#5]#6{#4{#1}{#2}{#3}{#6}}
+\def\@gxsecplain#1#2#3#4#5{#4{#1}{#2}{#3}{#5}}
+\def\@gxstar#1#2#3#4{\@gxhead{#3}{#4}}
+\def\@gxnum#1#2#3#4{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#4}\else\refstepcounter{#1}\@gxhead{#3}{\csname the#1\endcsname\quad#4}\fi}
+\def\@gxhead#1#2{\par\medskip\noindent{#1 #2}\par}
 \def\@afterheading{}
 \def\secdef#1#2{\@ifstar{#2}{#1}}
 \def\@dottedtocline#1#2#3#4#5{}
