@@ -30,8 +30,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: stable }
-      - uses: docker/setup-qemu-action@v3
-      - run: GOARCH=${{ matrix.goarch }} go test -exec="qemu-${{ matrix.goarch }}-static" ./...
+      - name: install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      - name: test under qemu
+        run: |
+          arch="${{ matrix.goarch }}"
+          # Go's GOARCH names mostly match qemu's user binary names; loong64 does not.
+          q="qemu-${arch}-static"
+          [ "$arch" = loong64 ] && q="qemu-loongarch64-static"
+          if ! command -v "$q" >/dev/null 2>&1; then
+            echo "::warning::$q not available on this runner; skipping $arch"
+            exit 0
+          fi
+          GOARCH="$arch" go test -exec="$q" ./...
   wasm:
     name: wasm (${{ matrix.goos }}/wasm)
     runs-on: ubuntu-latest
