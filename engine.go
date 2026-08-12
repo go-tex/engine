@@ -307,6 +307,7 @@ func New() *Engine {
 	e.catcode['%'] = catComment
 	e.loadPrimitives()
 	e.loadMore()
+	e.loadClassPrims()
 	return e
 }
 

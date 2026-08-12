@@ -151,9 +151,21 @@ func (e *Engine) curFrame() *loadFrame {
 
 // ── \documentclass / \usepackage / \RequirePackage / \LoadClass ─────────────
 
-// doDocumentClass implements \documentclass[options]{class}: it loads class.cls
-// when it can be resolved, falling back to the existing emulation (the class is
-// otherwise handled by the minimal LaTeX kernel) when it cannot.
+// emulatedClasses are the standard classes the engine models directly and well
+// (deterministically, under the strict-mode conformance gate). Routing them to the
+// real .cls would make a strict compile depend on the entire LaTeX kernel being
+// present (a real \documentclass{article} calls \@startsection, \list, NFSS … at
+// document time); until that kernel is complete the built-in emulation is the
+// faithful path, so these are not loaded from the embedded/real .cls. The embedded
+// article.cls is still available to \LoadClass (a custom class building on it).
+var emulatedClasses = map[string]bool{
+	"article": true, "report": true, "book": true, "amsart": true,
+	"letter": true, "proc": true, "slides": true, "minimal": true,
+}
+
+// doDocumentClass implements \documentclass[options]{class}: for a non-emulated
+// class it loads class.cls when it can be resolved; for a standard class (and when
+// the file cannot be found) it falls back to the built-in emulation.
 func (e *Engine) doDocumentClass() {
 	opts := e.scanBracketList()
 	name := e.readBraceName()
@@ -161,7 +173,10 @@ func (e *Engine) doDocumentClass() {
 		return
 	}
 	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
-	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !neverLoadReal[name] {
+	if emulatedClasses[name] || neverLoadReal[name] {
+		return // use the built-in emulation for a standard class
+	}
+	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok {
 		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
 }
@@ -410,8 +425,3 @@ func (e *Engine) doInputIfFileExists() {
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()
 }
-
-// embeddedTeXFile returns a base class/package file shipped in the binary. The
-// embedded set is currently empty (bundled and search-path files cover today's
-// use); vetted base files (article.cls, size1x.clo, …) will be embedded here.
-func embeddedTeXFile(string) ([]byte, bool) { return nil, false }

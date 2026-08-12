@@ -41,13 +41,14 @@ var expandableSet = map[string]bool{
 	"the": true, "number": true, "romannumeral": true, "jobname": true,
 	"if": true, "ifnum": true, "ifx": true, "ifodd": true, "ifcase": true,
 	"iftrue": true, "iffalse": true, "else": true, "fi": true, "or": true, "ifcat": true,
+	"ifdim": true,
 }
 
 func isExpandable(name string) bool { return expandableSet[name] }
 
 func isIfPrim(name string) bool {
 	switch name {
-	case "if", "ifnum", "ifx", "ifodd", "ifcase", "iftrue", "iffalse", "ifcat":
+	case "if", "ifnum", "ifx", "ifodd", "ifcase", "iftrue", "iffalse", "ifcat", "ifdim":
 		return true
 	}
 	return false
@@ -961,7 +962,7 @@ func (e *Engine) loadMore() {
 	}
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("renewcommand", func(e *Engine) { e.doNewcommand() })
-	e.prim("providecommand", func(e *Engine) { e.doNewcommand() })
+	e.prim("providecommand", func(e *Engine) { e.doProvidecommand() })
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("renewenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })

@@ -454,7 +454,10 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(MiniLaTeXKernel); err != nil {
 		return err
 	}
-	return e.LoadFormat(LaTeX2eKernelHelpers)
+	if err := e.LoadFormat(LaTeX2eKernelHelpers); err != nil {
+		return err
+	}
+	return e.LoadFormat(LaTeX2eClassLead)
 }
 
 // doNewcommand implements LaTeX's \newcommand / \renewcommand / \providecommand:
@@ -465,7 +468,14 @@ func (e *Engine) LoadLaTeX() error {
 // body). When a second bracket [default] is present, the FIRST of the nargs
 // parameters becomes optional: at call time #1 comes from a bracketed [..]
 // argument if one is supplied, otherwise from default (standard LaTeX semantics).
-func (e *Engine) doNewcommand() {
+func (e *Engine) doNewcommand() { e.doNewcommandMode(false) }
+
+// doProvidecommand implements \providecommand: it reads and consumes the same
+// grammar as \newcommand but only defines \name when it is not already defined,
+// so a fallback definition never clobbers a real one.
+func (e *Engine) doProvidecommand() { e.doNewcommandMode(true) }
+
+func (e *Engine) doNewcommandMode(provide bool) {
 	name := e.scanCmdName()
 	nargs := e.scanOptBracketInt()
 	optDefault, optArg := e.scanOptBracketToks() // optional [default]: 1st arg optional
@@ -477,7 +487,10 @@ func (e *Engine) doNewcommand() {
 		}
 		return
 	}
-	body := e.scanBody()
+	body := e.scanBody() // always consume the body, even when we won't (re)define
+	if provide && name != "" && e.eq[name] != nil {
+		return // \providecommand: keep the existing definition
+	}
 	var params []tok
 	for i := 1; i <= nargs && i <= 9; i++ {
 		params = append(params, tok{ch: rune('0' + i), cat: catParam})
