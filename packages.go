@@ -25,6 +25,7 @@ import (
 type loadFrame struct {
 	atcat    cat              // catcode of @ to restore when the file ends
 	name     string           // package/class base name (for the loaded registry + \CurrentOption)
+	endHook  string           // \@endofpackagehook / \@endofclasshook to reset after the file
 	passed   []string         // options requested for this file
 	declared map[string][]tok // \DeclareOption{name}{code}
 	star     []tok            // \DeclareOption*{code}
@@ -85,11 +86,17 @@ var neverLoadReal = map[string]bool{
 // loadTeXFile splices a resolved class/package file into the input with @ made a
 // letter, pushing a load frame so the catcode and tolerance are restored when the
 // file's tokens are exhausted (via the \@gotex@endload marker appended after it).
-// name is the base name (no extension); passed are its options.
-func (e *Engine) loadTeXFile(data []byte, name string, passed []string) {
+// name is the base name and ext its extension (".sty"/".cls"); passed are its
+// options.
+func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
+	endHook := "@endofpackagehook"
+	if ext == ".cls" {
+		endHook = "@endofclasshook"
+	}
 	fr := loadFrame{
 		atcat:    e.catcode['@'],
 		name:     name,
+		endHook:  endHook,
 		passed:   passed,
 		declared: map[string][]tok{},
 	}
@@ -100,19 +107,24 @@ func (e *Engine) loadTeXFile(data []byte, name string, passed []string) {
 		e.loadedPackages = map[string]bool{}
 	}
 	e.loadedPackages[name] = true
-	// Let the kernel's \@ifpackageloaded / \@ifclassloaded (defined in TeX) see it.
-	e.define("@pkg@"+name+"@loaded", &meaning{kind: mMacro}, true)
+	// Record the file the way \ProvidesPackage/\ProvidesClass would, so the kernel's
+	// \@ifpackageloaded{name}/\@ifpackagewith{name}{opt} (which consult ver@<file>
+	// and opt@<file>) see it as loaded with its options.
+	e.define("ver@"+name+ext, &meaning{kind: mMacro, body: stringToToks("gotex")}, true)
+	e.define("opt@"+name+ext, &meaning{kind: mMacro, body: stringToToks(strings.Join(passed, ","))}, true)
 	// \CurrentOption starts empty for this file.
 	e.define("CurrentOption", &meaning{kind: mMacro}, true)
-	// Splice: file body, then a marker control sequence that pops the frame. The
-	// marker tokenizes with @ still a letter, so its name is valid.
-	insert := []rune(string(data) + "\\@gotex@endload ")
+	// Splice: file body, then the end-of-file hook (\AtEndOfPackage/Class code) and
+	// a marker control sequence that pops the frame. The marker tokenizes with @
+	// still a letter, so its name is valid.
+	insert := []rune(string(data) + "\\" + endHook + "\\@gotex@endload ")
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()
 }
 
-// endLoad pops the top load frame: it restores @'s catcode and the load tolerance.
+// endLoad pops the top load frame: it restores @'s catcode and the load tolerance,
+// and resets the end-of-file hook so it does not leak into the next load.
 func (e *Engine) endLoad() {
 	if len(e.loadStack) == 0 {
 		return
@@ -120,6 +132,9 @@ func (e *Engine) endLoad() {
 	fr := e.loadStack[len(e.loadStack)-1]
 	e.loadStack = e.loadStack[:len(e.loadStack)-1]
 	e.catcode['@'] = fr.atcat
+	if fr.endHook != "" {
+		e.define(fr.endHook, &meaning{kind: mMacro}, true) // \let\@endof…hook\@empty
+	}
 	if e.loadDepth > 0 {
 		e.loadDepth--
 	}
@@ -147,7 +162,7 @@ func (e *Engine) doDocumentClass() {
 	}
 	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !neverLoadReal[name] {
-		e.loadTeXFile(data, name, append(opts, e.takePassed(name)...))
+		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
 }
 
@@ -170,7 +185,7 @@ func (e *Engine) doUsepackageLoad() {
 			continue
 		}
 		if data, _, ok := e.findTeXFile(name, []string{".sty"}); ok {
-			e.loadTeXFile(data, name, append(append([]string{}, opts...), e.takePassed(name)...))
+			e.loadTeXFile(data, name, ".sty", append(append([]string{}, opts...), e.takePassed(name)...))
 		}
 	}
 }
@@ -189,7 +204,7 @@ func (e *Engine) doLoadClass(withOptions bool) {
 		return
 	}
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !neverLoadReal[name] {
-		e.loadTeXFile(data, name, append(opts, e.takePassed(name)...))
+		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
 }
 

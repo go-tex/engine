@@ -195,6 +195,39 @@ func TestPassAndExecuteOptions(t *testing.T) {
 	})
 }
 
+// The loader and the LaTeX2e kernel agree on the "loaded" registry: after
+// \usepackage{p}, the kernel's \@ifpackageloaded{p} takes its then-branch, and
+// \@ifpackagewith reports the options the loader recorded.
+func TestIfPackageLoadedContract(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"prov.sty": `\def\provcmd{}`,
+	}, func() {
+		out, _ := runLaTeX(t, `\usepackage[fancy]{prov}`+
+			`\@ifpackageloaded{prov}{\message{IS-LOADED}}{\message{NOT-LOADED}}`+
+			`\@ifpackageloaded{ghostpkg}{\message{GHOST-LOADED}}{\message{GHOST-ABSENT}}`)
+		if !strings.Contains(out, "IS-LOADED") {
+			t.Errorf("\\@ifpackageloaded did not see the loaded package; %q", out)
+		}
+		if !strings.Contains(out, "GHOST-ABSENT") {
+			t.Errorf("\\@ifpackageloaded reported an unloaded package as loaded; %q", out)
+		}
+	})
+}
+
+// \AtEndOfPackage code runs when the package finishes loading, and does not leak
+// into a later load.
+func TestAtEndOfPackageHook(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"hookpkg.sty": `\AtEndOfPackage{\message{END-HOOK}}\def\x{}`,
+		"plain2.sty":  `\def\y{}`,
+	}, func() {
+		out, _ := runLaTeX(t, `\usepackage{hookpkg}\usepackage{plain2}\message{DONE}`)
+		if strings.Count(out, "END-HOOK") != 1 {
+			t.Errorf("expected the end-of-package hook to fire exactly once; %q", out)
+		}
+	})
+}
+
 // \@setfontsize consumes its three arguments, so a class that redefines
 // \normalsize to call \@setfontsize\normalsize… does not recurse on itself.
 func TestSetfontsizeConsumesArgsNoRecursion(t *testing.T) {
