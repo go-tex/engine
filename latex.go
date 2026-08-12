@@ -457,6 +457,9 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(LaTeX2eKernelHelpers); err != nil {
 		return err
 	}
+	if err := e.LoadFormat(LaTeX2eClassKernel); err != nil {
+		return err
+	}
 	return e.LoadFormat(LaTeX2eClassLead)
 }
 
