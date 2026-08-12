@@ -92,6 +92,9 @@ func (e *Engine) doSettodim(which byte) {
 func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 	m := e.eq[target.cs]
 	if m == nil {
+		if e.lenient {
+			return // best-effort: ignore a \setlength on a length we don't model
+		}
 		e.fail("Undefined length \\" + target.cs)
 		return
 	}
@@ -131,6 +134,9 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 			e.rightskip = g
 		}
 	default:
+		if e.lenient {
+			return // best-effort: ignore a length op on a non-length target
+		}
 		e.fail("Not a length \\" + target.cs)
 	}
 }

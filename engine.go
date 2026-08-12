@@ -186,6 +186,12 @@ type Engine struct {
 	// level reached, keyed by the kernel suffix (i, ii, …), so a [resume] list can
 	// continue from it. Recorded by \@enumitemrec at every \end{enumerate}.
 	enumitemLast map[string]int
+
+	// lenient mode (see Options.Lenient): when set, an undefined control sequence
+	// is skipped (with its likely argument block) instead of aborting, and its
+	// name is tallied here for reporting. nil until the first skip.
+	lenient   bool
+	skippedCS map[string]int
 }
 
 type mkind uint8
@@ -840,6 +846,10 @@ func (e *Engine) beginParagraph(indent bool) {
 func (e *Engine) execCS(t tok) bool {
 	m := e.meaningOf(t)
 	if m == nil {
+		if e.lenient {
+			e.skipUndefined(t.cs)
+			return true
+		}
 		e.fail("Undefined control sequence \\" + t.cs)
 		return false
 	}
@@ -859,6 +869,48 @@ func (e *Engine) execCS(t tok) bool {
 	}
 	return true
 }
+
+// skipUndefined handles an undefined control sequence in lenient mode: it tallies
+// the name and swallows the command's likely argument block so a stray
+// \somemacro[opt]{body} does not spill "opt"/"body" onto the page as text. The
+// arity of an unknown macro is unknowable, so this is a heuristic: an optional
+// star, then any run of immediately-following [optional] and {mandatory}
+// arguments. A no-argument command (\somemacro Word) consumes nothing extra, so
+// "Word" is typeset normally.
+func (e *Engine) skipUndefined(name string) {
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS[name]++
+	// optional star form (\cmd*)
+	if t, ok := e.getNext(); ok {
+		if t.cs_ || t.ch != '*' {
+			e.back(t)
+		}
+	}
+	// any run of [optional] then {mandatory} arguments, in either order
+	for {
+		if _, ok := e.scanOptBracketToks(); ok {
+			continue
+		}
+		e.skipOptSpace()
+		t, ok := e.getNext()
+		if !ok {
+			return
+		}
+		if !t.cs_ && t.cat == catBegin {
+			e.grabGroup()
+			continue
+		}
+		e.back(t)
+		return
+	}
+}
+
+// SkippedCommands returns, for a lenient compile, how many times each undefined
+// control sequence was skipped (empty when strict or when none were undefined).
+// It lets a caller surface "these commands were dropped" after a preview compile.
+func (e *Engine) SkippedCommands() map[string]int { return e.skippedCS }
 
 func (e *Engine) fail(msg string) {
 	if e.err == nil {

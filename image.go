@@ -63,6 +63,14 @@ func (e *Engine) doIncludegraphics() {
 	}
 	data, format, iw, ih, err := loadImage(name)
 	if err != nil {
+		if e.lenient {
+			// Best-effort preview: a real document's figure files are not shipped
+			// with its .tex (or use a format we can't decode). Reserve the box with
+			// a framed placeholder sized from the requested dimensions so the
+			// surrounding text still flows, instead of aborting the whole compile.
+			e.placeholderImage(wReq, hReq, scale, name)
+			return
+		}
 		e.fail("includegraphics " + name + ": " + err.Error())
 		return
 	}
@@ -71,6 +79,27 @@ func (e *Engine) doIncludegraphics() {
 	e.parList = append(e.parList, imageNode{
 		data: data, format: format, width: w, height: h, srcLine: e.curSrcLine,
 	})
+}
+
+// placeholderImage appends a framed empty box standing in for an image that could
+// not be loaded (lenient mode). It sizes the box from the requested width/height
+// (or scale), falling back to a default figure size when none was given, so the
+// page keeps a sensibly-sized gap where the graphic would sit.
+func (e *Engine) placeholderImage(wReq, hReq int, scale float64, name string) {
+	w, h := graphicsSize(0, 0, wReq, hReq, scale)
+	if w <= 0 {
+		w = 120 * unity // a default figure width when the source gave none
+	}
+	if h <= 0 {
+		h = 90 * unity
+	}
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS["includegraphics"]++
+	e.startImage()
+	inner := &boxNode{kind: hbox, width: w, height: h}
+	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})
 }
 
 // startImage ensures a paragraph is open so the image joins horizontal mode.

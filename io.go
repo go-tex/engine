@@ -28,6 +28,9 @@ func (e *Engine) doFont() {
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
+		if e.lenient {
+			return // best-effort: skip a \font whose file isn't shipped
+		}
 		e.fail("font file not found: " + file)
 		return
 	}
@@ -54,6 +57,13 @@ func (e *Engine) doInput() {
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
+		if e.lenient {
+			if e.skippedCS == nil {
+				e.skippedCS = map[string]int{}
+			}
+			e.skippedCS["input"]++
+			return // best-effort: skip an \input whose file isn't shipped
+		}
 		e.fail("input file not found: " + file)
 		return
 	}

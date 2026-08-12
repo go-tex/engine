@@ -552,6 +552,13 @@ func (e *Engine) doBibliography() {
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
+		if e.lenient {
+			if e.skippedCS == nil {
+				e.skippedCS = map[string]int{}
+			}
+			e.skippedCS["bibliography"]++
+			return // best-effort: skip a \bibliography whose .bib isn't shipped
+		}
 		e.fail("bibliography file not found: " + file)
 		return
 	}

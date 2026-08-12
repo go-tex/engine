@@ -106,6 +106,14 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		svg, err = r.RenderSVG(src, size)
 	}
 	if err != nil {
+		if e.lenient {
+			// Best-effort preview: a real document's math may use a command
+			// go-tex/math does not yet know (a package macro, a user \def, an
+			// unimplemented symbol). Drop this one equation rather than aborting the
+			// whole compile, tallying the trigger so it can be reported/prioritised.
+			e.recordMathSkip(err.Error())
+			return mathNode{}
+		}
 		e.fail("math error in $" + src + "$: " + err.Error())
 		return mathNode{}
 	}
@@ -113,6 +121,28 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	// No baseline is reported; centre the box on the text baseline.
 	half := ptToSP(h) / 2
 	return mathNode{svg: svg, width: ptToSP(w), height: half, depth: ptToSP(h) - half}
+}
+
+// recordMathSkip tallies a dropped equation under skippedCS. When the error is
+// go-tex/math's "unknown command \X" it keys on that command (so the report shows
+// which math macro to implement next); otherwise it keys on a generic "$math$".
+func (e *Engine) recordMathSkip(errMsg string) {
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	key := "$math$"
+	const marker = "unknown command \\"
+	if i := strings.Index(errMsg, marker); i >= 0 {
+		rest := errMsg[i+len(marker):]
+		j := 0
+		for j < len(rest) && (rest[j] == '@' || (rest[j] >= 'a' && rest[j] <= 'z') || (rest[j] >= 'A' && rest[j] <= 'Z')) {
+			j++
+		}
+		if j > 0 {
+			key = "\\" + rest[:j]
+		}
+	}
+	e.skippedCS[key]++
 }
 
 // doMath handles a math-shift token: collect the source, render it, and place the

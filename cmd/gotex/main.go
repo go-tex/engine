@@ -36,6 +36,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	size := fs.Int("size", 10, "default text size in points")
 	margin := fs.Float64("margin", 72, "page margin in points")
 	date := fs.String("date", "", "date text bound to \\today")
+	lenient := fs.Bool("lenient", false, "skip undefined commands instead of aborting (best-effort preview of third-party documents)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -97,7 +98,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		defer os.Chdir(orig)
 	}
-	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date}
+	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date, Lenient: *lenient}
 
 	outName := *out
 	if outName == "" {

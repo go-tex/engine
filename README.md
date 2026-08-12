@@ -39,6 +39,27 @@ out, _ := engine.New().Run(`\def\twice#1{#1#1}\message{\twice{\twice A}}`)
 // out == "AAAA"
 ```
 
+## Real-world documents (lenient mode)
+
+A real third-party paper pulls in classes, packages, fonts, figures and `.bib`
+files that a from-scratch engine does not carry. Strict mode aborts on the first
+such gap (as TeX does). **Lenient mode** (`gotex -lenient`, or `Options{Lenient:
+true}`) turns those gaps into best-effort no-ops so an editor preview shows the
+typesettable content instead of one hard error:
+
+- an **undefined command** is skipped, along with its likely `[opt]{arg}` block;
+- an **unloadable figure** becomes a framed placeholder of the requested size;
+- a **math macro** go-tex/math doesn't know drops that one equation;
+- a **`\setlength` on an unmodelled length**, and a missing `\input`/`\bibliography`/
+  `\font` **file**, are ignored.
+
+Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
+report what was dropped. On a sample of **54 real arXiv sources**, strict mode
+compiled 0 end-to-end (each hit a package command in the preamble); lenient mode
+produces a multi-page PDF for **all 54**, with real, selectable prose text. It is
+a preview aid, not a fidelity claim — the roadmap below is how the gaps close for
+real.
+
 ## Status & roadmap to parity
 
 This is **stage 1** (mouth + gullet). The remaining stages, each gated by an

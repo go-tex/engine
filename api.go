@@ -28,6 +28,15 @@ type Options struct {
 	Margin     float64 // page margin in points (0 ⇒ 72)
 	NoPlain    bool    // set to omit the Plain macros
 	Date       string  // \today text (a pure-Go wasm build has no clock; supply it here)
+
+	// Lenient turns an undefined control sequence from a fatal error into a
+	// skipped command: the engine drops the unknown \cs (and its likely
+	// [optional]/{mandatory} argument block) and carries on, recording the name
+	// for reporting. This is best-effort "produce something" behaviour for real
+	// third-party documents that pull in packages/classes gotex does not load —
+	// an editor preview shows the typesettable content instead of one hard error.
+	// The default (false) is strict: an undefined cs aborts, as TeX does.
+	Lenient bool
 }
 
 func (o Options) size() int {
@@ -76,6 +85,7 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	}
 	e.SetFont(reg)
 	e.today = opt.Date
+	e.lenient = opt.Lenient
 	e.bindFont("rm", reg)
 	if err := e.bindOptionalFont("bf", opt.BoldFont, opt.size()); err != nil {
 		return nil, err
