@@ -1,0 +1,273 @@
+// Copyright (c) the go-tex/engine authors.
+// SPDX-License-Identifier: BSD-3-Clause
+
+package engine
+
+// This file holds the LaTeX2e "class kernel" substrate: the mechanical constants,
+// registers, flags, font aliases and no-op declarations that real .cls / .sty
+// files (article.cls, book.cls, …) are built on top of but that carry no
+// algorithm of their own. It is authored in pure TeX and loaded by LoadLaTeX
+// right after LaTeX2eKernelHelpers (kernelhelpers.go), so a class file can be
+// \input without tripping on an "undefined control sequence" for a plain
+// register or a font-switch alias.
+//
+// SCOPE / non-goals. This layer defines only the *mechanical* gap between the
+// kernel-helper layer and a class file: number/length constants (\p@, \@M, the
+// \@vpt … size numbers), scratch and page/layout/list/float registers, the
+// \if@… boolean flags, the NFSS font-switch aliases (mapped onto the engine's
+// existing \rm/\bf/\it/… no-ops — there is no real font-series/shape machinery),
+// and best-effort no-ops for the declaration commands a class preamble runs
+// (\NeedsTeXFormat, \DeclareRobustCommand, \markboth, \addcontentsline, …).
+//
+// It deliberately does NOT define the algorithmic pieces a class relies on —
+// \@startsection / \@sect / \list / \@setfontsize / \@float / \secdef / … —
+// nor the low-level TeX primitives \ifdim / \divide / \long / \newbox /
+// \leavevmode / \everypar / \sfcode / \hb@xt@. Those are provided elsewhere in
+// the engine (Go primitives or the sectioning/list layer); stubbing them here
+// would collide.
+//
+// Register layout is best-effort: allocating a name via \newdimen / \newskip /
+// \newcount makes an assignment to it (or a \setlength on it) a valid store, so
+// a class's `\setlength\leftmargini{...}` or `\itemsep=...` completes; the
+// numbers do not (yet) drive real page layout.
+//
+// KNOWN interop limitation (glue idiom). The engine's glue scanner matches the
+// `plus` / `minus` keywords with NON-expanding look-ahead and has no
+// factor×register product, so the classic LaTeX rubber-length idiom
+// `\z@ \@plus 3\p@` does NOT assemble its stretch/shrink: the leading dimen is
+// read (0pt), the following \@plus / 3\p@ are not folded in. \setlength /
+// register-assignment still complete WITHOUT error (the engine is tolerant), but
+// store only the rigid part. \@plus / \@minus / \@width are defined here exactly
+// as real LaTeX (as the bare keywords) so the tokens are not "undefined"; making
+// the idiom assemble the rubber part needs the scanner (owned by the engine
+// core, not this layer). See classkernel_test.go, which asserts the actual
+// (no-error, rigid-part) behaviour.
+
+// LaTeX2eClassKernel is the LaTeX2e class-kernel substrate, loaded by LoadLaTeX
+// right after LaTeX2eKernelHelpers.
+const LaTeX2eClassKernel = `
+\catcode64=11
+% ── numeric / length constants ──────────────────────────────────────────────
+% \p@ = 1pt as a dimen (so 3\p@, \setlength\x\p@ read it). \z@ / \z@skip already
+% come from the kernel-helper layer (kernelhelpers.go) as a \newdimen / \newskip.
+\newdimen\p@ \p@=1pt
+% \@plus / \@minus / \@width / \@height / \@depth: the plain-TeX/LaTeX keyword
+% macros, defined exactly as real latex.ltx (bare keywords). NOTE (see the file
+% header): the engine's glue scanner does not expand while matching keywords, so
+% the \z@ \@plus 3\p@ idiom stores only its rigid part — no error, no stretch.
+\def\@width{width}
+\def\@height{height}
+\def\@depth{depth}
+\def\@plus{plus}
+\def\@minus{minus}
+% Big integer constants used as penalties / limits. Real LaTeX uses
+% \mathchardef; \newcount avoids any \chardef range question and \the still
+% prints the value.
+\newcount\@M \@M=10000
+\newcount\@m \@m=1000
+\newcount\@Mi \@Mi=10001
+\newcount\@Mii \@Mii=10002
+\newcount\@Miii \@Miii=10003
+\newcount\@Miv \@Miv=10004
+% Font-size number macros consumed by \@setfontsize (\@xpt → 10, …).
+\def\@vpt{5}
+\def\@vipt{6}
+\def\@viipt{7}
+\def\@viiipt{8}
+\def\@ixpt{9}
+\def\@xpt{10}
+\def\@xipt{10.95}
+\def\@xiipt{12}
+\def\@xivpt{14}
+\def\@xviipt{17}
+\def\@xxpt{20}
+\def\@xxvpt{25}
+% ── scratch registers ───────────────────────────────────────────────────────
+% \@tempdima/b, \@tempcnta/b, \@tempskipa/b already come from the kernel-helper
+% layer; only \@tempdimc and the scratch box are added here. The engine has no
+% \newbox (a class-kernel algorithmic piece owned elsewhere); \@tempboxa is
+% allocated with \newsavebox so \sbox\@tempboxa / \usebox\@tempboxa are valid.
+\newdimen\@tempdimc
+\newsavebox{\@tempboxa}
+% ── page / layout dimens ────────────────────────────────────────────────────
+% \paperwidth/\paperheight are geometry-package option keys in the engine, not
+% registers; allocate them so a class may \setlength them. \parindent /
+% \baselineskip / \hsize / \vsize are engine parameters (untouched).
+\newdimen\paperwidth
+\newdimen\paperheight
+\newdimen\hangindent
+\newdimen\overfullrule
+\newdimen\maxdepth
+\newskip\topskip
+\newskip\parskip
+\newskip\lineskip
+\newskip\normallineskip
+\newdimen\arraycolsep
+\newdimen\arrayrulewidth
+\newdimen\doublerulesep
+\newdimen\tabcolsep
+\newdimen\tabbingsep
+\newdimen\fboxrule
+\newdimen\fboxsep
+\newcount\col@number
+% ── list dimens / skips ─────────────────────────────────────────────────────
+\newdimen\leftmargin
+\newdimen\leftmargini
+\newdimen\leftmarginii
+\newdimen\leftmarginiii
+\newdimen\leftmarginiv
+\newdimen\leftmarginv
+\newdimen\leftmarginvi
+\newdimen\rightmargin
+\newdimen\labelwidth
+\newdimen\labelsep
+\newdimen\itemindent
+\newdimen\listparindent
+\newskip\itemsep
+\newskip\parsep
+\newskip\topsep
+\newskip\partopsep
+% ── display skips ───────────────────────────────────────────────────────────
+\newskip\abovedisplayskip
+\newskip\belowdisplayskip
+\newskip\abovedisplayshortskip
+\newskip\belowdisplayshortskip
+% ── standard vertical-space amounts (\bigskip/\medskip/\smallskip macros come
+% from the Plain layer; only the amount registers are added). ─────────────────
+\newskip\bigskipamount
+\newskip\medskipamount
+\newskip\smallskipamount
+% ── float dimens / registers ────────────────────────────────────────────────
+% \footins / \@mpfootins are inserts in real LaTeX (\newinsert); the engine has
+% no inserts, so allocate them as \newcount pointing at high, otherwise-unused
+% register numbers, keeping \skip\footins / \dimen\footins valid scratch stores
+% that never collide with a \newskip/\newdimen allocation.
+\newskip\floatsep
+\newskip\textfloatsep
+\newskip\intextsep
+\newskip\dblfloatsep
+\newskip\dbltextfloatsep
+\newdimen\footnotesep
+\newcount\footins \footins=255
+\newcount\@mpfootins \@mpfootins=254
+\newskip\@fptop
+\newskip\@fpbot
+\newskip\@fpsep
+\newskip\@dblfptop
+\newskip\@dblfpbot
+\newskip\@dblfpsep
+% ── penalty / counter registers ─────────────────────────────────────────────
+\newcount\clubpenalty
+\newcount\widowpenalty
+\newcount\interlinepenalty
+\newcount\predisplaypenalty
+\newcount\postdisplaypenalty
+\newcount\@lowpenalty \@lowpenalty=51
+\newcount\@medpenalty \@medpenalty=151
+\newcount\@highpenalty \@highpenalty=301
+\newcount\@beginparpenalty
+\newcount\@endparpenalty
+\newcount\@itempenalty
+\newcount\@secpenalty
+\newcount\@clubpenalty
+\newcount\@topnum
+\newcount\c@secnumdepth \c@secnumdepth=3
+\newcount\c@footnote
+\newcount\day \day=1
+\newcount\month \month=1
+\newcount\year \year=2026
+% ── \if@ boolean flags (\newif comes from the kernel-helper layer) ───────────
+\newif\if@twocolumn
+\newif\if@twoside
+\newif\if@compatibility
+\newif\if@noskipsec
+\newif\if@mparswitch
+\newif\if@nobreak
+\newif\if@minipage
+\newif\if@titlepage
+\newif\if@openbib
+\newif\if@restonecol
+\newif\if@afterindent
+% Set the flags a class expects to have a definite state.
+\@compatibilityfalse
+\@twocolumnfalse
+\@twosidefalse
+\@mparswitchfalse
+\@nobreakfalse
+\@minipagefalse
+\@titlepagefalse
+\@openbibfalse
+\@restonecolfalse
+\@noskipsecfalse
+\@afterindentfalse
+% ── NFSS font-switch aliases (no real series/shape machinery; map onto the
+% engine's existing \rm/\bf/\it/\sl/\tt/\sf no-op switches). ───────────────────
+\def\normalfont{\rm}
+\def\rmfamily{\rm}
+\def\sffamily{\sf}
+\def\ttfamily{\tt}
+\def\bfseries{\bf}
+\def\mdseries{}
+\def\itshape{\it}
+\def\slshape{\sl}
+\def\scshape{}
+\def\upshape{}
+% Math alphabets: the class body may name them; define as identity text wrappers
+% (harmless — user math is handled wholesale by the math layer).
+\def\mathrm#1{#1}
+\def\mathbf#1{#1}
+\def\mathit#1{#1}
+\def\mathsf#1{#1}
+\def\mathtt#1{#1}
+\def\mathcal#1{#1}
+\def\mathnormal#1{#1}
+\def\@fontswitch#1#2{#2}
+\def\@nomath#1{}
+% \DeclareOldFontCommand\rm{\rmfamily}{\mathrm}: bind the old one-token font
+% command to its text form (best-effort: the math form is ignored).
+\def\DeclareOldFontCommand#1#2#3{\def#1{#2}}
+% ── no-op / best-effort declaration commands ────────────────────────────────
+% \DeclareRobustCommand / \CheckCommand behave like \newcommand (a Go primitive);
+% \@star@or@long (kernel-helper layer) consumes an optional leading '*'.
+\def\DeclareRobustCommand{\@star@or@long\newcommand}
+\def\CheckCommand{\@star@or@long\newcommand}
+\def\MakeRobust#1{}
+% \NeedsTeXFormat{fmt}[date] / \ProvidesFile/\ProvidesClass/\ProvidesPackage
+% {name}[date]: eat the required group then, only when a '[' actually follows,
+% the optional [date]. \@gobbleoptonly (\def\@gobbleoptonly[#1]{}) comes from the
+% mini-LaTeX layer; \@ifnextbracket leaves the '[' in place for it to consume,
+% and takes \relax (eating nothing more) when no bracket follows — so trailing
+% text after \NeedsTeXFormat{LaTeX2e} is NOT swallowed.
+\def\NeedsTeXFormat#1{\@ifnextbracket\@gobbleoptonly\relax}
+\def\ProvidesFile#1{\@ifnextbracket\@gobbleoptonly\relax}
+\def\ProvidesClass#1{\@ifnextbracket\@gobbleoptonly\relax}
+\def\ProvidesPackage#1{\@ifnextbracket\@gobbleoptonly\relax}
+% ── counter-format / case helpers (\@Roman/\@alph/\@Alph already defined) ────
+\def\@arabic#1{\number#1}
+\def\@roman#1{\romannumeral#1}
+\def\MakeUppercase#1{\uppercase{#1}}
+\def\MakeLowercase#1{\lowercase{#1}}
+% ── running heads / marks (no page-head machinery here: accept and drop) ─────
+\def\markboth#1#2{}
+\def\markright#1{}
+\def\@mkboth#1#2{}
+\def\leftmark{}
+\def\rightmark{}
+% ── contents recording (the engine owns its own TOC; accept and drop) ────────
+\def\addcontentsline#1#2#3{}
+\def\addtocontents#1#2{}
+\def\addvspace#1{\vskip#1}
+\def\addpenalty#1{}
+\def\nobreakspace{\space}
+% ── diagnostics not already routed by the kernel-helper layer ────────────────
+\def\@font@warning#1{\message{Font Warning: #1}}
+% ── misc structural no-ops ──────────────────────────────────────────────────
+\def\null{\hbox{}}
+% ── text symbols (simple literal glyphs) ────────────────────────────────────
+\def\textbullet{•}
+\def\textendash{–}
+\def\textemdash{—}
+\def\textasteriskcentered{*}
+\def\textperiodcentered{·}
+\catcode64=11
+`

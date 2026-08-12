@@ -454,7 +454,10 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(MiniLaTeXKernel); err != nil {
 		return err
 	}
-	return e.LoadFormat(LaTeX2eKernelHelpers)
+	if err := e.LoadFormat(LaTeX2eKernelHelpers); err != nil {
+		return err
+	}
+	return e.LoadFormat(LaTeX2eClassKernel)
 }
 
 // doNewcommand implements LaTeX's \newcommand / \renewcommand / \providecommand:
