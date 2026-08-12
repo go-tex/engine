@@ -41,3 +41,14 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       - run: GOOS=${{ matrix.goos }} GOARCH=wasm go build ./...
+  fidelity:
+    name: fidelity vs real LaTeX (tectonic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - name: install tectonic + poppler
+        run: sudo apt-get update && sudo apt-get install -y tectonic poppler-utils
+      - name: fidelity gate (gotex reproduces real LaTeX's prose)
+        run: GOWORK=off ./scripts/fidelity.sh --check

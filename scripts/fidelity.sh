@@ -29,7 +29,8 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-tectonic() { pkgx tectonic "$@"; }
+# Prefer a real binary on PATH (CI installs them via apt); fall back to pkgx locally.
+tectonic() { command -v tectonic >/dev/null && command tectonic "$@" || pkgx tectonic "$@"; }
 pdftotext() { command -v pdftotext >/dev/null && command pdftotext "$@" || pkgx pdftotext "$@"; }
 
 echo "building gotex…"
@@ -45,6 +46,15 @@ norm() {
 		tr 'A-Z' 'a-z' | tr -cs 'a-z0-9' '\n' | grep -v '^$' | sort -u
 }
 
+# With --check the script is a gate: it exits non-zero if gotex fails to reproduce
+# the reference PROSE text of any document. Math is rendered by gotex as vector
+# paths (not selectable PDF text) by design, so math.tex is compile-checked only,
+# not text-diffed. Every fidelity doc sets \pagestyle{empty} so neither engine emits
+# a page number (the one other benign difference).
+check=0
+[ "${1:-}" = "--check" ] && check=1
+fail=0
+
 printf '%-8s %8s %8s %8s   %s\n' doc ref_words gotex common notes
 for tex in "$root"/testdata/fidelity/*.tex; do
 	d="$(basename "$tex" .tex)"
@@ -56,5 +66,21 @@ for tex in "$root"/testdata/fidelity/*.tex; do
 	gw=$(wc -l < "$work/$d.got.txt" | tr -d ' ')
 	common=$(comm -12 "$work/$d.ref.txt" "$work/$d.got.txt" | wc -l | tr -d ' ')
 	missing=$(comm -23 "$work/$d.ref.txt" "$work/$d.got.txt" | tr '\n' ' ')
-	printf '%-8s %8s %8s %8s   %s\n' "$d" "$rw" "$gw" "$common" "${missing:+missing: $missing}"
+
+	if [ "$d" = math ]; then
+		# vector math: require only that both engines produced a PDF with text.
+		note="math is vector (compile-only)"
+		[ -s "$work/$d.pdf" ] && [ -s "$work/$d.got.pdf" ] || { note="MATH DID NOT COMPILE"; fail=1; }
+	elif [ -n "$missing" ]; then
+		note="MISSING: $missing"; fail=1
+	else
+		note="ok"
+	fi
+	printf '%-8s %8s %8s %8s   %s\n' "$d" "$rw" "$gw" "$common" "$note"
 done
+
+if [ "$check" = 1 ]; then
+	[ "$fail" = 0 ] && echo "fidelity: OK — gotex reproduces the reference prose" \
+		|| echo "fidelity: FAILED — see MISSING lines above"
+	exit "$fail"
+fi
