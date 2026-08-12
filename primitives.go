@@ -915,8 +915,32 @@ func (e *Engine) loadMore() {
 	e.prim("par", func(e *Engine) { e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
-	e.prim("documentclass", func(e *Engine) { e.doGobbleOptAndGroup() })
-	e.prim("usepackage", func(e *Engine) { e.doUsepackage() })
+	e.prim("documentclass", func(e *Engine) { e.doDocumentClass() })
+	e.prim("usepackage", func(e *Engine) { e.doUsepackageLoad() })
+	e.prim("LoadClass", func(e *Engine) { e.doLoadClass(false) })
+	e.prim("LoadClassWithOptions", func(e *Engine) { e.doLoadClass(true) })
+	e.prim("RequirePackageWithOptions", func(e *Engine) { e.doUsepackageLoad() })
+	// LaTeX2e option processing (see packages.go), driving real .cls/.sty loading.
+	e.prim("DeclareOption", func(e *Engine) { e.doDeclareOption() })
+	e.prim("ProcessOptions", func(e *Engine) { e.doProcessOptions() })
+	e.prim("ExecuteOptions", func(e *Engine) { e.doExecuteOptions() })
+	e.prim("PassOptionsToPackage", func(e *Engine) { e.doPassOptionsTo() })
+	e.prim("PassOptionsToClass", func(e *Engine) { e.doPassOptionsTo() })
+	e.prim("IfFileExists", func(e *Engine) { e.doIfFileExists() })
+	e.prim("InputIfFileExists", func(e *Engine) { e.doInputIfFileExists() })
+	e.prim("@gotex@endload", func(e *Engine) { e.endLoad() })
+	// NFSS size-switch commands a class redefines \normalsize/\small/… to call.
+	// The engine has no NFSS, but these MUST consume their arguments: a class body
+	// like \renewcommand\normalsize{\@setfontsize\normalsize\@xpt\@xiipt …} would
+	// otherwise leave \normalsize in the stream and recurse forever. Gobbling the
+	// arguments makes the size switch a no-op (size is left unchanged) without loop.
+	e.prim("@setfontsize", func(e *Engine) { e.grabUndelimited(); e.grabUndelimited(); e.grabUndelimited() })
+	e.prim("@setsize", func(e *Engine) {
+		e.grabUndelimited()
+		e.grabUndelimited()
+		e.grabUndelimited()
+		e.grabUndelimited()
+	})
 	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })   // \[ … \] display math
 	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) })  // \( … \) inline math
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[

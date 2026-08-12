@@ -552,7 +552,7 @@ func (e *Engine) doBibliography() {
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
-		if e.lenient {
+		if e.tolerant() {
 			if e.skippedCS == nil {
 				e.skippedCS = map[string]int{}
 			}

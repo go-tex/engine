@@ -106,7 +106,7 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		svg, err = r.RenderSVG(src, size)
 	}
 	if err != nil {
-		if e.lenient {
+		if e.tolerant() {
 			// Best-effort preview: a real document's math may use a command
 			// go-tex/math does not yet know (a package macro, a user \def, an
 			// unimplemented symbol). Drop this one equation rather than aborting the

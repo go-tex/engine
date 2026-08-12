@@ -198,29 +198,6 @@ func (e *Engine) renderMargin(fallback float64) float64 {
 	return fallback
 }
 
-// doUsepackage handles \usepackage[options]{name}. It reads the optional
-// [options] and the required {name}; when the package is geometry it applies the
-// options, otherwise it discards them (as before). Multiple comma-separated names
-// in the group are honoured — the options apply if geometry is among them.
-func (e *Engine) doUsepackage() {
-	optToks, _ := e.scanOptBracketToks()
-	e.skipOptSpace()
-	name := ""
-	if t, ok := e.getXToken(); ok {
-		if t.cat == catBegin && !t.cs_ {
-			name = e.toksToString(e.grabGroup())
-		} else {
-			e.back(t)
-		}
-	}
-	for _, n := range strings.Split(name, ",") {
-		if strings.TrimSpace(n) == "geometry" {
-			e.applyGeometry(e.toksToString(optToks))
-			return
-		}
-	}
-}
-
 // doGeometry handles \geometry{options}, re-applying geometry settings on top of
 // any earlier ones (later wins).
 func (e *Engine) doGeometry() {

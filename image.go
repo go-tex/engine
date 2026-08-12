@@ -63,7 +63,7 @@ func (e *Engine) doIncludegraphics() {
 	}
 	data, format, iw, ih, err := loadImage(name)
 	if err != nil {
-		if e.lenient {
+		if e.tolerant() {
 			// Best-effort preview: a real document's figure files are not shipped
 			// with its .tex (or use a format we can't decode). Reserve the box with
 			// a framed placeholder sized from the requested dimensions so the

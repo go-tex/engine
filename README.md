@@ -60,6 +60,25 @@ produces a multi-page PDF for **all 54**, with real, selectable prose text. It i
 a preview aid, not a fidelity claim — the roadmap below is how the gaps close for
 real.
 
+### Loading real classes and packages
+
+`\documentclass` and `\usepackage` (and `\RequirePackage`, `\LoadClass`,
+`\LoadClassWithOptions`) do more than emulate: they **resolve and load the real
+`.cls`/`.sty`** — from the document's own directory (an arXiv paper's bundled
+class/package), a `TEXINPUTS`/`GOTEX_TEXMF` search path, or an embedded base set —
+making `@` a letter and running the file's own `\newcommand`/`\def`/… on the
+engine. The LaTeX2e option mechanism runs too: `\DeclareOption`,
+`\DeclareOption*`, `\ProcessOptions`, `\ExecuteOptions`, `\CurrentOption`,
+`\PassOptionsToPackage`/`\PassOptionsToClass`, plus `\IfFileExists`/
+`\InputIfFileExists`. A file loads *tolerantly* — a command the engine lacks is
+skipped, so a real class contributes what it can — and a **runaway-expansion
+guard** bounds macro expansion so a pathological or partially-supported file can
+never hang (it stops with partial output in lenient mode, an error in strict).
+Distribution-heavy packages the engine emulates natively or better as stubs
+(`geometry`, `tikz`, `hyperref`, `graphicx`, encodings, …) are not loaded from
+disk. Base classes (`article`, `amsart`) are the next embed — the kernel gap to
+run them is mapped.
+
 ## Status & roadmap to parity
 
 This is **stage 1** (mouth + gullet). The remaining stages, each gated by an

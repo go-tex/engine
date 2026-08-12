@@ -192,7 +192,36 @@ type Engine struct {
 	// name is tallied here for reporting. nil until the first skip.
 	lenient   bool
 	skippedCS map[string]int
+
+	// class/package loading (see packages.go): the stack of files being \input as
+	// classes/packages (each restores @'s catcode when done), the loaded registry,
+	// options queued by \PassOptionsTo*, and a depth that makes loading tolerant of
+	// commands the engine lacks (so a real .cls contributes what it can).
+	loadStack      []loadFrame
+	loadDepth      int
+	loadedPackages map[string]bool
+	passedOptions  map[string][]string
+
+	// runaway guard: a bound on macro expansion so a pathological input (an
+	// infinite \def loop, or a tolerantly-skipped arg-consuming command that
+	// leaves a self-referential token behind) cannot hang. steps counts
+	// expansions; runaway trips when steps or the input-stack depth exceed their
+	// limits, stopping the loop (partial output in tolerant mode, an error in
+	// strict mode).
+	steps     int
+	stepLimit int // expansion ceiling (New sets maxExpandSteps; tests may lower it)
+	runaway   bool
 }
+
+const (
+	maxExpandSteps = 60_000_000 // expansion ceiling; a large real document stays well under it
+	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
+)
+
+// tolerant reports whether an unimplemented construct should be skipped rather
+// than aborting: either the caller asked for lenient mode, or a class/package file
+// is being loaded (a real .cls/.sty always loads best-effort).
+func (e *Engine) tolerant() bool { return e.lenient || e.loadDepth > 0 }
 
 type mkind uint8
 
@@ -251,8 +280,9 @@ func New() *Engine {
 	e.columnsep = 10 * unity                                                                        // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
 	e.hyphenpenalty = 50                                                                            // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
-	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
-	e.pageNumStyle = 'a'  // arabic page numbers by default
+	e.stepLimit = maxExpandSteps // runaway-expansion ceiling (tests may lower it)
+	e.pageStyle = "empty"        // no page number until \pagestyle{plain}/\pagenumbering
+	e.pageNumStyle = 'a'         // arabic page numbers by default
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -517,6 +547,9 @@ func (e *Engine) endGroup() {
 // (macros and expandable primitives) until a non-expandable token surfaces.
 func (e *Engine) getXToken() (tok, bool) {
 	for {
+		if e.runaway {
+			return tok{}, false
+		}
 		t, ok := e.getNext()
 		if !ok {
 			return tok{}, false
@@ -531,9 +564,17 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		switch m.kind {
 		case mMacro:
+			if e.steps++; e.steps > e.stepLimit || len(e.lists) > maxInputDepth {
+				e.tripRunaway()
+				return tok{}, false
+			}
 			e.expandMacro(m)
 		case mPrim:
 			if isExpandable(m.name) {
+				if e.steps++; e.steps > e.stepLimit {
+					e.tripRunaway()
+					return tok{}, false
+				}
 				m.prim(e)
 			} else {
 				return t, true
@@ -846,7 +887,7 @@ func (e *Engine) beginParagraph(indent bool) {
 func (e *Engine) execCS(t tok) bool {
 	m := e.meaningOf(t)
 	if m == nil {
-		if e.lenient {
+		if e.tolerant() {
 			e.skipUndefined(t.cs)
 			return true
 		}
@@ -911,6 +952,18 @@ func (e *Engine) skipUndefined(name string) {
 // control sequence was skipped (empty when strict or when none were undefined).
 // It lets a caller surface "these commands were dropped" after a preview compile.
 func (e *Engine) SkippedCommands() map[string]int { return e.skippedCS }
+
+// tripRunaway halts expansion when the step/depth guard fires: it discards the
+// pending input so the loop unwinds, and (in strict mode only) records the error.
+// In tolerant mode the partial document built so far is still rendered.
+func (e *Engine) tripRunaway() {
+	e.runaway = true
+	e.lists = nil
+	e.noBase = true
+	if !e.tolerant() {
+		e.fail("runaway expansion: aborted after too many macro expansions (possible infinite loop)")
+	}
+}
 
 func (e *Engine) fail(msg string) {
 	if e.err == nil {
