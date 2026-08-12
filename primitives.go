@@ -930,6 +930,7 @@ func (e *Engine) loadMore() {
 	e.prim("IfFileExists", func(e *Engine) { e.doIfFileExists() })
 	e.prim("InputIfFileExists", func(e *Engine) { e.doInputIfFileExists() })
 	e.prim("@gotex@endload", func(e *Engine) { e.endLoad() })
+	e.prim("@starttoc", func(e *Engine) { e.doStartTOC() }) // a real class's TOC command bridges to the engine's entry table
 	// NFSS size-switch commands a class redefines \normalsize/\small/… to call.
 	// The engine has no NFSS, but these MUST consume their arguments: a class body
 	// like \renewcommand\normalsize{\@setfontsize\normalsize\@xpt\@xiipt …} would

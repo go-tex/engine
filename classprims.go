@@ -143,8 +143,13 @@ const LaTeX2eClassLead = `
 \def\@afterheading{}
 \def\secdef#1#2{\@ifstar{#2}{#1}}
 \def\@dottedtocline#1#2#3#4#5{}
-\def\@starttoc#1{}
 \def\@textsuperscript#1{#1}
+% \@thanks accumulates \thanks footnotes for \maketitle; \thanks is best-effort
+% (its note is dropped). Defining them keeps a real class's \maketitle from
+% aborting on \@thanks. (\@starttoc is a Go primitive bridging to the engine's
+% two-pass contents table, so it is not defined here.)
+\def\@thanks{}
+\def\thanks#1{}
 % ── float environments (figure/table via the class's \@float) ────────────────
 % \@float{type}[placement] starts a centred float block and records \@captype so
 % \caption numbers it; \end@float closes it. \@dblfloat is the two-column (figure*/

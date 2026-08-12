@@ -130,6 +130,29 @@ func (e *Engine) emitTOCList(heading string, entries []tocEntry) {
 	b.cs("par")
 	b.cs("nobreak")
 	b.cs("smallskip")
+	e.emitTOCEntryTokens(&b, entries)
+	e.push(b.ts)
+}
+
+// doStartTOC implements \@starttoc{kind}: it typesets the recorded entries for that
+// list (toc/lof/lot) WITHOUT a heading — a real class's \tableofcontents/
+// \listoffigures already issues its own \section*{…} heading and then calls
+// \@starttoc. It bridges the class's TOC command to the engine's two-pass entry
+// table (see tocList), so a loaded article.cls still renders a dotted contents list.
+func (e *Engine) doStartTOC() {
+	kind := e.readBraceName()
+	if kind == "" {
+		return
+	}
+	var b tocTokens
+	b.e = e
+	e.emitTOCEntryTokens(&b, e.tocList(kind))
+	e.push(b.ts)
+}
+
+// emitTOCEntryTokens appends one dotted line per entry to b (see emitTOCList for
+// the line shape); shared by \tableofcontents and \@starttoc.
+func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 	for _, en := range entries {
 		b.cs("par")
 		b.cs("noindent")
@@ -151,7 +174,6 @@ func (e *Engine) emitTOCList(heading string, entries []tocEntry) {
 	}
 	b.cs("par")
 	b.cs("medskip")
-	e.push(b.ts)
 }
 
 // tocTokens builds a token list with the engine's live catcodes.

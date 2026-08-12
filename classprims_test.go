@@ -158,9 +158,30 @@ func TestEmbeddedBaseFilesResolvable(t *testing.T) {
 			t.Errorf("embedded %s does not look like a real LaTeX file", name)
 		}
 	}
-	// A standard class stays on the built-in emulation (not routed to the embed).
-	if !emulatedClasses["article"] {
-		t.Error("article should be an emulated class (not routed to the real .cls yet)")
+	// article is now routed to the real embedded class (not the emulation).
+	if emulatedClasses["article"] {
+		t.Error("article should load the real embedded class, not the emulation")
+	}
+}
+
+// \documentclass{article} loads the REAL embedded article.cls end to end and
+// typesets a rich document: a numbered \tableofcontents ("Contents"), a numbered
+// \section ("1 Intro") and the body — the class runs on the engine.
+func TestArticleLoadsRealClass(t *testing.T) {
+	src := "\\documentclass{article}\n\\title{T}\\author{A}\n\\begin{document}\n" +
+		"\\maketitle\\tableofcontents\n\\section{Intro}\nBody.\n\\end{document}"
+	e, err := compile([]byte(src), Options{})
+	if err != nil {
+		t.Fatalf("real article.cls compile: %v", err)
+	}
+	if !e.loadedPackages["article"] {
+		t.Fatal("article was not loaded as the real class")
+	}
+	got := pageChars(e)
+	for _, w := range []string{"Contents", "1Intro", "Body."} {
+		if !strings.Contains(got, w) {
+			t.Errorf("missing %q in %q", w, got)
+		}
 	}
 }
 

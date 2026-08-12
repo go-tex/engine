@@ -171,15 +171,16 @@ func (e *Engine) curFrame() *loadFrame {
 
 // ── \documentclass / \usepackage / \RequirePackage / \LoadClass ─────────────
 
-// emulatedClasses are the standard classes the engine models directly and well
-// (deterministically, under the strict-mode conformance gate). Routing them to the
-// real .cls would make a strict compile depend on the entire LaTeX kernel being
-// present (a real \documentclass{article} calls \@startsection, \list, NFSS … at
-// document time); until that kernel is complete the built-in emulation is the
-// faithful path, so these are not loaded from the embedded/real .cls. The embedded
-// article.cls is still available to \LoadClass (a custom class building on it).
+// emulatedClasses are the standard classes still served by the built-in emulation
+// rather than a real .cls. article is NOT here: the engine now loads the real,
+// embedded article.cls (the class kernel — \@startsection numbering, \list, NFSS
+// aliases, \@float, \@starttoc, rubber glue, source-line stability — is complete
+// enough that it passes the conformance and fidelity gates). The classes below are
+// not embedded, so \documentclass{report|book|amsart|…} resolves nothing and falls
+// back to the emulation anyway; listing them makes that intent explicit and keeps a
+// bundled report.cls of the same name from being loaded unvetted.
 var emulatedClasses = map[string]bool{
-	"article": true, "report": true, "book": true, "amsart": true,
+	"report": true, "book": true, "amsart": true,
 	"letter": true, "proc": true, "slides": true, "minimal": true,
 }
 
