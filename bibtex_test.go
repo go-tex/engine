@@ -351,7 +351,10 @@ func writeBib(t *testing.T) string {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(dir, "refs")
+	// Forward slashes: the returned base path is embedded into TeX source
+	// (\bibliography{base}), where a backslash (the Windows separator) is the
+	// escape char. TeX and Go's os.ReadFile both accept "/" on every platform.
+	return filepath.ToSlash(filepath.Join(dir, "refs"))
 }
 
 // runTwoPass mimics api.go's two-pass compile for a raw LaTeX-kernel run: an aux

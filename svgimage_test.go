@@ -64,7 +64,10 @@ func TestIncludegraphicsSVG(t *testing.T) {
 // the viewBox.
 func TestIncludegraphicsSVGFileViewBox(t *testing.T) {
 	dir := t.TempDir()
-	fp := filepath.Join(dir, "pic.svg")
+	// Forward slashes: this path is embedded into TeX source
+	// (\includegraphics{...}), where a backslash (the Windows separator) is the
+	// escape char. TeX and Go's os.ReadFile both accept "/" on every platform.
+	fp := filepath.ToSlash(filepath.Join(dir, "pic.svg"))
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50">` +
 		`<rect width="100" height="50" fill="green"/></svg>`
 	if err := os.WriteFile(fp, []byte(svg), 0644); err != nil {
@@ -128,9 +131,11 @@ func TestIncludegraphicsSVGSniffed(t *testing.T) {
 // SourceError (no panic).
 func TestIncludegraphicsSVGErrors(t *testing.T) {
 	cases := map[string]string{
-		"truncated svg":   svgDataURIB64(`<svg width="40"`), // no '>' → decoder error
-		"bad base64":      "data:image/svg+xml;base64,@@@not-base64@@@",
-		"missing file":    filepath.Join(t.TempDir(), "nope.svg"),
+		"truncated svg": svgDataURIB64(`<svg width="40"`), // no '>' → decoder error
+		"bad base64":    "data:image/svg+xml;base64,@@@not-base64@@@",
+		// Forward slashes: embedded into TeX source below, where a backslash
+		// (the Windows separator) is the escape char.
+		"missing file":    filepath.ToSlash(filepath.Join(t.TempDir(), "nope.svg")),
 		"non-svg-non-img": svgDataURIB64(`<html><body>hi</body></svg>`), // sniffed svg, bad root
 	}
 	for name, arg := range cases {
@@ -346,7 +351,10 @@ func TestRenderPDFWithSVGImage(t *testing.T) {
 		t.Skip("no system font")
 	}
 	dir := t.TempDir()
-	pic := filepath.Join(dir, "pic.svg")
+	// Forward slashes: this path is embedded into TeX source
+	// (\includegraphics{...}), where a backslash (the Windows separator) is the
+	// escape char. TeX and Go's os.ReadFile both accept "/" on every platform.
+	pic := filepath.ToSlash(filepath.Join(dir, "pic.svg"))
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40">` +
 		`<rect width="60" height="40" fill="#88bbdd"/>` +
 		`<circle cx="30" cy="20" r="12" fill="crimson"/></svg>` // crimson is unknown → default black

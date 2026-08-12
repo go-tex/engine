@@ -80,12 +80,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
-	// Resolve relative \input paths against the document's directory.
+	// Resolve relative \input paths against the document's directory. Restore
+	// the working directory before returning: os.Chdir mutates the process-wide
+	// cwd, and leaving it inside a caller's temp dir makes that dir impossible
+	// to remove on Windows ("The process cannot access the file because it is
+	// being used by another process") when the caller (e.g. a test) cleans up.
 	if dir := filepath.Dir(input); dir != "." {
+		orig, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "gotex: %v\n", err)
+			return 1
+		}
 		if err := os.Chdir(dir); err != nil {
 			fmt.Fprintf(stderr, "gotex: %v\n", err)
 			return 1
 		}
+		defer os.Chdir(orig)
 	}
 	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date}
 
@@ -128,8 +138,15 @@ func writeOutput(src []byte, name, format string, opt engine.Options) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
-	return engine.CompileToPDF(src, opt, f)
+	// Close deterministically and surface a write error in preference to the
+	// close error. Relying on a deferred Close alone would ignore its error and
+	// (on Windows) could keep the handle open past the caller's temp-dir
+	// cleanup; closing here releases the handle before writeOutput returns.
+	pages, err := engine.CompileToPDF(src, opt, f)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return pages, err
 }
 
 // readIf reads a file, returning nil bytes (no error) when the path is empty.
