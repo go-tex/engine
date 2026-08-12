@@ -479,6 +479,7 @@ func (e *Engine) doNewcommand() { e.doNewcommandMode(false) }
 func (e *Engine) doProvidecommand() { e.doNewcommandMode(true) }
 
 func (e *Engine) doNewcommandMode(provide bool) {
+	e.peekStar() // \newcommand* / \renewcommand* / \providecommand* (short form): consume the *
 	name := e.scanCmdName()
 	nargs := e.scanOptBracketInt()
 	optDefault, optArg := e.scanOptBracketToks() // optional [default]: 1st arg optional

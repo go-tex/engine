@@ -163,3 +163,70 @@ func TestEmbeddedBaseFilesResolvable(t *testing.T) {
 		t.Error("article should be an emulated class (not routed to the real .cls yet)")
 	}
 }
+
+// pageChars walks a compiled engine's main vertical list and paragraph list,
+// collecting every typeset character — used to assert nothing leaks onto the page.
+func pageChars(e *Engine) string {
+	var s []rune
+	var walk func(ns []node)
+	walk = func(ns []node) {
+		for _, n := range ns {
+			switch v := n.(type) {
+			case charNode:
+				s = append(s, v.ch)
+			case *boxNode:
+				walk(v.list)
+			}
+		}
+	}
+	walk(e.mvl)
+	walk(e.parList)
+	return string(s)
+}
+
+// The starred forms \newcommand*/\renewcommand*/\providecommand* must consume the
+// '*' (short form) — otherwise it leaks onto the page as a literal asterisk, which
+// is exactly how real class files (article.cls's \newcommand*\l@section…) spilled
+// stray '*' glyphs.
+func TestNewcommandStarConsumed(t *testing.T) {
+	src := `\documentclass{article}\begin{document}` +
+		`\newcommand*\aa{A}\renewcommand*\aa{B}\providecommand*\bb{C}\aa\bb\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pageChars(e)
+	if strings.Contains(got, "*") {
+		t.Errorf("a '*' from \\newcommand* leaked onto the page: %q", got)
+	}
+	if !strings.Contains(got, "B") || !strings.Contains(got, "C") {
+		t.Errorf("starred defs did not take effect: %q", got)
+	}
+}
+
+// A custom class that \LoadClass{article} (the realistic \documentclass flow, which
+// sets \@ptsize so size1x.clo loads) typesets \section + itemize with no stray
+// characters leaking — the class's \newcommand* and \DeclareOldFontCommand no
+// longer spill '*', and the penalty/glue assignments no longer spill digits.
+func TestRealClassCleanRender(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"demoart.cls": `\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}` +
+			`\ProcessOptions\LoadClass{article}`,
+	}, func() {
+		src := `\documentclass{demoart}\begin{document}` +
+			`\section{Intro}Body words here.\begin{itemize}\item one\item two\end{itemize}\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		got := pageChars(e)
+		if strings.Contains(got, "*") {
+			t.Errorf("stray '*' leaked when loading real article.cls: %q", got)
+		}
+		for _, w := range []string{"Intro", "Body", "one", "two"} {
+			if !strings.Contains(got, w) {
+				t.Errorf("expected %q in output, got %q", w, got)
+			}
+		}
+	})
+}
