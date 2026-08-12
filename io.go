@@ -67,7 +67,7 @@ func (e *Engine) doInput() {
 		e.fail("input file not found: " + file)
 		return
 	}
-	insert := []rune(string(data) + " ") // TeX appends a space at end of file
+	insert := []rune(normalizeEOL(string(data)) + " ") // TeX appends a space at end of file
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts() // the splice shifted every offset; rebuild the line table

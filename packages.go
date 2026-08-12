@@ -116,11 +116,24 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	e.define("CurrentOption", &meaning{kind: mMacro}, true)
 	// Splice: file body, then the end-of-file hook (\AtEndOfPackage/Class code) and
 	// a marker control sequence that pops the frame. The marker tokenizes with @
-	// still a letter, so its name is valid.
-	insert := []rune(string(data) + "\\" + endHook + "\\@gotex@endload ")
+	// still a letter, so its name is valid. Line endings are normalised to LF first:
+	// the engine treats only \n as end-of-line, so a CRLF file (e.g. a .cls checked
+	// out on Windows) would otherwise typeset stray \r characters.
+	insert := []rune(normalizeEOL(string(data)) + "\\" + endHook + "\\@gotex@endload ")
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()
+}
+
+// normalizeEOL converts CRLF and lone CR line endings to LF. The engine's mouth
+// treats only \n as end-of-line, so a file with Windows/classic-Mac line endings
+// would otherwise leave stray \r characters that get typeset.
+func normalizeEOL(s string) string {
+	if !strings.ContainsRune(s, '\r') {
+		return s
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
 }
 
 // endLoad pops the top load frame: it restores @'s catcode and the load tolerance,
@@ -420,7 +433,7 @@ func (e *Engine) doInputIfFileExists() {
 	if len(then) > 0 {
 		e.push(then)
 	}
-	insert := []rune(string(data) + " ")
+	insert := []rune(normalizeEOL(string(data)) + " ")
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()

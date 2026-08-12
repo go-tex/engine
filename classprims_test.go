@@ -278,3 +278,27 @@ func TestRealClassTocAndFloats(t *testing.T) {
 		}
 	})
 }
+
+// A class/package/\input file with CRLF (Windows) or lone-CR line endings must not
+// leave stray carriage returns to be typeset — the engine treats only \n as
+// end-of-line, so loaded files are normalised to LF (regression: the embedded
+// article.cls checked out as CRLF on Windows spilled \r glyphs and corrupted
+// captions).
+func TestCRLFNormalized(t *testing.T) {
+	if normalizeEOL("a\r\nb\rc\n") != "a\nb\nc\n" {
+		t.Fatal("normalizeEOL did not fold CRLF/CR to LF")
+	}
+	withTempDir(t, map[string]string{"frag.tex": "Hello\r\nWorld\r\n"}, func() {
+		e, err := compile([]byte(`\documentclass{article}\begin{document}\input{frag}\end{document}`), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := pageChars(e)
+		if strings.ContainsRune(got, '\r') {
+			t.Errorf("a stray carriage return was typeset: %q", got)
+		}
+		if !strings.Contains(got, "Hello") || !strings.Contains(got, "World") {
+			t.Errorf("CRLF \\input content missing: %q", got)
+		}
+	})
+}

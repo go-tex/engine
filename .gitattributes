@@ -1,0 +1,3 @@
+texmf/*.cls text eol=lf
+texmf/*.clo text eol=lf
+*.tex text eol=lf

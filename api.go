@@ -147,6 +147,7 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 // gathers the label table (so forward \refs resolve), exactly as LaTeX uses its
 // .aux file — carrying the labels into the second, rendered pass.
 func compile(src []byte, opt Options) (*Engine, error) {
+	src = []byte(normalizeEOL(string(src))) // tolerate a CRLF document (e.g. from Windows)
 	latex := isLaTeX(src)
 	if latex && needsTwoPass(src) {
 		aux, err := buildEngine(opt, true)
