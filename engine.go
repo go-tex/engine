@@ -1210,11 +1210,20 @@ func roundDecimals(digs []int) int {
 func (e *Engine) applyUnit(intPart, f int) int {
 	e.skipOptSpace()
 	a, ok := e.getXToken()
-	if !ok || a.cs_ {
-		if ok {
-			e.back(a)
-		}
+	if !ok {
 		return intPart*unity + f // bare number ⇒ pt
+	}
+	if a.cs_ {
+		// <factor><internal dimen>, e.g. 6\p@ = 6×1pt. The internal dimen provides
+		// the unit; the factor (intPart.f) scales it. Common throughout real class
+		// files (\@plus 1.5\p@, \leftmargini 2.5em stored as \p@ multiples).
+		e.back(a)
+		if v, isDimen := e.coerceInternalDimen(); isDimen {
+			e.skipOneOptSpace()
+			return int((int64(intPart)*int64(v)*unity + int64(f)*int64(v)) / unity)
+		}
+		e.back(a)
+		return intPart*unity + f // a real cs that is not a dimen ⇒ bare number is pt
 	}
 	b, ok := e.getXToken()
 	if !ok || b.cs_ {
@@ -1307,25 +1316,74 @@ func (e *Engine) scanGlue() glueSpec {
 	return g
 }
 
+// coerceInternalDimen reads a control sequence that denotes an internal dimension
+// (a \newdimen register or dimen parameter, a \newskip register coerced to its
+// width, or a \dimen/\skip/\wd/\ht/\dp primitive) and returns its value in sp. On a
+// non-dimen (or non-cs) token it backs out and returns ok=false, so a caller can
+// fall back. It is the unit half of TeX's <factor><internal dimen> (e.g. 6\p@).
+func (e *Engine) coerceInternalDimen() (int, bool) {
+	t, ok := e.getXToken()
+	if !ok {
+		return 0, false
+	}
+	if t.cs_ {
+		if m := e.eq[t.cs]; m != nil {
+			switch {
+			case m.kind == mDimenRef:
+				return e.dimen[m.code], true
+			case m.kind == mSkipRef:
+				return e.skip[m.code].width, true
+			case m.kind == mPrim && m.name == "dimen":
+				return e.dimen[e.scanInt()], true
+			case m.kind == mPrim && m.name == "skip":
+				return e.skip[e.scanInt()].width, true
+			case m.kind == mPrim && m.name == "wd":
+				return e.boxDim('w'), true
+			case m.kind == mPrim && m.name == "ht":
+				return e.boxDim('h'), true
+			case m.kind == mPrim && m.name == "dp":
+				return e.boxDim('d'), true
+			case m.kind == mPrim && m.name == "hsize":
+				return e.hsize, true
+			case m.kind == mPrim && m.name == "vsize":
+				return e.vsize, true
+			case m.kind == mPrim && m.name == "parindent":
+				return e.parindent, true
+			}
+		}
+	}
+	e.back(t)
+	return 0, false
+}
+
 // scanKeyword tries to match the literal word (case-insensitively) after optional
 // spaces, consuming it on success and backing out every token on failure.
 func (e *Engine) scanKeyword(word string) bool {
 	e.skipOptSpace()
 	var buf []tok
+	restore := func() bool {
+		for k := len(buf) - 1; k >= 0; k-- {
+			e.back(buf[k])
+		}
+		return false
+	}
+	// Match with expansion (as TeX does), so a keyword produced by a macro is seen:
+	// LaTeX's \@plus expands to " plus" and \@minus to " minus". Skip a leading
+	// space that such an expansion introduces before the first letter.
+	leading := true
 	for _, w := range word {
-		t, ok := e.getNext()
+		t, ok := e.getXToken()
+		for leading && ok && t.cat == catSpace && !t.cs_ {
+			buf = append(buf, t)
+			t, ok = e.getXToken()
+		}
+		leading = false
 		if !ok {
-			for k := len(buf) - 1; k >= 0; k-- {
-				e.back(buf[k])
-			}
-			return false
+			return restore()
 		}
 		buf = append(buf, t)
 		if t.cs_ || lower(t.ch) != w {
-			for k := len(buf) - 1; k >= 0; k-- {
-				e.back(buf[k])
-			}
-			return false
+			return restore()
 		}
 	}
 	return true

@@ -31,17 +31,11 @@ package engine
 // a class's `\setlength\leftmargini{...}` or `\itemsep=...` completes; the
 // numbers do not (yet) drive real page layout.
 //
-// KNOWN interop limitation (glue idiom). The engine's glue scanner matches the
-// `plus` / `minus` keywords with NON-expanding look-ahead and has no
-// factor×register product, so the classic LaTeX rubber-length idiom
-// `\z@ \@plus 3\p@` does NOT assemble its stretch/shrink: the leading dimen is
-// read (0pt), the following \@plus / 3\p@ are not folded in. \setlength /
-// register-assignment still complete WITHOUT error (the engine is tolerant), but
-// store only the rigid part. \@plus / \@minus / \@width are defined here exactly
-// as real LaTeX (as the bare keywords) so the tokens are not "undefined"; making
-// the idiom assemble the rubber part needs the scanner (owned by the engine
-// core, not this layer). See classkernel_test.go, which asserts the actual
-// (no-error, rigid-part) behaviour.
+// Glue idiom. \@plus / \@minus / \@width are defined here exactly as real LaTeX
+// (as the bare keywords). The engine's glue scanner now expands while matching the
+// `plus` / `minus` keywords and supports TeX's factor×internal-dimen products, so
+// the classic LaTeX rubber-length idiom `\z@ \@plus 3\p@` assembles its full glue
+// (0pt plus 3pt) — see classkernel_test.go.
 
 // LaTeX2eClassKernel is the LaTeX2e class-kernel substrate, loaded by LoadLaTeX
 // right after LaTeX2eKernelHelpers.
@@ -52,9 +46,9 @@ const LaTeX2eClassKernel = `
 % come from the kernel-helper layer (kernelhelpers.go) as a \newdimen / \newskip.
 \newdimen\p@ \p@=1pt
 % \@plus / \@minus / \@width / \@height / \@depth: the plain-TeX/LaTeX keyword
-% macros, defined exactly as real latex.ltx (bare keywords). NOTE (see the file
-% header): the engine's glue scanner does not expand while matching keywords, so
-% the \z@ \@plus 3\p@ idiom stores only its rigid part — no error, no stretch.
+% macros, defined exactly as real latex.ltx (bare keywords). The engine's glue
+% scanner expands while matching keywords, so the \z@ \@plus 3\p@ idiom assembles
+% its full rubber glue (0pt plus 3pt).
 \def\@width{width}
 \def\@height{height}
 \def\@depth{depth}

@@ -124,20 +124,24 @@ func TestClassKernelRegisters(t *testing.T) {
 	}
 }
 
-// Documented interop LIMITATION: the classic rubber-length idiom
-// \z@ \@plus 3\p@ does NOT assemble its stretch (the engine's glue scanner does
-// not expand while matching the plus/minus keywords, and has no factor×register
-// product). It must still complete WITHOUT error and store the rigid part, so a
-// class load is not aborted. This test pins that actual behaviour — if the engine
-// core later teaches the scanner the idiom, update the want to include the
-// stretch and this test will flag it.
-func TestClassKernelRubberGlueLimitation(t *testing.T) {
+// The classic rubber-length idiom \z@ \@plus 3\p@ now assembles its full glue: the
+// engine's glue scanner expands while matching the plus/minus keywords and supports
+// TeX's factor×internal-dimen products (6\p@ = 6×1pt). Both the \setlength form and
+// the direct register-assignment form (as size1x.clo uses) are covered.
+func TestClassKernelRubberGlue(t *testing.T) {
 	got, err := ckRunErr(t, `\setlength{\abovedisplayskip}{\z@ \@plus 3\p@}\message{[\the\abovedisplayskip]}`)
 	if err != nil {
 		t.Fatalf("rubber-glue idiom aborted the load: %v", err)
 	}
-	if got != "[0.0pt]" {
-		t.Errorf("rubber idiom => %q, want [0.0pt] (rigid part only; see file header)", got)
+	if got != "[0.0pt plus 3.0pt]" {
+		t.Errorf("rubber idiom => %q, want [0.0pt plus 3.0pt]", got)
+	}
+	got, err = ckRunErr(t, `\abovedisplayskip 6\p@ \@plus 1.5\p@ \@minus 4\p@\message{[\the\abovedisplayskip]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "[6.0pt plus 1.5pt minus 4.0pt]" {
+		t.Errorf("direct rubber form => %q, want [6.0pt plus 1.5pt minus 4.0pt]", got)
 	}
 }
 

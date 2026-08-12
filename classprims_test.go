@@ -36,6 +36,23 @@ func TestProvidecommandKeepsExisting(t *testing.T) {
 	}
 }
 
+// A dimension written as <factor><internal dimen> (e.g. 6\p@ = 6×1pt) is a core
+// TeX length form used throughout real class files; the factor scales the internal
+// dimen, including a fractional factor.
+func TestFactorInternalDimen(t *testing.T) {
+	cases := map[string]string{
+		`\newdimen\p@ \p@=1pt \dimen0=6\p@ \message{\the\dimen0}`:              "6.0pt",
+		`\newdimen\p@ \p@=1pt \dimen0=2.5\p@ \message{\the\dimen0}`:            "2.5pt",
+		`\newdimen\q \q=4pt \dimen0=3\q \message{\the\dimen0}`:                 "12.0pt",
+		`\newdimen\p@ \p@=1pt \dimen0=6\p@ plus2\p@\message{\the\dimen0 done}`: "6.0pt", // trailing glue words not part of a \dimen
+	}
+	for src, want := range cases {
+		if got := mustRun(t, src); !strings.Contains(got, want) {
+			t.Errorf("%q => %q, want it to contain %q", src, got, want)
+		}
+	}
+}
+
 // \ifdim compares lengths (both branches), like \ifnum for numbers.
 func TestIfdim(t *testing.T) {
 	if !strings.Contains(mustRun(t, `\message{\ifdim 3pt<5pt LT\else GE\fi}`), "LT") {
