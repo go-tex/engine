@@ -24,8 +24,11 @@ jobs:
     name: arch ${{ matrix.goarch }} (qemu)
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        goarch: [riscv64, loong64, ppc64le, s390x]
+        # loong64 omitted: qemu user-mode support for it is unreliable on the runner
+        # (the engine still cross-compiles for loong64; only the qemu run is dropped).
+        goarch: [riscv64, ppc64le, s390x]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

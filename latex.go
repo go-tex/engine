@@ -377,6 +377,73 @@ const MiniLaTeXKernel = `
 \def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 \def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 % ─── end sub-captions / \captionof / \captionsetup ───────────────────────────
+% ─── real-world preamble robustness ──────────────────────────────────────────
+% Real papers configure many packages in the preamble with commands that do not
+% affect this engine's output. Rather than abort on an "undefined control
+% sequence", accept the common ones: define them as no-ops that gobble their
+% arguments, and the usual page-layout dimensions / pdfTeX counters as registers,
+% so a document gets past its preamble to the body. This is best-effort robustness,
+% NOT package emulation — a command that genuinely draws (a TikZ picture) still
+% cannot render, it just no longer aborts the preamble. (Derived from an arXiv
+% compatibility study: these were the commands most often blocking real papers.)
+\def\makeatletter{\catcode64=11\relax}
+\def\makeatother{\catcode64=12\relax}
+\newcount\pdfoutput
+\newcount\pdfminorversion
+\newdimen\voffset\newdimen\hoffset
+\newdimen\topmargin\newdimen\oddsidemargin\newdimen\evensidemargin
+\newdimen\headheight\newdimen\headsep\newdimen\footskip\newdimen\textheight
+\newdimen\marginparwidth\newdimen\marginparsep\newdimen\marginparpush
+\def\em{\it}
+\def\normalem{}
+\def\ULforem{}
+\def\useunder{}
+\def\sloppy{}
+\def\fussy{}
+\def\raggedbottom{}
+\def\flushbottom{}
+\def\MFUhyphentrue{}
+\def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
+\def\@gobbleoptonly[#1]{}
+\def\hypersetup#1{}
+\def\usetikzlibrary#1{}
+\def\pgfplotsset#1{}
+\def\tikzset#1{}
+\def\lstset#1{}
+\def\microtypesetup#1{}
+\def\microtypecontext#1{}
+\def\zcsetup#1{}
+\def\setdisplayskipstretch#1{}
+\def\bibpunct#1{}
+\def\thanks#1{}
+\def\address#1{}
+\def\email#1{}
+\def\keywords#1{}
+\def\AtBeginDocument#1{}
+\def\AtEndDocument#1{}
+\def\newboolean#1{}
+\def\setboolean#1#2{}
+\def\numberwithin#1#2{}
+\def\newaliascnt#1#2{}
+\def\DeclareMathOperator#1#2{}
+\def\DeclarePairedDelimiter#1#2#3{}
+\def\SetKwInput#1#2{}
+\def\algnewcommand#1#2{}
+\def\setlist{\@ifnextbracket\@setlistopt\@setlistarg}
+\def\@setlistopt[#1]#2{}
+\def\@setlistarg#1{}
+\def\RequirePackage{\usepackage}
+\def\and{\quad}
+\def\affil#1{}
+\def\crefname#1#2#3{}
+\def\Crefname#1#2#3{}
+\def\urlstyle#1{}
+\def\urladdr#1{}
+\def\aliascntresetthe#1{}
+\def\subjclass{\@ifnextbracket\@subjclassopt\@subjclassarg}
+\def\@subjclassopt[#1]#2{}
+\def\@subjclassarg#1{}
+% ─── end real-world preamble robustness ──────────────────────────────────────
 `
 
 // LoadLaTeX loads the Plain macros (if not already) and the minimal LaTeX kernel.
