@@ -48,7 +48,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: stable }
-      - name: install tectonic + poppler
-        run: sudo apt-get update && sudo apt-get install -y tectonic poppler-utils
+      - name: install poppler
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: install tectonic
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
+          sudo install -m 0755 tectonic /usr/local/bin/tectonic
+          tectonic --version
       - name: fidelity gate (gotex reproduces real LaTeX's prose)
         run: GOWORK=off ./scripts/fidelity.sh --check
