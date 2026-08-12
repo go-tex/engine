@@ -6,12 +6,17 @@ with `pdftotext`, and reports how much of the reference text gotex reproduces. I
 measures *content* fidelity — is the same text typeset — not pixel parity (the two
 engines use different fonts and line-breaking, so a pixel diff is meaningless).
 
-It is a developer gauge, not a CI gate (it needs network for tectonic's package
-bundle and `pdftotext`). Run from the repo root:
+Run from the repo root as a developer gauge (prints the table), or with `--check` as
+a gate that exits non-zero if gotex fails to reproduce the reference prose:
 
+```sh
+GOWORK=off ./scripts/fidelity.sh          # table
+GOWORK=off ./scripts/fidelity.sh --check  # gate (used by the `fidelity` CI job)
 ```
-GOWORK=off ./scripts/fidelity.sh
-```
+
+The `fidelity` CI job installs tectonic + poppler on Ubuntu and runs `--check` on
+every push/PR. Each doc sets `\pagestyle{empty}` so neither engine emits a page
+number; `math.tex` is compile-checked only (gotex renders math as vector paths).
 
 ## Latest result (2026-08-11, gotex v0.85.0 vs tectonic 0.17.0)
 
