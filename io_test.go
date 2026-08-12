@@ -8,7 +8,10 @@ import (
 
 func TestInputSplicesFile(t *testing.T) {
 	dir := t.TempDir()
-	inc := filepath.Join(dir, "inc.tex")
+	// Use forward slashes: the path is embedded into TeX source, where a
+	// backslash (the Windows separator) is the escape char. TeX and Go's
+	// os.ReadFile both accept "/" on every platform, including Windows.
+	inc := filepath.ToSlash(filepath.Join(dir, "inc.tex"))
 	os.WriteFile(inc, []byte(`\count5=42 `), 0644)
 	e := New()
 	// \input runs the file, then the rest of the line continues.
@@ -25,7 +28,8 @@ func TestInputAddsTexExtension(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "m.tex"), []byte(`\def\hi{HELLO}`), 0644)
 	e := New()
-	got, _ := e.Run(`\input ` + filepath.Join(dir, "m") + ` \message{\hi}`)
+	// Forward slashes: this path is embedded into TeX source (see above).
+	got, _ := e.Run(`\input ` + filepath.ToSlash(filepath.Join(dir, "m")) + ` \message{\hi}`)
 	if trimNL(got) != "HELLO" {
 		t.Errorf("got %q want HELLO", trimNL(got))
 	}
