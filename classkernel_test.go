@@ -161,8 +161,10 @@ func TestClassKernelDeclarations(t *testing.T) {
 		{"providesclass", `\ProvidesClass{article}[2024/01/01 v1]\message{OK}`, "OK"},
 		{"providespackage", `\ProvidesPackage{amsmath}\message{OK}`, "OK"},
 		{"providesfile", `\ProvidesFile{foo.cfg}[2024]\message{OK}`, "OK"},
-		// \DeclareOldFontCommand binds the one-token font command to its text form
-		{"oldfontcmd", `\DeclareOldFontCommand\ckrm{ROMAN}{\mathrm}\message{[\ckrm]}`, "[ROMAN]"},
+		// \DeclareOldFontCommand is a no-op: it must NOT redefine the engine's own
+		// \rm/\bf/… (real LaTeX's article.cls rebinds \rm to \normalfont\rmfamily,
+		// which with our aliases would loop). It completes without looping.
+		{"oldfontcmd", `\DeclareOldFontCommand{\rm}{\normalfont\rmfamily}{\mathrm}\message{OK}`, "OK"},
 		// running-head marks are accepted and their \...mark macros stay empty
 		{"marks", `\markboth{L}{R}\markright{r}\@mkboth{a}{b}\message{[\leftmark|\rightmark]}`, "[|]"},
 	}

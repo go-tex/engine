@@ -217,9 +217,13 @@ const LaTeX2eClassKernel = `
 \def\mathnormal#1{#1}
 \def\@fontswitch#1#2{#2}
 \def\@nomath#1{}
-% \DeclareOldFontCommand\rm{\rmfamily}{\mathrm}: bind the old one-token font
-% command to its text form (best-effort: the math form is ignored).
-\def\DeclareOldFontCommand#1#2#3{\def#1{#2}}
+% \DeclareOldFontCommand\rm{\normalfont\rmfamily}{\mathrm}: real LaTeX binds the
+% one-token font command to a text and a math form. In this engine \rm/\bf/\it/…
+% are ALREADY the font switches, and \normalfont/\rmfamily are defined above as
+% aliases back to them, so honouring the class's redefinition would make
+% \rm → \normalfont\rmfamily → \rm loop. It is therefore a no-op: the engine's
+% own \rm/\bf/… (and the \mathrm/… math wrappers above) are kept.
+\def\DeclareOldFontCommand#1#2#3{}
 % ── no-op / best-effort declaration commands ────────────────────────────────
 % \DeclareRobustCommand / \CheckCommand behave like \newcommand (a Go primitive);
 % \@star@or@long (kernel-helper layer) consumes an optional leading '*'.
