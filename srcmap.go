@@ -36,7 +36,14 @@ func (e *Engine) buildLineStarts() {
 // input, updating the cached (line, column). Line is 1-based, column 0-based.
 func (e *Engine) setSrcPos(pos int) {
 	e.srcPos = pos
-	e.curSrcLine, e.curSrcCol = e.lineColAt(pos)
+	line, col := e.lineColAt(pos)
+	// Discount the lines of already-loaded class/package files (spliced into the
+	// base ahead of this position) so the reported line is the user's own document
+	// line — loading article.cls must not shift where a glyph says it came from.
+	if line -= e.loadedNL; line < 1 {
+		line = 1
+	}
+	e.curSrcLine, e.curSrcCol = line, col
 }
 
 // lineColAt converts a base-input rune offset into a 1-based line and 0-based

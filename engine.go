@@ -201,6 +201,7 @@ type Engine struct {
 	loadDepth      int
 	loadedPackages map[string]bool
 	passedOptions  map[string][]string
+	loadedNL       int // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
 
 	// runaway guard: a bound on macro expansion so a pathological input (an
 	// infinite \def loop, or a tolerantly-skipped arg-consuming command that
@@ -316,6 +317,7 @@ func New() *Engine {
 func (e *Engine) Run(src string) (string, error) {
 	e.base = []rune(src)
 	e.bpos = 0
+	e.loadedNL = 0 // fresh document: no loaded-file lines discounted yet
 	e.buildLineStarts()
 	e.mainLoop()
 	return e.out.String(), e.err

@@ -302,3 +302,40 @@ func TestCRLFNormalized(t *testing.T) {
 		}
 	})
 }
+
+// Loading a class splices its (hundreds of) lines into the input ahead of the
+// document, but that must NOT shift the source-line numbers the engine attributes
+// to the user's own text: after \LoadClass{article}, a glyph on document line 3
+// still reports line 3 (not ~647). This keeps error locations and editor
+// source-navigation correct when a real class is loaded.
+func TestLoadDoesNotShiftSourceLines(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"demoart.cls": `\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}` +
+			`\ProcessOptions\LoadClass{article}`,
+	}, func() {
+		// "Findme" sits on line 3 of the document source.
+		src := "\\documentclass{demoart}\n\\begin{document}\nFindme here.\n\\end{document}"
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		line := 0
+		var walk func(ns []node)
+		walk = func(ns []node) {
+			for _, n := range ns {
+				switch v := n.(type) {
+				case charNode:
+					if v.ch == 'F' && line == 0 {
+						line = v.srcLine
+					}
+				case *boxNode:
+					walk(v.list)
+				}
+			}
+		}
+		walk(e.mvl)
+		if line != 3 {
+			t.Errorf("glyph 'F' of \"Findme\" reports source line %d, want 3 (class lines must not shift the document)", line)
+		}
+	})
+}

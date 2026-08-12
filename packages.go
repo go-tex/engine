@@ -25,6 +25,7 @@ import (
 type loadFrame struct {
 	atcat    cat              // catcode of @ to restore when the file ends
 	name     string           // package/class base name (for the loaded registry + \CurrentOption)
+	nlCount  int              // newlines in the spliced file (added to loadedNL when it ends)
 	endHook  string           // \@endofpackagehook / \@endofclasshook to reset after the file
 	passed   []string         // options requested for this file
 	declared map[string][]tok // \DeclareOption{name}{code}
@@ -119,7 +120,9 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// still a letter, so its name is valid. Line endings are normalised to LF first:
 	// the engine treats only \n as end-of-line, so a CRLF file (e.g. a .cls checked
 	// out on Windows) would otherwise typeset stray \r characters.
-	insert := []rune(normalizeEOL(string(data)) + "\\" + endHook + "\\@gotex@endload ")
+	body := normalizeEOL(string(data))
+	e.loadStack[len(e.loadStack)-1].nlCount = strings.Count(body, "\n")
+	insert := []rune(body + "\\" + endHook + "\\@gotex@endload ")
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()
@@ -145,6 +148,10 @@ func (e *Engine) endLoad() {
 	fr := e.loadStack[len(e.loadStack)-1]
 	e.loadStack = e.loadStack[:len(e.loadStack)-1]
 	e.catcode['@'] = fr.atcat
+	// The file's lines are now behind the mouth: exclude them from the document's
+	// source-line numbering (see setSrcPos), so loading a class does not shift the
+	// lines the editor/error reporter attributes to the user's own document.
+	e.loadedNL += fr.nlCount
 	if fr.endHook != "" {
 		e.define(fr.endHook, &meaning{kind: mMacro}, true) // \let\@endof…hook\@empty
 	}
