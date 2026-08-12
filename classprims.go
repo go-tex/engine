@@ -138,13 +138,21 @@ const LaTeX2eClassLead = `
 \def\@gxsecopt#1#2#3#4[#5]#6{#4{#1}{#2}{#3}{#6}}
 \def\@gxsecplain#1#2#3#4#5{#4{#1}{#2}{#3}{#5}}
 \def\@gxstar#1#2#3#4{\@gxhead{#3}{#4}}
-\def\@gxnum#1#2#3#4{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#4}\else\refstepcounter{#1}\@gxhead{#3}{\csname the#1\endcsname\quad#4}\fi}
+\def\@gxnum#1#2#3#4{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#4}\else\refstepcounter{#1}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#4}\@gxhead{#3}{\csname the#1\endcsname\quad#4}\fi}
 \def\@gxhead#1#2{\par\medskip\noindent{#1 #2}\par}
 \def\@afterheading{}
 \def\secdef#1#2{\@ifstar{#2}{#1}}
 \def\@dottedtocline#1#2#3#4#5{}
 \def\@starttoc#1{}
 \def\@textsuperscript#1{#1}
+% ── float environments (figure/table via the class's \@float) ────────────────
+% \@float{type}[placement] starts a centred float block and records \@captype so
+% \caption numbers it; \end@float closes it. \@dblfloat is the two-column (figure*/
+% table*) form, handled the same way (single column).
+\def\@float#1{\par\medskip\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
+\def\end@float{\par\endgroup\medskip}
+\def\@dblfloat#1{\@float{#1}}
+\def\end@dblfloat{\end@float}
 \def\usecounter#1{}
 \def\twocolumn{\@ifnextchar[{\@gobbleopt}{}}
 \def\onecolumn{}

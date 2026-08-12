@@ -254,3 +254,27 @@ func TestRealClassSectionNumbering(t *testing.T) {
 		}
 	})
 }
+
+// When a real class (article.cls via \LoadClass) is loaded, its \@float-based
+// figure/table environments number their captions ("Figure 1:", "Table 1:"), the
+// numbered \section records a \tableofcontents entry, and \tableofcontents renders
+// a "Contents" heading — the class's TOC/float machinery runs on the engine.
+func TestRealClassTocAndFloats(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"demoart.cls": `\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}` +
+			`\ProcessOptions\LoadClass{article}`,
+	}, func() {
+		src := `\documentclass{demoart}\begin{document}\tableofcontents\section{Intro}Body.` +
+			`\begin{figure}\caption{A figure}\end{figure}\begin{table}\caption{A table}\end{table}\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := pageChars(e)
+		for _, w := range []string{"Contents", "1Intro", "Figure1:", "Table1:"} {
+			if !strings.Contains(got, w) {
+				t.Errorf("missing %q in %q", w, got)
+			}
+		}
+	})
+}
