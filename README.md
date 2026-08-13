@@ -100,12 +100,11 @@ longer shifts the line numbers the editor maps glyphs back to). A real
 reproduces the reference engine's prose on the fidelity gate. Because the class
 files are `go:embed`ed and the resolver needs no filesystem, **the real classes
 also run in the `js/wasm` build — genuine LaTeX class rendering in the browser,
-with no TeXLive and no server.** `amsart` loads its real class too — it runs on
-the same engine (no amsmath needed; the math layer already covers its
-environments), and needs real token registers (`\toks`/`\newtoks`), so its
-`\maketitle` builds the author/address block, the abstract, sections and numbered
-math; a few heading details (a duplicated section number, a stray author bullet)
-are still cosmetic-preview, not yet the exact amsart `\@sect` layout.
+with no TeXLive and no server.** `amsart` is embedded and its class loads (its
+`\maketitle` even drove real token-register support — `\toks`/`\newtoks` — into
+the engine), but `\documentclass{amsart}` is kept on the emulation for now: its
+own `\newtheorem…[section]` machinery loops on the engine, so it waits on that
+fix before it is routed to the real class.
 
 ## Status & roadmap to parity
 
@@ -122,13 +121,13 @@ Each stage is gated by an objective oracle:
 5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
    text) and self-contained **SVG** pages; the SVG carries a source map for
    click-to-line.
-6. ✅ **Real classes** — `\documentclass{article|report|book|amsart}` loads and
-   runs the genuine embedded LaTeX class (see above), reproducing the reference
-   engine's prose on the fidelity gate — in native builds **and** in `js/wasm`.
+6. ✅ **Real classes** — `\documentclass{article|report|book}` loads and runs the
+   genuine embedded LaTeX class (see above), reproducing the reference engine's
+   prose on the fidelity gate — in native builds **and** in `js/wasm`.
 
-Next: the exact amsart `\@sect` heading layout, more real packages (`amsmath`,
-`hyperref`, `graphicx`), a broader real-document conformance corpus (PDF-diff vs
-pdftex/xetex), and the TRIP test. Coverage ~91%;
+Next: `amsart`'s `\newtheorem` fix (then route it to the real class), more real
+packages (`amsmath`, `hyperref`, `graphicx`), a broader real-document conformance
+corpus (PDF-diff vs pdftex/xetex), and the TRIP test. Coverage ~91%;
 the meaningful gate is the conformance ratchet plus the fidelity check against a
 real LaTeX engine, not a fixed coverage figure. Pure Go, CGO=0, `go vet` clean,
 green across three 64-bit arches under qemu plus `js/wasm` and `wasip1/wasm`.

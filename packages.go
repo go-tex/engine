@@ -185,16 +185,23 @@ func (e *Engine) curFrame() *loadFrame {
 
 // ── \documentclass / \usepackage / \RequirePackage / \LoadClass ─────────────
 
-// emulatedClasses are the standard classes still served by the built-in emulation
-// rather than a real .cls. article/report/book are NOT here: the engine loads their
-// real, embedded classes (the class kernel — \@startsection numbering, \secdef via
+// emulatedClasses are the standard classes served by the built-in emulation rather
+// than a real .cls. article/report/book are NOT here: the engine loads their real,
+// embedded classes (the class kernel — \@startsection numbering, \secdef via
 // \@dblarg for \chapter, \list, NFSS aliases, \@float, \@starttoc, rubber glue,
 // source-line stability — is complete enough that they pass the conformance and
-// fidelity gates). The classes below are not embedded, so \documentclass{amsart|…}
-// resolves nothing and falls back to the emulation anyway (amsart would also need
-// amsmath); listing them makes that intent explicit and keeps a same-named bundled
-// class from being loaded unvetted.
+// fidelity gates).
+//
+// amsart IS here (gated to emulation) even though amsart.cls is embedded and loads:
+// its own \newtheorem…[section] machinery loops on the engine (the runaway guard is
+// expansion-only and doesn't catch it), so a real math paper hangs. The class kernel
+// additions it drove — token registers, the ## parameter-char fix, the plain-TeX
+// substrate — are kept (they help every real class/package); routing
+// \documentclass{amsart} to the real class waits on the \newtheorem fix. The real
+// amsart.cls stays available to \LoadClass. letter/proc/slides/minimal are not
+// embedded, so they fall back to the emulation regardless.
 var emulatedClasses = map[string]bool{
+	"amsart": true,
 	"letter": true, "proc": true, "slides": true, "minimal": true,
 }
 
