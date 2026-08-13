@@ -29,6 +29,13 @@ func TestInlineMathBox(t *testing.T) {
 	if math.width <= 0 || math.height <= 0 {
 		t.Errorf("math box has non-positive dims: %+v", math)
 	}
+	// Baseline-aware placement (go-tex/math metrics, not the old h/2 centring):
+	// "x^2+1" has a superscript that reaches well above the baseline and almost
+	// nothing below it, so the box's height above the baseline must exceed its
+	// depth below. Centring on half the overall height would make them equal.
+	if math.height <= math.depth {
+		t.Errorf("inline math not baseline-aligned: height %d sp should exceed depth %d sp for x^2+1", math.height, math.depth)
+	}
 	// box width includes a(5) + math(>0) + b(5)
 	if b.width <= 10*unity {
 		t.Errorf("box width %d sp should exceed 10pt (a+b) by the math width", b.width)

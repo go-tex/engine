@@ -4,7 +4,6 @@
 package engine
 
 import (
-	"strconv"
 	"strings"
 
 	texmath "github.com/go-tex/math"
@@ -99,11 +98,12 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	}
 	size := e.mathSize()
 	var svg string
+	var m texmath.Metrics
 	var err error
 	if display {
-		svg, err = r.RenderDisplaySVG(src, size)
+		svg, m, err = r.RenderDisplaySVGMetrics(src, size)
 	} else {
-		svg, err = r.RenderSVG(src, size)
+		svg, m, err = r.RenderSVGMetrics(src, size)
 	}
 	if err != nil {
 		if e.tolerant() {
@@ -117,10 +117,11 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		e.fail("math error in $" + src + "$: " + err.Error())
 		return mathNode{}
 	}
-	w, h := parseSVGSize(svg)
-	// No baseline is reported; centre the box on the text baseline.
-	half := ptToSP(h) / 2
-	return mathNode{svg: svg, width: ptToSP(w), height: half, depth: ptToSP(h) - half}
+	// go-tex/math reports the true box: the baseline is at y=Height in the SVG,
+	// so the math baseline aligns with the surrounding text baseline (Height above,
+	// Depth below) instead of being centred on height/2 — which dropped inline math
+	// below the line — and the tight width removes the old padding's side-space.
+	return mathNode{svg: svg, width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
 }
 
 // recordMathSkip tallies a dropped equation under skippedCS. When the error is
@@ -203,24 +204,4 @@ func (e *Engine) placeMath(m mathNode, display bool) {
 		e.beginParagraph(false)
 	}
 	e.parList = append(e.parList, m)
-}
-
-// parseSVGSize extracts the width and height (points) from an SVG root element's
-// width="…" and height="…" attributes.
-func parseSVGSize(svg string) (float64, float64) {
-	return attrFloat(svg, `width="`), attrFloat(svg, `height="`)
-}
-
-func attrFloat(svg, key string) float64 {
-	i := strings.Index(svg, key)
-	if i < 0 {
-		return 0
-	}
-	rest := svg[i+len(key):]
-	j := strings.IndexByte(rest, '"')
-	if j < 0 {
-		return 0
-	}
-	v, _ := strconv.ParseFloat(strings.TrimSuffix(rest[:j], "pt"), 64)
-	return v
 }
