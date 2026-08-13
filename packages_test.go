@@ -156,6 +156,69 @@ func TestRunawayGuardTolerant(t *testing.T) {
 	}
 }
 
+// The tight-loop guard catches a non-terminating expansion that makes no forward
+// progress (the mouth reads no new base input) FAST — at the no-progress ceiling
+// (tightLoopSteps), far below the coarse absolute ceiling (maxExpandSteps). This is
+// the real robustness fix: a self-referential macro trips in well under a second at
+// the DEFAULT limits, where the old expansion-only ceiling took ~90s on amsart's
+// \newtheorem loop.
+func TestTightLoopGuardTripsFast(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	// DEFAULT limits (no lowered stepLimit): the tight-loop guard must trip on its
+	// own, not via the absolute ceiling.
+	_, err := e.Run(`\def\lx{\lx}\lx`)
+	if err == nil {
+		t.Fatal("strict mode: expected a runaway-expansion error, got nil")
+	}
+	if !e.runaway {
+		t.Fatal("runaway flag not set")
+	}
+	// It tripped at the no-progress ceiling, not the absolute one: steps must be far
+	// below maxExpandSteps (here ~tightLoopSteps, 2M, vs the 60M backstop).
+	if e.steps > tightLoopSteps+1000 {
+		t.Errorf("tight loop tripped at %d steps; want it caught near the no-progress ceiling %d, not the absolute %d", e.steps, tightLoopSteps, maxExpandSteps)
+	}
+	if e.steps < tightLoopSteps/2 {
+		t.Errorf("tight loop tripped suspiciously early at %d steps (< half the no-progress ceiling %d)", e.steps, tightLoopSteps)
+	}
+	if e.noProgSteps <= tightLoopSteps {
+		t.Errorf("no-progress counter = %d; want it to have exceeded the ceiling %d", e.noProgSteps, tightLoopSteps)
+	}
+}
+
+// A legitimate document that expands a great many macros but keeps consuming base
+// input (each \item reads new source) must NOT false-trip the tight-loop guard: the
+// no-progress counter resets on every base-input advance, so it never approaches the
+// ceiling even though the cumulative step count is large.
+func TestTightLoopGuardNoFalseTripOnLargeDoc(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`\def\row{item with a few words to expand and typeset\par}`)
+	// Many base-consuming expansions: 20000 lines, each a macro call plus text. This
+	// drives the cumulative step count high while base input advances continuously.
+	for i := 0; i < 20000; i++ {
+		b.WriteString(`\row `)
+	}
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.lenient = true
+	if _, err := e.Run(b.String()); err != nil {
+		t.Fatalf("large legitimate document errored: %v", err)
+	}
+	if e.runaway {
+		t.Fatalf("tight-loop guard FALSE-TRIPPED on a large legitimate document (steps=%d, noProgSteps=%d): a doc that keeps consuming base input must never trip", e.steps, e.noProgSteps)
+	}
+	// It really did a lot of expansion work, yet the no-progress run stayed small
+	// (resets on every base read) — proving the guard measures progress, not volume.
+	if e.noProgSteps > tightLoopSteps {
+		t.Errorf("no-progress counter reached %d on a legit doc; must stay well below the ceiling %d", e.noProgSteps, tightLoopSteps)
+	}
+}
+
 // \LoadClassWithOptions lets a class build on a base class, forwarding options;
 // \IfFileExists / \InputIfFileExists branch on and splice resolvable files;
 // \PassOptionsToPackage + \ExecuteOptions feed the option machinery.

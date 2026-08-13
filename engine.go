@@ -218,13 +218,30 @@ type Engine struct {
 	// limits, stopping the loop (partial output in tolerant mode, an error in
 	// strict mode).
 	steps     int
-	stepLimit int // expansion ceiling (New sets maxExpandSteps; tests may lower it)
+	stepLimit int // absolute expansion ceiling (New sets maxExpandSteps; tests may lower it)
 	runaway   bool
+
+	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
+	// loop (a self-referential macro, or a peeking idiom the kernel helpers
+	// approximate imperfectly — e.g. amsart's \newtheorem…[section]) churns
+	// expansion on the input stack while the mouth consumes NO new base input, so
+	// e.bpos stays put. We count expansion steps taken with e.bpos unmoved and trip
+	// the guard once that no-progress run exceeds tightLimit — catching such loops
+	// in a fraction of a second, far below the coarse absolute ceiling. A legitimate
+	// document (however large) keeps reading base input, which advances e.bpos and
+	// resets the counter, so it never false-trips. e.bpos is monotonic within a Run
+	// (Run resets it to 0; class/package loading splices file bodies into e.base at
+	// e.bpos and scanning advances through them), which makes it a sound progress
+	// signal even while a heavy .cls is loading.
+	progBpos    int // e.bpos at the last observed forward progress
+	noProgSteps int // expansion steps since e.bpos last advanced
+	tightLimit  int // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
-	maxExpandSteps = 60_000_000 // expansion ceiling; a large real document stays well under it
+	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
 	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
+	tightLoopSteps = 2_000_000  // no-progress ceiling: expansion steps with no new base input consumed
 )
 
 // tolerant reports whether an unimplemented construct should be skipped rather
@@ -290,9 +307,10 @@ func New() *Engine {
 	e.columnsep = 10 * unity                                                                                                                 // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
 	e.hyphenpenalty = 50                                                                                                                     // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
-	e.stepLimit = maxExpandSteps // runaway-expansion ceiling (tests may lower it)
-	e.pageStyle = "empty"        // no page number until \pagestyle{plain}/\pagenumbering
-	e.pageNumStyle = 'a'         // arabic page numbers by default
+	e.stepLimit = maxExpandSteps // absolute runaway-expansion ceiling (tests may lower it)
+	e.tightLimit = tightLoopSteps
+	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
+	e.pageNumStyle = 'a'  // arabic page numbers by default
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
@@ -328,7 +346,9 @@ func New() *Engine {
 func (e *Engine) Run(src string) (string, error) {
 	e.base = []rune(src)
 	e.bpos = 0
-	e.loadedNL = 0 // fresh document: no loaded-file lines discounted yet
+	e.progBpos = 0    // fresh document: reset the no-progress guard
+	e.noProgSteps = 0 // (e.bpos is monotonic within a Run, so this is a clean baseline)
+	e.loadedNL = 0    // fresh document: no loaded-file lines discounted yet
 	e.buildLineStarts()
 	e.mainLoop()
 	return e.out.String(), e.err
@@ -578,14 +598,14 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		switch m.kind {
 		case mMacro:
-			if e.steps++; e.steps > e.stepLimit || len(e.lists) > maxInputDepth {
+			if e.stepOverrun() || len(e.lists) > maxInputDepth {
 				e.tripRunaway()
 				return tok{}, false
 			}
 			e.expandMacro(m)
 		case mPrim:
 			if isExpandable(m.name) {
-				if e.steps++; e.steps > e.stepLimit {
+				if e.stepOverrun() {
 					e.tripRunaway()
 					return tok{}, false
 				}
@@ -726,8 +746,31 @@ func (e *Engine) grabDelimited(delim []tok) []tok {
 	}
 }
 
-// stripOuterBraces removes one level of braces if the whole arg is a group.
-func (e *Engine) stripOuterBraces(arg []tok) []tok { return arg }
+// stripOuterBraces removes one level of braces when the whole argument is a single
+// enclosing group — TeX strips the braces of a delimited macro argument that is
+// wholly wrapped in one matching { } pair (so \@oparg{\@ynthm{thm}}[] delivers
+// \@ynthm{thm}, not {\@ynthm{thm}}; the latter re-braces the token and derails a
+// downstream delimited match — the amsart \newtheorem loop). It must NOT strip when
+// the leading { closes before the end (e.g. {a}{b}), where the braces are not a
+// single enclosing pair.
+func (e *Engine) stripOuterBraces(arg []tok) []tok {
+	if len(arg) < 2 || !(arg[0].cat == catBegin && !arg[0].cs_) || !(arg[len(arg)-1].cat == catEnd && !arg[len(arg)-1].cs_) {
+		return arg
+	}
+	depth := 0
+	for i, t := range arg {
+		switch {
+		case t.cat == catBegin && !t.cs_:
+			depth++
+		case t.cat == catEnd && !t.cs_:
+			depth--
+			if depth == 0 && i != len(arg)-1 {
+				return arg // the first group closes before the end: not one enclosing pair
+			}
+		}
+	}
+	return arg[1 : len(arg)-1]
+}
 
 func (e *Engine) grabGroup() []tok {
 	depth := 1
@@ -970,6 +1013,26 @@ func (e *Engine) skipUndefined(name string) {
 // control sequence was skipped (empty when strict or when none were undefined).
 // It lets a caller surface "these commands were dropped" after a preview compile.
 func (e *Engine) SkippedCommands() map[string]int { return e.skippedCS }
+
+// stepOverrun tallies one expansion step and reports whether the runaway guard
+// should trip. Two independent conditions fire it: the absolute ceiling
+// (stepLimit — a coarse backstop) and the tight-loop guard. The latter measures
+// TeX-style forward progress by watching e.bpos, the mouth's position in the base
+// input: every step taken with e.bpos unmoved bumps noProgSteps, and any advance
+// of e.bpos resets it. A non-terminating expansion churns the input stack without
+// reading new base input, so noProgSteps climbs to tightLimit in a fraction of a
+// second; a legitimate document keeps consuming base input, which resets the
+// counter long before it reaches tightLimit, so it never false-trips.
+func (e *Engine) stepOverrun() bool {
+	e.steps++
+	if e.bpos > e.progBpos { // the mouth consumed new base input: real forward progress
+		e.progBpos = e.bpos
+		e.noProgSteps = 0
+	} else {
+		e.noProgSteps++
+	}
+	return e.steps > e.stepLimit || e.noProgSteps > e.tightLimit
+}
 
 // tripRunaway halts expansion when the step/depth guard fires: it discards the
 // pending input so the loop unwinds, and (in strict mode only) records the error.

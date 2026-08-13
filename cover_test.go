@@ -22,7 +22,9 @@ func TestMorePrimitives(t *testing.T) {
 		{`\def\a{o}{\global\edef\a{X}}\message{\a}`, "X"},
 		// delimited parameters, including a braced argument that hides the delimiter
 		{`\def\p#1:#2;{[#1,#2]}\message{\p x:y;}`, "[x,y]"},
-		{`\def\q#1.{(#1)}\message{\q {a.b}.}`, "({a.b})"},
+		// the braced argument hides the '.' delimiter; because the whole argument is a
+		// single enclosing group, TeX strips its outer braces (#1 = a.b, not {a.b}).
+		{`\def\q#1.{(#1)}\message{\q {a.b}.}`, "(a.b)"},
 		// \string of a single character
 		{`\message{\string a}`, "a"},
 		// \meaning of a macro with parameters and a control-symbol body
