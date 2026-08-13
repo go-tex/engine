@@ -22,6 +22,25 @@ func mustRun(t *testing.T, src string) string {
 	return out
 }
 
+// \MakeUppercase (and \MakeLowercase) case-shift the EXPANSION of their argument:
+// \uppercase only touches explicit character tokens, so a control sequence such
+// as \contentsname (or a running head's \leftmark) must be expanded to its letters
+// first. Real classes rely on this — report.cls sets \markboth{\MakeUppercase\…}.
+func TestMakeUppercaseExpandsArgument(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\begin{document}`+
+		`\def\cn{Contents}\MakeUppercase{\cn} \def\wd{HELLO}\MakeLowercase{\wd}\end{document}`), Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	if !strings.Contains(got, "CONTENTS") {
+		t.Errorf("\\MakeUppercase{\\cn} typeset %q, want it to contain CONTENTS (the cs expansion, shifted)", got)
+	}
+	if !strings.Contains(got, "hello") {
+		t.Errorf("\\MakeLowercase{\\wd} typeset %q, want hello", got)
+	}
+}
+
 // \providecommand defines a command only when it is not already defined, so a
 // fallback never clobbers an existing (engine or user) definition — unlike
 // \newcommand, which always (re)defines.

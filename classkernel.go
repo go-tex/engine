@@ -243,8 +243,14 @@ const LaTeX2eClassKernel = `
 % ── counter-format / case helpers (\@Roman/\@alph/\@Alph already defined) ────
 \def\@arabic#1{\number#1}
 \def\@roman#1{\romannumeral#1}
-\def\MakeUppercase#1{\uppercase{#1}}
-\def\MakeLowercase#1{\lowercase{#1}}
+% \MakeUppercase/\MakeLowercase expand their argument first, then case-shift it:
+% \uppercase only acts on explicit character tokens, so a control sequence such as
+% \contentsname or amsart's \shorttitle must be expanded to its letters before it
+% can be shifted. Skipping this both left cs arguments un-shifted and, via amsart's
+% \altucnm idiom (\MakeTextUppercase{\toks@{#1}}\edef#1{\the\toks@}), made
+% \shorttitle self-referential — an infinite loop when the running head expanded it.
+\def\MakeUppercase#1{\edef\@MakeCase@a{#1}\uppercase\expandafter{\@MakeCase@a}}
+\def\MakeLowercase#1{\edef\@MakeCase@a{#1}\lowercase\expandafter{\@MakeCase@a}}
 % ── running heads / marks (no page-head machinery here: accept and drop) ─────
 \def\markboth#1#2{}
 \def\markright#1{}
