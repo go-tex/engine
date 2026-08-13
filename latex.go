@@ -460,7 +460,10 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(LaTeX2eClassKernel); err != nil {
 		return err
 	}
-	return e.LoadFormat(LaTeX2eClassLead)
+	if err := e.LoadFormat(LaTeX2eClassLead); err != nil {
+		return err
+	}
+	return e.LoadFormat(AMSClassSubstrate)
 }
 
 // doNewcommand implements LaTeX's \newcommand / \renewcommand / \providecommand:
@@ -500,10 +503,22 @@ func (e *Engine) doNewcommandMode(provide bool) {
 		params = append(params, tok{ch: rune('0' + i), cat: catParam})
 	}
 	if name != "" {
-		e.define(name, &meaning{
+		m := &meaning{
 			kind: mMacro, params: params, body: body,
 			optArg: optArg && nargs >= 1, optDefault: optDefault,
-		}, false)
+		}
+		e.define(name, m, false)
+		// A command WITH an optional argument is a "robust" LaTeX command: latex.ltx
+		// splits it into a front end (\name) and an internal (the control sequence
+		// literally named "\name", reached as \csname\string\name\endcsname) that holds
+		// the [#1]#2… body. Class code rebinds the front end to a wrapper that calls
+		// that internal — amsart does exactly this for \title / \author
+		// (\edef\title{\@dblarg\@xp\@nx\csname\string\title\endcsname}). Bind the
+		// internal to the same body so the wrapper resolves to real code instead of an
+		// undefined \relax (which would leak the arguments and derail \maketitle).
+		if m.optArg {
+			e.define("\\"+name, m, false)
+		}
 	}
 }
 
