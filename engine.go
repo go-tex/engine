@@ -162,6 +162,14 @@ type Engine struct {
 	allocSkp         int  // next free \skip register handed out by \newskip
 	allocBox         int  // next free \box register handed out by \newsavebox
 
+	// token registers (see toks.go): \toks<n> / \newtoks-allocated registers store
+	// a token list each. A class's title/mark machinery (amsart's \andify, \toks@,
+	// \@temptokena) reads and rewrites them via \the\toks@ and \toks@\expandafter{…}.
+	// Stored globally (no group save-stack) — enough for the single-pass title
+	// assembly they perform.
+	toks      [][]tok
+	allocToks int
+
 	// page style (see pagenum.go): the page builder places a centred page number at
 	// the foot of each page when pageStyle is not "empty". pageNumStyle formats it.
 	pageStyle    string // "plain" ⇒ bottom-centred number; "empty" (default) ⇒ none
@@ -234,6 +242,7 @@ const (
 	mCountRef // \countdef / \newcount — an alias for a \count register (code = index)
 	mDimenRef // \dimendef / \newdimen — an alias for a \dimen register (code = index)
 	mSkipRef  // \skipdef / \newskip — an alias for a \skip register (code = index)
+	mToksRef  // \toksdef / \newtoks — an alias for a \toks register (code = index)
 	mBoxRef   // \newsavebox — an alias for a \box register (code = index)
 	mFont     // a font-switching control sequence defined by \font
 	mUndef
@@ -271,15 +280,15 @@ type saveItem struct {
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10} // allocators start at 10
-	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                                          // plain TeX \hsize = 6.5in
-	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                                          // plain TeX \vsize = 8.9in
-	e.baselineskip = 12 * unity                                                                     // 12pt
-	e.baseBaselineskip = e.baselineskip                                                             // setspace 1.0 ref
-	e.lineskip = unity                                                                              // 1pt
-	e.parindent = 20 * unity                                                                        // plain TeX \parindent = 20pt
-	e.columnsep = 10 * unity                                                                        // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
-	e.hyphenpenalty = 50                                                                            // plain TeX \hyphenpenalty
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10, allocToks: 10, toks: make([][]tok, 256)} // allocators start at 10
+	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                                                                                   // plain TeX \hsize = 6.5in
+	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                                                                                   // plain TeX \vsize = 8.9in
+	e.baselineskip = 12 * unity                                                                                                              // 12pt
+	e.baseBaselineskip = e.baselineskip                                                                                                      // setspace 1.0 ref
+	e.lineskip = unity                                                                                                                       // 1pt
+	e.parindent = 20 * unity                                                                                                                 // plain TeX \parindent = 20pt
+	e.columnsep = 10 * unity                                                                                                                 // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
+	e.hyphenpenalty = 50                                                                                                                     // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
 	e.stepLimit = maxExpandSteps // runaway-expansion ceiling (tests may lower it)
 	e.pageStyle = "empty"        // no page number until \pagestyle{plain}/\pagenumbering
@@ -309,6 +318,8 @@ func New() *Engine {
 	e.loadPrimitives()
 	e.loadMore()
 	e.loadClassPrims()
+	e.loadToksPrims()
+	e.loadAMSPrims()
 	return e
 }
 
@@ -801,7 +812,9 @@ func (e *Engine) stepToken(t tok) bool {
 			e.beginGroup()
 		case catEnd:
 			e.endGroup()
-		case catLetter, catOther:
+		case catLetter, catOther, catParam:
+			// catParam here is a stray literal '#' (a ## reduced by scanBody that was
+			// not consumed as a parameter char by a nested \def); typeset it as text.
 			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
 		case catSpace:
 			if e.inPar && e.curFont != nil {
@@ -904,6 +917,8 @@ func (e *Engine) execCS(t tok) bool {
 		e.dimenRefAssign(m.code, false) // \d=<dimen>
 	case mSkipRef:
 		e.skipRefAssign(m.code, false) // \s=<glue>
+	case mToksRef:
+		e.toksRefAssign(m.code) // \t{<toks>} or \t\otherreg
 	case mFont:
 		e.selectFont(m.font) // \rm etc. selects the current font (group-scoped)
 	case mPrim:
@@ -1211,6 +1226,10 @@ func roundDecimals(digs []int) int {
 // unit keyword that follows (TeX §453–458). Defaults to pt if none is recognised.
 func (e *Engine) applyUnit(intPart, f int) int {
 	e.skipOptSpace()
+	// Optional "true" prefix (TeX's magnification-independent units, e.g. .5truein).
+	// The engine has no \mag, so a true<unit> length equals the plain <unit>; consume
+	// the keyword and fall through to the ordinary unit scan.
+	e.scanKeyword("true")
 	a, ok := e.getXToken()
 	if !ok {
 		return intPart*unity + f // bare number ⇒ pt
@@ -1473,7 +1492,12 @@ func (e *Engine) scanBody() []tok {
 				return g
 			}
 			if n.cat == catParam && !n.cs_ {
-				g = append(g, chTok('#', catOther)) // ## → #
+				// ## → a single #, kept as a PARAMETER character (catParam), not catOther:
+				// TeX's halving preserves the #'s parameter-ness so a nested definition
+				// scanned from this body (amsart's \def\@andlistc##1{…##1…} inside
+				// \newcommand\nxandlist) still sees #1 as a parameter. A stray # that
+				// reaches the stomach is typeset as '#' by stepToken / the box builder.
+				g = append(g, tok{ch: '#', cat: catParam}) // ## → #
 			} else {
 				g = append(g, tok{ch: n.ch, cat: catParam}) // #digit → parameter
 			}

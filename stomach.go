@@ -467,7 +467,9 @@ func (e *Engine) buildBoxList() []node {
 			case catBegin:
 				depth++
 				e.beginGroup()
-			case catLetter, catOther:
+			case catLetter, catOther, catParam:
+				// catParam here is a stray literal '#' (a ## reduced by scanBody that
+				// was not consumed as a parameter char by a nested \def); typeset it.
 				if e.curFont != nil {
 					list = e.appendChar(list, t.ch)
 				}
@@ -654,9 +656,26 @@ func (e *Engine) setBox(i int, b *boxNode) {
 	}
 }
 
+// boxRegIndex reads a box-register reference: either a \newbox/\newsavebox-defined
+// control sequence (mBoxRef, e.g. amsart's \abstractbox) or a bare register number
+// (\setbox0). Without it \setbox\abstractbox would misparse and leak the '=' that
+// follows the register.
+func (e *Engine) boxRegIndex() int {
+	e.skipOptSpace()
+	if t, ok := e.getXToken(); ok {
+		if t.cs_ {
+			if m := e.eq[t.cs]; m != nil && m.kind == mBoxRef {
+				return m.code
+			}
+		}
+		e.back(t)
+	}
+	return e.scanInt()
+}
+
 // doSetbox handles \setbox<n>=<box>.
 func (e *Engine) doSetbox() {
-	i := e.scanInt()
+	i := e.boxRegIndex()
 	e.scanEquals()
 	e.setBox(i, e.scanBox())
 }

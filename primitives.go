@@ -41,14 +41,17 @@ var expandableSet = map[string]bool{
 	"the": true, "number": true, "romannumeral": true, "jobname": true,
 	"if": true, "ifnum": true, "ifx": true, "ifodd": true, "ifcase": true,
 	"iftrue": true, "iffalse": true, "else": true, "fi": true, "or": true, "ifcat": true,
-	"ifdim": true,
+	"ifdim":   true,
+	"ifmmode": true, "ifhmode": true, "ifvmode": true, "ifinner": true,
+	"ifvoid": true, "ifhbox": true, "ifvbox": true,
 }
 
 func isExpandable(name string) bool { return expandableSet[name] }
 
 func isIfPrim(name string) bool {
 	switch name {
-	case "if", "ifnum", "ifx", "ifodd", "ifcase", "iftrue", "iffalse", "ifcat", "ifdim":
+	case "if", "ifnum", "ifx", "ifodd", "ifcase", "iftrue", "iffalse", "ifcat", "ifdim",
+		"ifmmode", "ifhmode", "ifvmode", "ifinner", "ifvoid", "ifhbox", "ifvbox":
 		return true
 	}
 	return false
@@ -164,7 +167,29 @@ func (e *Engine) doGlobal() {
 		return
 	}
 	m := e.eq[t.cs]
-	if m == nil || m.kind != mPrim {
+	if m == nil {
+		return
+	}
+	// A \global-prefixed assignment through a register alias (\global\topskip42\p@,
+	// \global\@tempcnta…). The engine's registers are otherwise unscoped, so the
+	// global flag only matters for the \count/\dimen/\skip save stack; either way the
+	// value must be consumed so it is not typeset.
+	switch m.kind {
+	case mCountRef:
+		e.countRefAssign(m.code, true)
+		return
+	case mDimenRef:
+		e.dimenRefAssign(m.code, true)
+		return
+	case mSkipRef:
+		e.skipRefAssign(m.code, true)
+		return
+	case mToksRef:
+		e.toksRefAssign(m.code)
+		return
+	}
+	if m.kind != mPrim {
+		e.back(t) // best-effort: run it locally (global scope not modelled here)
 		return
 	}
 	switch m.name {
@@ -176,14 +201,20 @@ func (e *Engine) doGlobal() {
 		e.doLet(true)
 	case "count":
 		e.doCountAssign(true)
+	case "dimen":
+		e.doDimenAssign(true)
 	case "advance":
 		e.doAdvance(true)
 	case "multiply":
 		e.doMultiply(true)
+	case "divide":
+		e.doDivide(true)
 	case "chardef":
 		e.doChardef(true)
 	case "catcode":
 		e.doCatcode(true)
+	default:
+		e.back(t) // \global\setbox…, \global\toks…, etc.: run the assignment locally
 	}
 }
 
@@ -645,6 +676,12 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
+				return
+			case m.kind == mToksRef:
+				e.push(e.toksValue(m.code))
+				return
+			case m.kind == mPrim && m.name == "toks":
+				e.push(e.toksValue(e.scanInt()))
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))

@@ -115,6 +115,20 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	e.define("opt@"+name+ext, &meaning{kind: mMacro, body: stringToToks(strings.Join(passed, ","))}, true)
 	// \CurrentOption starts empty for this file.
 	e.define("CurrentOption", &meaning{kind: mMacro}, true)
+	// \@currname / \@currext name the file being loaded, as \ProvidesClass/Package's
+	// caller (\documentclass/\usepackage) sets them in real LaTeX; a class reads them
+	// (amsart's opening \csname ver@\@currname.\@currext\endcsname and its
+	// \@currnamestack scan). ext is stored without the leading dot ("cls"/"sty").
+	extNoDot := strings.TrimPrefix(ext, ".")
+	e.define("@currname", &meaning{kind: mMacro, body: stringToToks(name)}, true)
+	e.define("@currext", &meaning{kind: mMacro, body: stringToToks(extNoDot)}, true)
+	// \@currnamestack is a flat brace-group list the class dissects with a delimited
+	// macro (\@tempa#1#2\@nil); a single {name}{ext} frame satisfies that scan.
+	stack := append([]tok{chTok('{', catBegin)}, stringToToks(name)...)
+	stack = append(stack, chTok('}', catEnd), chTok('{', catBegin))
+	stack = append(stack, stringToToks(extNoDot)...)
+	stack = append(stack, chTok('}', catEnd))
+	e.define("@currnamestack", &meaning{kind: mMacro, body: stack}, true)
 	// Splice: file body, then the end-of-file hook (\AtEndOfPackage/Class code) and
 	// a marker control sequence that pops the frame. The marker tokenizes with @
 	// still a letter, so its name is valid. Line endings are normalised to LF first:
@@ -181,7 +195,6 @@ func (e *Engine) curFrame() *loadFrame {
 // amsmath); listing them makes that intent explicit and keeps a same-named bundled
 // class from being loaded unvetted.
 var emulatedClasses = map[string]bool{
-	"amsart": true,
 	"letter": true, "proc": true, "slides": true, "minimal": true,
 }
 
