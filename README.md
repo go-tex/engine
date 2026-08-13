@@ -4,17 +4,23 @@
 [![Go](https://img.shields.io/badge/go-1.26.4%2B-00ADD8)](https://go.dev/dl/)
 [![status](https://img.shields.io/badge/status-engine%20core%20(in%20progress)-orange)](#status)
 
-**A pure-Go (no cgo) TeX engine, under construction — aimed at functional parity
-with a TeX distribution, not a subset.** This module is the engine's **mouth and
-gullet**: a faithful re-implementation of TeX's category-code tokenizer, the
-equivalents table (`eqtb`) with grouping/scoping, macro definition with
-**delimited parameters**, and the full **expansion** machinery.
+**A pure-Go (no cgo) TeX engine aimed at functional parity with a TeX
+distribution, not a subset.** It is a faithful re-implementation of TeX — the
+category-code tokenizer, the equivalents table (`eqtb`) with grouping/scoping,
+macro definition with **delimited parameters** and the full **expansion**
+machinery (the mouth and gullet); a scaled-point box/glue/penalty **stomach**
+with Knuth–Plass line breaking and a cost-based page builder; math via
+`go-tex/math`; OpenType fonts; and **PDF + SVG** output — and on top of it, it
+**loads and runs the genuine LaTeX classes**: `\documentclass{article}`,
+`{report}` and `{book}` execute the real, embedded `.cls` files, in native builds
+and in the browser (`js/wasm`), with no TeXLive.
 
 It is developed the way parity is actually reachable — **reimplement the engine
-faithfully, gated by TeX's own conformance oracle** — and later run the *real*
-LaTeX kernel and packages on it (they are TeX macros), diffing output against
-`pdftex`/`xetex`. The primary gate here is the **conformance ratchet**
-(`TestConformance`): TeX snippets checked byte-for-byte against real-TeX output.
+faithfully, gated by objective oracles** — then run the *real* LaTeX classes and
+packages on it (they are TeX macros). Two gates hold the line: the **conformance
+ratchet** (`TestConformance`, TeX snippets checked byte-for-byte against real-TeX
+output) and a **fidelity check** that compares whole-document prose against a real
+LaTeX engine (`tectonic`).
 
 ## Working today (verified, faithful)
 
@@ -76,26 +82,51 @@ guard** bounds macro expansion so a pathological or partially-supported file can
 never hang (it stops with partial output in lenient mode, an error in strict).
 Distribution-heavy packages the engine emulates natively or better as stubs
 (`geometry`, `tikz`, `hyperref`, `graphicx`, encodings, …) are not loaded from
-disk. Base classes (`article`, `amsart`) are the next embed — the kernel gap to
-run them is mapped.
+disk.
+
+**The standard base classes run for real.** `\documentclass{article}`,
+`{report}` and `{book}` load and execute the **genuine, embedded LaTeX classes**
+(`article.cls`/`report.cls`/`book.cls` + their size option files, LPPL, verbatim)
+— not an emulation. Everything they need is in place: the LaTeX2e kernel helpers,
+a class-kernel substrate (constants, registers, `\if@` flags, NFSS font-switch
+aliases), `\newcommand*`/`\DeclareOldFontCommand`, the rubber-glue and
+`<factor><internal-dimen>` length scanner, numbered `\@startsection` with
+`\@tocentry`, `\secdef` via `\@dblarg` (so `\chapter` works), `\@float`
+figure/table captions, `\@starttoc` bridged to the engine's two-pass contents
+table, and — the keystone — **stable source lines** (loading a 644-line class no
+longer shifts the line numbers the editor maps glyphs back to). A real
+`\documentclass{article}` document typesets a numbered title, a dotted
+`\tableofcontents`, numbered sections, and numbered figure/table captions, and it
+reproduces the reference engine's prose on the fidelity gate. Because the class
+files are `go:embed`ed and the resolver needs no filesystem, **the real classes
+also run in the `js/wasm` build — genuine LaTeX class rendering in the browser,
+with no TeXLive and no server.** (`amsart` still uses the emulation; it
+additionally needs amsmath.)
 
 ## Status & roadmap to parity
 
-This is **stage 1** (mouth + gullet). The remaining stages, each gated by an
-objective oracle:
+Each stage is gated by an objective oracle:
 
-1. ✅ **Mouth + gullet** — tokenizer, `eqtb`, macros, expansion (this module).
-2. ⬜ **Stomach** — box/glue/penalty model, h/v lists, **Knuth–Plass** line
-   breaking, page builder, `\halign` — gated by the **TRIP test**.
-3. ⬜ **Math** (Appendix G) — `go-tex/math` is the starting point.
-4. ⬜ **Fonts** — TFM + OpenType (via `go-opentype`).
-5. ⬜ **Output** — DVI → **PDF** (via `go-pdfkit`), then run the real
-   `latex.ltx` + packages, gated by **PDF-diff vs pdftex/xetex**.
+1. ✅ **Mouth + gullet** — tokenizer, `eqtb`, macros, expansion.
+2. ✅ **Stomach** — box/glue/penalty model in scaled points, h/v lists,
+   Knuth–Plass line breaking with an emergency pass, cost-based page builder,
+   `\halign`.
+3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
+   (vector output).
+4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
+   assets, with kerning and ligatures.
+5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
+   text) and self-contained **SVG** pages; the SVG carries a source map for
+   click-to-line.
+6. ✅ **Real classes** — `\documentclass{article|report|book}` loads and runs the
+   genuine embedded LaTeX class (see above), reproducing the reference engine's
+   prose on the fidelity gate — in native builds **and** in `js/wasm`.
 
-Because it is under construction, line coverage (currently ~84%) rises as
-subsystems land; the meaningful gate is the growing conformance ratchet, not a
-fixed coverage figure. Pure Go, CGO=0, `go vet` clean, green across six 64-bit
-arches plus `js/wasm` and `wasip1/wasm`.
+Next: more real classes/packages (`amsart` + `amsmath`), a broader real-document
+conformance corpus (PDF-diff vs pdftex/xetex), and the TRIP test. Coverage ~91%;
+the meaningful gate is the conformance ratchet plus the fidelity check against a
+real LaTeX engine, not a fixed coverage figure. Pure Go, CGO=0, `go vet` clean,
+green across three 64-bit arches under qemu plus `js/wasm` and `wasip1/wasm`.
 
 ## License
 
