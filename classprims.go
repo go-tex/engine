@@ -141,7 +141,13 @@ const LaTeX2eClassLead = `
 \def\@gxnum#1#2#3#4{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#4}\else\refstepcounter{#1}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#4}\@gxhead{#3}{\csname the#1\endcsname\quad#4}\fi}
 \def\@gxhead#1#2{\par\medskip\noindent{#1 #2}\par}
 \def\@afterheading{}
-\def\secdef#1#2{\@ifstar{#2}{#1}}
+% \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
+% optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title
+% as the optional one too — without this, \chapter{T} mis-parses (\@chapter would
+% scan for a '[' that is not there and drop the title).
+\def\secdef#1#2{\@ifstar{#2}{\@dblarg{#1}}}
+\long\def\@dblarg#1{\@ifnextchar[{#1}{\@xdblarg{#1}}}
+\long\def\@xdblarg#1#2{#1[{#2}]{#2}}
 \def\@dottedtocline#1#2#3#4#5{}
 \def\@textsuperscript#1{#1}
 % \@thanks accumulates \thanks footnotes for \maketitle; \thanks is best-effort

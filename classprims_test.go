@@ -360,3 +360,28 @@ func TestLoadDoesNotShiftSourceLines(t *testing.T) {
 		}
 	})
 }
+
+// \documentclass{report} and {book} load their real embedded classes and typeset
+// numbered chapters ("Chapter 1"), chapter-scoped section numbers ("1.1"), the
+// titles, and the body — \secdef going through \@dblarg is what lets \chapter's
+// \@chapter[#1]#2 receive its title.
+func TestReportBookLoadRealClass(t *testing.T) {
+	for _, cls := range []string{"report", "book"} {
+		src := "\\documentclass{" + cls + "}\\begin{document}" +
+			"\\chapter{First}\\section{Sub}Body text here.\\end{document}"
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Errorf("%s: %v", cls, err)
+			continue
+		}
+		if !e.loadedPackages[cls] {
+			t.Errorf("%s not loaded as the real class", cls)
+		}
+		got := pageChars(e)
+		for _, w := range []string{"Chapter", "First", "1.1", "Sub", "Body"} {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: missing %q in %q", cls, w, got)
+			}
+		}
+	}
+}

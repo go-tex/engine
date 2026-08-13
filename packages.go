@@ -172,15 +172,16 @@ func (e *Engine) curFrame() *loadFrame {
 // ── \documentclass / \usepackage / \RequirePackage / \LoadClass ─────────────
 
 // emulatedClasses are the standard classes still served by the built-in emulation
-// rather than a real .cls. article is NOT here: the engine now loads the real,
-// embedded article.cls (the class kernel — \@startsection numbering, \list, NFSS
-// aliases, \@float, \@starttoc, rubber glue, source-line stability — is complete
-// enough that it passes the conformance and fidelity gates). The classes below are
-// not embedded, so \documentclass{report|book|amsart|…} resolves nothing and falls
-// back to the emulation anyway; listing them makes that intent explicit and keeps a
-// bundled report.cls of the same name from being loaded unvetted.
+// rather than a real .cls. article/report/book are NOT here: the engine loads their
+// real, embedded classes (the class kernel — \@startsection numbering, \secdef via
+// \@dblarg for \chapter, \list, NFSS aliases, \@float, \@starttoc, rubber glue,
+// source-line stability — is complete enough that they pass the conformance and
+// fidelity gates). The classes below are not embedded, so \documentclass{amsart|…}
+// resolves nothing and falls back to the emulation anyway (amsart would also need
+// amsmath); listing them makes that intent explicit and keeps a same-named bundled
+// class from being loaded unvetted.
 var emulatedClasses = map[string]bool{
-	"report": true, "book": true, "amsart": true,
+	"amsart": true,
 	"letter": true, "proc": true, "slides": true, "minimal": true,
 }
 
