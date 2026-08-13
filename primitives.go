@@ -89,6 +89,12 @@ func (e *Engine) loadPrimitives() {
 	// grouping & misc
 	e.prim("begingroup", func(e *Engine) { e.beginGroup() })
 	e.prim("endgroup", func(e *Engine) { e.endGroup() })
+	// \bgroup and \egroup are \let to the group-opening/closing characters, so they
+	// act as an implicit { and } (TeX §1063). Real classes rely on this, e.g.
+	// amsart's \setbox\abstractbox=\vtop\bgroup … \egroup — without it the box never
+	// opens and its material (the abstract, and everything after) leaks/vanishes.
+	e.define("bgroup", &meaning{kind: mLetChar, ch: '{', cat: catBegin}, true)
+	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
 	e.prim("relax", func(e *Engine) {})
 	e.prim("message", func(e *Engine) { e.doMessage() })
 

@@ -844,11 +844,31 @@ func (e *Engine) mainLoop() {
 	}
 }
 
+// implicitChar resolves an implicit character token: a control sequence \let to a
+// character (mLetChar, e.g. \bgroup={ or \egroup=}). In the stomach and while
+// scanning box material such a token acts as its character — opening or closing a
+// group and so on — exactly as TeX treats implicit character tokens. Meaning-level
+// operators (\ifx, \let, \string, \meaning) are unaffected: they read tokens
+// without dispatching them through here. Returns the character token and true when
+// t is such a control sequence.
+func (e *Engine) implicitChar(t tok) (tok, bool) {
+	if !t.cs_ {
+		return t, false
+	}
+	if m := e.meaningOf(t); m != nil && m.kind == mLetChar {
+		return tok{ch: m.ch, cat: m.cat}, true
+	}
+	return t, false
+}
+
 // stepToken processes one already-expanded token in the main horizontal/vertical
 // loop: grouping, characters, interword space, math shift, or a control sequence.
 // It returns false when a primitive asks the loop to stop. Shared by mainLoop and
 // the sandboxed builds (e.g. a footnote body) that run material to completion.
 func (e *Engine) stepToken(t tok) bool {
+	if c, ok := e.implicitChar(t); ok {
+		t = c // an implicit { / } / space etc. acts as its character in the stomach
+	}
 	if !t.cs_ {
 		switch t.cat {
 		case catBegin:

@@ -35,6 +35,31 @@ func leadingOffset(b *boxNode) int {
 	return off
 }
 
+// \bgroup and \egroup act as an implicit { and }: a box opened with \vbox\bgroup
+// captures its material into the register (rather than leaking it to the page),
+// and the pair opens/closes a group like braces. Real classes depend on this —
+// amsart's \setbox\abstractbox=\vtop\bgroup … \egroup.
+func TestBgroupEgroupImplicitBraces(t *testing.T) {
+	e := New()
+	if _, err := e.Run(`\setbox0=\vbox\bgroup\hbox{x}\hbox{y}\egroup`); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if e.box[0] == nil {
+		t.Fatal("box0 void: \\vbox\\bgroup…\\egroup did not capture into the register")
+	}
+	if got := len(topBoxes(e.box[0].list)); got != 2 {
+		t.Errorf("box0 holds %d inner boxes, want 2 (the \\bgroup body leaked instead of being captured)", got)
+	}
+	// The pair scopes a definition exactly as { } would.
+	e2 := New()
+	if _, err := e2.Run(`\bgroup\def\gone{Y}\egroup`); err != nil {
+		t.Fatalf("run2: %v", err)
+	}
+	if e2.eq["gone"] != nil {
+		t.Error("\\def inside \\bgroup…\\egroup leaked past the group")
+	}
+}
+
 // \makebox[50pt]{x} forces the box to exactly 50pt regardless of the content's
 // natural 5pt width.
 func TestMakeboxWidth(t *testing.T) {

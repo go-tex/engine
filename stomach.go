@@ -398,10 +398,16 @@ func (e *Engine) makeBox(kind boxKind) *boxNode {
 		mode, target = packSpread, e.scanDimen()
 	}
 	e.skipOptSpace()
-	if t, ok := e.getXToken(); !ok || !(t.cat == catBegin && !t.cs_) {
-		if ok {
-			e.back(t)
-		}
+	t, ok := e.getXToken()
+	if !ok {
+		return &boxNode{kind: kind} // malformed: empty box
+	}
+	rt := t
+	if c, isChar := e.implicitChar(t); isChar {
+		rt = c // accept \bgroup as the box's opening brace
+	}
+	if !(rt.cat == catBegin && !rt.cs_) {
+		e.back(t)
 		return &boxNode{kind: kind} // malformed: empty box
 	}
 	e.beginGroup()
@@ -455,6 +461,9 @@ func (e *Engine) buildBoxList() []node {
 		t, ok := e.getXToken()
 		if !ok {
 			return list
+		}
+		if c, isChar := e.implicitChar(t); isChar {
+			t = c // \egroup closes the box, \bgroup opens a nested group
 		}
 		if !t.cs_ {
 			switch t.cat {
