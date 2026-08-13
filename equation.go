@@ -81,6 +81,12 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 			break
 		}
 		switch {
+		case t.cs_ && t.cs != "end" && e.expandsToEnd(t):
+			// A user macro standing in for \end{...} (e.g. \newcommand\enq{\end{equation}}):
+			// its tokens are read raw here, so without expanding it the loop would never
+			// see \end and would swallow the rest of the document. Expand it in place and
+			// re-read; the real \end token surfaces on the next iteration.
+			e.expandMacro(e.meaningOf(t))
 		case t.cs_ && t.cs == "end":
 			if e.readBraceName() == name {
 				return b.String(), meta
@@ -101,6 +107,20 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 		}
 	}
 	return b.String(), meta
+}
+
+// expandsToEnd reports whether the control sequence t is a parameterless macro
+// whose replacement text begins with \end — i.e. a user shorthand for the
+// environment's closing tag (\newcommand\enq{\end{equation}}). Such a macro is
+// otherwise read raw by the math-body scanner and would hide the \end. The check
+// is deliberately narrow (no parameters, body[0] == \end) so ordinary math macros
+// like \R or \mathbb are never expanded here, keeping the math source verbatim.
+func (e *Engine) expandsToEnd(t tok) bool {
+	m := e.meaningOf(t)
+	if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
+		return false
+	}
+	return m.body[0].cs_ && m.body[0].cs == "end"
 }
 
 // readTag reads a \tag argument: an optional leading * (bare, no parentheses) then a

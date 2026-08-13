@@ -52,10 +52,7 @@ func (e *Engine) doInput() {
 	if file == "" {
 		return
 	}
-	if !hasExtension(file) {
-		file += ".tex"
-	}
-	data, err := os.ReadFile(file)
+	data, err := e.readInput(file)
 	if err != nil {
 		if e.tolerant() {
 			if e.skippedCS == nil {
@@ -111,6 +108,33 @@ func (e *Engine) scanFileName() string {
 		b = append(b, u.ch)
 	}
 	return string(b)
+}
+
+// inputCandidates returns the filenames \input tries, in order. TeX's default
+// extension is .tex, but a dot in the basename does not reliably mean an
+// extension is present: real section files are named "1.Introduction",
+// "2.1.prelims", etc., whose real file is "1.Introduction.tex". So when the name
+// has a dot we try it verbatim first (it may already be complete, e.g. foo.tex or
+// data.csv) and fall back to name+.tex; when it has no dot we append .tex first
+// (TeX's rule) and try the bare name second.
+func inputCandidates(file string) []string {
+	if hasExtension(file) {
+		return []string{file, file + ".tex"}
+	}
+	return []string{file + ".tex", file}
+}
+
+// readInput reads an \input file, applying the candidate-name search. It returns
+// the first candidate that reads successfully, or the last error otherwise.
+func (e *Engine) readInput(file string) ([]byte, error) {
+	var err error
+	var data []byte
+	for _, c := range inputCandidates(file) {
+		if data, err = os.ReadFile(c); err == nil {
+			return data, nil
+		}
+	}
+	return nil, err
 }
 
 // hasExtension reports whether the filename's basename contains a dot.

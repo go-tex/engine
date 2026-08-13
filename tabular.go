@@ -441,13 +441,34 @@ func (e *Engine) scanColSpec() ([]byte, []int, []bool) {
 		}
 		return aligns, pwidths, []bool{}
 	}
+	// depth tracks {..} groups nested in the spec — the array-package prefixes
+	// @{sep}, >{decl}, <{decl}, !{sep} each brace a group whose contents are not
+	// column letters. Without this, the first inner } (e.g. from @{}) would be
+	// mistaken for the spec's closing brace, leaking the rest of the preamble into
+	// the body scanner (which then never finds \end{tabular} and swallows the
+	// document). Only a } at depth 0 closes the spec.
+	depth := 0
 	for {
 		u, ok := e.getNext()
-		if !ok || (u.cat == catEnd && !u.cs_) {
+		if !ok {
 			break
 		}
 		if u.cs_ {
 			continue
+		}
+		switch {
+		case u.cat == catBegin:
+			depth++
+			continue
+		case u.cat == catEnd:
+			if depth == 0 {
+				goto done // the spec's own closing brace
+			}
+			depth--
+			continue
+		}
+		if depth > 0 {
+			continue // inside a @{}/>{}/<{}/!{} group: not column letters
 		}
 		switch u.ch {
 		case 'l', 'c', 'r':
@@ -466,6 +487,7 @@ func (e *Engine) scanColSpec() ([]byte, []int, []bool) {
 			ruleGaps[col] = true
 		}
 	}
+done:
 	vrules := make([]bool, len(aligns)+1)
 	for g := range ruleGaps {
 		if g >= 0 && g <= len(aligns) {
