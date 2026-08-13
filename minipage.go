@@ -50,6 +50,14 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			break // premature end of input: return whatever we gathered
 		}
 		switch {
+		case t.cs_ && t.cs != "end" && t.cs != "begin" && e.expandsToEnd(t):
+			// A user macro standing in for \end{...} (e.g. \newcommand\emp{\end{minipage}}):
+			// read raw here it hides the \end, so the body scanner would run to EOF and
+			// swallow the rest of the document. Expand it in place so the real \end token
+			// surfaces next iteration (where the depth bookkeeping then handles it).
+			// Narrow: only a parameterless macro whose body begins with \end (see
+			// expandsToEnd), so ordinary body macros pass through into the body verbatim.
+			e.expandMacro(e.meaningOf(t))
 		case t.cs_ && t.cs == "end":
 			n := e.readBraceName()
 			if n == name {

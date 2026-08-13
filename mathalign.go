@@ -277,6 +277,13 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 			break
 		}
 		switch {
+		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
+			// A user macro standing in for \end{...} (e.g. \newcommand\enq{\end{align}}):
+			// read raw here it would never be recognised and the align body would run
+			// to EOF, swallowing the rest of the document. Expand it in place so the
+			// real \end token surfaces on the next iteration. Narrow: only a
+			// parameterless macro whose body begins with \end (see expandsToEnd).
+			e.expandMacro(e.meaningOf(t))
 		case depth == 0 && t.cs_ && t.cs == "end":
 			if e.readBraceName() == name {
 				endRow()

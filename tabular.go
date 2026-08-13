@@ -580,6 +580,13 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			break
 		}
 		switch {
+		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
+			// A user macro standing in for \end{...} (e.g. \newcommand\etab{\end{tabular}}):
+			// read raw here it hides the \end, so the body scanner would run to EOF and
+			// swallow the rest of the document. Expand it in place so the real \end token
+			// surfaces next iteration. Narrow: only a parameterless macro whose body
+			// begins with \end (see expandsToEnd), so verbatim cell content is untouched.
+			e.expandMacro(e.meaningOf(t))
 		case depth == 0 && t.cs_ && t.cs == "end":
 			if name := e.readBraceName(); name == env {
 				endRow()

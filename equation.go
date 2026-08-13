@@ -112,15 +112,27 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 // expandsToEnd reports whether the control sequence t is a parameterless macro
 // whose replacement text begins with \end — i.e. a user shorthand for the
 // environment's closing tag (\newcommand\enq{\end{equation}}). Such a macro is
-// otherwise read raw by the math-body scanner and would hide the \end. The check
-// is deliberately narrow (no parameters, body[0] == \end) so ordinary math macros
-// like \R or \mathbb are never expanded here, keeping the math source verbatim.
-func (e *Engine) expandsToEnd(t tok) bool {
+// otherwise read raw by the math-body scanner and would hide the \end. It is a
+// thin alias for expandsToCloseCS with the closing cs "end".
+func (e *Engine) expandsToEnd(t tok) bool { return e.expandsToCloseCS(t, "end") }
+
+// expandsToCloseCS reports whether the control sequence t is a parameterless
+// macro whose replacement text begins with the control sequence named close —
+// i.e. a user shorthand that stands in for a raw-token scanner's terminator
+// (\newcommand\enq{\end{equation}} for a \end-hunting scanner, or
+// \newcommand\dclose{\]} for a \[…\] scanner that closes on \]). Such a macro is
+// read raw by an environment/argument body scanner, so without expanding it the
+// terminator token never surfaces and the scanner swallows the rest of the input.
+// The check is deliberately narrow — no parameters and body[0] == the exact close
+// cs — so ordinary content macros (\R, \mathbb, or a user \def that merely mentions
+// the close cs mid-body) are never expanded here, keeping the scanned source and
+// verbatim cells intact.
+func (e *Engine) expandsToCloseCS(t tok, close string) bool {
 	m := e.meaningOf(t)
 	if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
 		return false
 	}
-	return m.body[0].cs_ && m.body[0].cs == "end"
+	return m.body[0].cs_ && m.body[0].cs == close
 }
 
 // readTag reads a \tag argument: an optional leading * (bare, no parentheses) then a

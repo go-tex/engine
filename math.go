@@ -169,6 +169,16 @@ func (e *Engine) collectMathUntilCS(close string) string {
 		if !ok || (t.cs_ && t.cs == close) {
 			break
 		}
+		if t.cs_ && t.cs != close && e.expandsToCloseCS(t, close) {
+			// A user macro standing in for the closing \] or \) (e.g.
+			// \newcommand\dclose{\]}): read raw here it hides the terminator, so the
+			// scanner would run to EOF and swallow the rest of the document. Expand it
+			// in place so the real close cs surfaces next iteration. Narrow: only a
+			// parameterless macro whose body begins with the exact close cs, so ordinary
+			// math macros stay verbatim in the collected source.
+			e.expandMacro(e.meaningOf(t))
+			continue
+		}
 		if t.cs_ {
 			b.WriteByte('\\')
 			b.WriteString(t.cs)

@@ -89,6 +89,180 @@ func TestExpandsToEndIsNarrow(t *testing.T) {
 	}
 }
 
+// topLevelHas reports whether some top-level node of the main vertical list carries
+// `want` in its text without `notWith`. It distinguishes "content escaped the
+// environment box and became its own page-level material" (fix works) from "content
+// was swallowed into the environment's box" (the truncation bug): when an env-body
+// scanner runs to EOF, the trailing prose is trapped inside the table/box and every
+// node that mentions `want` also mentions the in-env marker.
+func topLevelHas(mvl []node, want, notWith string) bool {
+	for _, n := range mvl {
+		t := mvlText([]node{n})
+		if strings.Contains(t, want) && !strings.Contains(t, notWith) {
+			return true
+		}
+	}
+	return false
+}
+
+// A user macro standing in for \end is read raw by the align/gather body scanner
+// (collectAlignBody). Unless it is expanded there, the scanner never sees \end and
+// runs to EOF: the trailing prose is fed to the math renderer (or dropped) instead
+// of reaching the page. Same swallow class as the equation fix, now covered for
+// align, gather and the other amsmath alignments that share collectAlignBody.
+func TestMacroWrappedEndClosesAlign(t *testing.T) {
+	for _, env := range []string{"align", "gather"} {
+		src := `\documentclass{article}
+\newcommand{\eqx}{\end{` + env + `}}
+\begin{document}
+BEFOREMARK
+\begin{` + env + `} x = y \eqx
+AFTERMARK
+\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("%s: compile: %v", env, err)
+		}
+		txt := mvlText(e.mvl)
+		if !strings.Contains(txt, "BEFOREMARK") {
+			t.Errorf("%s: text before the env is missing; got %q", env, txt)
+		}
+		// When the body scanner swallows to EOF the prose becomes math source (SVG),
+		// so it never surfaces as page text; its presence proves the env closed.
+		if !strings.Contains(txt, "AFTERMARK") {
+			t.Fatalf("%s: macro-wrapped \\end failed to close the env; body after it was swallowed; got %q", env, txt)
+		}
+	}
+}
+
+// A user macro standing in for \end{tabular} is read raw by collectTabularBody.
+// Unless expanded, the scanner runs to EOF and the rest of the document is trapped
+// as extra table cells. The fix closes the table so trailing prose is page-level
+// material again.
+func TestMacroWrappedEndClosesTabular(t *testing.T) {
+	const src = `\documentclass{article}
+\newcommand{\etab}{\end{tabular}}
+\begin{document}
+\begin{tabular}{cc}
+CELLMARK & beta \\ gamma & delta \etab
+
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "CELLMARK") {
+		t.Errorf("tabular cell missing; got %q", txt)
+	}
+	// Swallowed prose lands inside the table box (still rendered), so "contains
+	// AFTERMARK" is not enough — assert it escaped the table as its own page material.
+	if !topLevelHas(e.mvl, "AFTERMARK", "CELLMARK") {
+		t.Fatalf("macro-wrapped \\end failed to close the tabular; trailing prose stayed inside the table; got %q", txt)
+	}
+}
+
+// A user macro standing in for \end{minipage} is read raw by collectEnvBody. Unless
+// expanded, the minipage never closes and the rest of the document is typeset inside
+// its narrow box. The fix closes it so trailing prose is a full-width paragraph.
+func TestMacroWrappedEndClosesMinipage(t *testing.T) {
+	const src = `\documentclass{article}
+\newcommand{\emp}{\end{minipage}}
+\begin{document}
+\begin{minipage}{3cm}
+INSIDEMARK
+\emp
+
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "INSIDEMARK") {
+		t.Errorf("minipage body missing; got %q", txt)
+	}
+	if !topLevelHas(e.mvl, "AFTERMARK", "INSIDEMARK") {
+		t.Fatalf("macro-wrapped \\end failed to close the minipage; trailing prose stayed inside the box; got %q", txt)
+	}
+}
+
+// A user macro standing in for the closing \] is read raw by collectMathUntilCS.
+// Unless expanded, the display-math scanner runs to EOF and the rest of the document
+// becomes math source instead of page text. The fix surfaces the real \].
+func TestMacroWrappedCloseClosesDisplayMath(t *testing.T) {
+	const src = `\documentclass{article}
+\newcommand{\dc}{\]}
+\begin{document}
+BEFOREMARK
+\[ x = y \dc
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "BEFOREMARK") {
+		t.Errorf("text before the display math is missing; got %q", txt)
+	}
+	if !strings.Contains(txt, "AFTERMARK") {
+		t.Fatalf("macro-wrapped \\] failed to close the display math; body after it was swallowed; got %q", txt)
+	}
+}
+
+// Verbatim must NOT expand anything: a literal \end{equation} inside a verbatim block
+// is ordinary text, and only a literal \end{verbatim} terminates it. This guards the
+// deliberate decision to leave the raw-buffer verbatim/lstlisting scanners untouched.
+func TestVerbatimKeepsLiteralEndVerbatim(t *testing.T) {
+	const src = `\documentclass{article}
+\newcommand{\enq}{\end{equation}}
+\begin{document}
+\begin{verbatim}
+\end{equation} and \enq stay literal here
+\end{verbatim}
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	// The literal \end{equation} and \enq are rendered verbatim (their letters reach
+	// the page), and the block terminated only at \end{verbatim} so AFTERMARK follows.
+	if !strings.Contains(txt, "equation") || !strings.Contains(txt, "enq") {
+		t.Errorf("verbatim did not keep its literal \\end text; got %q", txt)
+	}
+	if !strings.Contains(txt, "AFTERMARK") {
+		t.Fatalf("verbatim block did not terminate at \\end{verbatim}; got %q", txt)
+	}
+}
+
+// expandsToCloseCS (which expandsToEnd delegates to) must stay narrow for any close
+// cs: only a parameterless macro whose body BEGINS with the exact close cs qualifies.
+// A macro that merely mentions the close cs mid-body, or wraps a different cs, is not
+// a shorthand and must not be expanded away by a body scanner.
+func TestExpandsToCloseCSIsNarrow(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	// \dc -> \]  : a genuine shorthand for the \[ … \] closer.
+	e.define("dc", &meaning{kind: mMacro, body: []tok{csTok("]")}}, false)
+	// \midend -> x\end{eq} : \end appears mid-body, not at position 0 — not a shorthand.
+	e.define("midend", &meaning{kind: mMacro, body: []tok{chTok('x', catLetter), csTok("end"), chTok('{', catBegin), chTok('e', catLetter), chTok('q', catLetter), chTok('}', catEnd)}}, false)
+
+	if !e.expandsToCloseCS(csTok("dc"), "]") {
+		t.Error("a macro whose body begins with the close cs should be recognised")
+	}
+	if e.expandsToCloseCS(csTok("dc"), "end") {
+		t.Error("\\dc wraps \\], not \\end; must not match the \\end closer")
+	}
+	if e.expandsToEnd(csTok("midend")) {
+		t.Error("a macro with \\end mid-body must not be treated as an \\end shorthand")
+	}
+}
+
 // \input names whose basename contains a dot (1.Introduction, 2.1.prelims) must
 // still resolve to <name>.tex. The old heuristic treated the dot as an extension
 // and never appended .tex, so every section was dropped. Regression for arXiv
