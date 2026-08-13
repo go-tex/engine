@@ -385,3 +385,22 @@ func TestReportBookLoadRealClass(t *testing.T) {
 		}
 	}
 }
+
+// The common LaTeX text symbols render as real glyphs — including the ones whose
+// ASCII form has a special catcode (\ ~ ^ _ { }), produced via \char so they work
+// in any context. (A real document, and the wasm demo's sample, use these.)
+func TestTextSymbolsRender(t *testing.T) {
+	src := `\documentclass{article}\begin{document}` +
+		`A\textbackslash B\textasciitilde C\textasciicircum D\textunderscore E\textbar ` +
+		`F\textdagger G\textsection H\textcopyright I\textdegree\end{document}`
+	e, err := compile([]byte(src), Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	for _, r := range []string{"\\", "~", "^", "_", "|", "†", "§", "©", "°"} {
+		if !strings.Contains(got, r) {
+			t.Errorf("text symbol %q did not render: %q", r, got)
+		}
+	}
+}

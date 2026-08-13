@@ -267,5 +267,34 @@ const LaTeX2eClassKernel = `
 \def\textemdash{—}
 \def\textasteriskcentered{*}
 \def\textperiodcentered{·}
+% Symbols whose ASCII form has a special catcode are produced with \char so they
+% survive in any context (\ ~ ^ _ { } are esc/active/sup/sub/begin/end):
+\def\textbackslash{\char92\relax}
+\def\textasciitilde{\char126\relax}
+\def\textasciicircum{\char94\relax}
+\def\textunderscore{\char95\relax}
+\def\textbraceleft{\char123\relax}
+\def\textbraceright{\char125\relax}
+% Ordinary-catcode ASCII and Unicode glyphs:
+\def\textbar{|}
+\def\textless{<}
+\def\textgreater{>}
+\def\textquotesingle{'}
+\def\textquotedbl{"}
+\def\textquoteleft{‘}
+\def\textquoteright{’}
+\def\textquotedblleft{“}
+\def\textquotedblright{”}
+\def\textdagger{†}
+\def\textdaggerdbl{‡}
+\def\textsection{§}
+\def\textparagraph{¶}
+\def\textregistered{®}
+\def\textcopyright{©}
+\def\texttrademark{™}
+\def\textdegree{°}
+\def\textpm{±}
+\def\textmu{µ}
+\def\textbardbl{‖}
 \catcode64=11
 `
