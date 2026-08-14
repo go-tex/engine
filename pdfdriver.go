@@ -4,9 +4,7 @@
 package engine
 
 import (
-	"bytes"
 	"fmt"
-	"image"
 	"io"
 
 	"github.com/go-pdfkit/pdfkit"
@@ -247,17 +245,13 @@ func (d *pdfDraw) transform(tn transformNode, x, baseline float64) {
 // text/rule colours correct.
 func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
 	switch n.format {
-	case "png":
+	case imgPNG:
 		_ = d.p.DrawPNG(n.data, r)
-	case "jpeg":
+	case imgJPEG:
 		_ = d.p.DrawJPEG(n.data, r)
-	case "svg":
+	case imgSVG:
 		drawSVGImage(d.p, n.data, r)
 		d.p.SetFillColor(pdfkit.RGB8(uint8(d.curColor>>16), uint8(d.curColor>>8), uint8(d.curColor)))
-	default:
-		if img, _, err := image.Decode(bytes.NewReader(n.data)); err == nil {
-			d.p.DrawImage(img, r)
-		}
 	}
 }
 

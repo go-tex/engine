@@ -39,8 +39,8 @@ func TestIncludegraphicsSVG(t *testing.T) {
 	if !ok {
 		t.Fatal("no imageNode placed")
 	}
-	if im.format != "svg" {
-		t.Errorf("format = %q, want svg", im.format)
+	if im.format != imgSVG {
+		t.Errorf("format = %v, want imgSVG", im.format)
 	}
 	if im.width != 80*unity {
 		t.Errorf("width = %d sp, want 80pt", im.width)
@@ -83,8 +83,8 @@ func TestIncludegraphicsSVGFileViewBox(t *testing.T) {
 	if !ok {
 		t.Fatal("no imageNode placed")
 	}
-	if im.format != "svg" {
-		t.Errorf("format = %q, want svg", im.format)
+	if im.format != imgSVG {
+		t.Errorf("format = %v, want imgSVG", im.format)
 	}
 	if im.width != 100*unity || im.height != 50*unity { // intrinsic, 1 user unit = 1pt
 		t.Errorf("intrinsic size = %d×%d sp, want 100×50pt", im.width, im.height)
@@ -105,8 +105,8 @@ func TestIncludegraphicsSVGPlainDataURI(t *testing.T) {
 	if !ok {
 		t.Fatal("no imageNode placed")
 	}
-	if im.format != "svg" || im.width != 30*unity || im.height != 30*unity {
-		t.Errorf("got format=%q size=%d×%d, want svg 30×30pt", im.format, im.width, im.height)
+	if im.format != imgSVG || im.width != 30*unity || im.height != 30*unity {
+		t.Errorf("got format=%v size=%d×%d, want svg 30×30pt", im.format, im.width, im.height)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestIncludegraphicsSVGSniffed(t *testing.T) {
 		t.Fatal(err)
 	}
 	im, ok := firstImage(e.mvl)
-	if !ok || im.format != "svg" {
+	if !ok || im.format != imgSVG {
 		t.Fatalf("expected a sniffed svg image, got ok=%v format=%q", ok, im.format)
 	}
 }

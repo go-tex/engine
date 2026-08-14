@@ -5,9 +5,42 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/png"
 	"testing"
 )
+
+// A GIF (which the standard-library-only path could not decode) is loaded through
+// the go-gfx codec and re-encoded to PNG for embedding: \includegraphics places it
+// as an imageNode of format imgPNG at its intrinsic size, proving the broadened
+// format support is wired.
+func TestIncludeGraphicsGIFViaGoGfx(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 12, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 12; x++ {
+			img.Set(x, y, color.RGBA{10, 200, 30, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := gif.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	uri := "data:image/gif;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+	e := New()
+	if _, err := e.Run(`\noindent\includegraphics{` + uri + `}`); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	im, ok := firstImage(e.mvl)
+	if !ok {
+		t.Fatal("no imageNode placed (GIF was not decoded)")
+	}
+	if im.format != imgPNG {
+		t.Errorf("format = %v, want imgPNG (GIF re-encoded)", im.format)
+	}
+	if im.width != 12*unity || im.height != 8*unity {
+		t.Errorf("size = %d×%d sp, want 12×8 pt", im.width, im.height)
+	}
+}
 
 // pngDataURI builds a w×h PNG and returns it as a base64 data: URI, so image tests
 // need no files on disk (the same path the browser build uses).
@@ -55,8 +88,8 @@ func TestIncludegraphics(t *testing.T) {
 	if !ok {
 		t.Fatal("no imageNode placed")
 	}
-	if im.format != "png" {
-		t.Errorf("format = %q, want png", im.format)
+	if im.format != imgPNG {
+		t.Errorf("format = %v, want imgPNG", im.format)
 	}
 	if im.width != 60*unity {
 		t.Errorf("width = %d sp, want 60pt", im.width)

@@ -74,13 +74,13 @@ func looksLikeSVG(data []byte) bool {
 
 // loadSVGImage validates the SVG root and returns the verbatim bytes, the "svg"
 // format tag and the intrinsic size (points). A missing/broken root is errSVG.
-func loadSVGImage(data []byte) (out []byte, format string, iw, ih int, err error) {
+func loadSVGImage(data []byte) (out []byte, format imgFormat, iw, ih int, err error) {
 	attrs, ok := svgRootAttrs(data)
 	if !ok {
-		return nil, "", 0, 0, errSVG
+		return nil, 0, 0, 0, errSVG
 	}
 	iw, ih = svgIntrinsic(attrs)
-	return data, "svg", iw, ih, nil
+	return data, imgSVG, iw, ih, nil
 }
 
 // svgRootAttrs returns the attributes of the root <svg> element. It fails (ok=false)

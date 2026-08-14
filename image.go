@@ -14,22 +14,42 @@ package engine
 import (
 	"bytes"
 	"encoding/base64"
-	"image"
-	_ "image/jpeg" // register JPEG for image.DecodeConfig
-	_ "image/png"  // register PNG for image.DecodeConfig
+	"image/png" // re-encode exotic formats for embedding
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/go-gfx/gfx/codec"
 )
+
+// imgFormat is the embedded-image format an imageNode carries.
+type imgFormat uint8
+
+const (
+	imgPNG  imgFormat = iota // raster, embedded/re-encoded as PNG
+	imgJPEG                  // raster, embedded verbatim (DCT)
+	imgSVG                   // vector: data-URI in the SVG driver, paths in the PDF driver
+)
+
+// mime returns the data-URI media type for the format.
+func (f imgFormat) mime() string {
+	switch f {
+	case imgJPEG:
+		return "image/jpeg"
+	case imgSVG:
+		return "image/svg+xml"
+	}
+	return "image/png"
+}
 
 // imageNode is a placed image: the original file bytes (PNG/JPEG embedded verbatim;
 // SVG embedded verbatim by the SVG driver, vector-drawn by the PDF driver) and the
 // box it occupies (sp), sitting on the baseline.
 type imageNode struct {
 	data          []byte
-	format        string // "png", "jpeg" or "svg"
+	format        imgFormat
 	width, height int
 	depth         int
 	srcLine       int
@@ -38,15 +58,7 @@ type imageNode struct {
 func (imageNode) isNode() {}
 
 // mime returns the data-URI media type for the image format.
-func (n imageNode) mime() string {
-	switch n.format {
-	case "jpeg":
-		return "image/jpeg"
-	case "svg":
-		return "image/svg+xml"
-	}
-	return "image/png"
-}
+func (n imageNode) mime() string { return n.format.mime() }
 
 // dataURI returns the image as a base64 data: URI for the SVG <image> href.
 func (n imageNode) dataURI() string {
@@ -138,7 +150,7 @@ func graphicsSize(iw, ih, wReq, hReq int, scale float64) (w, h int) {
 // format ("png"/"jpeg"/"svg") and intrinsic pixel dimensions. An SVG source (a
 // ".svg" file, a data:image/svg+xml URI, or content sniffed as SVG) is handled by
 // loadSVGImage; everything else goes through image.DecodeConfig (PNG/JPEG).
-func loadImage(name string) (data []byte, format string, iw, ih int, err error) {
+func loadImage(name string) (data []byte, format imgFormat, iw, ih int, err error) {
 	svgHint := false
 	if strings.HasPrefix(name, "data:") {
 		svgHint = svgDataURI(name)
@@ -148,16 +160,31 @@ func loadImage(name string) (data []byte, format string, iw, ih int, err error) 
 		data, err = os.ReadFile(name)
 	}
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 	if svgHint || looksLikeSVG(data) {
 		return loadSVGImage(data)
 	}
-	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	// Raster image: decode through the go-gfx codec, which handles PNG, JPEG, GIF,
+	// WEBP, TIFF, BMP, ICNS and ICO — well beyond the standard library — so more real
+	// figure formats render. PNG and JPEG are embedded verbatim (both drivers handle
+	// them natively, keeping the output small); any other format is re-encoded to PNG.
+	img, err := codec.Decode(data)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, 0, 0, 0, err
 	}
-	return data, format, cfg.Width, cfg.Height, nil
+	switch codec.Sniff(data) {
+	case codec.PNG:
+		return data, imgPNG, img.W, img.H, nil
+	case codec.JPEG:
+		return data, imgJPEG, img.W, img.H, nil
+	default:
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img.ToNRGBA()); err != nil {
+			return nil, 0, 0, 0, err
+		}
+		return buf.Bytes(), imgPNG, img.W, img.H, nil
+	}
 }
 
 // decodeDataURI extracts the bytes from a data: URI. A ";base64" payload is base64-
