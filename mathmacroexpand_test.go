@@ -48,6 +48,8 @@ func TestArgMathMacroResolves(t *testing.T) {
 		{`\newcommand{\half}[1]{\frac{#1}{2}}`, `$\half{x}$`},
 		{`\newcommand{\bbset}[1]{\mathbb{#1}}`, `$\bbset{Z}$`},                 // arg into a known command
 		{`\newcommand{\R}{\mathbb R}\newcommand{\pw}[1]{\R^{#1}}`, `$\pw{n}$`}, // arg body holds a shorthand
+		{`\newcommand{\abs}[1]{\lvert#1\rvert}`, `$\abs{x}$`},                  // \lvert/\rvert now known (math v0.7.0)
+		{`\newcommand{\norm}[1]{\lVert#1\rVert}`, `$\norm{v}^2$`},
 	}
 	for _, c := range cases {
 		e := New()
