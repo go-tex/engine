@@ -443,6 +443,43 @@ const MiniLaTeXKernel = `
 \def\subjclass{\@ifnextbracket\@subjclassopt\@subjclassarg}
 \def\@subjclassopt[#1]#2{}
 \def\@subjclassarg#1{}
+% Body-level commands seen across the corpus that, left undefined, DROP real
+% content rather than mere configuration (from the skip census):
+% \ensuremath{x} typesets x in math — undefined, its argument fell into text mode
+% and its sub/superscripts were lost; \texorpdfstring{tex}{pdf} keeps the TeX form
+% (hyperref bookmarks); \xspace is a smart space that here is a harmless no-op.
+\def\ensuremath#1{\ifmmode#1\else$#1$\fi}
+\def\texorpdfstring#1#2{#1}
+\def\xspace{}
+% algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
+% pseudocode reads as lines with keywords instead of being dropped command-by-
+% command. Not the real indented layout — each control word starts a line and
+% prints its keyword; conditions/bodies that follow render as ordinary text.
+\def\State{\par\noindent}
+\def\Statex{\par\noindent}
+\def\Require{\par\noindent\textbf{Require: }}
+\def\Ensure{\par\noindent\textbf{Ensure: }}
+\def\Input{\par\noindent\textbf{Input: }}
+\def\Output{\par\noindent\textbf{Output: }}
+\def\Return{\textbf{return} }
+\def\Comment#1{}
+\def\If#1{\par\noindent\textbf{if} #1 \textbf{then}}
+\def\ElsIf#1{\par\noindent\textbf{else if} #1 \textbf{then}}
+\def\Else{\par\noindent\textbf{else}}
+\def\EndIf{}
+\def\For#1{\par\noindent\textbf{for} #1 \textbf{do}}
+\def\ForAll#1{\par\noindent\textbf{for all} #1 \textbf{do}}
+\def\EndFor{}
+\def\While#1{\par\noindent\textbf{while} #1 \textbf{do}}
+\def\EndWhile{}
+\def\Repeat{\par\noindent\textbf{repeat}}
+\def\Until#1{\par\noindent\textbf{until} #1}
+\def\Loop{\par\noindent\textbf{loop}}
+\def\EndLoop{}
+\def\Function#1#2{\par\noindent\textbf{function} #1(#2)}
+\def\EndFunction{}
+\def\Procedure#1#2{\par\noindent\textbf{procedure} #1(#2)}
+\def\EndProcedure{}
 % ─── end real-world preamble robustness ──────────────────────────────────────
 `
 

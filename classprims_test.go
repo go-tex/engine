@@ -38,6 +38,41 @@ func TestTrivlistScopes(t *testing.T) {
 	}
 }
 
+// Body-level commands that were dropped (skip census across the corpus) now run:
+// \texorpdfstring keeps its TeX form, \ensuremath wraps its argument in real math
+// (a math node, not broken text), and algorithmicx keywords render as text.
+func TestBodyRobustnessCommands(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\begin{document}`+
+		`\texorpdfstring{KEEPTEX}{dropPDF} \Require cond \Return done \ensuremath{q}\end{document}`), Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	if !strings.Contains(got, "KEEPTEX") || strings.Contains(got, "dropPDF") {
+		t.Errorf("texorpdfstring: page=%q, want KEEPTEX and not dropPDF", got)
+	}
+	if !strings.Contains(got, "Require") || !strings.Contains(got, "return") {
+		t.Errorf("algorithmicx keywords missing: page=%q", got)
+	}
+	var hasMath bool
+	var walk func([]node)
+	walk = func(ns []node) {
+		for _, n := range ns {
+			switch v := n.(type) {
+			case mathNode:
+				hasMath = true
+			case *boxNode:
+				walk(v.list)
+			}
+		}
+	}
+	walk(e.mvl)
+	walk(e.parList)
+	if !hasMath {
+		t.Error("\\ensuremath did not produce a math node (its argument was dropped/typeset as text)")
+	}
+}
+
 // \everypar fires its token list at the start of every paragraph (TeX inserts
 // the hook as the first horizontal material), and the setting is group-scoped so
 // a list environment can install a per-item hook and have it removed at \endgroup.
