@@ -96,6 +96,8 @@ type Engine struct {
 	// paragraph-builder state (horizontal mode at top level)
 	inPar            bool   // a paragraph is being accumulated
 	parList          []node // the current paragraph's horizontal list
+	everypar         []tok  // \everypar hook, fired at each paragraph start
+	inEverypar       bool   // guard: do not re-fire \everypar while it is running
 	hsize            int    // line width for breaking (sp)
 	vsize            int    // page height for the page builder (sp)
 	baselineskip     int    // baseline-to-baseline glue (sp)
@@ -284,15 +286,16 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip
-	name string
-	old  *meaning
-	idx  int
-	oldi int
-	oldc cat
-	oldd int
-	oldg glueSpec
-	oldf fontFace
+	kind    int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip
+	name    string
+	old     *meaning
+	idx     int
+	oldi    int
+	oldc    cat
+	oldd    int
+	oldg    glueSpec
+	oldf    fontFace
+	oldtoks []tok
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
@@ -571,8 +574,19 @@ func (e *Engine) endGroup() {
 			e.rightskip = s.oldg
 		case 8:
 			e.curColor = uint32(s.oldi)
+		case 9:
+			e.everypar = s.oldtoks
 		}
 	}
+}
+
+// setEverypar assigns the \everypar hook, recording the old value on the save
+// stack so a group (e.g. a list environment) restores it at \endgroup.
+func (e *Engine) setEverypar(ts []tok) {
+	if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 9, oldtoks: e.everypar})
+	}
+	e.everypar = ts
 }
 
 // ── expansion ───────────────────────────────────────────────────────────────
@@ -956,6 +970,34 @@ func (e *Engine) beginParagraph(indent bool) {
 	e.inPar = true
 	if indent {
 		e.parList = append(e.parList, &boxNode{kind: hbox, width: e.parindent})
+	}
+	// Fire \everypar at the very start of the paragraph, before any of its text —
+	// TeX inserts the hook tokens as horizontal material. Running them to
+	// completion here (into parList) keeps them ahead of the character that began
+	// the paragraph. inPar is already set, and inEverypar guards against a \par or
+	// paragraph-start inside the hook re-triggering it.
+	if len(e.everypar) > 0 && !e.inEverypar {
+		hook := e.everypar
+		e.inEverypar = true
+		e.execToks(hook)
+		e.inEverypar = false
+	}
+}
+
+// execToks runs a token list to completion in the current stomach mode, stopping
+// at a private sentinel rather than falling through to the base input. It routes
+// each token through stepToken, so the tokens act exactly as if they appeared in
+// the source at this point (used to fire \everypar).
+func (e *Engine) execToks(ts []tok) {
+	e.push(append(append([]tok(nil), ts...), sentinel))
+	for e.err == nil {
+		t, ok := e.getXToken()
+		if !ok || (t.cs_ && t.cs == sentinel.cs) {
+			return
+		}
+		if !e.stepToken(t) {
+			return
+		}
 	}
 }
 

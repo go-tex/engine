@@ -36,11 +36,12 @@ func (e *Engine) loadClassPrims() {
 			e.beginParagraph(false)
 		}
 	})
-	// \everypar{toks} / \everypar={toks}: the paragraph-start token list. The engine
-	// has no everypar hook; accept and discard the assignment so a class can set it.
+	// \everypar{toks} / \everypar=<toks|\toksreg>: the paragraph-start token list,
+	// fired by beginParagraph. The value may be a braced group or another toks
+	// register (amsart uses \everypar\dth@everypar), so read it like any toks
+	// assignment; the setting is group-scoped so a list restores it at \endgroup.
 	e.prim("everypar", func(e *Engine) {
-		e.scanEquals()
-		e.readBraceToksRaw()
+		e.setEverypar(e.readToksValue())
 	})
 	// \sfcode<charcode>=<int>: space-factor code assignment. No space-factor model
 	// yet; consume the assignment as a no-op.

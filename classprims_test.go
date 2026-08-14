@@ -22,6 +22,26 @@ func mustRun(t *testing.T, src string) string {
 	return out
 }
 
+// \everypar fires its token list at the start of every paragraph (TeX inserts
+// the hook as the first horizontal material), and the setting is group-scoped so
+// a list environment can install a per-item hook and have it removed at \endgroup.
+func TestEveryparFires(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\everypar{X}\begin{document}`+
+		`one\par two\par{\everypar{Y}inner}\par three\end{document}`), Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	// Each of the three outer paragraphs is prefixed with X; the grouped paragraph
+	// uses Y, and X is restored afterwards (three X's, one Y).
+	if strings.Count(got, "X") != 3 {
+		t.Errorf("expected 3 \\everypar{X} firings, got %q", got)
+	}
+	if strings.Count(got, "Y") != 1 {
+		t.Errorf("expected 1 grouped \\everypar{Y} firing, got %q", got)
+	}
+}
+
 // \MakeUppercase (and \MakeLowercase) case-shift the EXPANSION of their argument:
 // \uppercase only touches explicit character tokens, so a control sequence such
 // as \contentsname (or a running head's \leftmark) must be expanded to its letters
