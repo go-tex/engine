@@ -3,6 +3,8 @@
 
 package engine
 
+import "strings"
+
 // This file is a minimal LaTeX layer written in TeX on top of the Plain macros:
 // the \begin/\end environment mechanism (via \csname, exactly as latex.ltx does),
 // sectioning, the common text-formatting commands, and list/quote environments.
@@ -748,4 +750,92 @@ func (e *Engine) doGobbleOptAndGroup() {
 			e.back(t)
 		}
 	}
+}
+
+// doGobbleEnv discards the body of a non-renderable environment (tikzpicture,
+// pgfpicture, tikzcd, …) whole. It is reached via \begin{name} — already expanded
+// to the \name control sequence — so the input cursor sits just past it. It
+// consumes tokens up to and including the matching \end{name}, honouring nested
+// \begin{name}…\end{name} of the same name. The scan is at the token level (via
+// getNext), so it works whether the environment sits in the raw source or is
+// replayed from a macro/box body; nothing is emitted, so no TikZ command
+// (\draw, \node, \path, \foreach, …) can leak into the typeset output.
+func (e *Engine) doGobbleEnv(name string) {
+	depth := 1
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return // unterminated: input exhausted
+		}
+		if !t.cs_ {
+			continue
+		}
+		switch t.cs {
+		case "begin":
+			if e.gobbleEnvName() == name {
+				depth++
+			}
+		case "end":
+			if e.gobbleEnvName() == name {
+				depth--
+				if depth == 0 {
+					e.emitPicturePlaceholder(name)
+					return
+				}
+			}
+		}
+	}
+}
+
+// emitPicturePlaceholder stands a gobbled picture environment (TikZ/PGF/tikz-cd)
+// in for the diagram it would have drawn: a framed empty box of a modest, fixed
+// figure size. Reserving this space — rather than emitting nothing — keeps the
+// surrounding text flowing where the real diagram sat, which is both more
+// faithful than a blank and keeps pagination stable.
+func (e *Engine) emitPicturePlaceholder(name string) {
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS[name]++
+	e.startImage()
+	inner := &boxNode{kind: hbox, width: 96 * unity, height: 60 * unity}
+	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})
+}
+
+// gobbleEnvName consumes a following {name} group (skipping leading spaces) and
+// returns the environment name it spells. It always consumes the group so the
+// caller can discard it; a missing group yields "" with the token pushed back.
+func (e *Engine) gobbleEnvName() string {
+	t, ok := e.getNext()
+	for ok && t.cat == catSpace && !t.cs_ {
+		t, ok = e.getNext()
+	}
+	if !ok {
+		return ""
+	}
+	if !(t.cat == catBegin && !t.cs_) {
+		e.back(t)
+		return ""
+	}
+	var sb strings.Builder
+	depth := 1
+	for {
+		u, ok := e.getNext()
+		if !ok {
+			break
+		}
+		if u.cs_ {
+			continue
+		}
+		if u.cat == catBegin {
+			depth++
+		} else if u.cat == catEnd {
+			if depth--; depth == 0 {
+				break
+			}
+		} else {
+			sb.WriteRune(u.ch)
+		}
+	}
+	return sb.String()
 }

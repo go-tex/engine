@@ -1100,6 +1100,15 @@ func (e *Engine) loadMore() {
 	})
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
+	// Non-renderable picture environments (TikZ / PGF / tikz-cd): the whole body is
+	// gobbled as raw source up to the matching \end{…}, so no \draw/\node/\path/
+	// \foreach can leak into the text. Reached via \begin{…}=\csname …\endcsname.
+	e.prim("tikzpicture", func(e *Engine) { e.doGobbleEnv("tikzpicture") })
+	e.prim("endtikzpicture", func(e *Engine) {}) // consumed literally by doGobbleEnv; defined for safety
+	e.prim("pgfpicture", func(e *Engine) { e.doGobbleEnv("pgfpicture") })
+	e.prim("endpgfpicture", func(e *Engine) {})
+	e.prim("tikzcd", func(e *Engine) { e.doGobbleEnv("tikzcd") })
+	e.prim("endtikzcd", func(e *Engine) {})
 	e.prim("verb", func(e *Engine) { e.doVerb() })
 	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
 	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
