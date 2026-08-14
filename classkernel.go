@@ -182,6 +182,15 @@ const LaTeX2eClassKernel = `
 \newif\if@openbib
 \newif\if@restonecol
 \newif\if@afterindent
+% list-machinery booleans (latex.ltx's \list/\trivlist/\item everypar hook): a
+% class's real \trivlist/\@item toggles these, and if \@nmbrlistfalse etc. are
+% undefined the list never closes cleanly and swallows the following input (seen
+% with amsart's \maketitle author block, which runs \trivlist before the body).
+\newif\if@nmbrlist
+\newif\if@newlist
+\newif\if@noparitem
+\newif\if@noparlist
+\newif\if@inlabel
 % Set the flags a class expects to have a definite state.
 \@compatibilityfalse
 \@twocolumnfalse

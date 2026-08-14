@@ -33,6 +33,27 @@ func ckRunErr(t *testing.T, src string) (string, error) {
 	return trimNL(got), err
 }
 
+// The LaTeX list-machinery booleans (\if@nmbrlist, \if@newlist, \if@noparitem,
+// \if@noparlist, \if@inlabel) are defined, so a real class's \trivlist/\@item
+// code that toggles them does not hit an undefined control sequence (which,
+// undefined, leaves the list open and swallows the following input).
+func TestListMachineryBooleans(t *testing.T) {
+	for _, b := range []string{"@nmbrlist", "@newlist", "@noparitem", "@noparlist", "@inlabel"} {
+		// Set true → \if… takes the true branch; set false → false branch; and none
+		// of \if@X, \@Xtrue, \@Xfalse may be an undefined control sequence.
+		src := `\@nameuse{` + b + `true}\csname if` + b + `\endcsname\message{T}\fi` +
+			`\@nameuse{` + b + `false}\csname if` + b + `\endcsname\else\message{F}\fi`
+		out, err := ckRunErr(t, src)
+		if err != nil {
+			t.Errorf("\\if%s not usable: %v", b, err)
+			continue
+		}
+		if out != "T F" {
+			t.Errorf("\\if%s toggling: message=%q, want \"T F\"", b, out)
+		}
+	}
+}
+
 // Purely expandable results: the constant / size-number / char macros expand
 // inside a single wrapping \message.
 func TestClassKernelExpandable(t *testing.T) {
