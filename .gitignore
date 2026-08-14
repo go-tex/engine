@@ -1,3 +1,5 @@
 *.wasm
 page.svg
 page.png
+/gotex
+/gotex-wasm

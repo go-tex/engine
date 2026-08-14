@@ -97,14 +97,7 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		return mathNode{}
 	}
 	size := e.mathSize()
-	var svg string
-	var m texmath.Metrics
-	var err error
-	if display {
-		svg, m, err = r.RenderDisplaySVGMetrics(src, size)
-	} else {
-		svg, m, err = r.RenderSVGMetrics(src, size)
-	}
+	svg, m, err := e.renderMathResolvingMacros(r, src, display, size)
 	if err != nil {
 		if e.tolerant() {
 			// Best-effort preview: a real document's math may use a command
@@ -124,6 +117,86 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	return mathNode{svg: svg, width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
 }
 
+// renderMathResolvingMacros renders src, and when go-tex/math rejects a command it
+// does not know, it expands that command IN THE SOURCE when — and only when — the
+// command is a parameterless user/kernel macro (kind mMacro), then retries. This
+// recovers user math shorthands the raw-token scanner emits verbatim, e.g. a
+// document's \newcommand\F{\mathbb F} or \def\Z{\mathbb{Z}}: go-tex/math never
+// learned \F, but it does know \mathbb, so substituting the macro's replacement
+// lets the equation render instead of being dropped.
+//
+// The substitution is a strict fallback: the literal source is always tried first,
+// so every construct go-tex/math already understands (\frac, \sum, \cdot, \mathbf…)
+// renders exactly as before and is never expanded — expansion happens only on the
+// specific command that failed. That makes the pass regression-free by construction:
+// anything that used to render still renders unchanged. A per-name guard (seen) and a
+// bounded try count keep a self-referential or non-shrinking macro from looping.
+func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, display bool, size int) (string, texmath.Metrics, error) {
+	seen := map[string]bool{}
+	var svg string
+	var m texmath.Metrics
+	var err error
+	for tries := 0; tries < 64; tries++ {
+		if display {
+			svg, m, err = r.RenderDisplaySVGMetrics(src, size)
+		} else {
+			svg, m, err = r.RenderSVGMetrics(src, size)
+		}
+		if err == nil {
+			return svg, m, nil
+		}
+		name := unknownMathCommand(err.Error())
+		if name == "" || seen[name] {
+			return svg, m, err
+		}
+		exp, ok := e.zeroParamMacroExpansion(name)
+		if !ok {
+			return svg, m, err
+		}
+		seen[name] = true
+		src = replaceMathCS(src, name, exp)
+	}
+	return svg, m, err
+}
+
+// zeroParamMacroExpansion returns the replacement text (as go-tex/math source) of a
+// parameterless macro named name, and true when name is such a macro. Macros that
+// take arguments, primitives, and undefined names return ("", false) — an argument
+// macro cannot be resolved by plain string substitution here, and a primitive/unknown
+// name is left verbatim for go-tex/math to handle itself.
+func (e *Engine) zeroParamMacroExpansion(name string) (string, bool) {
+	m := e.eq[name]
+	if m == nil || m.kind != mMacro || len(m.params) != 0 {
+		return "", false
+	}
+	return e.toksToString(m.body), true
+}
+
+// replaceMathCS substitutes every occurrence of the control sequence \name in a
+// go-tex/math source string with exp. scanMathSource emits every control sequence as
+// a backslash, its name, and a single trailing space, so \name is matched with that
+// exact trailing space — which also prevents \F from matching inside \Foo.
+func replaceMathCS(src, name, exp string) string {
+	return strings.ReplaceAll(src, "\\"+name+" ", exp+" ")
+}
+
+// unknownMathCommand extracts the command name X from a go-tex/math "unknown command
+// \X" error, or "" when the message is a different failure. The name runs over letters
+// and @ (a LaTeX-internal control word), matching a TeX control-word token.
+func unknownMathCommand(errMsg string) string {
+	const marker = "unknown command \\"
+	i := strings.Index(errMsg, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := errMsg[i+len(marker):]
+	j := 0
+	for j < len(rest) && (rest[j] == '@' || (rest[j] >= 'a' && rest[j] <= 'z') || (rest[j] >= 'A' && rest[j] <= 'Z')) {
+		j++
+	}
+	return rest[:j]
+}
+
 // recordMathSkip tallies a dropped equation under skippedCS. When the error is
 // go-tex/math's "unknown command \X" it keys on that command (so the report shows
 // which math macro to implement next); otherwise it keys on a generic "$math$".
@@ -132,16 +205,8 @@ func (e *Engine) recordMathSkip(errMsg string) {
 		e.skippedCS = map[string]int{}
 	}
 	key := "$math$"
-	const marker = "unknown command \\"
-	if i := strings.Index(errMsg, marker); i >= 0 {
-		rest := errMsg[i+len(marker):]
-		j := 0
-		for j < len(rest) && (rest[j] == '@' || (rest[j] >= 'a' && rest[j] <= 'z') || (rest[j] >= 'A' && rest[j] <= 'Z')) {
-			j++
-		}
-		if j > 0 {
-			key = "\\" + rest[:j]
-		}
+	if name := unknownMathCommand(errMsg); name != "" {
+		key = "\\" + name
 	}
 	e.skippedCS[key]++
 }

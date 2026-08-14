@@ -169,6 +169,21 @@ const LaTeX2eClassLead = `
 \def\twocolumn{\@ifnextchar[{\@gobbleopt}{}}
 \def\onecolumn{}
 \def\@gobbleopt[#1]{}
+% ── \[ \] as robust commands (space-suffixed internal names) ─────────────────
+% In real LaTeX \[ and \] are robust: \[ expands to \protect\[<space>, and the
+% space-suffixed control words hold the actual body (\relax\ifmmode\@badmath\else
+% $$\fi). The engine drives display math from a \[ primitive instead, but class code
+% introspects the robust form: amsart's amsthm QED patch does
+%   \expandafter\ifx\csname[ \endcsname\relax \expandafter\@tempa\[\@nil\[ \else …\fi
+% to splice \def\@currenvir{displaymath} into \['s body by splitting it at its $. When
+% \csname[ \endcsname is undefined the then-branch runs \@tempa\[\@nil\[, which — with
+% \[ a non-expandable primitive rather than a $$-bearing macro — mis-scans and leaks a
+% stray $…\def\@currenvir{displaymath} into the stream, opening math that swallows the
+% following input (a lone \input body after \maketitle). Defining the space-suffixed
+% forms makes \ifx…\relax false, so the else-branch patches the (inert) decoy \[<space>
+% by splitting its real $$ body, and the display-math primitive \[ is never touched.
+\expandafter\def\csname[ \endcsname{\relax\ifmmode\@badmath\else$$\fi}
+\expandafter\def\csname] \endcsname{\relax\ifmmode$$\else\@badmath\fi}
 % ── generic list (best-effort: each item on its own line with its label) ─────
 \def\list#1#2{\par}
 \def\endlist{\par}
