@@ -10,8 +10,8 @@ github.com/go-opentype/shape v0.3.2 h1:qaaUhg9m6yusm6MCfa07DhZ5Z0ZxOmGwLxHklVeLU
 github.com/go-opentype/shape v0.3.2/go.mod h1:oVq3kFGx6kIHKrFXfxqnp8JUYR7k9NzeY+E17LYHhrU=
 github.com/go-pdfkit/pdfkit v0.4.0 h1:gLC9YBK8Sq7OVoR6vjmO5k3tjzK++0UGGJcsWDCt2Xw=
 github.com/go-pdfkit/pdfkit v0.4.0/go.mod h1:HkjxMIqOjZvJT0KLme1WS6J9jguiTdWi+zLdTYbGIkc=
-github.com/go-tex/math v0.12.0 h1:J7ntXgzpENDwzEokBwVrkoFKY6AoNE4fWJnTEUbSUS0=
-github.com/go-tex/math v0.12.0/go.mod h1:eNq1Js988sqQRsxNR08JFQ5dQfyqfd8CYf5fE3iWbhU=
+github.com/go-tex/math v0.13.0 h1:HvzBtTS+KAZoMWpLXq4QSEhJve3l8XZGcuTfNuJoieM=
+github.com/go-tex/math v0.13.0/go.mod h1:eNq1Js988sqQRsxNR08JFQ5dQfyqfd8CYf5fE3iWbhU=
 github.com/go-widgets/painter v0.2.0 h1:C7anwlKLYnlTeCK90xKYvy0srxYXqhuvyDFismlf2Sc=
 github.com/go-widgets/painter v0.2.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
 github.com/go-widgets/toolkit v0.79.0 h1:lZeQPeUYcGvD7++F8bFUN8in68nO98m0qpU3Nz+C0ws=
