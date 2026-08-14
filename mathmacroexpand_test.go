@@ -34,6 +34,37 @@ func TestUserMathMacroResolves(t *testing.T) {
 	}
 }
 
+// Argument macros are resolved too: an unknown \name with parameters has its
+// brace/char/cs arguments parsed out of the math source and substituted into the
+// body, then the equation is retried. When the substituted body uses commands
+// go-tex/math already knows (^, (), \frac, \mathbb…), the equation renders instead
+// of being dropped. (A body that expands to a delimiter go-tex/math has not learned
+// yet — \lvert, or \ensuremath's \ifmmode conditional — is a separate go-tex/math
+// gap, not an expansion failure; the mechanism still substitutes correctly.)
+func TestArgMathMacroResolves(t *testing.T) {
+	cases := []struct{ def, use string }{
+		{`\newcommand{\sq}[1]{#1^2}`, `$\sq{x}$`},
+		{`\newcommand{\pair}[2]{(#1,#2)}`, `$\pair{a}{b}$`},
+		{`\newcommand{\half}[1]{\frac{#1}{2}}`, `$\half{x}$`},
+		{`\newcommand{\bbset}[1]{\mathbb{#1}}`, `$\bbset{Z}$`},                 // arg into a known command
+		{`\newcommand{\R}{\mathbb R}\newcommand{\pw}[1]{\R^{#1}}`, `$\pw{n}$`}, // arg body holds a shorthand
+	}
+	for _, c := range cases {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.lenient = true
+		if _, err := e.Run(c.def + c.use); err != nil {
+			t.Errorf("%s%s: unexpected error %v", c.def, c.use, err)
+			continue
+		}
+		if len(e.SkippedCommands()) != 0 {
+			t.Errorf("%s%s: expected to render, but dropped: %v", c.def, c.use, e.SkippedCommands())
+		}
+	}
+}
+
 // Resolution is recursive: a shorthand whose replacement is itself another shorthand
 // (\X → \R → \mathbb R) resolves through both levels, one retry per still-unknown name.
 func TestUserMathMacroResolvesRecursively(t *testing.T) {
@@ -100,28 +131,33 @@ func TestSelfReferentialMathMacroDoesNotLoop(t *testing.T) {
 	}
 }
 
-// zeroParamMacroExpansion accepts only a parameterless macro; a primitive, an undefined
-// name, and a macro that takes arguments each return (,"" false) so the resolver leaves
-// them verbatim for go-tex/math.
-func TestZeroParamMacroExpansion(t *testing.T) {
+// expandMacroInMathSource substitutes a user/kernel macro in a math-source string:
+// a parameterless macro's occurrences are replaced by its body, an argument macro's
+// arguments are parsed from the source and substituted into #1…; a primitive or an
+// undefined name returns (,"" false) so the resolver leaves it verbatim.
+func TestExpandMacroInMathSource(t *testing.T) {
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Run(`\newcommand{\Zero}{\mathbb Z}\newcommand{\One}[1]{|#1|}`); err != nil {
+	if _, err := e.Run(`\newcommand{\Zero}{\mathbb Z}\newcommand{\One}[1]{|#1|}\newcommand{\Two}[2]{(#1;#2)}`); err != nil {
 		t.Fatal(err)
 	}
-	if exp, ok := e.zeroParamMacroExpansion("Zero"); !ok || exp != `\mathbb Z` {
-		t.Errorf("0-param macro: got (%q,%v), want (%q,true)", exp, ok, `\mathbb Z`)
+	cases := []struct {
+		name, src, want string
+		ok              bool
+	}{
+		{"Zero", `\Zero _p`, `\mathbb Z _p`, true},
+		{"One", `\One {x} + y`, `|x| + y`, true},
+		{"Two", `a \Two {p}{q} b`, `a (p;q) b`, true},
+		{"relax", `\relax `, "", false},       // a primitive is not a resolvable macro
+		{"thereisnosuchname", `x`, "", false}, // undefined name
 	}
-	if _, ok := e.zeroParamMacroExpansion("One"); ok {
-		t.Error("a macro with a parameter must not be resolved by string substitution")
-	}
-	if _, ok := e.zeroParamMacroExpansion("relax"); ok {
-		t.Error("a primitive is not a resolvable macro")
-	}
-	if _, ok := e.zeroParamMacroExpansion("thereisnosuchname"); ok {
-		t.Error("an undefined name is not a resolvable macro")
+	for _, c := range cases {
+		got, ok := e.expandMacroInMathSource(c.src, c.name)
+		if ok != c.ok || (ok && got != c.want) {
+			t.Errorf("expandMacroInMathSource(%q,%q) = (%q,%v), want (%q,%v)", c.src, c.name, got, ok, c.want, c.ok)
+		}
 	}
 }
 

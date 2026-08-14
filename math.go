@@ -5,6 +5,7 @@ package engine
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	texmath "github.com/go-tex/math"
 )
@@ -149,27 +150,58 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 		if name == "" || seen[name] {
 			return svg, m, err
 		}
-		exp, ok := e.zeroParamMacroExpansion(name)
+		next, ok := e.expandMacroInMathSource(src, name)
 		if !ok {
 			return svg, m, err
 		}
 		seen[name] = true
-		src = replaceMathCS(src, name, exp)
+		src = next
 	}
 	return svg, m, err
 }
 
-// zeroParamMacroExpansion returns the replacement text (as go-tex/math source) of a
-// parameterless macro named name, and true when name is such a macro. Macros that
-// take arguments, primitives, and undefined names return ("", false) — an argument
-// macro cannot be resolved by plain string substitution here, and a primitive/unknown
-// name is left verbatim for go-tex/math to handle itself.
-func (e *Engine) zeroParamMacroExpansion(name string) (string, bool) {
+// expandMacroInMathSource substitutes the user/kernel macro \name in a go-tex/math
+// source string. A parameterless macro's every occurrence is replaced by its
+// replacement text; an argument macro (\newcommand\abs[1]{\lvert#1\rvert},
+// \ensuremath, …) has each occurrence's brace/char/cs arguments parsed out of the
+// source and substituted into #1…#9 of the body. Primitives, undefined names, and
+// macros whose arguments cannot be parsed return ("", false) — left verbatim for
+// go-tex/math. scanMathSource emits every control sequence as backslash-name-space,
+// which this matches and reproduces.
+func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 	m := e.eq[name]
-	if m == nil || m.kind != mMacro || len(m.params) != 0 {
+	if m == nil || m.kind != mMacro {
 		return "", false
 	}
-	return e.toksToString(m.body), true
+	if len(m.params) == 0 {
+		return replaceMathCS(src, name, e.toksToString(m.body)), true
+	}
+	needle := "\\" + name + " "
+	n := len(m.params)
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := src[i+len(needle):]
+		args, consumed, ok := parseMathArgs(rest, n)
+		if !ok {
+			out.WriteString(needle) // leave this occurrence for go-tex/math to reject
+			src = rest
+			continue
+		}
+		out.WriteString(e.substituteMathBody(m.body, args))
+		src = rest[consumed:]
+		changed = true
+	}
+	if !changed {
+		return "", false
+	}
+	out.WriteString(src)
+	return out.String(), true
 }
 
 // replaceMathCS substitutes every occurrence of the control sequence \name in a
@@ -178,6 +210,82 @@ func (e *Engine) zeroParamMacroExpansion(name string) (string, bool) {
 // exact trailing space — which also prevents \F from matching inside \Foo.
 func replaceMathCS(src, name, exp string) string {
 	return strings.ReplaceAll(src, "\\"+name+" ", exp+" ")
+}
+
+// parseMathArgs reads n arguments from the start of a go-tex/math source string
+// (after a macro's name-space): a {balanced group} (returned without its outer
+// braces), a whole control sequence (\name, kept with its trailing space), or a
+// single rune. It returns the arguments, how many bytes they consumed, and false if
+// an argument is missing or a group is unbalanced.
+func parseMathArgs(s string, n int) ([]string, int, bool) {
+	p := 0
+	args := make([]string, 0, n)
+	for k := 0; k < n; k++ {
+		for p < len(s) && s[p] == ' ' {
+			p++
+		}
+		if p >= len(s) {
+			return nil, 0, false
+		}
+		switch s[p] {
+		case '{':
+			depth, start := 0, p
+			for p < len(s) {
+				if s[p] == '{' {
+					depth++
+				} else if s[p] == '}' {
+					depth--
+				}
+				p++
+				if depth == 0 {
+					break
+				}
+			}
+			if depth != 0 {
+				return nil, 0, false
+			}
+			args = append(args, s[start+1:p-1])
+		case '\\':
+			start := p
+			p++
+			for p < len(s) && (s[p] == '@' || (s[p] >= 'a' && s[p] <= 'z') || (s[p] >= 'A' && s[p] <= 'Z')) {
+				p++
+			}
+			arg := s[start:p]
+			if p < len(s) && s[p] == ' ' {
+				p++
+			}
+			args = append(args, arg+" ")
+		default:
+			r, w := utf8.DecodeRuneInString(s[p:])
+			args = append(args, string(r))
+			p += w
+		}
+	}
+	return args, p, true
+}
+
+// substituteMathBody renders a macro body to go-tex/math source, replacing each #k
+// parameter token with args[k-1]. Non-parameter tokens use scanMathSource's
+// encoding (backslash-name-space for a cs, the rune otherwise).
+func (e *Engine) substituteMathBody(body []tok, args []string) string {
+	var b strings.Builder
+	for _, t := range body {
+		if !t.cs_ && t.cat == catParam && t.ch >= '1' && t.ch <= '9' {
+			if i := int(t.ch - '1'); i < len(args) {
+				b.WriteString(args[i])
+			}
+			continue
+		}
+		if t.cs_ {
+			b.WriteByte('\\')
+			b.WriteString(t.cs)
+			b.WriteByte(' ')
+		} else {
+			b.WriteRune(t.ch)
+		}
+	}
+	return b.String()
 }
 
 // unknownMathCommand extracts the command name X from a go-tex/math "unknown command
