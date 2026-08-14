@@ -452,6 +452,25 @@ const MiniLaTeXKernel = `
 \def\subjclass{\@ifnextbracket\@subjclassopt\@subjclassarg}
 \def\@subjclassopt[#1]#2{}
 \def\@subjclassarg#1{}
+% Break hints and math-boldness / spacing switches: this engine does its own
+% page and line breaking and has no bold-math or spacing modes, so these are
+% accepted as no-ops. \pagebreak & co. gobble their optional [priority].
+\def\pagebreak{\@ifnextbracket\@gobbleoptonly\relax}
+\def\nopagebreak{\@ifnextbracket\@gobbleoptonly\relax}
+\def\linebreak{\@ifnextbracket\@gobbleoptonly\relax}
+\def\nolinebreak{\@ifnextbracket\@gobbleoptonly\relax}
+\def\boldmath{}
+\def\unboldmath{}
+\def\frenchspacing{}
+\def\nonfrenchspacing{}
+% \qedhere (amsthm): the end-of-proof square requested mid-line/mid-display is
+% dropped here (the proof's trailing \qed still sets the mark).
+\def\qedhere{}
+% \footnotetext[n]{text} and \newcolumntype{x}[n]{spec}: accepted and gobbled
+% whole (optional [.] plus the required group) instead of leaking their bodies.
+\def\@gobbleoptarg[#1]#2{}
+\def\footnotetext{\@ifnextbracket\@gobbleoptarg\@gobble}
+\def\newcolumntype#1{\@ifnextbracket\@gobbleoptarg\@gobble}
 % Body-level commands seen across the corpus that, left undefined, DROP real
 % content rather than mere configuration (from the skip census):
 % \ensuremath{x} typesets x in math — undefined, its argument fell into text mode
