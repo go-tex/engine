@@ -425,7 +425,14 @@ const MiniLaTeXKernel = `
 \def\setboolean#1#2{}
 \def\numberwithin#1#2{}
 \def\newaliascnt#1#2{}
-\def\DeclareMathOperator#1#2{}
+% \DeclareMathOperator{\Aut}{Aut} now DEFINES \Aut as \operatorname{Aut} (the
+% starred form uses \operatorname* for display limits). In math the raw scanner
+% emits \Aut verbatim; go-tex/math does not know it, but the math-source macro
+% resolver expands the zero-parameter \Aut to \operatorname{Aut}, which it renders
+% — so a paper's custom operators typeset instead of being dropped.
+\def\DeclareMathOperator{\@ifstar\@gtxdeclmathopstar\@gtxdeclmathop}
+\def\@gtxdeclmathop#1#2{\def#1{\operatorname{#2}}}
+\def\@gtxdeclmathopstar#1#2{\def#1{\operatorname*{#2}}}
 \def\DeclarePairedDelimiter#1#2#3{}
 \def\SetKwInput#1#2{}
 \def\algnewcommand#1#2{}

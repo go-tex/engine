@@ -22,6 +22,22 @@ func mustRun(t *testing.T, src string) string {
 	return out
 }
 
+// \DeclareMathOperator{\Aut}{Aut} defines \Aut as an operator; in math the source
+// resolver expands it to \operatorname{Aut} so it renders instead of being dropped.
+func TestDeclareMathOperatorRenders(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\DeclareMathOperator{\Aut}{Aut}`+
+		`\DeclareMathOperator*{\argmax}{arg\,max}`+
+		`\begin{document}$\Aut(G)$ and $\argmax_x f(x)$\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, k := range []string{"\\Aut", "\\argmax"} {
+		if e.SkippedCommands()[k] > 0 {
+			t.Errorf("%s was dropped from math; \\DeclareMathOperator did not define it", k)
+		}
+	}
+}
+
 // \trivlist opens a group that \endtrivlist closes, so a definition made inside
 // (as a real class's \trivlist body does) does not leak out. This is what lets
 // amsart's \maketitle author block (\trivlist … \endtrivlist) contain itself
