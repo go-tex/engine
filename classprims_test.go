@@ -22,6 +22,22 @@ func mustRun(t *testing.T, src string) string {
 	return out
 }
 
+// \trivlist opens a group that \endtrivlist closes, so a definition made inside
+// (as a real class's \trivlist body does) does not leak out. This is what lets
+// amsart's \maketitle author block (\trivlist … \endtrivlist) contain itself
+// instead of leaving the list open and swallowing the following text.
+func TestTrivlistScopes(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\begin{document}`+
+		`\def\gtmp{OUTER}\trivlist\def\gtmp{INNER}\endtrivlist\gtmp\end{document}`), Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	if !strings.Contains(got, "OUTER") || strings.Contains(got, "INNER") {
+		t.Errorf("\\def inside \\trivlist leaked past \\endtrivlist; page=%q, want OUTER (group restored)", got)
+	}
+}
+
 // \everypar fires its token list at the start of every paragraph (TeX inserts
 // the hook as the first horizontal material), and the setting is group-scoped so
 // a list environment can install a per-item hook and have it removed at \endgroup.

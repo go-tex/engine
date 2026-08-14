@@ -172,8 +172,15 @@ const LaTeX2eClassLead = `
 % ── generic list (best-effort: each item on its own line with its label) ─────
 \def\list#1#2{\par}
 \def\endlist{\par}
-\def\trivlist{\par}
-\def\endtrivlist{\par}
+% \trivlist opens a group so a real class's redefined \trivlist (amsart's
+% \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
+% \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
+% leaving an undefined \@trivlist that swallows the rest of the document. \list is
+% deliberately left ungrouped here (the corpus's article itemize/enumerate are
+% sensitive to \list's exact behavior); only the trivlist path is scoped.
+\def\@trivlist{\par\begingroup}
+\def\trivlist{\@trivlist}
+\def\endtrivlist{\endgroup\par}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\textbullet]}}
 \def\@gotexitem[#1]{\par\noindent#1\ }
 `
