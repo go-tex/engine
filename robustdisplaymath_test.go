@@ -5,6 +5,7 @@ package engine
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,13 +50,17 @@ func TestInputBodyAfterMaketitleSurvivesAmsart(t *testing.T) {
 	defer func() { emulatedClasses["amsart"] = true }()
 
 	const marker = "INPUTAFTERMAKETITLE"
-	if err := os.WriteFile("/tmp/gotex_maketitle_input.tex", []byte(marker+" renders now\n"), 0o644); err != nil {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "gotex_maketitle_input.tex")
+	if err := os.WriteFile(inputPath, []byte(marker+" renders now\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("/tmp/gotex_maketitle_input.tex")
+	// TeX \input uses forward slashes and no extension; ToSlash keeps the path
+	// valid on Windows (t.TempDir is under an OS temp dir, not /tmp).
+	texPath := filepath.ToSlash(strings.TrimSuffix(inputPath, ".tex"))
 
 	src := "\\documentclass{amsart}\n\\title{A Title}\\author{An Author}\n" +
-		"\\begin{document}\n\\maketitle\n\\input{/tmp/gotex_maketitle_input}\nMore body after input.\n\\end{document}\n"
+		"\\begin{document}\n\\maketitle\n\\input{" + texPath + "}\nMore body after input.\n\\end{document}\n"
 
 	// Strict: the stray-$ math error is gone.
 	if _, err := compile([]byte(src), Options{Lenient: false}); err != nil {
