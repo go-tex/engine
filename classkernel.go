@@ -224,6 +224,13 @@ const LaTeX2eClassKernel = `
 \def\mathtt#1{#1}
 \def\mathcal#1{#1}
 \def\mathnormal#1{#1}
+% \mathds (dsfont) is double-struck — the same blackboard-bold role as \mathbb,
+% which the math layer knows. dsfont.sty's \DeclareMathAlphabet machinery can't run
+% here, so alias it: in math the retry path expands \mathds{X} -> \mathbb{X}.
+\def\mathds#1{\mathbb{#1}}
+% \Tilde (amsmath's stackable tilde accent) renders as the ordinary \tilde accent,
+% which the math layer knows; the retry path expands \Tilde{x} -> \tilde{x}.
+\def\Tilde{\tilde}
 \def\@fontswitch#1#2{#2}
 \def\@nomath#1{}
 % \DeclareOldFontCommand\rm{\normalfont\rmfamily}{\mathrm}: real LaTeX binds the
