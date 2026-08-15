@@ -152,6 +152,15 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 		}
 		next, ok := e.expandMacroInMathSource(src, name)
 		if !ok {
+			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
+			// cannot render. Strip them from the source — keeping any content
+			// argument — so the equation typesets in the surrounding colour instead
+			// of being dropped whole.
+			if stripped, sok := stripMathColor(src, name); sok {
+				seen[name] = true
+				src = stripped
+				continue
+			}
 			return svg, m, err
 		}
 		seen[name] = true
@@ -202,6 +211,75 @@ func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 	}
 	out.WriteString(src)
 	return out.String(), true
+}
+
+// mathColorCmds are the xcolor/color commands the engine implements as primitives
+// (so the math macro-retry cannot expand them) and which go-tex/math does not
+// render. Each maps to the count of mandatory {brace} arguments and the 0-based
+// index of the one to keep as content (-1 = drop the command outright). A leading
+// optional [model] argument is skipped separately.
+var mathColorCmds = map[string]struct{ mand, keep int }{
+	"color":       {1, -1}, // \color[model]{name}
+	"pagecolor":   {1, -1},
+	"normalcolor": {0, -1},
+	"textcolor":   {2, 1}, // \textcolor[model]{name}{content}
+	"colorbox":    {2, 1}, // \colorbox[model]{name}{content}
+	"fcolorbox":   {3, 2}, // \fcolorbox[model]{frame}{bg}{content}
+}
+
+// stripMathColor removes every occurrence of the colour command \name from a
+// go-tex/math source string, keeping any content argument, and reports whether it
+// changed anything. The equation then renders in the surrounding colour rather than
+// being dropped. An occurrence whose arguments cannot be parsed is left verbatim
+// (for go-tex/math to reject) so a malformed source is never silently corrupted.
+func stripMathColor(src, name string) (string, bool) {
+	spec, ok := mathColorCmds[name]
+	if !ok {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := skipMathOptArg(src[i+len(needle):])
+		args, consumed, ok := parseMathArgs(rest, spec.mand)
+		if !ok {
+			out.WriteString(needle)
+			src = src[i+len(needle):]
+			continue
+		}
+		if spec.keep >= 0 && spec.keep < len(args) {
+			out.WriteString(args[spec.keep])
+		}
+		src = rest[consumed:]
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
+}
+
+// skipMathOptArg drops a leading optional [..] argument (and any spaces before it)
+// from a go-tex/math source string, e.g. the colour model in \color[rgb]{1,0,0}.
+func skipMathOptArg(s string) string {
+	p := 0
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	if p < len(s) && s[p] == '[' {
+		for p < len(s) && s[p] != ']' {
+			p++
+		}
+		if p < len(s) {
+			p++ // consume ']'
+		}
+		return s[p:]
+	}
+	return s
 }
 
 // replaceMathCS substitutes every occurrence of the control sequence \name in a
