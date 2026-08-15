@@ -376,11 +376,26 @@ func unknownMathCommand(errMsg string) string {
 		return ""
 	}
 	rest := errMsg[i+len(marker):]
+	if rest == "" {
+		return ""
+	}
+	// A control word is one or more letters (@ included, for LaTeX internals).
 	j := 0
 	for j < len(rest) && (rest[j] == '@' || (rest[j] >= 'a' && rest[j] <= 'z') || (rest[j] >= 'A' && rest[j] <= 'Z')) {
 		j++
 	}
-	return rest[:j]
+	if j > 0 {
+		return rest[:j]
+	}
+	// Otherwise it is a control symbol: a single non-letter (\1, \%, \#, \_ …).
+	// Returning it lets the macro-retry expand a document's \newcommand{\1}{…} and
+	// keys the skip tally on the real command instead of the generic "$math$".
+	// Whitespace is not a command name (a malformed "\ " error), so ignore it.
+	r, _ := utf8.DecodeRuneInString(rest)
+	if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+		return ""
+	}
+	return string(r)
 }
 
 // recordMathSkip tallies a dropped equation under skippedCS. When the error is

@@ -170,7 +170,10 @@ func TestUnknownMathCommand(t *testing.T) {
 		{`texmath: unknown command \mathbb`, "mathbb"},
 		{`texmath: unknown command \@currenvir followed`, "@currenvir"},
 		{`unknown command \F`, "F"},
-		{`unknown command \ with no name`, ""},
+		{`unknown command \1`, "1"},               // control symbol: a document's \newcommand{\1}
+		{`unknown command \% here`, "%"},          // escaped special
+		{`unknown command \ with no name`, ""},    // control space is not a command
+		{`trailing marker unknown command \`, ""}, // nothing after the backslash
 		{`some other failure`, ""},
 	}
 	for _, c := range cases {

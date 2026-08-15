@@ -231,6 +231,9 @@ const LaTeX2eClassKernel = `
 % \Tilde (amsmath's stackable tilde accent) renders as the ordinary \tilde accent,
 % which the math layer knows; the retry path expands \Tilde{x} -> \tilde{x}.
 \def\Tilde{\tilde}
+% amsmath's \implies / \impliedby are long double arrows the math layer knows.
+\def\implies{\Longrightarrow}
+\def\impliedby{\Longleftarrow}
 \def\@fontswitch#1#2{#2}
 \def\@nomath#1{}
 % \DeclareOldFontCommand\rm{\normalfont\rmfamily}{\mathrm}: real LaTeX binds the
