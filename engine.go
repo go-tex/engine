@@ -236,10 +236,11 @@ type Engine struct {
 	// (Run resets it to 0; class/package loading splices file bodies into e.base at
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
-	expandDepth int // >0 while an isolated expansion (\edef/\message) is running
-	progBpos    int // e.bpos at the last observed forward progress
-	noProgSteps int // expansion steps since e.bpos last advanced
-	tightLimit  int // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
+	afterToken  *tok // token saved by \afterassignment, inserted after the next one
+	expandDepth int  // >0 while an isolated expansion (\edef/\message) is running
+	progBpos    int  // e.bpos at the last observed forward progress
+	noProgSteps int  // expansion steps since e.bpos last advanced
+	tightLimit  int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
@@ -515,14 +516,39 @@ func (e *Engine) meaningOf(t tok) *meaning {
 }
 
 func (e *Engine) define(name string, m *meaning, global bool) {
-	if !global && len(e.groups) > 0 {
+	if global {
+		e.forgetSaved(0, 0, name)
+	} else if len(e.groups) > 0 {
 		e.save = append(e.save, saveItem{kind: 0, name: name, old: e.eq[name]})
 	}
 	e.eq[name] = m
 }
 
+// forgetSaved drops the pending restores for one quantity, which is what makes an
+// assignment *global*: the value must outlive every group that is open, so a
+// local assignment made earlier in one of them must no longer be restored over
+// it at the closing brace. Without this, {\x=1 \global\x=2 } would leave \x at
+// its value from before the group — and the idiom that carries a result out of a
+// group (pgf's \pgf@process does exactly {…\global\pgf@x=\pgf@x}) would return
+// nothing.
+func (e *Engine) forgetSaved(kind, idx int, name string) {
+	if len(e.save) == 0 {
+		return
+	}
+	out := e.save[:0]
+	for _, it := range e.save {
+		if it.kind == kind && ((kind == 0 && it.name == name) || (kind != 0 && it.idx == idx)) {
+			continue
+		}
+		out = append(out, it)
+	}
+	e.save = out
+}
+
 func (e *Engine) setCount(i, v int, global bool) {
-	if !global && len(e.groups) > 0 {
+	if global {
+		e.forgetSaved(1, i, "")
+	} else if len(e.groups) > 0 {
 		e.save = append(e.save, saveItem{kind: 1, idx: i, oldi: e.count[i]})
 	}
 	e.count[i] = v
@@ -532,7 +558,9 @@ func (e *Engine) setDimen(i, v int, global bool) {
 	if i < 0 || i >= 256 {
 		return
 	}
-	if !global && len(e.groups) > 0 {
+	if global {
+		e.forgetSaved(3, i, "")
+	} else if len(e.groups) > 0 {
 		e.save = append(e.save, saveItem{kind: 3, idx: i, oldd: e.dimen[i]})
 	}
 	e.dimen[i] = v
@@ -542,7 +570,9 @@ func (e *Engine) setSkip(i int, v glueSpec, global bool) {
 	if i < 0 || i >= 256 {
 		return
 	}
-	if !global && len(e.groups) > 0 {
+	if global {
+		e.forgetSaved(4, i, "")
+	} else if len(e.groups) > 0 {
 		e.save = append(e.save, saveItem{kind: 4, idx: i, oldg: e.skip[i]})
 	}
 	e.skip[i] = v
@@ -1042,6 +1072,11 @@ func (e *Engine) execCS(t tok) bool {
 		e.fail("Undefined control sequence \\" + t.cs)
 		return false
 	}
+	if m.kind == mPrim && m.name == "afterassignment" {
+		m.prim(e)
+		return true
+	}
+	defer e.flushAfterAssignment(m)
 	switch m.kind {
 	case mCountRef:
 		e.countRefAssign(m.code, false) // \n=<v>
@@ -1169,11 +1204,29 @@ func (e *Engine) scanInt() int {
 				if m.kind == mCharDef {
 					return sign * m.code
 				}
+				// A box-register handle from \newbox is a register *number*: TeX
+				// allocates it with \chardef, so \box\mybox, \wd\mybox and
+				// \setbox\mybox all read it as the integer it stands for.
+				if m.kind == mBoxRef {
+					return sign * m.code
+				}
 				if m.kind == mCountRef {
 					return sign * e.count[m.code]
 				}
 				if m.kind == mPrim && m.name == "count" {
 					return sign * e.count[e.scanInt()]
+				}
+				// TeX coerces an internal dimension (or glue) to an integer: its
+				// value in scaled points. \number\pgf@x and \ifnum\wd0>0 both
+				// rely on it, and a package that computes with lengths uses it
+				// constantly.
+				if e.isInternalDimen(t) && m.name != "dimexpr" {
+					e.back(t)
+					v, _ := e.scanDimenValue(false)
+					return sign * v
+				}
+				if m.kind == mPrim && m.name == "catcode" {
+					return sign * int(e.catcode[rune(e.scanInt())])
 				}
 				if m.kind == mPrim && m.name == "numexpr" {
 					return sign * e.scanExpr(false)
@@ -1184,6 +1237,13 @@ func (e *Engine) scanInt() int {
 					return sign * e.scanExpr(true)
 				}
 			}
+		}
+		// TeX's alphabetic constant: `<character> or `<single-character control
+		// sequence> is that character's code. It is how a source names a character
+		// it cannot write as a number — \catcode`\%=14, \lccode`\a=`\A,
+		// \chardef\bslash=`\\ — so a package that sets any catcode needs it.
+		if t.is('`', catOther) {
+			return sign * e.scanCharCode()
 		}
 		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
 			n := int(t.ch - '0')
@@ -1203,6 +1263,68 @@ func (e *Engine) scanInt() int {
 		e.back(t)
 		return 0
 	}
+}
+
+// assignmentPrims are the primitives that perform an assignment, after which a
+// token saved by \afterassignment is inserted (TeX §1269). A register alias
+// (\pgf@x=…) assigns too and is handled by kind, not by name.
+var assignmentPrims = map[string]bool{
+	"def": true, "gdef": true, "edef": true, "xdef": true, "let": true,
+	"futurelet": true, "global": true, "chardef": true, "countdef": true,
+	"dimendef": true, "skipdef": true, "toksdef": true, "newcount": true,
+	"newdimen": true, "newskip": true, "newtoks": true, "newbox": true,
+	"count": true, "dimen": true, "skip": true, "toks": true, "catcode": true,
+	"advance": true, "multiply": true, "divide": true, "setbox": true,
+	"font": true, "hsize": true, "vsize": true, "parindent": true,
+	"baselineskip": true, "leftskip": true, "rightskip": true, "sfcode": true,
+	"hskip": true, "vskip": true, "wd": true, "ht": true, "dp": true,
+	"columnsep": true, "columnseprule": true,
+}
+
+// flushAfterAssignment inserts the token \afterassignment saved, once the
+// assignment it was waiting for has been performed. TeX keeps exactly one such
+// token, and it is inserted after the assignment, not before — which is what
+// lets a macro see the value that was just assigned (pgf uses it to resume a
+// scanner right after \let\next= has swallowed a token).
+func (e *Engine) flushAfterAssignment(m *meaning) {
+	if e.afterToken == nil {
+		return
+	}
+	switch m.kind {
+	case mCountRef, mDimenRef, mSkipRef, mToksRef, mFont:
+	case mPrim:
+		if !assignmentPrims[m.name] {
+			return
+		}
+	default:
+		return
+	}
+	t := *e.afterToken
+	e.afterToken = nil
+	e.back(t)
+}
+
+// scanCharCode reads the character after a ` : a character token gives its own
+// code, and a control sequence gives the code of its single character (TeX reads
+// this token unexpanded, so `\a is the letter a even when \a is a macro). A
+// multi-letter control sequence is not a character constant and yields zero.
+func (e *Engine) scanCharCode() int {
+	t, ok := e.getNext()
+	if !ok {
+		return 0
+	}
+	code := 0
+	if t.cs_ {
+		r := []rune(t.cs)
+		if len(r) != 1 {
+			return 0
+		}
+		code = int(r[0])
+	} else {
+		code = int(t.ch)
+	}
+	e.skipOneOptSpace()
+	return code
 }
 
 // unitRatio maps a physical unit keyword to TeX's exact (num, denom) ratio to

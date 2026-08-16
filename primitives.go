@@ -73,6 +73,13 @@ func (e *Engine) loadPrimitives() {
 	e.prim("xdef", func(e *Engine) { e.doDef(true, true) })
 	e.prim("let", func(e *Engine) { e.doLet(false) })
 	e.prim("futurelet", func(e *Engine) { e.doFuturelet(false) })
+	// \afterassignment saves one token to be inserted once the next assignment
+	// has been carried out (see flushAfterAssignment).
+	e.prim("afterassignment", func(e *Engine) {
+		if t, ok := e.getNext(); ok {
+			e.afterToken = &t
+		}
+	})
 	e.prim("global", func(e *Engine) { e.doGlobal() })
 	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
 	e.prim("countdef", func(e *Engine) { e.doCountdef() })
@@ -698,6 +705,12 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "dimexpr":
 				e.pushString(formatPt(e.scanExpr(true)))
 				return
+			case m.kind == mPrim && m.name == "catcode":
+				// \the\catcode`\@ — a file that changes a character's category
+				// saves the old value this way and restores it when it is done, so
+				// reading a catcode matters as much as setting one.
+				e.pushString(strconv.Itoa(int(e.catcode[rune(e.scanInt())])))
+				return
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
 				return
@@ -817,21 +830,28 @@ func (e *Engine) evalIfx() bool {
 // ifxEqual reports whether two tokens are \ifx-equal: same character+catcode for
 // plain characters, or equal meanings for control sequences / active chars.
 func (e *Engine) ifxEqual(a, b tok) bool {
-	ma, mb := e.meaningOf(a), e.meaningOf(b)
-	if ma == nil && mb == nil {
-		// \ifx compares *meanings*, and every undefined control sequence has the
-		// same one — "undefined" — so two of them are equal whatever they are
-		// called. That is what makes \ifx\foo\undefined the standard way to ask
-		// whether \foo exists, an idiom nearly every package is built on.
-		if a.cs_ && b.cs_ {
-			return true
-		}
-		return tokEq(a, b)
-	}
+	ma, mb := e.ifxMeaning(a), e.ifxMeaning(b)
 	if ma == nil || mb == nil {
-		return false
+		// Only an undefined control sequence has no meaning at all, and they all
+		// share the same one — "undefined" — so two of them are equal whatever
+		// they are called. That is what makes \ifx\foo\undefined the standard way
+		// to ask whether \foo exists, an idiom nearly every package is built on.
+		return ma == nil && mb == nil
 	}
 	return meaningEq(ma, mb)
+}
+
+// ifxMeaning is what \ifx compares: the meaning of a token. A character token
+// carries one too — its category and character — which is the same meaning a
+// control sequence \let to that character has. So \ifx\next/ is true when \next
+// was \let to a slash, the way every one-token-lookahead scanner tests what it
+// peeked at (LaTeX's \@ifnextchar family, pgfkeys' path splitting, …). nil means
+// undefined, which only a control sequence can be.
+func (e *Engine) ifxMeaning(t tok) *meaning {
+	if !t.cs_ {
+		return &meaning{kind: mLetChar, ch: t.ch, cat: t.cat}
+	}
+	return e.meaningOf(t)
 }
 
 func (e *Engine) evalIf() bool {

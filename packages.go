@@ -475,11 +475,39 @@ func (e *Engine) doIfFileExists() {
 	}
 }
 
+// readBraceNameX reads a braced file name, expanding it as TeX's file-name
+// scanner does: a package names the file to load through a macro (pgf loads its
+// driver as \pgfutil@InputIfFileExists{\pgfsysdriver}), so an unexpanded name
+// would never resolve.
+func (e *Engine) readBraceNameX() string {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || t.cs_ || t.cat != catBegin {
+		if ok {
+			e.back(t)
+		}
+		return ""
+	}
+	var b []rune
+	for {
+		u, ok := e.getXToken()
+		if !ok || (!u.cs_ && u.cat == catEnd) {
+			break
+		}
+		if u.cs_ {
+			b = append(b, []rune(u.cs)...)
+			continue
+		}
+		b = append(b, u.ch)
+	}
+	return strings.TrimSpace(string(b))
+}
+
 // doInputIfFileExists implements \InputIfFileExists{name}{then}{else}: when name
 // resolves it splices the file (with the then-code queued to run after it), else it
 // runs the else-code.
 func (e *Engine) doInputIfFileExists() {
-	name := e.readBraceName()
+	name := e.readBraceNameX()
 	then := e.readBraceToksRaw()
 	els := e.readBraceToksRaw()
 	data, _, ok := e.findTeXFile(name, []string{"", ".tex"})
