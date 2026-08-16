@@ -435,7 +435,12 @@ const MiniLaTeXKernel = `
 \def\DeclareMathOperator{\@ifstar\@gtxdeclmathopstar\@gtxdeclmathop}
 \def\@gtxdeclmathop#1#2{\def#1{\operatorname{#2}}}
 \def\@gtxdeclmathopstar#1#2{\def#1{\operatorname*{#2}}}
-\def\DeclarePairedDelimiter#1#2#3{}
+% \DeclarePairedDelimiter\cmd{L}{R} (mathtools) defines \cmd{x} as the auto-sized
+% \left L x \right R — real papers use it for \abs \norm \ceil \floor \set. It is a
+% plain one-argument macro so the math resolver can expand it textually (a runtime
+% \@ifstar for the * variant cannot survive that string substitution). The auto-size
+% \left…\right already matches what the starred form asks for.
+\def\DeclarePairedDelimiter#1#2#3{\newcommand#1[1]{\left#2 ##1\right#3}}
 \def\SetKwInput#1#2{}
 \def\algnewcommand#1#2{}
 \def\setlist{\@ifnextbracket\@setlistopt\@setlistarg}

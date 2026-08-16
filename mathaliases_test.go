@@ -34,6 +34,28 @@ func TestMathAliases(t *testing.T) {
 	}
 }
 
+// \DeclarePairedDelimiter (mathtools) defines a one-argument delimiter macro; real
+// papers use it for \ceil \floor \abs \norm \set. It must expand textually so the
+// math resolver renders it instead of dropping the equation.
+func TestDeclarePairedDelimiter(t *testing.T) {
+	src := `\documentclass{article}` +
+		`\DeclarePairedDelimiter\ceil{\lceil}{\rceil}` +
+		`\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}` +
+		`\begin{document}$\ceil{x}+\floor{\frac{y}{2}}$\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"\\ceil", "\\floor", "ceil", "floor"} {
+		if e.SkippedCommands()[k] != 0 {
+			t.Errorf("dropped %q: %v", k, e.SkippedCommands())
+		}
+	}
+	if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
+		t.Error("rendered no glyph paths")
+	}
+}
+
 // Colour commands are primitives go-tex/math cannot render; in math they are
 // stripped (content kept) so the equation typesets in the surrounding colour
 // instead of being dropped — the single largest remaining arXiv math gap.
