@@ -102,6 +102,25 @@ func TestFuturelet(t *testing.T) {
 	}
 }
 
+// Inside \message/\typeout, \protect shields the next control sequence from
+// expansion (LaTeX \let\protect\string). Without it, a self-referential warning
+// like ieeeconf's \typeout{… \protect\section …} — where \section expands to a
+// macro that re-issues that very warning — loops forever.
+func TestProtectInMessage(t *testing.T) {
+	// \protect keeps \foo literal; the bare \foo still expands.
+	if got := run(t, `\def\foo{EXPANDED}\message{a\protect\foo b}`); got != `a\foob` {
+		t.Errorf("protected \\foo = %q, want %q", got, `a\foob`)
+	}
+	if got := run(t, `\def\foo{EXPANDED}\message{\foo}`); got != "EXPANDED" {
+		t.Errorf("unprotected \\foo = %q, want %q", got, "EXPANDED")
+	}
+	// A self-referential \protect\sec inside its own warning must not recurse.
+	if got := run(t, `\def\sec{\@ifstar{\x}{\destroy}}`+
+		`\def\destroy#1{\message{use \protect\sec}}\destroy{arg}\message{ok}`); got != `use \sec ok` {
+		t.Errorf("self-referential protect = %q, want %q", got, `use \sec ok`)
+	}
+}
+
 // TestScoping verifies that groups save and restore meanings and registers.
 func TestScoping(t *testing.T) {
 	if got := run(t, `\def\a{out}{\def\a{in}\message{\a}}\message{\a}`); got != "in out" {

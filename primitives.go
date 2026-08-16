@@ -921,7 +921,21 @@ func (e *Engine) doMessage() {
 	if !ok || !(t.cat == catBegin && !t.cs_) {
 		return
 	}
-	b := e.expandList(e.grabGroup())
+	raw := e.grabGroup()
+	// \message/\typeout typeset a "moving argument": \protect must shield the
+	// following control sequence from expansion (LaTeX does \let\protect\string
+	// here). Without it, a self-referential warning such as ieeeconf's
+	//   \def\@IEEEdestroythesectionargument#1{\typeout{… \protect\section …}}
+	// re-expands \section — itself a macro that calls \@IEEEdestroythesectionargument
+	// — and loops forever. Shielding it makes \protect\section print literally.
+	savedProtect, hadProtect := e.eq["protect"]
+	e.eq["protect"] = e.eq["string"]
+	b := e.expandList(raw)
+	if hadProtect {
+		e.eq["protect"] = savedProtect
+	} else {
+		delete(e.eq, "protect")
+	}
 	if e.out.Len() > 0 {
 		e.out.WriteByte(' ')
 	}
