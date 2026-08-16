@@ -156,24 +156,6 @@ func TestIsInternalDimen(t *testing.T) {
 	}
 }
 
-// \futurelet peeks at a token without consuming it: the meaning is assigned and
-// both tokens are put back for the following macro to read.
-func TestFuturelet(t *testing.T) {
-	// \next takes the meaning of the token *after* \a, which is not consumed.
-	e := New()
-	e.SetFont(spMock{})
-	out, err := e.Run(`\def\a{}\let\bee=b\futurelet\next\a b\ifx\next\bee\message{sawb}\fi`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "sawb" {
-		t.Errorf("\\futurelet did not see the second token: %q", out)
-	}
-	if got := glyphString(e.mvl); got != "b" {
-		t.Errorf("the peeked token must still be read: typeset %q, want b", got)
-	}
-}
-
 // Both tokens survive \futurelet, in their original order.
 func TestFutureletPutsBothBack(t *testing.T) {
 	e := New()

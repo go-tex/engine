@@ -72,7 +72,7 @@ func (e *Engine) loadPrimitives() {
 	e.prim("edef", func(e *Engine) { e.doDef(false, true) })
 	e.prim("xdef", func(e *Engine) { e.doDef(true, true) })
 	e.prim("let", func(e *Engine) { e.doLet(false) })
-	e.prim("futurelet", func(e *Engine) { e.doFuturelet() })
+	e.prim("futurelet", func(e *Engine) { e.doFuturelet(false) })
 	e.prim("global", func(e *Engine) { e.doGlobal() })
 	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
 	e.prim("countdef", func(e *Engine) { e.doCountdef() })
@@ -167,14 +167,20 @@ func (e *Engine) doLet(global bool) {
 		e.back(t)
 	}
 	rhs, ok := e.getNext()
-	if !ok || name == "" {
+	if !ok {
 		return
 	}
-	e.letTo(name, rhs, global)
+	e.assignLetMeaning(name, rhs, global)
 }
 
-// letTo gives name the current meaning of the token rhs (TeX \let's assignment).
-func (e *Engine) letTo(name string, rhs tok, global bool) {
+// assignLetMeaning gives the control sequence `name` the meaning carried by the
+// token `rhs` — a copy of another control sequence's meaning, mUndef for an
+// undefined one, or a "let character" for a character token. Shared by \let and
+// \futurelet.
+func (e *Engine) assignLetMeaning(name string, rhs tok, global bool) {
+	if name == "" {
+		return
+	}
 	if rhs.cs_ {
 		if m := e.eq[rhs.cs]; m != nil {
 			cp := *m
@@ -187,12 +193,11 @@ func (e *Engine) letTo(name string, rhs tok, global bool) {
 	e.define(name, &meaning{kind: mLetChar, ch: rhs.ch, cat: rhs.cat}, global)
 }
 
-// doFuturelet implements \futurelet\cs<token1><token2>: \cs takes token2's
-// meaning and BOTH tokens are put back, so a macro can look one token ahead
-// without consuming it. It is how LaTeX's \@ifnextchar (and every package's copy
-// of it, such as pgf's \pgfutil@ifnextchar) peeks at the next character to decide
-// whether an optional argument follows.
-func (e *Engine) doFuturelet() {
+// doFuturelet implements \futurelet\cs<t1><t2>: it lets \cs take the meaning of
+// t2 WITHOUT consuming either token — t1 and t2 are left in the input so the
+// next thing processed is t1. This is the one-token lookahead that generic
+// LaTeX scanners (\@ifnextchar, elsarticle's \elem@thanksref loop, …) rely on.
+func (e *Engine) doFuturelet(global bool) {
 	name := e.scanCSName()
 	t1, ok1 := e.getNext()
 	if !ok1 {
@@ -200,14 +205,12 @@ func (e *Engine) doFuturelet() {
 	}
 	t2, ok2 := e.getNext()
 	if !ok2 {
+		e.assignLetMeaning(name, t1, global)
 		e.back(t1)
 		return
 	}
-	if name != "" {
-		e.letTo(name, t2, false)
-	}
-	e.back(t2) // pushed first so token1 is read first
-	e.back(t1)
+	e.assignLetMeaning(name, t2, global)
+	e.push([]tok{t1, t2})
 }
 
 func (e *Engine) skipOptSpace0() {
@@ -254,6 +257,8 @@ func (e *Engine) doGlobal() {
 		e.doDef(true, true)
 	case "let":
 		e.doLet(true)
+	case "futurelet":
+		e.doFuturelet(true)
 	case "count":
 		e.doCountAssign(true)
 	case "dimen":
@@ -806,6 +811,12 @@ func (e *Engine) evalIfx() bool {
 	if !ok1 || !ok2 {
 		return false
 	}
+	return e.ifxEqual(a, b)
+}
+
+// ifxEqual reports whether two tokens are \ifx-equal: same character+catcode for
+// plain characters, or equal meanings for control sequences / active chars.
+func (e *Engine) ifxEqual(a, b tok) bool {
 	ma, mb := e.meaningOf(a), e.meaningOf(b)
 	if ma == nil && mb == nil {
 		// \ifx compares *meanings*, and every undefined control sequence has the
@@ -954,7 +965,21 @@ func (e *Engine) doMessage() {
 	if !ok || !(t.cat == catBegin && !t.cs_) {
 		return
 	}
-	b := e.expandList(e.grabGroup())
+	raw := e.grabGroup()
+	// \message/\typeout typeset a "moving argument": \protect must shield the
+	// following control sequence from expansion (LaTeX does \let\protect\string
+	// here). Without it, a self-referential warning such as ieeeconf's
+	//   \def\@IEEEdestroythesectionargument#1{\typeout{… \protect\section …}}
+	// re-expands \section — itself a macro that calls \@IEEEdestroythesectionargument
+	// — and loops forever. Shielding it makes \protect\section print literally.
+	savedProtect, hadProtect := e.eq["protect"]
+	e.eq["protect"] = e.eq["string"]
+	b := e.expandList(raw)
+	if hadProtect {
+		e.eq["protect"] = savedProtect
+	} else {
+		delete(e.eq, "protect")
+	}
 	if e.out.Len() > 0 {
 		e.out.WriteByte(' ')
 	}
@@ -1178,6 +1203,30 @@ func (e *Engine) loadMore() {
 		chosen := elseToks
 		if t, ok := e.getNext(); ok {
 			if !t.cs_ && t.ch == '[' {
+				chosen = thenToks
+			}
+			e.back(t)
+		}
+		e.push(chosen)
+	})
+	// \@ifnextchar<tok>{THEN}{ELSE}: the general LaTeX look-ahead, now that the
+	// engine has real \ifx-based token comparison. The target token is read
+	// unexpanded; the next non-space input token is peeked (never consumed) and,
+	// when it is \ifx-equal to the target, THEN is chosen, else ELSE. This handles
+	// targets that are control sequences — e.g. elsarticle/bmvc2k list scanners
+	// use \@ifnextchar\<sentinel> to stop, which the bracket-only fallback could
+	// never detect (it always took ELSE and looped forever).
+	e.prim("@ifnextchar", func(e *Engine) {
+		target, ok := e.getNext()
+		if !ok {
+			return
+		}
+		thenToks := e.grabUndelimited()
+		elseToks := e.grabUndelimited()
+		e.skipOptSpace()
+		chosen := elseToks
+		if t, tok := e.getNext(); tok {
+			if e.ifxEqual(t, target) {
 				chosen = thenToks
 			}
 			e.back(t)

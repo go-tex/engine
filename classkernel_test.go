@@ -54,6 +54,46 @@ func TestListMachineryBooleans(t *testing.T) {
 	}
 }
 
+// \loop … \repeat must run, and — critically — \repeat is \let to \fi so that
+// TeX's skip over a FALSE \if branch treats a \loop\ifnum…\repeat body as
+// balanced. A skipped branch containing an unclosed \ifnum (had \repeat not
+// counted as \fi) would overrun its \else/\fi and swallow the text that follows
+// — the mechanism behind the acl.sty conference-style 0-page bug.
+func TestLoopRepeat(t *testing.T) {
+	// Executed loop: count from 1, five iterations, emit a mark each time.
+	if out := ckRun(t, `\newcount\n \n=0 \loop\advance\n 1 \message{x}\ifnum\n<5 \repeat`); out != "x x x x x" {
+		t.Errorf("executed \\loop: message=%q, want \"x x x x x\"", out)
+	}
+	// Skipped false branch whose body holds \loop\ifnum…\repeat: the \message
+	// AFTER the \fi must still fire (skip stayed balanced, nothing swallowed).
+	if out := ckRun(t, `\newif\ifX \ifX \loop\ifnum1<2 \repeat\else\fi\message{after}`); out != "after" {
+		t.Errorf("skipped \\loop\\repeat branch swallowed following text: message=%q, want \"after\"", out)
+	}
+}
+
+// \@ifnextchar peeks the next token and compares it (\ifx) to a target that may
+// be a control sequence — not just '['. A list scanner that stops on a control-
+// sequence sentinel (elsarticle/bmvc2k author lists use exactly this) must
+// terminate; the old bracket-only fallback always took ELSE and looped forever.
+func TestIfnextcharTargets(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		// list map that stops on a \stop (=\relax) sentinel
+		{"cs-sentinel", `\makeatletter\let\stop\relax\def\R{}` +
+			`\def\ml#1{\edef\R{\R#1}\@ifnextchar\stop{\@gobble}{\ml}}` +
+			`\ml{a}{b}{c}\stop\message{\R}`, "abc"},
+		// '[' still detected (optional-argument look-ahead)
+		{"bracket-present", `\makeatletter\def\c{\@ifnextchar[{\def\R{B}}{\def\R{N}}}\c[x]\message{\R}`, "B"},
+		{"bracket-absent", `\makeatletter\def\c{\@ifnextchar[{\def\R{B}}{\def\R{N}}}\c y\message{\R}`, "N"},
+		// a \relax target is matched by a following \relax
+		{"relax-target", `\makeatletter\def\c{\@ifnextchar\relax{\def\R{R}}{\def\R{N}}}\c\relax\message{\R}`, "R"},
+	}
+	for _, c := range cases {
+		if got := ckRun(t, c.src); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 // Purely expandable results: the constant / size-number / char macros expand
 // inside a single wrapping \message.
 func TestClassKernelExpandable(t *testing.T) {

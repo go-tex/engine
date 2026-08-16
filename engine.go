@@ -406,8 +406,33 @@ func (e *Engine) scan() (tok, bool) {
 			e.bpos++
 			return e.scanCS(), true
 		case catComment:
+			// A comment runs to the end of the line. In TeX the terminating
+			// end-of-line is consumed by the comment — it produces NO interword
+			// space — and the next line begins in state N, where leading spaces
+			// are ignored. So `\def\x#1%⏎   {…}` defines an UNDELIMITED macro
+			// (the `%` is exactly what suppresses the space that the line break
+			// would otherwise leave in the parameter text), and `foo%⏎bar` joins
+			// as `foobar`. A following blank line still breaks the paragraph.
+			e.setSrcPos(start)
 			for e.bpos < len(e.base) && e.base[e.bpos] != '\n' {
 				e.bpos++
+			}
+			newlines := 0
+			for e.bpos < len(e.base) {
+				cc := e.catOf(e.base[e.bpos])
+				if cc == catEOL {
+					newlines++
+					e.bpos++
+					continue
+				}
+				if cc == catSpace {
+					e.bpos++
+					continue
+				}
+				break
+			}
+			if newlines >= 2 {
+				return csTok("par"), true
 			}
 		case catSpace, catEOL:
 			e.setSrcPos(start)

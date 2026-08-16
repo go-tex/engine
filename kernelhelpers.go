@@ -186,18 +186,8 @@ const LaTeX2eKernelHelpers = `
 % harmless no-op for .sty files that reference it.
 \def\l@ngrel@x{}
 \def\@star@or@long#1{\@ifstar{#1}{#1}}
-% ── \@ifnextchar (best-effort; the engine has no \futurelet) ─────────────────
-% Generic single-character look-ahead needs \futurelet, which this engine lacks.
-% The engine CAN peek for '[' (\@ifnextbracket). \@ifnextchar therefore handles
-% the dominant real-world case \@ifnextchar[{then}{else} exactly (delegating to
-% \@ifnextbracket, which leaves the '[' in place for {then} to read); for ANY
-% OTHER target character it takes the else-branch WITHOUT peeking. Code that wants
-% to look ahead for '*' should use \@ifstar (which peeks correctly).
-% The '[' look-ahead must happen with NOTHING between \@ifnextbracket and the real
-% input, so the \else/\fi are consumed FIRST (\expandafter over \fi) and the branch
-% selector then grabs the two trailing groups — \@ifnextbracket runs with the live
-% input immediately after it.
-\def\@ifnextchar#1#2#3{\if[#1\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi{\@ifnextbracket{#2}{#3}}{#3}}
+% \@ifnextchar is a native primitive (real \ifx-based look-ahead over any target
+% token, including control sequences) — see the engine's primitive table.
 % ── logging / diagnostics: never abort a .sty, route everything to \message ──
 % \MessageBreak/\protect/\on@line/\@spaces are the tokens warnings interpolate;
 % keep them harmless inside the \message expansion. \@ehc/\@ehd are the "error
