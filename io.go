@@ -4,7 +4,9 @@
 package engine
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -124,13 +126,31 @@ func inputCandidates(file string) []string {
 	return []string{file + ".tex", file}
 }
 
-// readInput reads an \input file, applying the candidate-name search. It returns
-// the first candidate that reads successfully, or the last error otherwise.
+// readInput reads an \input file, applying the candidate-name search over the
+// same places \usepackage looks (see findTeXFile): the document's directory, the
+// TEXINPUTS/GOTEX_TEXMF path, then the embedded base set. A package splits itself
+// across files and pulls them in with \input, so \input must search the path as
+// well — a package found on TEXINPUTS whose own parts were not would load only
+// its first file. It returns the first candidate that reads, or the last error.
 func (e *Engine) readInput(file string) ([]byte, error) {
-	var err error
-	var data []byte
+	var err error = fs.ErrNotExist
 	for _, c := range inputCandidates(file) {
-		if data, err = os.ReadFile(c); err == nil {
+		if filepath.IsAbs(c) {
+			data, e2 := os.ReadFile(c)
+			if e2 == nil {
+				return data, nil
+			}
+			err = e2
+			continue
+		}
+		for _, d := range e.texInputDirs() {
+			data, e2 := os.ReadFile(filepath.Join(d, c))
+			if e2 == nil {
+				return data, nil
+			}
+			err = e2
+		}
+		if data, ok := embeddedTeXFile(c); ok {
 			return data, nil
 		}
 	}

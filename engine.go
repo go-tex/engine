@@ -159,6 +159,7 @@ type Engine struct {
 	pendingFootnotes []*boxNode
 	buildingFootnote bool
 	noBase           bool // when true, getNext does not fall through to the base string
+	negateNextIf     int  // pending \unless prefixes (e-TeX): reverse the next conditional
 	allocCnt         int  // next free \count register handed out by \newcount
 	allocDim         int  // next free \dimen register handed out by \newdimen
 	allocSkp         int  // next free \skip register handed out by \newskip
@@ -235,6 +236,7 @@ type Engine struct {
 	// (Run resets it to 0; class/package loading splices file bodies into e.base at
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
+	expandDepth int // >0 while an isolated expansion (\edef/\message) is running
 	progBpos    int // e.bpos at the last observed forward progress
 	noProgSteps int // expansion steps since e.bpos last advanced
 	tightLimit  int // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
@@ -1173,6 +1175,14 @@ func (e *Engine) scanInt() int {
 				if m.kind == mPrim && m.name == "count" {
 					return sign * e.count[e.scanInt()]
 				}
+				if m.kind == mPrim && m.name == "numexpr" {
+					return sign * e.scanExpr(false)
+				}
+				if m.kind == mPrim && m.name == "dimexpr" {
+					// A dimension used where an integer is wanted coerces to its
+					// value in scaled points, as TeX's <internal dimen> does.
+					return sign * e.scanExpr(true)
+				}
 			}
 		}
 		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
@@ -1261,6 +1271,12 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.skip[m.code].width, 0
 			case m.kind == mPrim && m.name == "skip":
 				return e.skip[e.scanInt()].width, 0
+			case m.kind == mPrim && m.name == "dimexpr":
+				return e.scanExpr(true), 0
+			case m.kind == mPrim && m.name == "numexpr":
+				// An integer expression used as a dimension is a number of scaled
+				// points, matching \dimexpr <number>sp.
+				return e.scanExpr(false), 0
 			case m.kind == mPrim && m.name == "dimen":
 				return e.dimen[e.scanInt()], 0
 			case m.kind == mPrim && m.name == "wd":

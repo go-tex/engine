@@ -408,6 +408,11 @@ const MiniLaTeXKernel = `
 \def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
 \def\@gobbleoptonly[#1]{}
 \def\hypersetup#1{}
+% The pgf system layer picks its driver from \pgfsysdriver when one is already
+% defined, so naming this engine's own (texmf/pgfsys-gotex.def) here is what makes
+% the real pgf/TikZ draw rather than load and define nothing. Harmless when pgf is
+% never loaded.
+\def\pgfsysdriver{pgfsys-gotex.def}
 \def\usetikzlibrary#1{}
 \def\pgfplotsset#1{}
 \def\tikzset#1{}

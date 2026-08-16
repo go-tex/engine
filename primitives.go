@@ -49,6 +49,9 @@ var expandableSet = map[string]bool{
 func isExpandable(name string) bool { return expandableSet[name] }
 
 func isIfPrim(name string) bool {
+	if etexIfPrims[name] {
+		return true
+	}
 	switch name {
 	case "if", "ifnum", "ifx", "ifodd", "ifcase", "iftrue", "iffalse", "ifcat", "ifdim",
 		"ifmmode", "ifhmode", "ifvmode", "ifinner", "ifvoid", "ifhbox", "ifvbox":
@@ -97,7 +100,11 @@ func (e *Engine) loadPrimitives() {
 	e.define("bgroup", &meaning{kind: mLetChar, ch: '{', cat: catBegin}, true)
 	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
 	e.prim("relax", func(e *Engine) {})
+	// \nullfont selects the empty font (see nullfont.go); it is a font switch, so
+	// it is scoped by the enclosing group like any other.
+	e.eq["nullfont"] = &meaning{kind: mFont, font: nullFont{}, name: "nullfont"}
 	e.prim("message", func(e *Engine) { e.doMessage() })
+	e.prim("special", func(e *Engine) { e.doSpecial() })
 
 	// expansion
 	e.prim("expandafter", func(e *Engine) { e.doExpandafter() })
@@ -108,6 +115,12 @@ func (e *Engine) loadPrimitives() {
 	e.prim("number", func(e *Engine) { e.pushString(strconv.Itoa(e.scanInt())) })
 	e.prim("the", func(e *Engine) { e.doThe() })
 	e.prim("romannumeral", func(e *Engine) { e.pushString(roman(e.scanInt())) })
+
+	// e-TeX expressions (see etex.go). Executed on their own they contribute
+	// their value, as \the would print it; the scanners below read them as
+	// internal quantities.
+	e.prim("numexpr", func(e *Engine) { e.pushString(strconv.Itoa(e.scanExpr(false))) })
+	e.prim("dimexpr", func(e *Engine) { e.pushString(formatPt(e.scanExpr(true))) })
 
 	// conditionals
 	e.prim("ifnum", func(e *Engine) { e.doIf(e.evalIfnum()) })
@@ -120,6 +133,13 @@ func (e *Engine) loadPrimitives() {
 	e.prim("else", func(e *Engine) { e.skipToFi() })
 	e.prim("fi", func(e *Engine) {})
 	e.prim("or", func(e *Engine) { e.skipToFi() })
+
+	// e-TeX's conditionals and expansion primitives — see etexif.go.
+	e.loadETeXConditionals()
+	e.loadETeXExpansion()
+
+	// TeX's named integer/dimension/glue parameters — see texparams.go.
+	e.loadTeXParams()
 
 	// siunitx subset (\num, \si, \unit, \SI/\qty, \ang) — see siunitx.go.
 	e.loadSIUnitx()
@@ -672,6 +692,12 @@ func (e *Engine) doThe() {
 	if t.cs_ {
 		if m := e.eq[t.cs]; m != nil {
 			switch {
+			case m.kind == mPrim && m.name == "numexpr":
+				e.pushString(strconv.Itoa(e.scanExpr(false)))
+				return
+			case m.kind == mPrim && m.name == "dimexpr":
+				e.pushString(formatPt(e.scanExpr(true)))
+				return
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
 				return
@@ -718,10 +744,10 @@ func (e *Engine) doThe() {
 				e.pushString(formatGlue(e.skip[m.code]))
 				return
 			case m.kind == mToksRef:
-				e.push(e.toksValue(m.code))
+				e.push(e.theToks(e.toksValue(m.code)))
 				return
 			case m.kind == mPrim && m.name == "toks":
-				e.push(e.toksValue(e.scanInt()))
+				e.push(e.theToks(e.toksValue(e.scanInt())))
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))
@@ -735,6 +761,11 @@ func (e *Engine) doThe() {
 // ── conditionals ────────────────────────────────────────────────────────────
 
 func (e *Engine) doIf(cond bool) {
+	// \unless (e-TeX) reverses the sense of the conditional it prefixes.
+	if e.negateNextIf > 0 {
+		e.negateNextIf--
+		cond = !cond
+	}
 	if cond {
 		return // execute the true branch; \else/\fi handle the rest
 	}
@@ -788,6 +819,13 @@ func (e *Engine) evalIfx() bool {
 func (e *Engine) ifxEqual(a, b tok) bool {
 	ma, mb := e.meaningOf(a), e.meaningOf(b)
 	if ma == nil && mb == nil {
+		// \ifx compares *meanings*, and every undefined control sequence has the
+		// same one — "undefined" — so two of them are equal whatever they are
+		// called. That is what makes \ifx\foo\undefined the standard way to ask
+		// whether \foo exists, an idiom nearly every package is built on.
+		if a.cs_ && b.cs_ {
+			return true
+		}
 		return tokEq(a, b)
 	}
 	if ma == nil || mb == nil {
@@ -948,6 +986,23 @@ func (e *Engine) doMessage() {
 	e.out.WriteString(e.toksToString(b))
 }
 
+// theToks delivers the value of \the<token variable>. Inside an \edef (or any
+// other isolated expansion) those tokens are inserted but NOT expanded again —
+// TeX's rule, and the whole reason \the\toks exists as a way to carry a token
+// list through an expansion intact. Marking each token unexpandable-once is
+// exactly that guarantee. In ordinary execution the tokens are read normally.
+func (e *Engine) theToks(ts []tok) []tok {
+	if e.expandDepth == 0 {
+		return ts
+	}
+	out := make([]tok, len(ts))
+	for i, t := range ts {
+		t.noexp = true
+		out[i] = t
+	}
+	return out
+}
+
 // sentinel marks the end of an isolated expansion (getXToken returns it
 // literally since it has no meaning, so expandList can stop reliably regardless
 // of what is already on the input stack).
@@ -959,6 +1014,7 @@ func (e *Engine) expandList(ts []tok) []tok {
 	e.push(append(append([]tok(nil), ts...), sentinel))
 	saved := e.noBase
 	e.noBase = true
+	e.expandDepth++
 	var out []tok
 	for {
 		t, ok := e.getXToken()
@@ -967,6 +1023,7 @@ func (e *Engine) expandList(ts []tok) []tok {
 		}
 		out = append(out, t)
 	}
+	e.expandDepth--
 	e.noBase = saved
 	return out
 }

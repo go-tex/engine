@@ -72,7 +72,9 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black">`, bg)
 	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font)
 	sb.WriteString(`</g></svg>`)
-	return sb.String()
+	// Driver literals may refer back to a picture origin declared by an earlier
+	// one; that is resolved over the finished page (see special.go).
+	return resolveSpecialOrigins(sb.String())
 }
 
 // paintBoxSP paints a box whose left edge is at x and whose baseline is at the
@@ -165,6 +167,15 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			paintTransformSP(sb, c, cx, baseline, font)
 			cx += spToPt(c.width())
+		case specialNode:
+			// A driver literal: emitted verbatim at its reference point, taking no
+			// space. Groups it opens bracket the material painted after it (the
+			// dvisvgm model pgf's SVG driver is written against), so the run of
+			// glyphs is closed first to keep the elements properly nested.
+			lg.close()
+			if lit, ok := specialLiteral(c.text, cx, baseline); ok {
+				sb.WriteString(lit)
+			}
 		}
 	}
 	lg.close()
@@ -281,6 +292,10 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			cy += spToPt(c.height + c.depth)
+		case specialNode: // a driver literal between two vertical items
+			if lit, ok := specialLiteral(c.text, x, cy); ok {
+				sb.WriteString(lit)
+			}
 		}
 	}
 }
