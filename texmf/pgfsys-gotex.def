@@ -1,0 +1,156 @@
+% Copyright (c) the go-tex/engine authors.
+% SPDX-License-Identifier: BSD-3-Clause
+%
+% pgf system layer driver for the go-tex engine.
+%
+% pgf (and TikZ on top of it) is written against a *driver*: the system layer,
+% pgfsys.code.tex, defines every drawing operation as \pgfsys@<op> and expects a
+% pgfsys-<backend>.def to say what those operations emit. Without one, the whole
+% edifice loads and defines nothing that draws — which is why the operators stay
+% undefined when pgf is loaded with no driver.
+%
+% This is that file for this engine. It is modelled on pgfsys-dvisvgm.def, which
+% is the shortest real driver in the distribution, because pgf already ships the
+% hard part: pgfsys-common-svg.def expresses all ~40 system operations as SVG
+% fragments emitted through \pgfsysprotocol@literal. This engine's own \special
+% namespace carries exactly such a fragment (see special.go), so the driver's job
+% reduces to three things: send a literal, open and close a picture, and place a
+% typeset box inside one.
+%
+% Placeholders the engine substitutes when the page is shipped out:
+%   {?x} {?y}      this literal's own reference point, in page points
+%   {?ox} {?oy}    the origin most recently declared with <gotex:origin/>
+%   {?-ox} {?-oy}  that origin negated
+%   {?nl}          a newline
+%
+% Coordinates: pgf emits big points and works y-up from the picture origin; the
+% page is in TeX points, y-down from the top-left. The picture's scope maps one
+% to the other with scale(0.996264,-0.996264) — 72/72.27 — after translating to
+% the picture origin, so every number pgf writes lands where it means.
+
+\ProvidesFileRCS{pgfsys-gotex.def}
+
+% All the drawing operations, as SVG fragments.
+\input{pgfsys-common-svg.def}
+
+% \pgfsys@invoke sends one literal. # is TeX's parameter character and is doubled
+% when a token list is written out, so it is rebound to the "other" # that
+% pgfsys-common-svg.def keeps for exactly this purpose; SVG needs it for colours
+% and fragment references.
+\def\pgfsys@invoke#1{{\let\#\pgf@sys@svg@hash\special{gotex:#1}}}
+
+\def\pgfsys@svg@newline{{?nl}}
+
+% A picture opens a scope at its own reference point and declares that point as
+% the origin, so a box placed inside can undo the mapping (see \pgfsys@hbox).
+\def\pgfsys@beginpicture{%
+  \pgfsys@svg@boxmodefalse%
+  \pgfsys@invoke{<gotex:origin/><g stroke-miterlimit="10" %
+transform="translate({?x},{?y})scale(0.996264,-0.996264)">}}
+\def\pgfsys@endpicture{\pgfsys@invoke{</g>}}
+
+% A box typeset inside a picture is painted by the engine at the page position TeX
+% gave it, but it is painted *inside* the picture's scope, which would transform
+% it twice. The box is therefore wrapped in that scope's inverse: undo the
+% bp-to-pt flip, then move back from the picture origin to the page origin.
+\def\pgf@sys@gotex@unmap{scale(1.00375,-1.00375)translate({?-ox},{?-oy})}
+
+\def\pgfsys@hbox#1{%
+  {%
+    \setbox#1=\hbox{\box#1}%
+    \wd#1=0pt%
+    \ht#1=0pt%
+    \dp#1=0pt%
+    \pgfsys@begin@idscope%
+    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap">}%
+    \box#1%
+    \pgfsys@invoke{</g>}%
+    \pgfsys@end@idscope%
+  }%
+}
+
+\def\pgfsys@hboxsynced#1{%
+  {%
+    \setbox#1=\hbox{\box#1}%
+    \wd#1=0pt%
+    \ht#1=0pt%
+    \dp#1=0pt%
+    \pgfsys@begin@idscope%
+    \pgfsys@beginscope%
+    \pgflowlevelsynccm%
+    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap">}%
+    \box#1%
+    \pgfsys@invoke{</g>}%
+    \pgfsys@endscope%
+    \pgfsys@end@idscope%
+  }%
+}
+
+% The finished picture becomes an ordinary box in the surrounding text: its
+% bounding box gives the width and height, and the baseline shift positions it.
+\def\pgfsys@typesetpicturebox#1{%
+  \pgf@ya=\pgf@shift@baseline\relax%
+  \advance\pgf@ya by-\pgf@picminy\relax%
+  \advance\pgf@picmaxy by-\pgf@picminy\relax% maxy is now the height
+  \advance\pgf@picmaxx by-\pgf@picminx\relax% maxx is now the width
+  \setbox#1=\hbox{\hskip-\pgf@picminx\lower\pgf@picminy\box#1}%
+  \ht#1=\pgf@picmaxy%
+  \wd#1=\pgf@picmaxx%
+  \dp#1=0pt%
+  \leavevmode%
+  \pgf@xa=\pgf@trimleft@final\relax  \ifdim\pgf@xa=0pt \else\kern\pgf@xa\fi%
+  \raise-\pgf@ya\hbox{\box#1}%
+  \pgf@xa=\pgf@trimright@final\relax \ifdim\pgf@xa=0pt \else\kern\pgf@xa\fi%
+}
+
+% Shadings. The common SVG layer builds the gradient definitions and the shape
+% that references them; the driver only has to place them.
+\def\pgfsys@shadingoutsidepgfpicture#1{%
+  \begingroup%
+    #1%
+    \setbox\pgfpic=\hbox to0pt{%
+      \pgfsys@beginpicture%
+        \pgfsys@beginscope%
+          \pgf@sys@svg@sh@defs%
+          \pgf@sys@svg@sh%
+        \pgfsys@endscope%
+      \pgfsys@endpicture%
+      \hss%
+    }%
+    \pgf@process{\pgf@sys@svg@pos}%
+    \pgf@picminx=0pt%
+    \pgf@picminy=0pt%
+    \pgf@picmaxx=\pgf@x%
+    \pgf@picmaxy=\pgf@y%
+    \def\pgf@trimleft@final{0pt}%
+    \def\pgf@trimright@final{0pt}%
+    \def\pgf@shift@baseline{0pt}%
+    \pgfsys@typesetpicturebox\pgfpic%
+  \endgroup%
+}
+
+\def\pgfsys@shadinginsidepgfpicture#1{%
+  #1%
+  \pgf@sys@svg@sh@defs%
+  \pgf@process{\pgf@sys@svg@pos}%
+  \pgf@xa=-.5\pgf@x%
+  \pgf@ya=-.5\pgf@y%
+  \pgfsysprotocol@literal{<g transform="translate(\pgf@sys@tonumber{\pgf@xa},\pgf@sys@tonumber{\pgf@ya})">}%
+  \pgf@sys@svg@sh%
+  \pgfsysprotocol@literal{</g>}%
+}
+
+% The page size is the engine's own (the box tree decides it), so a picture may
+% state one but it changes nothing.
+\def\pgfsys@papersize#1#2{}
+\def\pgfsys@prepare@papersize#1#2{}
+
+% Text inside a picture keeps its own colour; nothing has to be forced black.
+\def\pgfsys@text@to@black@hook{}
+
+% Definitions shared between pictures (markers, patterns) are emitted inline
+% rather than referenced, since the stream has no document-level <defs>.
+\def\pgf@sys@svg@make@defs#1#2{}
+\def\pgf@sys@svg@ref@defs#1{}
+
+\endinput

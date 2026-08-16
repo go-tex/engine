@@ -259,3 +259,76 @@ func TestSpecialInVerticalList(t *testing.T) {
 		t.Errorf("special not placed at the vertical cursor: %s", svg)
 	}
 }
+
+// A picture origin declared by one literal is recovered by later ones: a driver
+// needs it to place a typeset box inside a picture, because the scope the picture
+// opened also transforms the text the engine paints into it, and undoing that
+// map takes the point the map was built from.
+func TestSpecialOrigins(t *testing.T) {
+	got := resolveSpecialOrigins(`<gotex:origin x="30" y="40"/><g transform="translate({?-ox},{?-oy})">` +
+		`<path d="M {?ox} {?oy}"/></g>`)
+	want := `<g transform="translate(-30,-40)"><path d="M 30 40"/></g>`
+	if got != want {
+		t.Errorf("origins resolved to %q, want %q", got, want)
+	}
+}
+
+// A second declaration takes over from the first, so two pictures on a page each
+// get their own.
+func TestSpecialOriginsRedeclared(t *testing.T) {
+	got := resolveSpecialOrigins(`<gotex:origin x="1" y="2"/>[{?ox},{?oy}]` +
+		`<gotex:origin x="5" y="6"/>[{?ox},{?oy}]`)
+	if want := `[1,2][5,6]`; got != want {
+		t.Errorf("= %q, want %q", got, want)
+	}
+}
+
+// A back-reference with no declaration before it resolves to the page origin, and
+// a stream with neither is returned untouched.
+func TestSpecialOriginsWithoutDeclaration(t *testing.T) {
+	if got := resolveSpecialOrigins(`[{?ox},{?oy}]`); got != "[0,0]" {
+		t.Errorf("= %q, want [0,0]", got)
+	}
+	plain := `<path d="M 0 0 L 1 1"/>`
+	if got := resolveSpecialOrigins(plain); got != plain {
+		t.Errorf("a stream with no origins was rewritten: %q", got)
+	}
+	// A malformed declaration is left where it is rather than eating the stream.
+	if got := resolveSpecialOrigins(`<gotex:origin x="1" y="2"`); !strings.Contains(got, "gotex:origin") {
+		t.Errorf("an unterminated declaration was swallowed: %q", got)
+	}
+}
+
+// The declaration carries the coordinates of the special that made it, and never
+// appears in the output.
+func TestSpecialOriginFromPage(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	src := `\special{gotex:<gotex:origin/>}\special{gotex:<path d="M {?ox} {?oy} L {?-ox} {?-oy}"/>}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	svg := e.RenderPage(12)
+	if !strings.Contains(svg, `<path d="M 12 12 L -12 -12"/>`) {
+		t.Errorf("origin not taken from the declaring special: %s", svg)
+	}
+	if strings.Contains(svg, "gotex:origin") {
+		t.Errorf("the declaration leaked into the output: %s", svg)
+	}
+}
+
+// attrNum reads a numeric attribute, and gives zero when there is none to read.
+func TestAttrNum(t *testing.T) {
+	if got := attrNum(`<e x="12.5" y="-3"/>`, "x"); got != 12.5 {
+		t.Errorf("x = %v", got)
+	}
+	if got := attrNum(`<e x="12.5" y="-3"/>`, "y"); got != -3 {
+		t.Errorf("y = %v", got)
+	}
+	if got := attrNum(`<e/>`, "x"); got != 0 {
+		t.Errorf("missing attribute = %v, want 0", got)
+	}
+	if got := attrNum(`<e x="12`, "x"); got != 0 {
+		t.Errorf("unterminated attribute = %v, want 0", got)
+	}
+}

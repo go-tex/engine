@@ -84,6 +84,29 @@ var neverLoadReal = map[string]bool{
 	"xcolor": true, "color": true, "graphicx": true, "graphics": true,
 }
 
+// pgfPackages are the drawing packages the engine now has a system-layer driver
+// for (texmf/pgfsys-gotex.def, see special.go for the seam it draws through).
+// Loading their real sources — rather than gobbling a picture and standing a
+// placeholder box in for it — is what makes the engine behave like a TeX
+// distribution here. The path is still being brought up: the sources load a long
+// way but do not yet complete, so it is opt-in through GOTEX_PGF while the
+// remaining gaps are closed, and the stubs stay the default. With the variable
+// set (and the pgf sources on TEXINPUTS/GOTEX_TEXMF) the real files load and the
+// driver draws through the \special seam.
+var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
+
+// realPGF reports whether the real pgf/TikZ sources may be loaded.
+func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
+
+// emulateOnly reports whether a package must use the built-in stubs rather than
+// its real file.
+func emulateOnly(name string) bool {
+	if pgfPackages[name] {
+		return !realPGF()
+	}
+	return neverLoadReal[name]
+}
+
 // loadTeXFile splices a resolved class/package file into the input with @ made a
 // letter, pushing a load frame so the catcode and tolerance are restored when the
 // file's tokens are exhausted (via the \@gotex@endload marker appended after it).
@@ -220,7 +243,7 @@ func (e *Engine) doDocumentClass() {
 		e.loadBeamer()
 		return
 	}
-	if emulatedClasses[name] || neverLoadReal[name] {
+	if emulatedClasses[name] || emulateOnly(name) {
 		return // use the built-in emulation for a standard class
 	}
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok {
@@ -243,7 +266,7 @@ func (e *Engine) doUsepackageLoad() {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue
 		}
-		if neverLoadReal[name] {
+		if emulateOnly(name) {
 			continue
 		}
 		if data, _, ok := e.findTeXFile(name, []string{".sty"}); ok {
@@ -265,7 +288,7 @@ func (e *Engine) doLoadClass(withOptions bool) {
 	if name == "" {
 		return
 	}
-	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !neverLoadReal[name] {
+	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !emulateOnly(name) {
 		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
 }

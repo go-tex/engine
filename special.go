@@ -54,16 +54,94 @@ func (e *Engine) doSpecial() {
 	e.place(specialNode{text: text, srcLine: e.curSrcLine})
 }
 
+// originMark is a directive, not output: a special whose payload contains it
+// declares its own reference point to be the origin of the picture that follows,
+// which later literals recover through {?ox}/{?oy} (and {?-ox}/{?-oy} for the
+// negated form). A driver needs that because the scopes it opens also transform
+// the *text* the typesetter paints inside the picture: to place a box where TeX
+// put it, the driver wraps it in the inverse of the picture's own map, and the
+// inverse needs the origin the map was built from.
+const originMark = "<gotex:origin/>"
+
+// originElem is how a declared origin is carried through the emitted stream until
+// resolveSpecialOrigins consumes it: the painter knows each special's own point
+// but not the one a later special will refer back to, so the declaration travels
+// with its coordinates and the back-references are resolved in one pass over the
+// finished stream.
+const originElem = "gotex:origin"
+
 // specialLiteral returns the drawable payload of a special: the text after the
-// "gotex:" namespace with its position placeholders resolved against (x, y), the
-// special's reference point in page coordinates (points). ok is false for a
+// "gotex:" namespace with its own-position placeholders resolved against (x, y),
+// the special's reference point in page coordinates (points). ok is false for a
 // special in another driver's namespace, which this engine draws not at all.
+// Origin placeholders are left for resolveSpecialOrigins.
 func specialLiteral(text string, x, y float64) (string, bool) {
 	s := strings.TrimSpace(text)
 	if !strings.HasPrefix(s, gotexSpecial) {
 		return "", false
 	}
 	s = strings.TrimPrefix(s, gotexSpecial)
+	s = strings.ReplaceAll(s, originMark,
+		`<`+originElem+` x="`+f(x)+`" y="`+f(y)+`"/>`)
 	r := strings.NewReplacer("{?x}", f(x), "{?y}", f(y), "{?nl}", "\n")
 	return r.Replace(s), true
+}
+
+// resolveSpecialOrigins finishes a page's emitted stream: each declaration is
+// removed and the {?ox}/{?oy} (and negated {?-ox}/{?-oy}) placeholders after it
+// are replaced by the coordinates it carried. A back-reference with no
+// declaration before it resolves to the page origin.
+func resolveSpecialOrigins(s string) string {
+	if !strings.Contains(s, "{?ox}") && !strings.Contains(s, "{?oy}") &&
+		!strings.Contains(s, "{?-ox}") && !strings.Contains(s, "{?-oy}") &&
+		!strings.Contains(s, "<"+originElem) {
+		return s
+	}
+	var out strings.Builder
+	var ox, oy float64
+	rest := s
+	for {
+		i := strings.Index(rest, "<"+originElem)
+		if i < 0 {
+			break
+		}
+		j := strings.Index(rest[i:], "/>")
+		if j < 0 {
+			break
+		}
+		decl := rest[i : i+j+2]
+		out.WriteString(substOrigin(rest[:i], ox, oy))
+		ox, oy = originCoords(decl)
+		rest = rest[i+j+2:]
+	}
+	out.WriteString(substOrigin(rest, ox, oy))
+	return out.String()
+}
+
+// substOrigin replaces the origin back-references in one segment of the stream.
+func substOrigin(s string, ox, oy float64) string {
+	return strings.NewReplacer(
+		"{?-ox}", f(-ox), "{?-oy}", f(-oy),
+		"{?ox}", f(ox), "{?oy}", f(oy),
+	).Replace(s)
+}
+
+// originCoords reads the x/y of an origin declaration element.
+func originCoords(decl string) (float64, float64) {
+	return attrNum(decl, "x"), attrNum(decl, "y")
+}
+
+// attrNum reads a numeric attribute from an element's source text.
+func attrNum(elem, name string) float64 {
+	key := " " + name + `="`
+	i := strings.Index(elem, key)
+	if i < 0 {
+		return 0
+	}
+	rest := elem[i+len(key):]
+	j := strings.IndexByte(rest, '"')
+	if j < 0 {
+		return 0
+	}
+	return parseFloat(rest[:j])
 }

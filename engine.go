@@ -159,6 +159,7 @@ type Engine struct {
 	pendingFootnotes []*boxNode
 	buildingFootnote bool
 	noBase           bool // when true, getNext does not fall through to the base string
+	negateNextIf     int  // pending \unless prefixes (e-TeX): reverse the next conditional
 	allocCnt         int  // next free \count register handed out by \newcount
 	allocDim         int  // next free \dimen register handed out by \newdimen
 	allocSkp         int  // next free \skip register handed out by \newskip
@@ -235,6 +236,7 @@ type Engine struct {
 	// (Run resets it to 0; class/package loading splices file bodies into e.base at
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
+	expandDepth int // >0 while an isolated expansion (\edef/\message) is running
 	progBpos    int // e.bpos at the last observed forward progress
 	noProgSteps int // expansion steps since e.bpos last advanced
 	tightLimit  int // no-progress ceiling (New sets tightLoopSteps; tests may adjust)

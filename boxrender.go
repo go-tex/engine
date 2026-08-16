@@ -72,7 +72,9 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black">`, bg)
 	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font)
 	sb.WriteString(`</g></svg>`)
-	return sb.String()
+	// Driver literals may refer back to a picture origin declared by an earlier
+	// one; that is resolved over the finished page (see special.go).
+	return resolveSpecialOrigins(sb.String())
 }
 
 // paintBoxSP paints a box whose left edge is at x and whose baseline is at the

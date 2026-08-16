@@ -11,7 +11,7 @@ import "embed"
 // texmf/LICENSE-NOTE.md for provenance. A file in the document's own directory or
 // on the TEXINPUTS/GOTEX_TEXMF path takes precedence (see findTeXFile).
 
-//go:embed texmf/*.cls texmf/*.clo
+//go:embed texmf/*.cls texmf/*.clo texmf/*.def
 var embeddedTeXMF embed.FS
 
 // embeddedTeXFile returns a base class/package file shipped in the binary, if the

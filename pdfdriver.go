@@ -192,7 +192,7 @@ func (d *pdfDraw) drawSpecials() {
 	if len(d.specials) == 0 {
 		return
 	}
-	drawSVGStream(d.p, strings.Join(d.specials, ""), d.pageH)
+	drawSVGStream(d.p, resolveSpecialOrigins(strings.Join(d.specials, "")), d.pageH)
 	d.specials = nil
 	d.curColor = 0
 	d.p.SetFillColor(pdfkit.RGB8(0, 0, 0))
