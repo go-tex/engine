@@ -14,6 +14,8 @@ package engine
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
+	"image"
 	"image/png" // re-encode exotic formats for embedding
 	"net/url"
 	"os"
@@ -23,6 +25,22 @@ import (
 
 	"github.com/go-gfx/gfx/codec"
 )
+
+// RasterizePDF, when set by a consumer, rasterises a PDF figure (the bytes of an
+// included .pdf) to an image at the given DPI. It is the seam for \includegraphics
+// of vector PDFs: a pure-Go PDF renderer is a heavy dependency, so the engine core
+// stays free of it — the CLI and loom inject one (see go-tex/pdfrender), while the
+// browser/wasm build leaves it nil and shows a placeholder. EPS is not handled here.
+var RasterizePDF func(data []byte, dpi float64) (image.Image, error)
+
+// pdfFigureDPI is the resolution at which an injected renderer rasterises a PDF
+// figure; the resulting pixels are the figure's intrinsic size, then scaled to the
+// \includegraphics box like any raster.
+const pdfFigureDPI = 200
+
+// errNoPDFRasterizer is returned for a PDF figure when no renderer is wired, so the
+// caller frames a placeholder (the browser build's behaviour).
+var errNoPDFRasterizer = errors.New("texengine: PDF figure needs a rasteriser (none wired)")
 
 // imgFormat is the embedded-image format an imageNode carries.
 type imgFormat uint8
@@ -164,6 +182,24 @@ func loadImage(name string) (data []byte, format imgFormat, iw, ih int, err erro
 	}
 	if svgHint || looksLikeSVG(data) {
 		return loadSVGImage(data)
+	}
+	// A PDF figure (the common vector figure on arXiv) is rasterised by an injected
+	// renderer, then embedded as PNG like any other raster. With no renderer wired
+	// (e.g. the browser build) it becomes a framed placeholder.
+	if bytes.HasPrefix(data, []byte("%PDF-")) {
+		if RasterizePDF == nil {
+			return nil, 0, 0, 0, errNoPDFRasterizer
+		}
+		img, err := RasterizePDF(data, pdfFigureDPI)
+		if err != nil {
+			return nil, 0, 0, 0, err
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			return nil, 0, 0, 0, err
+		}
+		b := img.Bounds()
+		return buf.Bytes(), imgPNG, b.Dx(), b.Dy(), nil
 	}
 	// Raster image: decode through the go-gfx codec, which handles PNG, JPEG, GIF,
 	// WEBP, TIFF, BMP, ICNS and ICO — well beyond the standard library — so more real
