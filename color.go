@@ -131,6 +131,7 @@ func (e *Engine) doDefineColor() {
 		e.colors = map[string]uint32{}
 	}
 	e.colors[name] = parseColorSpec(model, spec)
+	e.publishColor(name, e.colors[name])
 }
 
 // parseColorSpec turns a color model + spec string into 0xRRGGBB.
@@ -188,6 +189,7 @@ func (e *Engine) doColorlet() {
 		e.colors = map[string]uint32{}
 	}
 	e.colors[name] = c
+	e.publishColor(name, c)
 }
 
 // doPagecolor implements \pagecolor{expr}: fill the page background with the colour
