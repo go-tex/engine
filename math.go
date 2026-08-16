@@ -187,6 +187,13 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = resolved
 				continue
 			}
+			// Non-rendering commands (spacing \hspace/\mspace; metadata \label,
+			// \nonumber, …) must not drop the equation: spacing becomes a space, the
+			// rest is removed, then retry.
+			if noised, nok := stripMathNoise(src, name); nok {
+				src = noised
+				continue
+			}
 			return svg, m, err
 		}
 		if next == src {
@@ -345,6 +352,53 @@ func (e *Engine) mathRefText(name, key string) string {
 	default: // \ref \autoref \cref \Cref \nameref \vref \pageref
 		return e.refText(key)
 	}
+}
+
+// mathNoise are commands that carry no math to render but must not drop the
+// equation: horizontal spacing (replaced by a thick space the math layer knows) and
+// metadata (removed). mand is the count of {brace} arguments to consume.
+var mathNoise = map[string]struct {
+	mand int
+	repl string
+}{
+	"hspace": {1, `\; `}, "mspace": {1, `\; `}, "vspace": {1, ``},
+	"label": {1, ``}, "nonumber": {0, ``}, "notag": {0, ``},
+	"qedhere": {0, ``}, "noalign": {1, ``},
+}
+
+// stripMathNoise rewrites every occurrence of a non-rendering command \name in a
+// math source string per mathNoise, reporting whether it changed anything. An
+// occurrence whose arguments cannot be parsed is left verbatim.
+func stripMathNoise(src, name string) (string, bool) {
+	spec, ok := mathNoise[name]
+	if !ok {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := src[i+len(needle):]
+		if spec.mand > 0 {
+			_, consumed, ok := parseMathArgs(rest, spec.mand)
+			if !ok {
+				out.WriteString(needle)
+				src = rest
+				continue
+			}
+			rest = rest[consumed:]
+		}
+		out.WriteString(spec.repl)
+		src = rest
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
 }
 
 // skipMathOptArg drops a leading optional [..] argument (and any spaces before it)

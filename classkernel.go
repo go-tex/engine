@@ -228,9 +228,21 @@ const LaTeX2eClassKernel = `
 % which the math layer knows. dsfont.sty's \DeclareMathAlphabet machinery can't run
 % here, so alias it: in math the retry path expands \mathds{X} -> \mathbb{X}.
 \def\mathds#1{\mathbb{#1}}
-% \Tilde (amsmath's stackable tilde accent) renders as the ordinary \tilde accent,
-% which the math layer knows; the retry path expands \Tilde{x} -> \tilde{x}.
+% amsmath's stackable accents (\Tilde \Bar \Hat …) render as the ordinary accents
+% the math layer knows; the retry path expands e.g. \Bar{x} -> \bar{x}.
 \def\Tilde{\tilde}
+\def\Bar{\bar}
+\def\Hat{\hat}
+\def\Check{\check}
+\def\Acute{\acute}
+\def\Grave{\grave}
+\def\Dot{\dot}
+\def\Ddot{\ddot}
+\def\Breve{\breve}
+\def\Vec{\vec}
+% \sfrac{a}{b} (xfrac, slanted fraction) approximated as an inline a/b; the math
+% layer has no slanted-fraction primitive but this keeps the equation rendering.
+\def\sfrac#1#2{#1\!/#2}
 % amsmath's \implies / \impliedby are long double arrows the math layer knows.
 \def\implies{\Longrightarrow}
 \def\impliedby{\Longleftarrow}

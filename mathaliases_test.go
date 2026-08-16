@@ -56,6 +56,38 @@ func TestDeclarePairedDelimiter(t *testing.T) {
 	}
 }
 
+// Non-rendering math commands must not drop the equation: capitalised amsmath
+// accents alias to the plain ones, spacing becomes a space, metadata is removed.
+func TestMathNoiseAndAccents(t *testing.T) {
+	for _, src := range []string{
+		`\documentclass{article}\begin{document}$\Bar{x}+\Hat{y}+\Breve{z}+\Vec{w}$\end{document}`,
+		`\documentclass{article}\begin{document}$a\hspace{1cm}b+\sfrac{1}{2}$\end{document}`,
+		`\documentclass{article}\usepackage{amsmath}\begin{document}\begin{align}x&=1\label{e1}\\y&=2\nonumber\end{align}\end{document}`,
+	} {
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: %v", src, err)
+		}
+		if len(e.SkippedCommands()) > 1 { // only the benign class-load "input" tally
+			t.Errorf("%s dropped: %v", src, e.SkippedCommands())
+		}
+	}
+	// stripMathNoise unit branches: a space command, a metadata command, a bad arg,
+	// and a non-noise name.
+	if out, ok := stripMathNoise(`a \hspace {1cm}b`, "hspace"); !ok || out != `a \; b` {
+		t.Errorf("hspace strip = (%q,%v)", out, ok)
+	}
+	if out, ok := stripMathNoise(`x \nonumber y`, "nonumber"); !ok || out != `x y` {
+		t.Errorf("nonumber strip = (%q,%v)", out, ok)
+	}
+	if out, ok := stripMathNoise(`\label `, "label"); ok || out != `\label ` {
+		t.Errorf("unparseable \\label must be left verbatim, got (%q,%v)", out, ok)
+	}
+	if _, ok := stripMathNoise(`x`, "frac"); ok {
+		t.Error("a non-noise command must not be stripped")
+	}
+}
+
 // A nested inline $…$ inside a \mbox/\text group within display or inline math is
 // that group's own math, not the closing shift. The scanner must not end the outer
 // math there — doing so truncated it and desynchronised every following $, swallowing
