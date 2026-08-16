@@ -780,6 +780,12 @@ func (e *Engine) evalIfx() bool {
 	if !ok1 || !ok2 {
 		return false
 	}
+	return e.ifxEqual(a, b)
+}
+
+// ifxEqual reports whether two tokens are \ifx-equal: same character+catcode for
+// plain characters, or equal meanings for control sequences / active chars.
+func (e *Engine) ifxEqual(a, b tok) bool {
 	ma, mb := e.meaningOf(a), e.meaningOf(b)
 	if ma == nil && mb == nil {
 		return tokEq(a, b)
@@ -1140,6 +1146,30 @@ func (e *Engine) loadMore() {
 		chosen := elseToks
 		if t, ok := e.getNext(); ok {
 			if !t.cs_ && t.ch == '[' {
+				chosen = thenToks
+			}
+			e.back(t)
+		}
+		e.push(chosen)
+	})
+	// \@ifnextchar<tok>{THEN}{ELSE}: the general LaTeX look-ahead, now that the
+	// engine has real \ifx-based token comparison. The target token is read
+	// unexpanded; the next non-space input token is peeked (never consumed) and,
+	// when it is \ifx-equal to the target, THEN is chosen, else ELSE. This handles
+	// targets that are control sequences — e.g. elsarticle/bmvc2k list scanners
+	// use \@ifnextchar\<sentinel> to stop, which the bracket-only fallback could
+	// never detect (it always took ELSE and looped forever).
+	e.prim("@ifnextchar", func(e *Engine) {
+		target, ok := e.getNext()
+		if !ok {
+			return
+		}
+		thenToks := e.grabUndelimited()
+		elseToks := e.grabUndelimited()
+		e.skipOptSpace()
+		chosen := elseToks
+		if t, tok := e.getNext(); tok {
+			if e.ifxEqual(t, target) {
 				chosen = thenToks
 			}
 			e.back(t)

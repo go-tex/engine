@@ -71,6 +71,29 @@ func TestLoopRepeat(t *testing.T) {
 	}
 }
 
+// \@ifnextchar peeks the next token and compares it (\ifx) to a target that may
+// be a control sequence — not just '['. A list scanner that stops on a control-
+// sequence sentinel (elsarticle/bmvc2k author lists use exactly this) must
+// terminate; the old bracket-only fallback always took ELSE and looped forever.
+func TestIfnextcharTargets(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		// list map that stops on a \stop (=\relax) sentinel
+		{"cs-sentinel", `\makeatletter\let\stop\relax\def\R{}` +
+			`\def\ml#1{\edef\R{\R#1}\@ifnextchar\stop{\@gobble}{\ml}}` +
+			`\ml{a}{b}{c}\stop\message{\R}`, "abc"},
+		// '[' still detected (optional-argument look-ahead)
+		{"bracket-present", `\makeatletter\def\c{\@ifnextchar[{\def\R{B}}{\def\R{N}}}\c[x]\message{\R}`, "B"},
+		{"bracket-absent", `\makeatletter\def\c{\@ifnextchar[{\def\R{B}}{\def\R{N}}}\c y\message{\R}`, "N"},
+		// a \relax target is matched by a following \relax
+		{"relax-target", `\makeatletter\def\c{\@ifnextchar\relax{\def\R{R}}{\def\R{N}}}\c\relax\message{\R}`, "R"},
+	}
+	for _, c := range cases {
+		if got := ckRun(t, c.src); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 // Purely expandable results: the constant / size-number / char macros expand
 // inside a single wrapping \message.
 func TestClassKernelExpandable(t *testing.T) {
