@@ -43,7 +43,10 @@ func TestInputAbsolutePath(t *testing.T) {
 	if err := os.WriteFile(p, []byte(`\message{ABS}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := New().Run(`\input{` + p + `}`)
+	// A path is spliced into TeX source, where a backslash begins a control
+	// sequence, so it goes in with forward slashes (which os.ReadFile accepts on
+	// every platform, Windows included).
+	out, err := New().Run(`\input{` + filepath.ToSlash(p) + `}`)
 	if err != nil {
 		t.Fatal(err)
 	}
