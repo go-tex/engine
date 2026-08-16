@@ -170,6 +170,15 @@ const LaTeX2eClassKernel = `
 \newcount\day \day=1
 \newcount\month \month=1
 \newcount\year \year=2026
+% ── plain-TeX \loop … \repeat ────────────────────────────────────────────────
+% Packages build iteration with \loop〈body〉\repeat where \repeat is \let to \fi.
+% The \let is essential beyond execution: it makes the conditional-skip that TeX
+% performs over a FALSE \if branch treat \repeat as a closing \fi, so a body such
+% as \loop\ifnum…\repeat inside a skipped branch stays balanced. Without \repeat
+% defined, a skipped \ifnum…\repeat never closes and the skip overruns the
+% matching \else/\fi, swallowing everything after it — the acl.sty 0-page bug.
+\def\loop#1\repeat{\def\iterate{#1\relax\expandafter\iterate\fi}\iterate\let\iterate\relax}
+\let\repeat\fi
 % ── \if@ boolean flags (\newif comes from the kernel-helper layer) ───────────
 \newif\if@twocolumn
 \newif\if@twoside

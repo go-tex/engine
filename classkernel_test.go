@@ -54,6 +54,23 @@ func TestListMachineryBooleans(t *testing.T) {
 	}
 }
 
+// \loop … \repeat must run, and — critically — \repeat is \let to \fi so that
+// TeX's skip over a FALSE \if branch treats a \loop\ifnum…\repeat body as
+// balanced. A skipped branch containing an unclosed \ifnum (had \repeat not
+// counted as \fi) would overrun its \else/\fi and swallow the text that follows
+// — the mechanism behind the acl.sty conference-style 0-page bug.
+func TestLoopRepeat(t *testing.T) {
+	// Executed loop: count from 1, five iterations, emit a mark each time.
+	if out := ckRun(t, `\newcount\n \n=0 \loop\advance\n 1 \message{x}\ifnum\n<5 \repeat`); out != "x x x x x" {
+		t.Errorf("executed \\loop: message=%q, want \"x x x x x\"", out)
+	}
+	// Skipped false branch whose body holds \loop\ifnum…\repeat: the \message
+	// AFTER the \fi must still fire (skip stayed balanced, nothing swallowed).
+	if out := ckRun(t, `\newif\ifX \ifX \loop\ifnum1<2 \repeat\else\fi\message{after}`); out != "after" {
+		t.Errorf("skipped \\loop\\repeat branch swallowed following text: message=%q, want \"after\"", out)
+	}
+}
+
 // Purely expandable results: the constant / size-number / char macros expand
 // inside a single wrapping \message.
 func TestClassKernelExpandable(t *testing.T) {
