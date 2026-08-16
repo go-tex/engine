@@ -80,6 +80,28 @@ func TestCommentEatsEndOfLine(t *testing.T) {
 	}
 }
 
+// \futurelet\cs<t1><t2> lets \cs take t2's meaning WITHOUT consuming t1 or t2 —
+// the one-token lookahead that generic LaTeX scanners depend on. Its absence made
+// elsarticle-style classes (ifacconf) loop forever: their \thanksref scanner ends
+// each element with \futurelet and never sees its \relax terminator.
+func TestFuturelet(t *testing.T) {
+	// \futurelet\pk\chk<t2> lets \pk take t2's meaning and runs \chk (t1) with
+	// both tokens still in the stream. Here t2 is \relax, so \chk sees \pk\ifx\relax.
+	// (Run in the token stream, not \message: \futurelet is an assignment.)
+	if got := run(t, `\def\chk{\ifx\pk\relax\def\R{sawrelax}\else\def\R{other}\fi}`+
+		`\futurelet\pk\chk\relax\message{\R}`); got != "sawrelax" {
+		t.Errorf("futurelet lookahead = %q, want %q", got, "sawrelax")
+	}
+	// A delimited-argument scanner that ends by peeking for its \relax terminator
+	// must terminate rather than consume off the end.
+	got := run(t, `\def\scan#1\stop{\futurelet\p\chk}`+
+		`\def\chk{\ifx\p\relax\def\R{done}\else\expandafter\eat\fi}\def\eat#1{\scan}`+
+		`\scan A\stop\relax\message{\R}`)
+	if got != "done" {
+		t.Errorf("futurelet scanner terminate = %q, want %q", got, "done")
+	}
+}
+
 // TestScoping verifies that groups save and restore meanings and registers.
 func TestScoping(t *testing.T) {
 	if got := run(t, `\def\a{out}{\def\a{in}\message{\a}}\message{\a}`); got != "in out" {

@@ -69,6 +69,7 @@ func (e *Engine) loadPrimitives() {
 	e.prim("edef", func(e *Engine) { e.doDef(false, true) })
 	e.prim("xdef", func(e *Engine) { e.doDef(true, true) })
 	e.prim("let", func(e *Engine) { e.doLet(false) })
+	e.prim("futurelet", func(e *Engine) { e.doFuturelet(false) })
 	e.prim("global", func(e *Engine) { e.doGlobal() })
 	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
 	e.prim("countdef", func(e *Engine) { e.doCountdef() })
@@ -146,7 +147,18 @@ func (e *Engine) doLet(global bool) {
 		e.back(t)
 	}
 	rhs, ok := e.getNext()
-	if !ok || name == "" {
+	if !ok {
+		return
+	}
+	e.assignLetMeaning(name, rhs, global)
+}
+
+// assignLetMeaning gives the control sequence `name` the meaning carried by the
+// token `rhs` — a copy of another control sequence's meaning, mUndef for an
+// undefined one, or a "let character" for a character token. Shared by \let and
+// \futurelet.
+func (e *Engine) assignLetMeaning(name string, rhs tok, global bool) {
+	if name == "" {
 		return
 	}
 	if rhs.cs_ {
@@ -159,6 +171,26 @@ func (e *Engine) doLet(global bool) {
 		return
 	}
 	e.define(name, &meaning{kind: mLetChar, ch: rhs.ch, cat: rhs.cat}, global)
+}
+
+// doFuturelet implements \futurelet\cs<t1><t2>: it lets \cs take the meaning of
+// t2 WITHOUT consuming either token — t1 and t2 are left in the input so the
+// next thing processed is t1. This is the one-token lookahead that generic
+// LaTeX scanners (\@ifnextchar, elsarticle's \elem@thanksref loop, …) rely on.
+func (e *Engine) doFuturelet(global bool) {
+	name := e.scanCSName()
+	t1, ok1 := e.getNext()
+	if !ok1 {
+		return
+	}
+	t2, ok2 := e.getNext()
+	if !ok2 {
+		e.assignLetMeaning(name, t1, global)
+		e.back(t1)
+		return
+	}
+	e.assignLetMeaning(name, t2, global)
+	e.push([]tok{t1, t2})
 }
 
 func (e *Engine) skipOptSpace0() {
@@ -205,6 +237,8 @@ func (e *Engine) doGlobal() {
 		e.doDef(true, true)
 	case "let":
 		e.doLet(true)
+	case "futurelet":
+		e.doFuturelet(true)
 	case "count":
 		e.doCountAssign(true)
 	case "dimen":
