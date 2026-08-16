@@ -234,6 +234,12 @@ const LaTeX2eClassKernel = `
 % amsmath's \implies / \impliedby are long double arrows the math layer knows.
 \def\implies{\Longrightarrow}
 \def\impliedby{\Longleftarrow}
+% \bm (bold math) is the same bold symbol as amsmath's \boldsymbol, which the math
+% layer knows; the retry path expands \bm{x} -> \boldsymbol{x}.
+\def\bm{\boldsymbol}
+% \scaleto{obj}{height} (scalerel) rescales obj to a height the math layer has no
+% notion of; render obj at its natural size (the scaling is cosmetic).
+\def\scaleto#1#2{#1}
 \def\@fontswitch#1#2{#2}
 \def\@nomath#1{}
 % \DeclareOldFontCommand\rm{\normalfont\rmfamily}{\mathrm}: real LaTeX binds the

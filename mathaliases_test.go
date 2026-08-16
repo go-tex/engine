@@ -56,6 +56,74 @@ func TestDeclarePairedDelimiter(t *testing.T) {
 	}
 }
 
+// A nested inline $…$ inside a \mbox/\text group within display or inline math is
+// that group's own math, not the closing shift. The scanner must not end the outer
+// math there — doing so truncated it and desynchronised every following $, swallowing
+// paragraphs of text as "math" (the single largest real-world failure). After the
+// group, ordinary math must still parse.
+func TestNestedDollarDoesNotDesync(t *testing.T) {
+	src := "\\documentclass{article}\\begin{document}" +
+		"$$ a=b \\quad \\mbox{for $x<y$, $u>v$.} $$\n" +
+		"Then $c=d$ real. More $e=f$ ok.\\end{document}"
+	e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.SkippedCommands()) > 1 { // only the benign class-load "input" tally
+		t.Errorf("nested $ desynchronised the scan: %v", e.SkippedCommands())
+	}
+}
+
+// A math environment nested in \begin{equation} must keep its own \end name; using
+// the outer name turned \begin{aligned}…\end{aligned} into …\end{equation} and the
+// math layer dropped it.
+func TestEquationWithNestedEnv(t *testing.T) {
+	for _, body := range []string{
+		`\begin{equation}\begin{aligned}a&=b\\c&=d\end{aligned}\end{equation}`,
+		`\begin{equation}\begin{bmatrix}a\\b\end{bmatrix}\end{equation}`,
+		`\begin{equation}f(x)=\begin{cases}1&x>0\\0&x\le0\end{cases}\end{equation}`,
+	} {
+		src := `\documentclass{article}\usepackage{amsmath}\begin{document}` + body + `\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if len(e.SkippedCommands()) > 1 {
+			t.Errorf("%s dropped: %v", body, e.SkippedCommands())
+		}
+	}
+}
+
+// Cross-reference / citation commands resolve to text inside math (\eqref → "(n)",
+// \ref → the label, \cite → a placeholder) so an equation carrying one still renders.
+func TestRefInMath(t *testing.T) {
+	src := `\documentclass{article}\begin{document}` +
+		`\begin{equation}x=1\label{eq:a}\end{equation}` +
+		`$y=\eqref{eq:a}\cdot\bm{v}+\ref{eq:a}$ and $z\citep{k}$.\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"\\eqref", "\\ref", "\\citep", "\\bm"} {
+		if e.SkippedCommands()[k] != 0 {
+			t.Errorf("dropped %q: %v", k, e.SkippedCommands())
+		}
+	}
+	// direct unit coverage of the resolver's branches
+	if got := e.mathRefText("eqref", "eq:a"); got == "" || got[0] != '(' {
+		t.Errorf("eqref text = %q", got)
+	}
+	if got := e.mathRefText("cite", "k"); got != "[?]" {
+		t.Errorf("cite text = %q, want [?]", got)
+	}
+	if _, ok := e.resolveMathRef(`x + y`, "notaref"); ok {
+		t.Error("non-ref command must not resolve")
+	}
+	if out, ok := e.resolveMathRef(`\ref `, "ref"); ok || out != `\ref ` {
+		t.Errorf("a \\ref with no argument must be left verbatim, got (%q,%v)", out, ok)
+	}
+}
+
 // Colour commands are primitives go-tex/math cannot render; in math they are
 // stripped (content kept) so the equation typesets in the surrounding colour
 // instead of being dropped — the single largest remaining arXiv math gap.

@@ -67,18 +67,33 @@ func (e *Engine) scanMathSource() (string, bool) {
 		}
 	}
 	var b strings.Builder
+	depth := 0 // brace nesting: a $ only ends the math at the top level
 	for {
 		t, ok := e.getNext()
 		if !ok {
 			break
 		}
-		if t.cat == catMath && !t.cs_ {
+		// A $ inside a \mbox{…$…$…}/\text{…} group (depth > 0) is that group's own
+		// nested inline math, NOT the closing shift — treating it as the close used
+		// to truncate the math here and desynchronise every $ in the rest of the
+		// document (a runaway that swallowed paragraphs of text as "math").
+		if t.cat == catMath && !t.cs_ && depth == 0 {
 			if display { // consume the second $ of the closing $$
 				if u, ok := e.getNext(); ok && !(u.cat == catMath && !u.cs_) {
 					e.back(u)
 				}
 			}
 			break
+		}
+		if !t.cs_ {
+			switch t.cat {
+			case catBegin:
+				depth++
+			case catEnd:
+				if depth > 0 {
+					depth--
+				}
+			}
 		}
 		if t.cs_ {
 			b.WriteByte('\\')
@@ -162,6 +177,14 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			// of being dropped whole.
 			if stripped, sok := stripMathColor(src, name); sok {
 				src = stripped
+				continue
+			}
+			// Cross-reference / citation commands (\ref, \eqref, \cite …) are engine
+			// primitives that resolve to text at typeset time, so go-tex/math cannot
+			// render them. Substitute their resolved text (or a neutral placeholder)
+			// into the source, so an equation carrying a \eqref{…} still typesets.
+			if resolved, rok := e.resolveMathRef(src, name); rok {
+				src = resolved
 				continue
 			}
 			return svg, m, err
@@ -268,6 +291,60 @@ func stripMathColor(src, name string) (string, bool) {
 	}
 	out.WriteString(src)
 	return out.String(), changed
+}
+
+// mathRefArity is the set of cross-reference / citation commands the engine
+// resolves inside math source, each taking one {key} argument (plus, for the cite
+// family, an optional [note]). Their value is text, so go-tex/math cannot render
+// them; resolveMathRef substitutes the resolved label or a neutral placeholder.
+var mathRefArity = map[string]bool{
+	"ref": true, "eqref": true, "pageref": true, "autoref": true,
+	"cref": true, "Cref": true, "nameref": true, "vref": true,
+	"cite": true, "citep": true, "citet": true, "citealp": true,
+	"citealt": true, "citeauthor": true, "citeyear": true, "Citep": true, "Citet": true,
+}
+
+// resolveMathRef replaces every \name{key} cross-reference or citation in a math
+// source string with its resolved text, reporting whether it changed anything.
+func (e *Engine) resolveMathRef(src, name string) (string, bool) {
+	if !mathRefArity[name] {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := skipMathOptArg(src[i+len(needle):]) // \cite[p. 3]{key}
+		args, consumed, ok := parseMathArgs(rest, 1)
+		if !ok {
+			out.WriteString(needle)
+			src = src[i+len(needle):]
+			continue
+		}
+		out.WriteString(e.mathRefText(name, args[0]))
+		src = rest[consumed:]
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
+}
+
+// mathRefText is the text a resolved cross-reference / citation contributes to
+// math. Label lookups reuse the shared refText resolver ("??" when unresolved).
+func (e *Engine) mathRefText(name, key string) string {
+	switch name {
+	case "eqref":
+		return "(" + e.refText(key) + ")"
+	case "cite", "citep", "citet", "citealp", "citealt", "citeauthor", "citeyear", "Citep", "Citet":
+		return "[?]" // the bibliography is not resolved in the math pass
+	default: // \ref \autoref \cref \Cref \nameref \vref \pageref
+		return e.refText(key)
+	}
 }
 
 // skipMathOptArg drops a leading optional [..] argument (and any spaces before it)

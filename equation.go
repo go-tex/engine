@@ -88,10 +88,15 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 			// re-read; the real \end token surfaces on the next iteration.
 			e.expandMacro(e.meaningOf(t))
 		case t.cs_ && t.cs == "end":
-			if e.readBraceName() == name {
+			endName := e.readBraceName()
+			if endName == name {
 				return b.String(), meta
 			}
-			b.WriteString("\\end{" + name + "}") // a non-matching \end (unusual in math)
+			// A nested \end (e.g. \end{aligned}, \end{bmatrix}, \end{cases} inside the
+			// equation) must be written back with ITS OWN name — using the outer name
+			// here turned \begin{aligned}…\end{aligned} into …\end{equation}, so the math
+			// layer reported "aligned closed by equation" and dropped the equation.
+			b.WriteString("\\end{" + endName + "}")
 		case t.cs_ && t.cs == "label":
 			meta.labels = append(meta.labels, e.readBraceName())
 		case t.cs_ && (t.cs == "nonumber" || t.cs == "notag"):
