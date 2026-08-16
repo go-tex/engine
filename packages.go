@@ -215,6 +215,11 @@ func (e *Engine) doDocumentClass() {
 		return
 	}
 	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
+	if name == "beamer" {
+		// beamer is emulated (frames→pages); its real pgf-based .cls is never loaded.
+		e.loadBeamer()
+		return
+	}
 	if emulatedClasses[name] || neverLoadReal[name] {
 		return // use the built-in emulation for a standard class
 	}
