@@ -6,6 +6,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/go-pdfkit/pdfkit"
 )
@@ -45,6 +46,7 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 			d.setColor(0)
 		}
 		d.box(page, margin, margin+spToPt(page.height))
+		d.drawSpecials()
 	}
 	return doc.Write(w)
 }
@@ -57,6 +59,7 @@ type pdfDraw struct {
 	cur      float64 // font size currently selected in the content stream
 	curColor uint32  // fill colour currently selected (0xRRGGBB; 0 = black)
 	pageH    float64
+	specials []string // driver literals collected in paint order (see special)
 }
 
 // setSize switches the PDF text size when a glyph's size differs from what's
@@ -165,8 +168,34 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			r := pdfkit.Rect{X: cx, Y: d.y(baseline), Width: spToPt(c.width), Height: spToPt(c.height)}
 			d.drawImage(c, r)
 			cx += spToPt(c.width)
+		case specialNode:
+			d.special(c, cx, baseline)
 		}
 	}
+}
+
+// special records a driver literal with the reference point it reached, in the
+// order the page paints it. The literals are drawn together once the page's box
+// tree has been walked (see drawSpecials): a pgf picture's operators arrive as
+// many specials that open and close shared graphics scopes, so they are
+// interpreted as one stream, not one by one.
+func (d *pdfDraw) special(s specialNode, x, baseline float64) {
+	if lit, ok := specialLiteral(s.text, x, baseline); ok {
+		d.specials = append(d.specials, lit)
+	}
+}
+
+// drawSpecials interprets the page's collected driver literals as vector marks.
+// It runs after the text and boxes so a picture's paths sit over the page, and
+// resets the tracked fill colour afterwards, since drawing selects its own.
+func (d *pdfDraw) drawSpecials() {
+	if len(d.specials) == 0 {
+		return
+	}
+	drawSVGStream(d.p, strings.Join(d.specials, ""), d.pageH)
+	d.specials = nil
+	d.curColor = 0
+	d.p.SetFillColor(pdfkit.RGB8(0, 0, 0))
 }
 
 // frame draws a framed box: four filled rules of thickness fr.rule border the
@@ -291,6 +320,8 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))
 			cy += spToPt(c.height + c.depth)
+		case specialNode:
+			d.special(c, x, cy)
 		}
 	}
 }

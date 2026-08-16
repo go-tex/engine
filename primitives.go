@@ -97,6 +97,7 @@ func (e *Engine) loadPrimitives() {
 	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
 	e.prim("relax", func(e *Engine) {})
 	e.prim("message", func(e *Engine) { e.doMessage() })
+	e.prim("special", func(e *Engine) { e.doSpecial() })
 
 	// expansion
 	e.prim("expandafter", func(e *Engine) { e.doExpandafter() })

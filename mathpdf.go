@@ -5,6 +5,7 @@ package engine
 
 import (
 	"encoding/xml"
+	"math"
 	"strconv"
 	"strings"
 
@@ -81,8 +82,10 @@ func attr(e xml.StartElement, name string) string {
 	return ""
 }
 
-// parseTransform handles translate(a[,b]) and scale(a[,b]) (the forms go-tex/math
-// emits), composed left-to-right.
+// parseTransform handles SVG's transform list — translate(a[,b]) and scale(a[,b])
+// (the forms go-tex/math emits) plus rotate(deg[,cx,cy]), matrix(a,b,c,d,e,f) and
+// skewX/skewY(deg) (the forms a drawing package's driver emits for an arbitrary
+// coordinate map) — composed left-to-right.
 func parseTransform(s string) affine {
 	m := identity()
 	for len(s) > 0 {
@@ -108,6 +111,23 @@ func parseTransform(s string) affine {
 				sy = args[1]
 			}
 			m = m.mul(affine{sx, 0, 0, sy, 0, 0})
+		case "rotate":
+			rad := arg(args, 0) * math.Pi / 180
+			cos, sin := math.Cos(rad), math.Sin(rad)
+			r := affine{cos, sin, -sin, cos, 0, 0}
+			if len(args) >= 3 { // rotate about (cx,cy)
+				cx, cy := args[1], args[2]
+				r = affine{1, 0, 0, 1, cx, cy}.mul(r).mul(affine{1, 0, 0, 1, -cx, -cy})
+			}
+			m = m.mul(r)
+		case "matrix":
+			if len(args) >= 6 {
+				m = m.mul(affine{args[0], args[1], args[2], args[3], args[4], args[5]})
+			}
+		case "skewX":
+			m = m.mul(affine{1, 0, math.Tan(arg(args, 0) * math.Pi / 180), 1, 0, 0})
+		case "skewY":
+			m = m.mul(affine{1, math.Tan(arg(args, 0) * math.Pi / 180), 0, 1, 0, 0})
 		}
 	}
 	return m
@@ -129,6 +149,17 @@ func drawSVGRect(p *pdfkit.Page, e xml.StartElement, m affine, left, pdfTop floa
 // drawSVGPath parses an SVG path "d" and fills it, mapping points through m and
 // the box placement. Supports M/L/H/V/C/Q/Z (absolute and relative).
 func drawSVGPath(p *pdfkit.Page, d string, m affine, left, pdfTop float64) {
+	if buildSVGPath(p, d, m, left, pdfTop) {
+		p.Fill()
+	}
+}
+
+// buildSVGPath emits an SVG path "d" as PDF path-construction operators, mapping
+// points through m and the box placement, and reports whether anything was
+// constructed. It paints nothing: the caller chooses the painting operator, so a
+// stroked path (a drawing package's usual output, see svgpdf.go) and a filled one
+// (a glyph outline) share one path parser.
+func buildSVGPath(p *pdfkit.Page, d string, m affine, left, pdfTop float64) bool {
 	pt := newPathTokens(d)
 	var cx, cy, startX, startY float64 // current point in SVG viewBox coords
 	moveTo := func(x, y float64) {
@@ -202,9 +233,7 @@ func drawSVGPath(p *pdfkit.Page, d string, m affine, left, pdfTop float64) {
 			p.ClosePath()
 		}
 	}
-	if drew {
-		p.Fill()
-	}
+	return drew
 }
 
 // pathTokens is a tiny scanner over an SVG path's command/number stream.
