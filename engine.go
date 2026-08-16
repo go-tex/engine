@@ -1148,6 +1148,14 @@ func (e *Engine) scanInt() int {
 				if m.kind == mPrim && m.name == "count" {
 					return sign * e.count[e.scanInt()]
 				}
+				if m.kind == mPrim && m.name == "numexpr" {
+					return sign * e.scanExpr(false)
+				}
+				if m.kind == mPrim && m.name == "dimexpr" {
+					// A dimension used where an integer is wanted coerces to its
+					// value in scaled points, as TeX's <internal dimen> does.
+					return sign * e.scanExpr(true)
+				}
 			}
 		}
 		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
@@ -1236,6 +1244,12 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.skip[m.code].width, 0
 			case m.kind == mPrim && m.name == "skip":
 				return e.skip[e.scanInt()].width, 0
+			case m.kind == mPrim && m.name == "dimexpr":
+				return e.scanExpr(true), 0
+			case m.kind == mPrim && m.name == "numexpr":
+				// An integer expression used as a dimension is a number of scaled
+				// points, matching \dimexpr <number>sp.
+				return e.scanExpr(false), 0
 			case m.kind == mPrim && m.name == "dimen":
 				return e.dimen[e.scanInt()], 0
 			case m.kind == mPrim && m.name == "wd":

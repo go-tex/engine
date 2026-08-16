@@ -99,6 +99,17 @@ func (e *Engine) loadAMSPrims() {
 		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
 		e.allocCnt++
 	})
+	// \newread\cs allocates an input stream the same way; the engine reads no
+	// TeX streams, but a package that allocates one (pgf's \r@pgf@reada) must not
+	// see \newread undefined.
+	e.prim("newread", func(e *Engine) {
+		name := e.scanCSName()
+		if name == "" || e.allocCnt >= 256 {
+			return
+		}
+		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
+		e.allocCnt++
+	})
 	e.prim("openout", func(e *Engine) { e.scanInt(); e.skipWriteFilename() })
 	e.prim("closeout", func(e *Engine) { e.scanInt() })
 	e.prim("write", func(e *Engine) {

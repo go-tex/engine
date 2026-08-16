@@ -69,6 +69,7 @@ func (e *Engine) loadPrimitives() {
 	e.prim("edef", func(e *Engine) { e.doDef(false, true) })
 	e.prim("xdef", func(e *Engine) { e.doDef(true, true) })
 	e.prim("let", func(e *Engine) { e.doLet(false) })
+	e.prim("futurelet", func(e *Engine) { e.doFuturelet() })
 	e.prim("global", func(e *Engine) { e.doGlobal() })
 	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
 	e.prim("countdef", func(e *Engine) { e.doCountdef() })
@@ -108,6 +109,12 @@ func (e *Engine) loadPrimitives() {
 	e.prim("number", func(e *Engine) { e.pushString(strconv.Itoa(e.scanInt())) })
 	e.prim("the", func(e *Engine) { e.doThe() })
 	e.prim("romannumeral", func(e *Engine) { e.pushString(roman(e.scanInt())) })
+
+	// e-TeX expressions (see etex.go). Executed on their own they contribute
+	// their value, as \the would print it; the scanners below read them as
+	// internal quantities.
+	e.prim("numexpr", func(e *Engine) { e.pushString(strconv.Itoa(e.scanExpr(false))) })
+	e.prim("dimexpr", func(e *Engine) { e.pushString(formatPt(e.scanExpr(true))) })
 
 	// conditionals
 	e.prim("ifnum", func(e *Engine) { e.doIf(e.evalIfnum()) })
@@ -150,6 +157,11 @@ func (e *Engine) doLet(global bool) {
 	if !ok || name == "" {
 		return
 	}
+	e.letTo(name, rhs, global)
+}
+
+// letTo gives name the current meaning of the token rhs (TeX \let's assignment).
+func (e *Engine) letTo(name string, rhs tok, global bool) {
 	if rhs.cs_ {
 		if m := e.eq[rhs.cs]; m != nil {
 			cp := *m
@@ -160,6 +172,29 @@ func (e *Engine) doLet(global bool) {
 		return
 	}
 	e.define(name, &meaning{kind: mLetChar, ch: rhs.ch, cat: rhs.cat}, global)
+}
+
+// doFuturelet implements \futurelet\cs<token1><token2>: \cs takes token2's
+// meaning and BOTH tokens are put back, so a macro can look one token ahead
+// without consuming it. It is how LaTeX's \@ifnextchar (and every package's copy
+// of it, such as pgf's \pgfutil@ifnextchar) peeks at the next character to decide
+// whether an optional argument follows.
+func (e *Engine) doFuturelet() {
+	name := e.scanCSName()
+	t1, ok1 := e.getNext()
+	if !ok1 {
+		return
+	}
+	t2, ok2 := e.getNext()
+	if !ok2 {
+		e.back(t1)
+		return
+	}
+	if name != "" {
+		e.letTo(name, t2, false)
+	}
+	e.back(t2) // pushed first so token1 is read first
+	e.back(t1)
 }
 
 func (e *Engine) skipOptSpace0() {
@@ -639,6 +674,12 @@ func (e *Engine) doThe() {
 	if t.cs_ {
 		if m := e.eq[t.cs]; m != nil {
 			switch {
+			case m.kind == mPrim && m.name == "numexpr":
+				e.pushString(strconv.Itoa(e.scanExpr(false)))
+				return
+			case m.kind == mPrim && m.name == "dimexpr":
+				e.pushString(formatPt(e.scanExpr(true)))
+				return
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
 				return

@@ -226,3 +226,36 @@ func TestSpecialHashNeedsOtherCatcode(t *testing.T) {
 		t.Errorf(`\string# = %q, want a single # in the literal`, texts[1])
 	}
 }
+
+// \special without a braced argument consumes nothing and places no node, so a
+// malformed source keeps typesetting instead of swallowing what follows.
+func TestSpecialWithoutGroup(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\special AB`); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := firstSpecial(e.mvl); ok {
+		t.Error("a special was placed without an argument")
+	}
+	if got := glyphString(e.mvl); got != "AB" {
+		t.Errorf("typeset %q, want AB", got)
+	}
+	if _, err := New().Run(`\special`); err != nil { // at end of input
+		t.Fatal(err)
+	}
+}
+
+// A special in a vertical list is drawn at the vertical cursor, so a picture
+// between two paragraphs lands where the page builder put it.
+func TestSpecialInVerticalList(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\hsize=100pt \baselineskip=10pt A\par\special{gotex:<rect x="{?x}" y="{?y}"/>}B\par`); err != nil {
+		t.Fatal(err)
+	}
+	svg := e.RenderPage(0)
+	if !strings.Contains(svg, `<rect x="0" y=`) {
+		t.Errorf("special not placed at the vertical cursor: %s", svg)
+	}
+}

@@ -253,3 +253,69 @@ func TestParseAlpha(t *testing.T) {
 }
 
 func closeTo(a, b float64) bool { return a-b < 1e-9 && b-a < 1e-9 }
+
+// A degenerate shape constructs no path, so nothing is painted and no stray
+// operator is left behind.
+func TestSVGStreamDegenerateShapes(t *testing.T) {
+	for _, frag := range []string{
+		`<rect x="0" y="0" width="0" height="10" fill="black"/>`,
+		`<rect x="0" y="0" width="10" height="-1" fill="black"/>`,
+		`<circle cx="5" cy="5" r="0" fill="black"/>`,
+		`<ellipse cx="5" cy="5" rx="4" ry="0" fill="black"/>`,
+		`<polygon points="1,1" fill="black"/>`,
+		`<polyline points="" fill="none" stroke="black"/>`,
+		`<path d="" fill="black"/>`,
+		`<path fill="black"/>`,
+	} {
+		if s := streamFor(t, frag, 20); s != "" {
+			t.Errorf("%s painted something:\n%s", frag, s)
+		}
+	}
+}
+
+// A zero-width pen draws no stroke (SVG paints nothing for stroke-width 0), and a
+// negative one is ignored so the inherited width stands.
+func TestSVGStreamStrokeWidthEdges(t *testing.T) {
+	if s := streamFor(t, `<path d="M 0 0 L 5 5" stroke="black" fill="none" stroke-width="0"/>`, 10); s != "" {
+		t.Errorf("a zero-width pen painted:\n%s", s)
+	}
+	s := streamFor(t, `<path d="M 0 0 L 5 5" stroke="black" fill="none" stroke-width="-2"/>`, 10)
+	wantOps(t, s, "1 w", "S") // the initial width, not −2
+	s = streamFor(t, `<path d="M 0 0 L 5 5" stroke="black" fill="none" stroke-width="wide"/>`, 10)
+	wantOps(t, s, "1 w", "S")
+}
+
+// An unreadable or inherit-valued paint leaves the inherited one in place; an
+// unknown element and unknown attributes are ignored.
+func TestSVGStreamUnknownValues(t *testing.T) {
+	s := streamFor(t, `<g stroke="black" fill="none"><path d="M 0 0 L 5 5" stroke="chartreuse" `+
+		`data-x="1" fill="inherit"/></g>`, 10)
+	wantOps(t, s, "0 0 0 RG", "S") // "chartreuse" is not in the colour table
+	if s := streamFor(t, `<foreignObject><b>hi</b></foreignObject>`, 10); s != "" {
+		t.Errorf("an unknown element painted:\n%s", s)
+	}
+}
+
+// fill-opacity, the shorthand opacity, a dash offset and a miter limit all reach
+// the graphics state; an out-of-range miter limit is ignored.
+func TestSVGStreamMoreAttributes(t *testing.T) {
+	s := streamFor(t, `<path d="M 0 0 L 5 5" fill="black" fill-opacity="0.25"/>`, 10)
+	if !strings.Contains(s, "gs") {
+		t.Errorf("fill-opacity did not select an ExtGState:\n%s", s)
+	}
+	s = streamFor(t, `<g opacity="0.5"><path d="M 0 0 L 5 5" fill="black"/></g>`, 10)
+	if !strings.Contains(s, "gs") {
+		t.Errorf("opacity did not select an ExtGState:\n%s", s)
+	}
+	s = streamFor(t, `<path d="M 0 0 L 5 5" stroke="black" fill="none" stroke-dasharray="2"`+
+		` stroke-dashoffset="1" stroke-miterlimit="8"/>`, 10)
+	wantOps(t, s, "8 M", "[2] 1 d", "S")
+	s = streamFor(t, `<path d="M 0 0 L 5 5" stroke="black" fill="none" stroke-miterlimit="0"/>`, 10)
+	wantOps(t, s, "4 M", "S") // below 1 is not a miter limit; the initial one stands
+}
+
+// An ellipse with a rotated map still passes through its four mapped extremes.
+func TestSVGStreamEllipseTransformed(t *testing.T) {
+	s := streamFor(t, `<g transform="translate(10,10)"><ellipse cx="0" cy="0" rx="5" ry="2" fill="black"/></g>`, 20)
+	wantOps(t, s, "15 10 m", "c", "h", "f")
+}
