@@ -47,6 +47,15 @@ func (e *Engine) doNewlength() {
 	e.allocSkp++
 }
 
+// recordSkippedLength tallies a length assignment dropped in lenient mode (its
+// register was never declared), so the skip census reports it.
+func (e *Engine) recordSkippedLength(name string) {
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS[name]++
+}
+
 // doSetlength implements \setlength (add=false) and \addtolength (add=true):
 // \setlength{\cmd}{glue}. The value is a full glue, so rubber lengths keep their
 // plus/minus components. Both are group-local (a plain assignment).
@@ -54,6 +63,13 @@ func (e *Engine) doSetlength(add bool) {
 	target, ok := e.readLengthCS()
 	g := e.readBraceGlue() // read the value regardless, to stay token-synchronised
 	if !ok {
+		// A real document sets a length the engine has no register for (a package's
+		// own \newlength that was gobbled, etc.). In lenient mode drop the assignment
+		// rather than abort the whole compile; the value is already consumed.
+		if e.tolerant() {
+			e.recordSkippedLength("setlength")
+			return
+		}
 		e.fail("Missing length register for \\setlength")
 		return
 	}
@@ -69,6 +85,10 @@ func (e *Engine) doSettodim(which byte) {
 	list, _ := e.grabHboxList() // sandboxed group; consumed even on a bad target
 	b := hpackSP(list, packNatural, 0)
 	if !ok {
+		if e.tolerant() {
+			e.recordSkippedLength("settowidth")
+			return
+		}
 		e.fail("Missing length register for \\settowidth")
 		return
 	}

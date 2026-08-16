@@ -117,3 +117,21 @@ func TestLenientNoArgKeepsFollowingWord(t *testing.T) {
 		t.Fatalf("render: pages=%d err=%v", len(pages), err)
 	}
 }
+
+// A length assignment whose register was never declared (a package's \newlength the
+// engine gobbled) must not abort the whole compile in lenient mode — real LaTeX
+// class guides do this. It is dropped and tallied instead.
+func TestLenientMissingLengthRegister(t *testing.T) {
+	for _, src := range []string{
+		`\documentclass{article}\begin{document}\setlength{\nosuchreg}{2pt}Body.\end{document}`,
+		`\documentclass{article}\begin{document}\settowidth{\nosuchreg}{xx}Body.\end{document}`,
+	} {
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: lenient compile aborted: %v", src, err)
+		}
+		if len(e.Pages()) == 0 {
+			t.Errorf("%s: produced no pages", src)
+		}
+	}
+}
