@@ -133,10 +133,14 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 // anything that used to render still renders unchanged. A per-name guard (seen) and a
 // bounded try count keep a self-referential or non-shrinking macro from looping.
 func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, display bool, size int) (string, texmath.Metrics, error) {
-	seen := map[string]bool{}
 	var svg string
 	var m texmath.Metrics
 	var err error
+	// The overall try bound stops a mutually-recursive pair (\a→\b→\a) that keeps
+	// changing the source forever. Progress within it is guarded per step by the
+	// fixpoint check below, not by a "seen once" set — a document's own \newcommand
+	// is often used NESTED (\prn{…\prn{…}}), so the same name must be expandable more
+	// than once as the outer occurrence exposes the inner ones.
 	for tries := 0; tries < 64; tries++ {
 		if display {
 			svg, m, err = r.RenderDisplaySVGMetrics(src, size)
@@ -147,7 +151,7 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			return svg, m, nil
 		}
 		name := unknownMathCommand(err.Error())
-		if name == "" || seen[name] {
+		if name == "" {
 			return svg, m, err
 		}
 		next, ok := e.expandMacroInMathSource(src, name)
@@ -157,13 +161,16 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			// argument — so the equation typesets in the surrounding colour instead
 			// of being dropped whole.
 			if stripped, sok := stripMathColor(src, name); sok {
-				seen[name] = true
 				src = stripped
 				continue
 			}
 			return svg, m, err
 		}
-		seen[name] = true
+		if next == src {
+			// A self-referential macro (\def\x{\x}) expands to itself: no progress,
+			// so stop rather than spin. The equation is dropped and recorded.
+			return svg, m, err
+		}
 		src = next
 	}
 	return svg, m, err

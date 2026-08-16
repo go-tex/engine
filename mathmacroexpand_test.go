@@ -83,6 +83,25 @@ func TestUserMathMacroResolvesRecursively(t *testing.T) {
 	}
 }
 
+// A macro used NESTED within its own argument (\prn{…\prn{…}}) must expand every
+// level: the outer occurrence is substituted first, exposing the inner one, which
+// the resolver expands on a later pass. A single-shot "seen once" guard would leave
+// the inner \prn unresolved and drop the whole equation — the real arXiv failure.
+func TestNestedSameMacroResolves(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.lenient = true
+	src := `\newcommand{\prn}[1]{\left(#1\right)}$O\prn{\frac{d}{n}+\log\prn{\frac{1}{\delta}}}$`
+	if _, err := e.Run(src); err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(e.SkippedCommands()) != 0 {
+		t.Errorf("nested \\prn should fully resolve, dropped: %v", e.SkippedCommands())
+	}
+}
+
 // The fallback must never touch a command go-tex/math already understands: the literal
 // source is tried first, so a kernel math macro like \cdot (which the engine defines as
 // a macro but go-tex/math renders natively) is never expanded and keeps rendering.
