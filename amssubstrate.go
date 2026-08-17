@@ -248,9 +248,22 @@ const AMSClassSubstrate = `
 \def\m@th{}
 \def\jobname{texput}
 \def\@auxout{-1}
-% \protected@edef ≈ \edef (\protect is already a harmless no-op in the kernel).
-\let\protected@edef\edef
-\let\protected@xdef\xdef
+% \protected@edef / \protected@xdef must keep a \protect'd (robust) token from
+% expanding while the body is being expanded — real LaTeX makes \protect
+% momentarily unexpandable. Plain \edef/\xdef here expands right through \protect,
+% so a robust command whose replacement text mentions itself or another robust
+% command runs away and swallows the document: bm.sty's
+% \protected@edef\bm#1{\bm{#1}}, and imsart's
+% \protected@xdef\@thanks{…\protect\thanks@thefnmark…\protect\orig@footnotetext…}.
+% Make \protect write itself and the following token literally, run the (x)edef
+% (which reads the control sequence, its parameter text and the body that follow),
+% then restore \protect once the assignment is done.
+\def\@unexpandable@protect{\noexpand\protect\noexpand}
+\def\gotex@restore@protect{\let\protect\gotex@@protect}
+\def\protected@edef{\let\gotex@@protect\protect\let\protect\@unexpandable@protect
+  \afterassignment\gotex@restore@protect\edef}
+\def\protected@xdef{\let\gotex@@protect\protect\let\protect\@unexpandable@protect
+  \afterassignment\gotex@restore@protect\xdef}
 % \DeclareTextCommand\cs{encoding}{body}: amsart uses only the no-optional-arg
 % form; bind \cs to its body and ignore the encoding.
 \def\DeclareTextCommand#1#2#3{\def#1{#3}}
