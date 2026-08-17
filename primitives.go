@@ -1010,15 +1010,35 @@ func (e *Engine) ifxMeaning(t tok) *meaning {
 func (e *Engine) evalIf() bool {
 	a, _ := e.getXToken()
 	b, _ := e.getXToken()
-	ca, cb := charOf(a), charOf(b)
+	ca, _ := e.ifCharOf(a)
+	cb, _ := e.ifCharOf(b)
 	return ca == cb
 }
 
-func charOf(t tok) rune {
-	if t.cs_ {
-		return -1
+// ifCharOf resolves the character a token stands for in \if and \ifcat (TeX
+// §506). A control sequence \let to a CHARACTER behaves exactly as that
+// character — that is the whole point of \futurelet, which \let's a lookahead
+// control sequence to the token it peeked at and then asks \ifcat what it was.
+// Every OTHER control sequence — a macro, a primitive, a \chardef'd constant, an
+// undefined name — is character code 256, category 16, which is why two of them
+// always compare equal to each other and never to a real character.
+//
+// The engine treated every control sequence that way, so \ifcat\next a was false
+// for a \next \let to a letter. beamer decides whether a \mode<…> spec is a MODE
+// NAME or an overlay range with exactly that test: it always answered "overlay",
+// every \mode<presentation> concluded the mode did not apply, and the class
+// silently commented out the rest of the document.
+//
+// The \chardef case is not an oversight: real TeX answers OTHER for
+// \ifcat\chardefd a and DIFF for \if\chardefd A. Checked against it.
+func (e *Engine) ifCharOf(t tok) (rune, cat) {
+	if !t.cs_ {
+		return t.ch, t.cat
 	}
-	return t.ch
+	if m := e.eq[t.cs]; m != nil && m.kind == mLetChar {
+		return m.ch, m.cat
+	}
+	return 256, 16
 }
 
 func meaningEq(a, b *meaning) bool {
@@ -1755,15 +1775,9 @@ func (e *Engine) doCharCode(table map[rune]int) {
 func (e *Engine) evalIfcat() bool {
 	a, _ := e.getXToken()
 	b, _ := e.getXToken()
-	ca, cb := catClass(a), catClass(b)
+	_, ca := e.ifCharOf(a)
+	_, cb := e.ifCharOf(b)
 	return ca == cb
-}
-
-func catClass(t tok) cat {
-	if t.cs_ {
-		return 16 // control sequences compare equal to each other
-	}
-	return t.cat
 }
 
 func (e *Engine) doMeaning() {

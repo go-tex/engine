@@ -66,6 +66,7 @@ var texGlueParams = []string{
 // name already defined (a parameter the engine models itself, or one a macro
 // layer has claimed) is left alone.
 func (e *Engine) loadTeXParams() {
+	e.endlineReg = -1
 	for name, def := range texIntParams {
 		if e.eq[name] != nil || e.allocCnt >= 256 {
 			continue
@@ -73,6 +74,11 @@ func (e *Engine) loadTeXParams() {
 		e.count[e.allocCnt] = def
 		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, true)
 		e.allocCnt++
+	}
+	// The mouth reads \endlinechar at every line end (see mouthChar); cache the
+	// register it landed on rather than looking the name up each time.
+	if m := e.eq["endlinechar"]; m != nil && m.kind == mCountRef {
+		e.endlineReg = m.code
 	}
 	for _, name := range texDimenParams {
 		if e.eq[name] != nil || e.allocDim >= 256 {

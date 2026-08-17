@@ -58,3 +58,26 @@ func TestKernelInternalsPackagesCallByName(t *testing.T) {
 		}
 	}
 }
+
+// More kernel internals a real class asks for by name. Each was missing, and each
+// one skipped is an assignment that did not happen.
+func TestMoreKernelInternals(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		// \maxdimen is plain TeX's largest dimension; package code uses it as "no
+		// limit", so its absence means the assignment simply does not happen.
+		{"maxdimen", `\newdimen\D\D=\maxdimen\message{[\the\D]}`, "[16383.99998pt]"},
+		// \@cons appends an \@elt-separated item to a kernel list macro.
+		{"cons", `\makeatletter\def\L{}\@cons\L{A}\@cons\L{B}\def\@elt#1{<#1>}\message{[\L]}`, "[<A><B>]"},
+		// \@onelevel@sanitize rewrites a macro's content as ordinary characters.
+		{"sanitize", `\makeatletter\def\N{ab}\@onelevel@sanitize\N\message{[\N]}`, "[ab]"},
+		{"sanitize-strips-the-prefix", `\makeatletter\def\N{a\relax b}\@onelevel@sanitize\N\message{[\meaning\N]}`, `[macro:->a\relax b]`},
+		// xcolor's switches, which xxcolor (beamer's colour layer) toggles.
+		{"globalcolors", `\makeatletter\globalcolorstrue\message{[\ifglobalcolors Y\else N\fi]}`, "[Y]"},
+		{"globalcolors-off", `\makeatletter\globalcolorsfalse\message{[\ifglobalcolors Y\else N\fi]}`, "[N]"},
+	}
+	for _, c := range cases {
+		if got := ckRun(t, c.src); got != c.want {
+			t.Errorf("%s: %s\n = %q, want %q", c.name, c.src, got, c.want)
+		}
+	}
+}

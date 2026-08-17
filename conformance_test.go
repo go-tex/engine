@@ -31,6 +31,11 @@ func TestConformance(t *testing.T) {
 		{"\\message{\\the\\catcode`\\^^M}", "5"},
 		// a parameter text ending in # is delimited by the brace, which stays put
 		{`\def\a#1#{\message{[#1]}}\a xy{}`, "[xy]"},
+		// \if / \ifcat resolve a control sequence \let to a character
+		{`\def\g#1{}\futurelet\n\g p\message{\ifcat\n a LETTER\else OTHER\fi}`, " LETTER"},
+		{`\chardef\c=65 \message{\ifcat\c a LETTER\else OTHER\fi}`, "OTHER"},
+		// \endlinechar is the character appended to every input line
+		{"\\begingroup\\endlinechar=-1\n\\gdef\\A{a\nb}\\endgroup\n\\message{\\meaning\\A}", "macro:->ab"},
 	}
 	for _, c := range cases {
 		if got := run(t, c.src); got != c.want {
