@@ -120,6 +120,10 @@ const LaTeX2eKernelHelpers = `
   \expandafter\def\csname\@stripif#1false\endcsname{\let#1\iffalse}}
 \newif\if@tempswa
 \newif\ifin@
+% xcolor's own switches, which packages built on it read: xxcolor — beamer's
+% colour layer — toggles \ifglobalcolors around every colour it sets.
+\newif\ifglobalcolors
+\newif\ifXC@keepwhite
 % ── definability / undefined tests ──────────────────────────────────────────
 % \@ifundefined{name}{then}{else}: \csname name\endcsname is \relax when the name
 % is undefined (doCsname), so \ifx…\relax selects the branch. NOTE the standard
@@ -241,6 +245,18 @@ const LaTeX2eKernelHelpers = `
 % \kernel@ifnextchar is the kernel's own name for \@ifnextchar (the kernel keeps a
 % private copy so a package that redefines \@ifnextchar cannot break the kernel).
 % beamer's overlay decoder calls it by that name.
+% \maxdimen is plain TeX's largest dimension. Package code uses it as "no limit"
+% (\vbox to\maxdimen, \dimen0=\maxdimen), so its absence is not a rounding matter:
+% the assignment simply does not happen.
+\newdimen\maxdimen \maxdimen=16383.99998pt
+% \@cons\list{\item} appends an \@elt-separated item to a LaTeX list macro, with
+% \@elt made harmless while the list is rebuilt.
+\def\@cons#1#2{\begingroup\let\@elt\relax\xdef#1{#1\@elt #2}\endgroup}
+% \@onelevel@sanitize\cs rewrites \cs's content as ordinary characters, which is
+% how the kernel makes a name safe to compare or write out. \strip@prefix drops
+% the "macro:->" that \meaning prints in front of the body.
+\def\strip@prefix#1>{}
+\def\@onelevel@sanitize#1{\edef#1{\expandafter\strip@prefix\meaning#1}}
 \let\kernel@ifnextchar\@ifnextchar
 % \in@{<a>}{<b>} sets \ifin@ true iff the token list <a> occurs inside <b>. The
 % kernel builds it as a delimited-match macro; keyval and beamer's option handling

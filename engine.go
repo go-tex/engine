@@ -227,6 +227,9 @@ type Engine struct {
 	steps     int
 	stepLimit int // absolute expansion ceiling (New sets maxExpandSteps; tests may lower it)
 	runaway   bool
+	// endlineReg is the \count register \endlinechar is bound to (see
+	// loadTeXParams), cached because the mouth reads it at every line end.
+	endlineReg int
 	// condOpen counts the conditionals whose \else/\fi is still to come, and
 	// condMarks records that count at the start of each conditional-operand scan.
 	// Together they decide when TeX's "insert \relax" rule applies — see
@@ -423,7 +426,11 @@ func (e *Engine) back(t tok) { e.lists = append(e.lists, []tok{t}) }
 func (e *Engine) scan() (tok, bool) {
 	for e.bpos < len(e.base) {
 		start := e.bpos
-		r, after := e.rawAt(e.bpos)
+		r, after, have := e.mouthChar(e.bpos)
+		if !have {
+			e.bpos = after // \endlinechar is out of range: this line end is nothing
+			continue
+		}
 		c := e.catOf(r)
 		switch c {
 		case catEsc:
@@ -444,7 +451,11 @@ func (e *Engine) scan() (tok, bool) {
 			}
 			newlines := 0
 			for e.bpos < len(e.base) {
-				rr, nx := e.rawAt(e.bpos)
+				rr, nx, ok := e.mouthChar(e.bpos)
+				if !ok {
+					e.bpos = nx
+					continue
+				}
 				cc := e.catOf(rr)
 				if cc == catEOL {
 					newlines++
@@ -471,7 +482,11 @@ func (e *Engine) scan() (tok, bool) {
 			}
 			e.bpos = after
 			for e.bpos < len(e.base) {
-				rr, nx := e.rawAt(e.bpos)
+				rr, nx, ok := e.mouthChar(e.bpos)
+				if !ok {
+					e.bpos = nx
+					continue
+				}
 				cc := e.catOf(rr)
 				if cc != catSpace && cc != catEOL {
 					break
@@ -508,15 +523,19 @@ func (e *Engine) scanCS() tok {
 	if e.bpos >= len(e.base) {
 		return csTok("")
 	}
-	r, after := e.rawAt(e.bpos)
+	r, after, have := e.mouthChar(e.bpos)
+	if !have {
+		e.bpos = after
+		return csTok("")
+	}
 	if e.catOf(r) != catLetter {
 		e.bpos = after
 		return csTok(string(r))
 	}
 	var name []rune
 	for e.bpos < len(e.base) {
-		rr, nx := e.rawAt(e.bpos)
-		if e.catOf(rr) != catLetter {
+		rr, nx, ok := e.mouthChar(e.bpos)
+		if !ok || e.catOf(rr) != catLetter {
 			break
 		}
 		name = append(name, rr)
@@ -524,7 +543,11 @@ func (e *Engine) scanCS() tok {
 	}
 	// a control word absorbs following spaces
 	for e.bpos < len(e.base) {
-		rr, nx := e.rawAt(e.bpos)
+		rr, nx, ok := e.mouthChar(e.bpos)
+		if !ok {
+			e.bpos = nx
+			continue
+		}
 		cc := e.catOf(rr)
 		if cc != catSpace && cc != catEOL {
 			break
@@ -575,6 +598,45 @@ func (e *Engine) rawAt(i int) (rune, int) {
 		return c + 64, i + 3
 	}
 	return c - 64, i + 3
+}
+
+// endlinechar is the character TeX appends to every input line — 13 (^^M) unless
+// a package changes it. A value outside 0..255 means "append nothing".
+func (e *Engine) endlinechar() int {
+	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
+		return '\r'
+	}
+	return e.count[e.endlineReg]
+}
+
+// mouthChar returns the character the mouth sees at index i, the index just past
+// it, and whether there is a character there at all.
+//
+// It resolves the two things TeX resolves at this level: the ^^ notation (rawAt),
+// and the END OF LINE. TeX reads its input one LINE at a time and appends the
+// character \endlinechar to each line; from then on that character acts on its
+// CATCODE like any other. This engine keeps the whole source in one buffer with \n
+// as the line separator, so the \n is presented as \endlinechar here.
+//
+// With the defaults — \endlinechar = 13 and \catcode13 = 5 — that is exactly the
+// end-of-line token the mouth produced before. It matters when a package CHANGES
+// them, and beamer does: it reads a line verbatim with \catcode`+"`"+`\^^M=12,
+// \endlinechar=-1 and a macro delimited by ^^M. Against a hardwired end-of-line
+// token that delimiter can never match, and the macro swallows the rest of the
+// document — which is what happened to every line after \documentclass{beamer}.
+func (e *Engine) mouthChar(i int) (rune, int, bool) {
+	if i >= len(e.base) {
+		return 0, i + 1, false
+	}
+	if e.base[i] == '\n' {
+		c := e.endlinechar()
+		if c < 0 || c > 255 {
+			return 0, i + 1, false // \endlinechar out of range: the line just ends
+		}
+		return rune(c), i + 1, true
+	}
+	r, next := e.rawAt(i)
+	return r, next, true
 }
 
 // lowerHexVal reports the value of a LOWERCASE hex digit, as TeX's ^^ notation
