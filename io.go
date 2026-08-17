@@ -98,12 +98,19 @@ func (e *Engine) doInput() {
 		e.fail("input file not found: " + file)
 		return
 	}
-	// Splice the file, then a marker that discounts its lines once they are behind
-	// the mouth. Without it every line of an \input'ed file would be counted in the
-	// document's own numbering, so an error or an editor's source map would point
-	// hundreds of lines past the real place — exactly what \usepackage already
-	// avoids for a class or package (see endLoad). The marker's name has no @ in
-	// it, since \input splices the file wherever the catcode of @ happens to be.
+	e.spliceInputFile(data)
+}
+
+// spliceInputFile puts a file's text into the input at the mouth's position,
+// followed by a marker that ends it. EVERY way of reading a file in must use
+// this: the marker is where \endinput stops (it means "stop reading THIS file",
+// so a file spliced without one lets an \endinput inside it run on to the
+// enclosing file's marker and swallow the rest of that file), and it is what
+// discounts the file's lines from the document's own numbering, so an error or
+// an editor's source map still points at the right line. The marker's name has
+// no @ in it, since a file may be read in wherever the catcode of @ happens to
+// be.
+func (e *Engine) spliceInputFile(data []byte) {
 	body := normalizeEOL(string(data))
 	e.inputNL = append(e.inputNL, strings.Count(body, "\n"))
 	insert := []rune(body + " \\gotexendinput ") // TeX appends a space at end of file
