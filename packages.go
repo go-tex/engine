@@ -92,6 +92,13 @@ var neverLoadReal = map[string]bool{
 	"hyperref": true, "fontspec": true, "inputenc": true, "fontenc": true,
 	"babel": true, "biblatex": true, "listings": true, "pstricks": true,
 	"xcolor": true, "color": true, "graphicx": true, "graphics": true,
+	// bm builds its bold-math commands from low-level math-alphabet machinery
+	// (\install@mathalphabet, \getanddefine@fonts) the engine's font model does not
+	// run, and its \protected@edef\bm#1{\bm{#1}} re-dispatch expands the robust \bm
+	// against the engine's non-protecting \protected@edef and swallows the document.
+	// The kernel already defines \bm as \boldsymbol (the math layer's bold path), so
+	// the bundled real bm.sty is only ever worse.
+	"bm": true,
 }
 
 // pgfPackages are the drawing packages the engine now has a system-layer driver
