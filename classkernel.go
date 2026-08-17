@@ -188,6 +188,81 @@ const LaTeX2eClassKernel = `
 % \setbox<n>=\box\voidb@x is how a package empties a box register. Without it
 % that idiom reads register 0 instead and steals whatever is in it.
 \newbox\voidb@x
+% NFSS's maths versions (\mathversion{bold} and friends) and the font-shape
+% switches a class uses around its headings. This engine has one face per family,
+% so a version switch has nothing to select; the argument is consumed.
+\def\mathversion#1{}
+\def\DeclareMathVersion#1{}
+\def\SetMathAlphabet@#1#2#3#4#5#6{}
+\def\fontfamily#1{\@gobbleone@nil}
+\def\fontseries#1{\@gobbleone@nil}
+\def\fontshape#1{\@gobbleone@nil}
+\def\fontsize#1#2{}
+\def\@gobbleone@nil{}
+\def\usefont#1#2#3#4{}
+% Line numbering (the lineno package, which several conference classes turn on
+% and off around their front matter). This engine does not number lines, so the
+% switches are accepted and do nothing.
+\def\linenumbers{}
+\def\nolinenumbers{}
+\def\runninglinenumbers{}
+\def\modulolinenumbers#1{}
+\def\setrunninglinenumbers{}
+% \protected@write writes to an auxiliary file with fragile commands shielded.
+% This engine keeps its cross-reference and table-of-contents information in
+% memory rather than in .aux files, so the write itself has nothing to do — but
+% a class calls it directly, and an undefined one stops the document.
+\def\protected@write#1#2#3{}
+\def\protected@edef#1#2{\edef#1{#2}}
+\def\protected@xdef#1#2{\xdef#1{#2}}
+% NFSS's font declarations. This engine has one face per family rather than
+% NFSS's encoding/family/series/shape tables, so a declaration cannot install
+% what it asks for — but a real paper's preamble is full of them, and an
+% undefined one stops the document before its first line. They are accepted and
+% their arguments consumed. A maths alphabet is worth more than that: the command
+% it declares is defined, and a family that names a blackboard-bold font gets the
+% blackboard alphabet the maths layer really has, so \mathbbm{N} still reads as
+% the set of naturals.
+\def\DeclareMathAlphabet#1#2#3#4#5{\gotex@declmathalpha#1{#3}}
+\def\gotex@declmathalpha#1#2{%
+  \def\gotex@fam{#2}%
+  \def\gotex@bbm{bbm}\def\gotex@bbold{bbold}\def\gotex@dsrom{dsrom}%
+  \ifx\gotex@fam\gotex@bbm \def#1##1{\mathbb{##1}}%
+  \else\ifx\gotex@fam\gotex@bbold \def#1##1{\mathbb{##1}}%
+  \else\ifx\gotex@fam\gotex@dsrom \def#1##1{\mathbb{##1}}%
+  \else\def#1##1{##1}%
+  \fi\fi\fi}
+\def\SetMathAlphabet#1#2#3#4#5#6{}
+\def\DeclareSymbolFont#1#2#3#4#5{}
+\def\SetSymbolFont#1#2#3#4#5#6{}
+\def\DeclareSymbolFontAlphabet#1#2{}
+\def\DeclareFontFamily#1#2#3{}
+\def\DeclareFontShape#1#2#3#4#5#6{}
+\def\DeclareFontEncoding#1#2#3{}
+\def\DeclareFontSubstitution#1#2#3#4{}
+\def\DeclareTextFontCommand#1#2{\def#1##1{{#2##1}}}
+% Which engine is this? A document asks before it chooses how to include a
+% graphic, which font machinery to load, or which encoding package to use — and
+% an unanswered question is a hard error, since \ifpdf…\else…\fi then has no
+% conditional to match. This engine is an e-TeX-capable engine that writes PDF
+% directly and reads UTF-8 source, so it answers the pdfTeX-shaped questions yes
+% (that is the branch whose packages it emulates) and the XeTeX/LuaTeX ones no.
+\newif\ifpdf\pdftrue
+\newif\ifPDFTeX\PDFTeXtrue
+\newif\ifpdftex\pdftextrue
+\newif\ifetex\etextrue
+\newif\ifeTeX\eTeXtrue
+\newif\ifxetex
+\newif\ifXeTeX
+\newif\ifluatex
+\newif\ifLuaTeX
+\newif\ifvtex
+\newif\ifVTeX
+\newif\ifptex
+\newif\ifuptex
+\newif\ifptexng
+\newif\ifalephtex
+\newif\ifTUTeX
 \newif\if@twocolumn
 \newif\if@twoside
 \newif\if@compatibility
