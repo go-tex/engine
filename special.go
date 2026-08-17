@@ -87,18 +87,23 @@ func specialLiteral(text string, x, y float64) (string, bool) {
 	return r.Replace(s), true
 }
 
-// resolveSpecialOrigins finishes a page's emitted stream: each declaration is
-// removed and the {?ox}/{?oy} (and negated {?-ox}/{?-oy}) placeholders after it
-// are replaced by the coordinates it carried. A back-reference with no
-// declaration before it resolves to the page origin.
-func resolveSpecialOrigins(s string) string {
+// originResolver resolves the origin back-references in a stream of literals as
+// they arrive, keeping the last origin declared. A driver that interprets the
+// stream in one go uses resolveSpecialOrigins; one that walks the page and needs
+// each literal finished as it reaches it (the PDF driver, which has to know the
+// transformation in force when it draws a character) resolves them one at a time.
+type originResolver struct{ ox, oy float64 }
+
+// next finishes one literal: the declarations in it are consumed (and become the
+// origin from here on) and the back-references before each are resolved against
+// the origin that was in force.
+func (r *originResolver) next(s string) string {
 	if !strings.Contains(s, "{?ox}") && !strings.Contains(s, "{?oy}") &&
 		!strings.Contains(s, "{?-ox}") && !strings.Contains(s, "{?-oy}") &&
 		!strings.Contains(s, "<"+originElem) {
 		return s
 	}
 	var out strings.Builder
-	var ox, oy float64
 	rest := s
 	for {
 		i := strings.Index(rest, "<"+originElem)
@@ -110,12 +115,21 @@ func resolveSpecialOrigins(s string) string {
 			break
 		}
 		decl := rest[i : i+j+2]
-		out.WriteString(substOrigin(rest[:i], ox, oy))
-		ox, oy = originCoords(decl)
+		out.WriteString(substOrigin(rest[:i], r.ox, r.oy))
+		r.ox, r.oy = originCoords(decl)
 		rest = rest[i+j+2:]
 	}
-	out.WriteString(substOrigin(rest, ox, oy))
+	out.WriteString(substOrigin(rest, r.ox, r.oy))
 	return out.String()
+}
+
+// resolveSpecialOrigins finishes a page's emitted stream: each declaration is
+// removed and the {?ox}/{?oy} (and negated {?-ox}/{?-oy}) placeholders after it
+// are replaced by the coordinates it carried. A back-reference with no
+// declaration before it resolves to the page origin.
+func resolveSpecialOrigins(s string) string {
+	var r originResolver
+	return r.next(s)
 }
 
 // substOrigin replaces the origin back-references in one segment of the stream.
