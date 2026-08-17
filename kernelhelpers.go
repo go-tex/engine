@@ -74,6 +74,17 @@ const LaTeX2eKernelHelpers = `
 \def\@gobblefour#1#2#3#4{}
 \def\@firstoftwo#1#2{#1}
 \def\@secondoftwo#1#2{#2}
+% LaTeX kernel while-loops. \@whilenum <test> \do {<body>} repeats <body> while
+% the \ifnum test holds; \@whiledim is the \ifdim analogue; \@whilesw <switch>\fi
+% {<body>} loops on a boolean switch. Classes drive frontmatter box splitting and
+% list machinery with these (e.g. imsart's \close@fm \@whiledim…\vsplit loop);
+% defined exactly as latex.ltx so the delimited \do argument parses correctly.
+\long\def\@whilenum#1\do #2{\ifnum #1\relax #2\relax\@iwhilenum{#1\relax #2\relax}\fi}
+\long\def\@iwhilenum#1{\ifnum #1\expandafter\@iwhilenum\else\expandafter\@gobble\fi{#1}}
+\long\def\@whiledim#1\do #2{\ifdim #1\relax#2\@iwhiledim{#1\relax#2}\fi}
+\long\def\@iwhiledim#1{\ifdim #1\expandafter\@iwhiledim\else\expandafter\@gobble\fi{#1}}
+\long\def\@whilesw#1\fi#2{#1#2\@iwhilesw{#1#2}\fi}
+\long\def\@iwhilesw#1\fi{#1\expandafter\@iwhilesw\else\@gobbletwo\fi{#1}\fi}
 % \@nil / \@nnil : pure delimiter tokens for list-scanning macros. Their meaning
 % is never executed; \@nnil's body is the single token \@nil so that a loop macro
 % \def'd to \@nil compares \ifx-equal to \@nnil (meaning-equality of bodies).

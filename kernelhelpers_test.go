@@ -81,6 +81,21 @@ func TestKernelNewif(t *testing.T) {
 	}
 }
 
+// The LaTeX kernel while-loops repeat their \do body while the test holds.
+// Classes drive frontmatter/list machinery with these; an undefined \@whiledim
+// would be skipped and its delimited test/body mis-parse.
+func TestKernelWhileLoops(t *testing.T) {
+	// \@whilenum: count 0..4, emit a mark each iteration.
+	if got := khRun(t, `\newcount\n\n=0 \@whilenum\n<5 \do{x\advance\n1 }\message{\the\n}`); got != "5" {
+		t.Errorf("@whilenum final count => %q, want 5", got)
+	}
+	// \@whiledim: subtract 3pt from 10pt until ≤0 ⇒ 4 iterations (10,7,4,1).
+	if got := khRun(t, `\newdimen\d\d=10pt \newcount\k\k=0 `+
+		`\@whiledim\d>\z@ \do{\advance\k1 \advance\d-3pt }\message{\the\k}`); got != "4" {
+		t.Errorf("@whiledim iterations => %q, want 4", got)
+	}
+}
+
 // Registers allocated by the helper layer are assignable and readable.
 func TestKernelRegisters(t *testing.T) {
 	if got := khRun(t, `\@tempcnta=5 \message{\the\@tempcnta}`); got != "5" {
