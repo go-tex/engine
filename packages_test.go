@@ -363,3 +363,41 @@ func TestProcessOptionsPeekDoesNotStrandFollowingToken(t *testing.T) {
 		}
 	})
 }
+
+// \@currname / \@currext name the file being loaded, and LaTeX keeps them on a
+// STACK: a class that requires a package in the middle of its own work must still
+// be "the current file" afterwards. The engine left them naming the last file
+// loaded, so beamer declared its options into the family named by whatever package
+// it happened to require last, and its own \ExecuteOptionsBeamer{c} then reported
+// "key c undefined" and put the message on the page.
+//
+// Outside any file they are EMPTY, not undefined — checked against real LaTeX,
+// which prints "." for \@currname.\@currext there.
+func TestCurrnameIsRestoredAfterANestedLoad(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"outer.sty": `\message{[in-outer:\@currname.\@currext]}` +
+			`\RequirePackage{inner}` +
+			`\message{[back-in-outer:\@currname.\@currext]}`,
+		"inner.sty": `\message{[in-inner:\@currname.\@currext]}`,
+	}, func() {
+		out, _ := runLaTeX(t, `\usepackage{outer}\makeatletter\message{[after:\@currname.\@currext]}`)
+		want := "[in-outer:outer.sty] [in-inner:inner.sty] [back-in-outer:outer.sty] [after:.]"
+		if out != want {
+			t.Errorf("\\@currname across a nested load:\n got %q\nwant %q", out, want)
+		}
+	})
+}
+
+// The option machinery reads \@currname, so a package that requires another in the
+// middle of declaring its options still executes its OWN options afterwards.
+func TestOptionsSurviveANestedRequire(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"host.sty":  `\DeclareOption{ha}{\message{HOST-OPT}}\RequirePackage{guest}\ProcessOptions\ExecuteOptions{ha}`,
+		"guest.sty": `\DeclareOption{ga}{\message{GUEST-OPT}}\ProcessOptions`,
+	}, func() {
+		out, _ := runLaTeX(t, `\usepackage{host}`)
+		if !strings.Contains(out, "HOST-OPT") {
+			t.Errorf("the host package's own option did not run after a nested \\RequirePackage: %q", out)
+		}
+	})
+}

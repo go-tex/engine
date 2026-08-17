@@ -757,9 +757,28 @@ func (e *Engine) scanOptBracketInt() int {
 		return 0
 	}
 	if !t.cs_ && t.ch == '[' {
-		n := e.scanInt()
-		if c, ok := e.getXToken(); ok && !(!c.cs_ && c.ch == ']') {
-			e.back(c)
+		// The count may arrive BRACED — \newcommand\foo[{1}]… — because the caller
+		// built the call by expansion rather than typing it. TeX strips the braces
+		// of an argument that is entirely one group, so read the bracket's content
+		// and take the number from what is left.
+		// The '[' goes back so the bracket reader (which applies TeX's
+		// brace-stripping rule) can take the whole thing; it is there, so the
+		// reader always finds it.
+		e.back(t)
+		toks, _ := e.scanOptBracketToks()
+		n := 0
+		neg := false
+		for _, u := range toks {
+			switch {
+			case u.cs_:
+			case u.ch == '-':
+				neg = !neg
+			case u.ch >= '0' && u.ch <= '9':
+				n = n*10 + int(u.ch-'0')
+			}
+		}
+		if neg {
+			n = -n
 		}
 		return n
 	}
@@ -794,13 +813,47 @@ func (e *Engine) scanOptBracketToks() ([]tok, bool) {
 					depth--
 				}
 			case depth == 0 && !u.cs_ && u.ch == ']':
-				return toks, true
+				return stripOuterGroup(toks), true
 			}
 			toks = append(toks, u)
 		}
 	}
 	e.back(t)
 	return nil, false
+}
+
+// stripOuterGroup removes the braces of an argument that is ENTIRELY one group,
+// which is what TeX does when it grabs a delimited parameter (§399): \def\d[#1]{}
+// called as \d[{g}] sees "g", while \d[{a}{b}] — two groups, not one enclosing
+// them — keeps its braces. Checked against real TeX.
+//
+// The engine reads [optional arguments] in Go rather than through a delimited
+// macro, so the rule has to be applied here. It matters at once for
+// \newcommand: the kernel's own \@testopt hands the default over BRACED, and
+// beamer builds a definition as \newcommand\foo[{1}][{}]{…} through a chain of
+// \expandafter — with the braces left on, the argument count was not a number and
+// \foo came out as a macro with no arguments at all, which put the body of every
+// beamer template on the page instead of storing it.
+func stripOuterGroup(toks []tok) []tok {
+	if len(toks) < 2 || toks[0].cs_ || toks[0].cat != catBegin {
+		return toks
+	}
+	depth := 0
+	for i, t := range toks {
+		switch {
+		case !t.cs_ && t.cat == catBegin:
+			depth++
+		case !t.cs_ && t.cat == catEnd:
+			depth--
+			if depth == 0 {
+				if i != len(toks)-1 {
+					return toks // the group ends before the argument does
+				}
+				return toks[1 : len(toks)-1]
+			}
+		}
+	}
+	return toks
 }
 
 // doDocumentClass gobbles \documentclass[options]{class} (both parts optional in

@@ -31,6 +31,16 @@ type loadFrame struct {
 	declared map[string][]tok // \DeclareOption{name}{code}
 	star     []tok            // \DeclareOption*{code}
 	hasStar  bool
+	// The \@currname / \@currext / \@currnamestack in force when this file was
+	// entered, restored when it ends. LaTeX keeps them on a stack for the same
+	// reason: a class that loads a package in the middle of its own option
+	// declarations must still be "the current file" afterwards. Without the
+	// restore, beamer declared its options into the family named by the LAST
+	// package it happened to require, and its own \ExecuteOptionsBeamer{c} then
+	// reported "key c undefined".
+	prevName  *meaning
+	prevExt   *meaning
+	prevStack *meaning
 }
 
 // texInputDirs is the ordered search path for \usepackage/\documentclass/\input
@@ -157,6 +167,8 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// (amsart's opening \csname ver@\@currname.\@currext\endcsname and its
 	// \@currnamestack scan). ext is stored without the leading dot ("cls"/"sty").
 	extNoDot := strings.TrimPrefix(ext, ".")
+	top := &e.loadStack[len(e.loadStack)-1]
+	top.prevName, top.prevExt, top.prevStack = e.eq["@currname"], e.eq["@currext"], e.eq["@currnamestack"]
 	e.define("@currname", &meaning{kind: mMacro, body: stringToToks(name)}, true)
 	e.define("@currext", &meaning{kind: mMacro, body: stringToToks(extNoDot)}, true)
 	// \@currnamestack is a flat brace-group list the class dissects with a delimited
@@ -225,6 +237,19 @@ func (e *Engine) endLoad() {
 	if fr.endHook != "" {
 		e.define(fr.endHook, &meaning{kind: mMacro}, true) // \let\@endof…hook\@empty
 	}
+	// Hand \@currname / \@currext / \@currnamestack back to the file that was
+	// being loaded when this one started (see loadFrame). Outside any file they
+	// are EMPTY, not undefined — that is what LaTeX leaves behind, and what code
+	// that interpolates them expects.
+	restore := func(name string, prev *meaning) {
+		if prev == nil {
+			prev = &meaning{kind: mMacro}
+		}
+		e.eq[name] = prev
+	}
+	restore("@currname", fr.prevName)
+	restore("@currext", fr.prevExt)
+	restore("@currnamestack", fr.prevStack)
 	if e.loadDepth > 0 {
 		e.loadDepth--
 	}
