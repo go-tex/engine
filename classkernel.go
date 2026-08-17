@@ -184,6 +184,10 @@ const LaTeX2eClassKernel = `
 % files apply to the lengths they compute. Without it a class silently drops
 % those calls.
 \def\@settopoint#1{\divide#1\p@\multiply#1\p@}
+% \voidb@x is the kernel's permanently empty box: nothing is ever put in it, so
+% \setbox<n>=\box\voidb@x is how a package empties a box register. Without it
+% that idiom reads register 0 instead and steals whatever is in it.
+\newbox\voidb@x
 \newif\if@twocolumn
 \newif\if@twoside
 \newif\if@compatibility

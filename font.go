@@ -121,6 +121,18 @@ func (e *Engine) SetFont(f fontFace) {
 	}
 }
 
+// loadSelectFont installs \gotex@selectbasefont, the primitive \selectfont is
+// defined in terms of: it makes the base (roman, \normalsize) face current
+// again. It is scoped like any other font switch, so a group restores whatever
+// was in force before.
+func (e *Engine) loadSelectFont() {
+	e.prim("gotex@selectbasefont", func(e *Engine) {
+		if e.baseFont != nil {
+			e.selectFont(e.baseFont)
+		}
+	})
+}
+
 // renderFont is the font the drivers use as the glyph source and size reference:
 // the \normalsize base (so per-glyph sizes scale relative to a fixed 100%), or the
 // current font when no base was set.
