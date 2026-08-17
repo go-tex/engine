@@ -81,7 +81,8 @@ func (e *Engine) loadPrimitives() {
 		}
 	})
 	e.prim("global", func(e *Engine) { e.doGlobal() })
-	e.prim("chardef", func(e *Engine) { e.doChardef(false) })
+	e.prim("chardef", func(e *Engine) { e.doChardef(false, false) })
+	e.prim("mathchardef", func(e *Engine) { e.doChardef(false, true) })
 	e.prim("countdef", func(e *Engine) { e.doCountdef() })
 	e.prim("newcount", func(e *Engine) { e.doNewcount() })
 
@@ -130,16 +131,32 @@ func (e *Engine) loadPrimitives() {
 	e.prim("dimexpr", func(e *Engine) { e.pushString(formatPt(e.scanExpr(true))) })
 
 	// conditionals
-	e.prim("ifnum", func(e *Engine) { e.doIf(e.evalIfnum()) })
-	e.prim("ifodd", func(e *Engine) { e.doIf(e.scanInt()%2 != 0) })
+	e.prim("ifnum", func(e *Engine) { e.doIf(e.scanCond(e.evalIfnum)) })
+	e.prim("ifodd", func(e *Engine) { e.doIf(e.scanCond(func() bool { return e.scanInt()%2 != 0 })) })
 	e.prim("ifx", func(e *Engine) { e.doIf(e.evalIfx()) })
 	e.prim("if", func(e *Engine) { e.doIf(e.evalIf()) })
 	e.prim("iftrue", func(e *Engine) { e.doIf(true) })
 	e.prim("iffalse", func(e *Engine) { e.doIf(false) })
 	e.prim("ifcase", func(e *Engine) { e.doIfcase() })
-	e.prim("else", func(e *Engine) { e.skipToFi() })
-	e.prim("fi", func(e *Engine) {})
-	e.prim("or", func(e *Engine) { e.skipToFi() })
+	e.prim("else", func(e *Engine) {
+		if e.insertRelax("else") {
+			return
+		}
+		e.closeCond()
+		e.skipToFi()
+	})
+	e.prim("fi", func(e *Engine) {
+		if !e.insertRelax("fi") {
+			e.closeCond()
+		}
+	})
+	e.prim("or", func(e *Engine) {
+		if e.insertRelax("or") {
+			return
+		}
+		e.closeCond()
+		e.skipToFi()
+	})
 
 	// e-TeX's conditionals and expansion primitives — see etexif.go.
 	e.loadETeXConditionals()
@@ -284,7 +301,9 @@ func (e *Engine) doGlobal() {
 	case "divide":
 		e.doDivide(true)
 	case "chardef":
-		e.doChardef(true)
+		e.doChardef(true, false)
+	case "mathchardef":
+		e.doChardef(true, true)
 	case "catcode":
 		e.doCatcode(true)
 	default:
@@ -292,12 +311,19 @@ func (e *Engine) doGlobal() {
 	}
 }
 
-func (e *Engine) doChardef(global bool) {
+// doChardef handles \chardef\name=<n> and, with math set, \mathchardef\name=<n>.
+// Both make \name a constant that reads as the integer <n> wherever a number is
+// wanted (\the, \count0=\name, \ifnum, …); they differ in MEANING, so \ifx
+// separates a \chardef from a \mathchardef of the same value and \meaning prints
+// \char"1F4 against \mathchar"1F4 — checked against real TeX. Packages reach for
+// \mathchardef purely to get an integer constant that costs no \count register
+// (etoolbox's roman-numeral table, LaTeX's \@M = 10000).
+func (e *Engine) doChardef(global, math bool) {
 	name := e.scanCSName()
 	e.scanEquals()
 	code := e.scanInt()
 	if name != "" {
-		e.define(name, &meaning{kind: mCharDef, code: code}, global)
+		e.define(name, &meaning{kind: mCharDef, code: code, mathChar: math}, global)
 	}
 }
 
@@ -852,6 +878,16 @@ func (e *Engine) doThe() {
 
 // ── conditionals ────────────────────────────────────────────────────────────
 
+// scanCond runs a conditional's operand scan with the "insert \relax" rule armed:
+// while it is running, an \else/\fi that belongs to THIS conditional (rather than
+// to one opened inside the scan) ends the scan instead of expanding. See
+// insertRelax.
+func (e *Engine) scanCond(f func() bool) bool {
+	e.condMarks = append(e.condMarks, e.condOpen)
+	defer func() { e.condMarks = e.condMarks[:len(e.condMarks)-1] }()
+	return f()
+}
+
 func (e *Engine) doIf(cond bool) {
 	// \unless (e-TeX) reverses the sense of the conditional it prefixes.
 	if e.negateNextIf > 0 {
@@ -859,23 +895,61 @@ func (e *Engine) doIf(cond bool) {
 		cond = !cond
 	}
 	if cond {
-		return // execute the true branch; \else/\fi handle the rest
+		e.condOpen++ // its \else or \fi is still to come
+		return       // execute the true branch; \else/\fi handle the rest
 	}
 	if e.skipToElseOrFi() == "else" {
-		return // execute the else branch
+		e.condOpen++ // the \fi that closes the else branch is still to come
+		return       // execute the else branch
+	}
+}
+
+// closeCond records that one conditional's \else/\fi has been reached.
+func (e *Engine) closeCond() {
+	if e.condOpen > 0 {
+		e.condOpen--
 	}
 }
 
 func (e *Engine) doIfcase() {
-	n := e.scanInt()
+	var n int
+	e.scanCond(func() bool { n = e.scanInt(); return false })
 	for n > 0 {
 		r := e.skipToElseOrFiOrOr()
-		if r == "fi" || r == "else" {
+		if r == "fi" {
+			return
+		}
+		if r == "else" {
+			e.condOpen++
 			return
 		}
 		n--
 	}
-	// fall through to the n-th case body
+	e.condOpen++ // the \or/\else/\fi that ends this case is still to come
+}
+
+// insertRelax implements TeX's "insert \relax" rule (tex.web §510). While a
+// conditional is still SCANNING its operands, an \else / \fi / \or belongs to
+// that conditional and not to the number being read, so TeX puts a \relax in
+// front of it — the \relax ends the number scan, and the \else is read again
+// afterwards, when the conditional has been evaluated.
+//
+// The idiom that needs this is the LaTeX kernel's own date comparison,
+//
+//	\ifnum<a><<b>\expandafter\@secondoftwo\else\expandafter\@firstoftwo\fi
+//
+// with nothing between the second number and \expandafter. Without the rule the
+// number scan expands \expandafter, which expands \else, and the conditional
+// unravels: \@ifl@t@r answered NOTHING for two equal dates, and every package
+// that asks \IfFormatAtLeastTF took neither branch.
+//
+// It returns true when it fired, meaning the caller must not act on the token.
+func (e *Engine) insertRelax(name string) bool {
+	if len(e.condMarks) == 0 || e.condOpen != e.condMarks[len(e.condMarks)-1] {
+		return false // no scan in progress, or this \else closes a NESTED conditional
+	}
+	e.push([]tok{csTok("relax"), csTok(name)})
+	return true
 }
 
 func (e *Engine) evalIfnum() bool {
@@ -955,7 +1029,7 @@ func meaningEq(a, b *meaning) bool {
 	case mPrim:
 		return a.name == b.name
 	case mCharDef:
-		return a.code == b.code
+		return a.code == b.code && a.mathChar == b.mathChar
 	case mLetChar:
 		return a.ch == b.ch && a.cat == b.cat
 	case mMacro:
@@ -1714,6 +1788,9 @@ func (e *Engine) meaningString(t tok) string {
 	case mPrim:
 		return "\\" + m.name
 	case mCharDef:
+		if m.mathChar {
+			return "\\mathchar\"" + itoaHex(m.code)
+		}
 		return "\\char\"" + itoaHex(m.code)
 	case mLetChar:
 		return catName(m.cat) + " " + string(m.ch)

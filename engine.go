@@ -227,6 +227,12 @@ type Engine struct {
 	steps     int
 	stepLimit int // absolute expansion ceiling (New sets maxExpandSteps; tests may lower it)
 	runaway   bool
+	// condOpen counts the conditionals whose \else/\fi is still to come, and
+	// condMarks records that count at the start of each conditional-operand scan.
+	// Together they decide when TeX's "insert \relax" rule applies — see
+	// insertRelax in primitives.go.
+	condOpen  int
+	condMarks []int
 
 	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
 	// loop (a self-referential macro, or a peeking idiom the kernel helpers
@@ -289,7 +295,10 @@ type meaning struct {
 	ch         rune   // let-char / chardef code
 	cat        cat
 	code       int
-	font       fontFace // mFont: the font this cs selects
+	// mathChar marks a \mathchardef constant (as against \chardef): the two read as
+	// the same integer but are different meanings to \ifx and \meaning.
+	mathChar bool
+	font     fontFace // mFont: the font this cs selects
 }
 
 type saveItem struct {
@@ -338,6 +347,13 @@ func New() *Engine {
 	e.catcode['$'] = catMath
 	e.catcode['&'] = catAlign
 	e.catcode['\n'] = catEOL
+	// Carriage return is TeX's end-of-line character: TeX turns the end of every
+	// input line into char 13 and gives it catcode 5. This engine reads a line
+	// ending as \n instead (see normalizeEOL), but char 13 keeps its catcode so
+	// that a package asking `\catcode`\^^M=12` — beamer does, to read a line
+	// verbatim — sees the value TeX shows, and CHANGES it, rather than assigning
+	// over a table entry that was already 12.
+	e.catcode['\r'] = catEOL
 	e.catcode['#'] = catParam
 	e.catcode['^'] = catSup
 	e.catcode['_'] = catSub
@@ -407,12 +423,12 @@ func (e *Engine) back(t tok) { e.lists = append(e.lists, []tok{t}) }
 func (e *Engine) scan() (tok, bool) {
 	for e.bpos < len(e.base) {
 		start := e.bpos
-		r := e.base[e.bpos]
+		r, after := e.rawAt(e.bpos)
 		c := e.catOf(r)
 		switch c {
 		case catEsc:
 			e.setSrcPos(start)
-			e.bpos++
+			e.bpos = after
 			return e.scanCS(), true
 		case catComment:
 			// A comment runs to the end of the line. In TeX the terminating
@@ -428,14 +444,15 @@ func (e *Engine) scan() (tok, bool) {
 			}
 			newlines := 0
 			for e.bpos < len(e.base) {
-				cc := e.catOf(e.base[e.bpos])
+				rr, nx := e.rawAt(e.bpos)
+				cc := e.catOf(rr)
 				if cc == catEOL {
 					newlines++
-					e.bpos++
+					e.bpos = nx
 					continue
 				}
 				if cc == catSpace {
-					e.bpos++
+					e.bpos = nx
 					continue
 				}
 				break
@@ -452,26 +469,27 @@ func (e *Engine) scan() (tok, bool) {
 			if c == catEOL {
 				newlines++
 			}
-			e.bpos++
+			e.bpos = after
 			for e.bpos < len(e.base) {
-				cc := e.catOf(e.base[e.bpos])
+				rr, nx := e.rawAt(e.bpos)
+				cc := e.catOf(rr)
 				if cc != catSpace && cc != catEOL {
 					break
 				}
 				if cc == catEOL {
 					newlines++
 				}
-				e.bpos++
+				e.bpos = nx
 			}
 			if newlines >= 2 {
 				return csTok("par"), true
 			}
 			return chTok(' ', catSpace), true
 		case catIgnore:
-			e.bpos++
+			e.bpos = after
 		default:
 			e.setSrcPos(start)
-			e.bpos++
+			e.bpos = after
 			return chTok(r, c), true
 		}
 	}
@@ -490,25 +508,85 @@ func (e *Engine) scanCS() tok {
 	if e.bpos >= len(e.base) {
 		return csTok("")
 	}
-	r := e.base[e.bpos]
+	r, after := e.rawAt(e.bpos)
 	if e.catOf(r) != catLetter {
-		e.bpos++
+		e.bpos = after
 		return csTok(string(r))
 	}
-	st := e.bpos
-	for e.bpos < len(e.base) && e.catOf(e.base[e.bpos]) == catLetter {
-		e.bpos++
+	var name []rune
+	for e.bpos < len(e.base) {
+		rr, nx := e.rawAt(e.bpos)
+		if e.catOf(rr) != catLetter {
+			break
+		}
+		name = append(name, rr)
+		e.bpos = nx
 	}
-	name := string(e.base[st:e.bpos])
 	// a control word absorbs following spaces
 	for e.bpos < len(e.base) {
-		cc := e.catOf(e.base[e.bpos])
+		rr, nx := e.rawAt(e.bpos)
+		cc := e.catOf(rr)
 		if cc != catSpace && cc != catEOL {
 			break
 		}
-		e.bpos++
+		e.bpos = nx
 	}
-	return csTok(name)
+	return csTok(string(name))
+}
+
+// rawAt reads the character at index i, resolving TeX's ^^ notation (TeX §352),
+// and returns it with the index just past what it consumed.
+//
+// A character whose catcode is 7 (superscript — "^" by default), doubled, escapes
+// the character that follows: ^^ then TWO lowercase hex digits is that character
+// code, otherwise the single following character is shifted by 64 — so ^^M is
+// carriage return, ^^I is tab, ^^J is line feed and ^^7e is "~". This is how a
+// package writes a control character it cannot type: beamer's
+//
+//	\catcode`\^^M=12
+//
+// asks for the code of carriage return, and without the notation the engine read
+// a "^" and typeset the rest, putting a stray "M=12" on the first page of every
+// beamer talk.
+//
+// The notation is resolved at the point a character is FETCHED, so it works
+// everywhere: in ordinary text, in a control-sequence name, and in the argument
+// of \catcode.
+func (e *Engine) rawAt(i int) (rune, int) {
+	if i >= len(e.base) {
+		return 0, i + 1
+	}
+	r := e.base[i]
+	if e.catOf(r) != catSup || i+2 >= len(e.base) || e.base[i+1] != r {
+		return r, i + 1
+	}
+	if i+3 < len(e.base) {
+		if h1, ok1 := lowerHexVal(e.base[i+2]); ok1 {
+			if h2, ok2 := lowerHexVal(e.base[i+3]); ok2 {
+				return rune(h1*16 + h2), i + 4
+			}
+		}
+	}
+	c := e.base[i+2]
+	if c >= 128 {
+		return r, i + 1 // not a character ^^ can shift; leave the "^" alone
+	}
+	if c < 64 {
+		return c + 64, i + 3
+	}
+	return c - 64, i + 3
+}
+
+// lowerHexVal reports the value of a LOWERCASE hex digit, as TeX's ^^ notation
+// requires: ^^4A is not hex (A is uppercase), it is "^^4" followed by "A".
+func lowerHexVal(r rune) (int, bool) {
+	switch {
+	case r >= '0' && r <= '9':
+		return int(r - '0'), true
+	case r >= 'a' && r <= 'f':
+		return int(r-'a') + 10, true
+	}
+	return 0, false
 }
 
 // ── meanings & grouping ─────────────────────────────────────────────────────
@@ -761,6 +839,14 @@ func (e *Engine) expandMacro(m *meaning) {
 // matchParams consumes the arguments for a parameter text, honoring literal
 // delimiter tokens between parameters.
 func (e *Engine) matchParams(params []tok) [][]tok {
+	// A parameter text ending in "#{" (see scanDefText) puts a brace marker last:
+	// the final argument runs up to the next opening brace, which stays in the
+	// input.
+	braceEnd := false
+	if n := len(params); n > 0 && params[n-1].cat == catParam && !params[n-1].cs_ && params[n-1].ch == '{' {
+		braceEnd = true
+		params = params[:n-1]
+	}
 	var args [][]tok
 	i := 0
 	for i < len(params) {
@@ -773,9 +859,12 @@ func (e *Engine) matchParams(params []tok) [][]tok {
 				delim = append(delim, params[j])
 				j++
 			}
-			if len(delim) == 0 {
+			switch {
+			case len(delim) == 0 && braceEnd && j == len(params):
+				args = append(args, e.grabUntilBrace())
+			case len(delim) == 0:
 				args = append(args, e.grabUndelimited())
-			} else {
+			default:
 				args = append(args, e.grabDelimited(delim))
 			}
 			i = j
@@ -795,6 +884,24 @@ func (e *Engine) grabOptArg(def []tok) []tok {
 		return toks
 	}
 	return def
+}
+
+// grabUntilBrace reads the argument of a "#{" parameter: everything up to the
+// next opening brace, which is left in the input (TeX §399 — the brace delimits
+// the argument and simultaneously opens the group that follows).
+func (e *Engine) grabUntilBrace() []tok {
+	var arg []tok
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return arg
+		}
+		if t.cat == catBegin && !t.cs_ {
+			e.back(t)
+			return arg
+		}
+		arg = append(arg, t)
+	}
 }
 
 func (e *Engine) grabUndelimited() []tok {
@@ -1872,9 +1979,21 @@ func (e *Engine) scanDefText() (params, body []tok) {
 		}
 		if t.cat == catParam && !t.cs_ {
 			n, ok := e.getNext()
-			if ok {
-				params = append(params, tok{ch: n.ch, cat: catParam})
+			if !ok {
+				continue
 			}
+			if n.cat == catBegin && !n.cs_ {
+				// TeX's "#{": a parameter text ending in # is delimited by the
+				// opening brace, which the macro does NOT consume — it is left in
+				// the input, where it also opens the macro's own body. LaTeX's
+				// \@yargd@f builds an n-argument definition this way, so without
+				// it \newcommand's kernel path (and everything etoolbox defines on
+				// top of it) silently defines nothing.
+				params = append(params, tok{ch: '{', cat: catParam})
+				body = e.scanBody()
+				return
+			}
+			params = append(params, tok{ch: n.ch, cat: catParam})
 			continue
 		}
 		params = append(params, t)

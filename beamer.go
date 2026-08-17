@@ -4,13 +4,17 @@
 package engine
 
 // BeamerClassKernel is the built-in emulation of the beamer presentation class.
-// beamer is built on pgf/tikz (out of scope here) and far too large to load its real
-// .cls, so the engine EMULATES its document structure instead: every frame becomes a
-// page, frame titles become headings, blocks render as titled paragraphs, and overlay
-// specifications (\pause, <1->, \only, \uncover, …) are shown STATICALLY — all the
-// material of a frame at once. Themes and pgf styling are gobbled. The goal is that a
-// beamer talk RENDERS its content as a sequence of pages, not pixel-fidelity to a
-// themed slide. Loaded by doDocumentClass when \documentclass{beamer} is seen.
+// The engine EMULATES beamer's document structure rather than running the real
+// class: every frame becomes a page, frame titles become headings, blocks render
+// as titled paragraphs, and overlay specifications (\pause, <1->, \only,
+// \uncover, …) are shown STATICALLY — all the material of a frame at once. Themes
+// and pgf styling are gobbled. The goal is that a beamer talk RENDERS its content
+// as a sequence of pages, not pixel-fidelity to a themed slide. Loaded by
+// doDocumentClass when \documentclass{beamer} is seen.
+//
+// The real beamer.cls is being brought up alongside this; it now LOADS in full,
+// and GOTEX_BEAMER switches to it — see realBeamer in packages.go for exactly how
+// far that has got and why the emulation is still the default.
 const BeamerClassKernel = `\makeatletter
 % ── overlay specifications <…>, shown statically ───────────────────────────────
 \long\def\bmr@eatov<#1>{}
