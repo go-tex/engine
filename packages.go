@@ -98,6 +98,20 @@ var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
 // realPGF reports whether the real pgf/TikZ sources may be loaded.
 func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 
+// realBeamer reports whether \documentclass{beamer} may load the REAL beamer.cls
+// (with the beamer sources, etoolbox and keyval on TEXINPUTS/GOTEX_TEXMF) instead
+// of the built-in emulation in beamer.go.
+//
+// Where this stands, honestly: the real class now LOADS — the whole beamer base,
+// its overlay decoder and its option machinery run with no undefined control
+// sequence, which is what the kernel work in this file, hooks.go and
+// kernelhelpers.go bought. It does not yet TYPESET a frame: beamer builds each
+// slide into a box and ships it out through machinery this engine's page builder
+// does not provide, so a talk still comes out nearly blank. Until that is done
+// the emulation (frames→pages, which renders the content) stays the default, and
+// this variable is how the real path is worked on.
+func realBeamer() bool { return os.Getenv("GOTEX_BEAMER") != "" }
+
 // emulateOnly reports whether a package must use the built-in stubs rather than
 // its real file.
 func emulateOnly(name string) bool {
@@ -159,7 +173,26 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// out on Windows) would otherwise typeset stray \r characters.
 	body := normalizeEOL(string(data))
 	e.loadStack[len(e.loadStack)-1].nlCount = strings.Count(body, "\n")
-	insert := []rune(body + "\\" + endHook + "\\@gotex@endload ")
+	// The 2020 format lets a package register code to run around ANOTHER file's
+	// loading: \AddToHook{package/amsmath/after} (beamer's overlay layer does exactly
+	// this) and \AddToHook{file/<name>.sty/before}. Fire those four hooks around the
+	// body. \UseHook on a hook nobody registered is a no-op, so this costs nothing
+	// when no one is listening.
+	kind := "package"
+	if ext == ".cls" {
+		kind = "class"
+	}
+	pre := "\\UseHook{file/" + name + ext + "/before}\\UseHook{" + kind + "/" + name + "/before}"
+	post := "\\UseHook{" + kind + "/" + name + "/after}\\UseHook{file/" + name + ext + "/after}"
+	// \gotexeatdate consumes the OPTIONAL DATE a caller may write after the file
+	// name — \RequirePackage{keyval}[1997/11/10] states the oldest acceptable
+	// release. The engine loads whatever it finds, but an unread date is typeset,
+	// and beamer's title page carried a stray "[1997/11/10]". It runs AFTER the
+	// file (and after the frame is popped), where the date is the next thing in the
+	// input: reading it BEFORE splicing the file would put the token that is not a
+	// "[" back on the token stack, ahead of the file about to be spliced into the
+	// character buffer — which silently swallowed everything after the \usepackage.
+	insert := []rune(pre + body + "\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts()
@@ -238,8 +271,7 @@ func (e *Engine) doDocumentClass() {
 		return
 	}
 	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
-	if name == "beamer" {
-		// beamer is emulated (frames→pages); its real pgf-based .cls is never loaded.
+	if name == "beamer" && !realBeamer() {
 		e.loadBeamer()
 		return
 	}
@@ -365,7 +397,7 @@ func (e *Engine) doExecuteOptions() {
 // doPassOptionsTo implements \PassOptionsToPackage{opts}{pkg} and
 // \PassOptionsToClass: it stashes options to be merged when pkg/class is loaded.
 func (e *Engine) doPassOptionsTo() {
-	opts := e.readBraceName()
+	opts := e.readBraceGroupText()
 	target := e.readBraceName()
 	if e.passedOptions == nil {
 		e.passedOptions = map[string][]string{}
@@ -375,6 +407,44 @@ func (e *Engine) doPassOptionsTo() {
 			e.passedOptions[target] = append(e.passedOptions[target], o)
 		}
 	}
+}
+
+// readBraceGroupText reads a braced group and returns its text with the INNER
+// braces kept and counted. An option list is not a name: beamer passes
+//
+//	\PassOptionsToPackage{pdfborder={0 0 0},linkbordercolor=[rgb]{.5,.5,.5}}{hyperref}
+//
+// and a reader that stops at the first closing brace ends the list inside
+// "pdfborder={0 0 0" — the remainder was typeset onto the first page.
+func (e *Engine) readBraceGroupText() string {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok || t.cs_ || t.cat != catBegin {
+		if ok {
+			e.back(t)
+		}
+		return ""
+	}
+	var b []rune
+	for depth := 1; ; {
+		u, ok := e.getNext()
+		if !ok {
+			break
+		}
+		if !u.cs_ && u.cat == catEnd {
+			depth--
+			if depth == 0 {
+				break
+			}
+		}
+		if !u.cs_ && u.cat == catBegin {
+			depth++
+		}
+		if !u.cs_ {
+			b = append(b, u.ch)
+		}
+	}
+	return string(b)
 }
 
 // takePassed returns and clears the options queued for name by \PassOptionsTo*.

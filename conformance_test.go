@@ -21,6 +21,16 @@ func TestConformance(t *testing.T) {
 		{`\uppercase{\message{hello}}`, "HELLO"},                 // \uppercase re-cases a pushed \message
 		{`\count1=10 \count2=3 \multiply\count1 by \count2 \message{\the\count1}`, "30"},
 		{`\message{\expandafter\string\csname foo\endcsname}`, `\foo`}, // csname+string
+		// \mathchardef names an integer constant, distinct in MEANING from \chardef
+		{`\mathchardef\c=500 \message{\the\c}`, "500"},
+		{`\mathchardef\c=500 \message{\meaning\c}`, `\mathchar"1F4`},
+		{`\mathchardef\a=7 \chardef\b=7 \message{\ifx\a\b same\else diff\fi}`, "diff"},
+		// ^^ notation: two lowercase hex digits, else the next character shifted by 64
+		{`\message{^^41}`, "A"},
+		{`\message{^^4x}`, "tx"},
+		{"\\message{\\the\\catcode`\\^^M}", "5"},
+		// a parameter text ending in # is delimited by the brace, which stays put
+		{`\def\a#1#{\message{[#1]}}\a xy{}`, "[xy]"},
 	}
 	for _, c := range cases {
 		if got := run(t, c.src); got != c.want {

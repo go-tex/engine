@@ -366,6 +366,9 @@ const LaTeX2eClassKernel = `
 % and takes \relax (eating nothing more) when no bracket follows — so trailing
 % text after \NeedsTeXFormat{LaTeX2e} is NOT swallowed.
 \def\NeedsTeXFormat#1{\@ifnextbracket\@gobbleoptonly\relax}
+% \gotexeatdate eats an optional [<date>] if one follows. The package loader runs
+% it after every class/package file (see loadTeXFile).
+\def\gotexeatdate{\@ifnextbracket\@gobbleoptonly\relax}
 \def\ProvidesFile#1{\@ifnextbracket\@gobbleoptonly\relax}
 \def\ProvidesClass#1{\@ifnextbracket\@gobbleoptonly\relax}
 \def\ProvidesPackage#1{\@ifnextbracket\@gobbleoptonly\relax}

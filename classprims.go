@@ -13,7 +13,7 @@ package engine
 // loadClassPrims registers the primitives real class files rely on.
 func (e *Engine) loadClassPrims() {
 	// \ifdim <dimen><rel><dimen>: a dimension comparison, the \ifnum for lengths.
-	e.prim("ifdim", func(e *Engine) { e.doIf(e.evalIfdim()) })
+	e.prim("ifdim", func(e *Engine) { e.doIf(e.scanCond(e.evalIfdim)) })
 	// \divide <reg> by <int>: the counterpart of \multiply.
 	e.prim("divide", func(e *Engine) { e.doDivide(false) })
 	// \newbox \cs: allocate a box register bound to \cs (plain TeX's bare-cs form of

@@ -306,3 +306,24 @@ func TestSetfontsizeConsumesArgsNoRecursion(t *testing.T) {
 		}
 	})
 }
+
+// An option list is not a name: braces inside it NEST. beamer passes
+//
+//	\PassOptionsToPackage{pdfborder={0 0 0},linkbordercolor=[rgb]{.5,.5,.5}}{hyperref}
+//
+// and a reader that stops at the first closing brace ends the list inside
+// "pdfborder={0 0 0" — the remainder, and the target package's name, were typeset
+// onto beamer's title page. The whole list must reach the package, and the second
+// argument must still be read as the target.
+func TestPassOptionsKeepsNestedBraces(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"nested.sty": `\DeclareOption{a}{\message{OPT-A}}\DeclareOption{b}{\message{OPT-B}}\ProcessOptions`,
+	}, func() {
+		out, _ := runLaTeX(t, `\PassOptionsToPackage{a,keyed={0 0 0},b}{nested}\usepackage{nested}\message{END}`)
+		for _, want := range []string{"OPT-A", "OPT-B", "END"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("missing %q in output %q", want, out)
+			}
+		}
+	})
+}

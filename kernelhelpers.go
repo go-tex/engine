@@ -191,14 +191,81 @@ const LaTeX2eKernelHelpers = `
     #4\relax\expandafter\@tforloop\fi#2\@@#3{#4}}
 \def\@break@tfor#1\@@#2#3{\fi\fi}
 % ── star/long dispatch ──────────────────────────────────────────────────────
-% \@star@or@long\cmd peeks for a '*' (via \@ifstar) and runs \cmd either way.
-% LIMITATION: the engine has no \long, so the "long vs short" (\par-in-argument)
-% distinction is not modelled — only the star is consumed. \l@ngrel@x is kept as a
-% harmless no-op for .sty files that reference it.
-\def\l@ngrel@x{}
-\def\@star@or@long#1{\@ifstar{#1}{#1}}
+% \@star@or@long\cmd peeks for a '*' (via \@ifstar) and runs \cmd either way, and
+% sets \l@ngrel@x to the prefix the definition should carry — \relax after a star,
+% \long without one, exactly as the LaTeX kernel does. \long is an accepted no-op
+% prefix here (the engine does not model the \par-in-argument restriction), but the
+% MEANING of \l@ngrel@x is read: etoolbox's \newrobustcmd branches on
+% \ifx\l@ngrel@x\relax to decide between \protected and \protected\long, so a
+% \l@ngrel@x that is neither sends every starred command down the long branch.
+\let\l@ngrel@x\relax
+\def\@star@or@long#1{\@ifstar{\let\l@ngrel@x\relax#1}{\let\l@ngrel@x\long#1}}
 % \@ifnextchar is a native primitive (real \ifx-based look-ahead over any target
 % token, including control sequences) — see the engine's primitive table.
+% \@testopt{<cmd>}{<default>} runs <cmd> on a following [optional argument], or on
+% [<default>] when there is none — the kernel's optional-argument dispatcher, which
+% every \newcommand-with-a-default and etoolbox's \newrobustcmd are built on. The
+% default is BRACED so a multi-token default arrives as one argument.
+\def\@testopt#1#2{\@ifnextchar[{#1}{#1[{#2}]}}
+% \@protected@testopt\cmd is the same dispatcher guarded by \protect: in the real
+% kernel the guard chooses between typesetting and writing the command to a file.
+% This engine has one \protect meaning (typesetting — nothing is written to .aux
+% for a later run), so the guard is always true and the argument, which only the
+% write branch uses, is dropped.
+\def\@typeset@protect{}
+\def\@protected@testopt#1{\@testopt}
+% ── \@argdef / \@yargdef: build an n-argument definition ─────────────────────
+% These are the kernel's own definition builders, and packages call them directly
+% — etoolbox's \newrobustcmd routes every command it defines through \@argdef (no
+% optional argument) or \@yargdef (with one). They were missing, so etoolbox
+% defined NOTHING: \mode, on which every line of beamer stands, simply did not
+% exist, and the class's own \mode<all> printed "<all>" onto the page.
+%
+% Written exactly as the LaTeX kernel writes them (read back from a real TeX with
+% \meaning). \@yargd@f assembles the parameter text #1#2…#n by matching against a
+% ready-made run of nine parameters, and stops at the requested count using a
+% parameter text that ends in "#{" — the argument runs up to the opening brace,
+% which stays behind to open the body.
+\long\def\@argdef#1[#2]#3{\@ifdefinable#1{\@yargdef#1\@ne{#2}{#3}}}
+\long\def\@reargdef#1[#2]{\@yargdef#1\@ne{#2}}
+\long\def\@yargdef#1#2#3{%
+  \ifx#2\tw@
+    \def\reserved@b##11{[####1]}%
+  \else
+    \let\reserved@b\@gobble
+  \fi
+  \expandafter\@yargd@f\expandafter{\number#3}#1}
+\long\def\@yargd@f#1#2{%
+  \def\reserved@a##1#1##2##{\expandafter\def\expandafter#2\reserved@b##1#1}%
+  \l@ngrel@x\reserved@a 0##1##2##3##4##5##6##7##8##9###1}
+% \kernel@ifnextchar is the kernel's own name for \@ifnextchar (the kernel keeps a
+% private copy so a package that redefines \@ifnextchar cannot break the kernel).
+% beamer's overlay decoder calls it by that name.
+\let\kernel@ifnextchar\@ifnextchar
+% \in@{<a>}{<b>} sets \ifin@ true iff the token list <a> occurs inside <b>. The
+% kernel builds it as a delimited-match macro; keyval and beamer's option handling
+% both ask it.
+\def\in@#1#2{%
+  \def\in@@##1#1##2##3\in@@{%
+    \ifx\in@##2\in@false\else\in@true\fi}%
+  \in@@#2#1\in@\in@@}
+% \@makeother makes a character ordinary — how a package reads text verbatim — and
+% \dospecials is plain TeX's list of the characters that need it.
+\def\@makeother#1{\catcode` + "`" + `#1=12\relax}
+\def\dospecials{\do\ \do\\\do\{\do\}\do\$\do\&\do\#\do\^\do\_\do\%\do\~}
+% \@onlypreamble{\cmd} records a command as preamble-only. The list is kept, so
+% code that walks \@preamblecmds finds what it expects; the engine does not
+% disable the commands at \begin{document}, which only costs a worse error message
+% for a document that misuses one.
+\def\@preamblecmds{}
+\def\@onlypreamble#1{%
+  \expandafter\gdef\expandafter\@preamblecmds\expandafter{\@preamblecmds\do#1}}
+\long\def\@xargdef#1[#2][#3]#4{%
+  \@ifdefinable#1{%
+    \expandafter\def\expandafter#1\expandafter{%
+      \expandafter\@protected@testopt\expandafter#1%
+      \csname\string#1\endcsname{#3}}%
+    \expandafter\@yargdef\csname\string#1\endcsname\tw@{#2}{#4}}}
 % ── logging / diagnostics: never abort a .sty, route everything to \message ──
 % \MessageBreak/\protect/\on@line/\@spaces are the tokens warnings interpolate;
 % keep them harmless inside the \message expansion. \@ehc/\@ehd are the "error
@@ -238,10 +305,21 @@ const LaTeX2eKernelHelpers = `
 \def\AtEndDocument#1{\g@addto@macro\@enddocumenthook{#1}}
 \def\AtEndOfPackage#1{\g@addto@macro\@endofpackagehook{#1}}
 \def\AtEndOfClass#1{\g@addto@macro\@endofclasshook{#1}}
-\def\document{\catcode64=12 \@begindocumenthook}
-\def\enddocument{\@enddocumenthook\par\vfill\penalty-10000 }
+% \document / \enddocument run BOTH the classic \AtBeginDocument / \AtEndDocument
+% accumulators and the named hooks of the 2020 format (see hooks.go), in the order
+% the real format uses: begindocument/before, the \AtBeginDocument code, then
+% begindocument/end, then the document environment's own env/document/begin.
+\def\document{\catcode64=12 \UseHook{begindocument/before}\@begindocumenthook
+  \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
+\def\enddocument{\UseHook{env/document/end}\@enddocumenthook\UseHook{enddocument}%
+  \UseHook{enddocument/afterlastpage}\UseHook{enddocument/afteraux}%
+  \UseHook{enddocument/info}\UseHook{enddocument/end}%
+  \par\vfill\penalty-10000 }
 % ── loaded-package / loaded-class registry (see CONTRACT above) ─────────────
 \def\@ifl@aded#1#2{\@ifundefined{ver@#2.#1}\@secondoftwo\@firstoftwo}
+% \@ptionlist{<file>} expands to the options that <file> was loaded with (the Go
+% loader records them in opt@<file>, see the CONTRACT above); empty if it was not.
+\def\@ptionlist#1{\@ifundefined{opt@#1}\@empty{\csname opt@#1\endcsname}}
 \def\@ifpackageloaded#1{\@ifl@aded{sty}{#1}}
 \def\@ifclassloaded#1{\@ifl@aded{cls}{#1}}
 % \@ifpackagewith{pkg}{opts}{then}{else}: true iff every option in {opts} is in
