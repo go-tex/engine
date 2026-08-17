@@ -153,6 +153,18 @@ const MiniLaTeXKernel = `
 \def\dots{...}
 \def\newpage{\par\penalty-10000 }
 \def\clearpage{\par\penalty-10000 }
+% \include{FILE}/\includeonly. LaTeX's \include starts a fresh page, reads
+% FILE.tex, then starts another fresh page (it also keeps a per-file .aux, which
+% the engine has no equivalent for), so it reduces to \clearpage\input\clearpage.
+% Without it, \include is an undefined control sequence: in lenient mode the
+% command is dropped and its {FILE} argument is typeset as stray text, so a paper
+% whose whole body lives in \include'd files (the LaTeX \include/\includeonly
+% convention for splitting a manuscript) renders zero pages. \includeonly only
+% narrows which files \include loads; honouring it would need comma-list
+% membership the mini-kernel has no \@for for, and over-including merely adds
+% content it would have skipped, so it is a safe no-op for best-effort rendering.
+\def\include#1{\clearpage\input{#1}\clearpage}
+\def\includeonly#1{}
 \def\hline{}
 \def\cline#1{}
 % amsthm-style theorem support. \newtheorem (a Go primitive) generates, per
