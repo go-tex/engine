@@ -505,6 +505,20 @@ func (e *Engine) scan() (tok, bool) {
 				e.bpos = nx
 			}
 			if newlines >= 2 {
+				// A blank line is \par. In TeX the end-of-line that first LEAVES the
+				// text (mid-line, state M) is a space; only the following blank line
+				// is \par — so content immediately before the break yields
+				// "<space>\par", not a bare \par. A macro whose parameter text is
+				// delimited by " \par" (a real LaTeX idiom — sn-jnl's
+				// \abstract#1 \par, and others) matches its delimiter ONLY when that
+				// space is present; without it the scan runs past the intended end
+				// and swallows the rest of the document. Emit the space before the
+				// \par when the run began after content on the line (not at a fresh
+				// line start, where TeX is in state N and \par stands alone).
+				if start > 0 && e.catOf(e.base[start-1]) != catEOL {
+					e.push([]tok{csTok("par")})
+					return chTok(' ', catSpace), true
+				}
 				return csTok("par"), true
 			}
 			return chTok(' ', catSpace), true
