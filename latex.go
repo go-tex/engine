@@ -419,6 +419,11 @@ const MiniLaTeXKernel = `
 % between RGB, CMYK and gray shadings). Answering "rgb" is both true here and what
 % lets those packages load at all — the TikZ fadings library stops on the very
 % first of these names otherwise.
+% \color hands the colour on to the drawing package when one is loaded and a
+% picture is open, so a mark it puts on the page is coloured like the text
+% around it (this is how TikZ's \draw[red] shorthand reaches the driver — it
+% asks the colour package, not pgf, to set the colour).
+\def\gotex@pgfcolor#1{\ifdefined\pgfsetcolor\ifpgfpicture\pgfsetcolor{#1}\fi\fi}
 \def\XC@sdef#1#2{\edef#1{#2}}
 \def\XC@tgt@mod#1{rgb}
 \def\XC@mod@rgb{rgb}

@@ -96,8 +96,32 @@ func (e *Engine) selectColor(c uint32) {
 }
 
 // doColor implements \color{name}: switch the current colour (group-scoped).
+//
+// The colour also has to reach the drawing driver. This engine resolves colour
+// itself and stamps it on each glyph, which is all a page of text needs; but a
+// drawing package puts its marks on the page through its own driver, and asks
+// the colour package — through \color — to tell that driver what colour to use.
+// TikZ's shorthand for a colour option, \draw[red], goes exactly that way. So
+// when a picture is open the name is handed on to the drawing package's own
+// colour command, which emits what its driver understands.
 func (e *Engine) doColor() {
-	e.selectColor(e.resolveColor(e.readBraceName()))
+	name := e.readBraceName()
+	e.selectColor(e.resolveColor(name))
+	e.tellDriverColor(name)
+}
+
+// tellDriverColor passes a colour name to the drawing package, if one is loaded
+// and a picture is open. The test lives in TeX (see \gotex@pgfcolor in the LaTeX
+// kernel) because only the package knows whether it is drawing.
+func (e *Engine) tellDriverColor(name string) {
+	if name == "" || e.eq["gotex@pgfcolor"] == nil {
+		return
+	}
+	out := []tok{csTok("gotex@pgfcolor"), chTok('{', catBegin)}
+	for _, r := range name {
+		out = append(out, chTok(r, catOther))
+	}
+	e.push(append(out, chTok('}', catEnd)))
 }
 
 // doColorbox implements \colorbox{name}{content}: content on a filled background
