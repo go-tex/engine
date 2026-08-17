@@ -215,6 +215,7 @@ type Engine struct {
 	lccode         map[rune]int // \lccode: what \lowercase maps a character to
 	uccode         map[rune]int // \uccode: what \uppercase maps a character to
 	afterGroup     [][]tok      // \aftergroup tokens, one list per open group
+	xpEnvArgs      [][][]tok    // xparse \NewDocumentEnvironment arguments, one frame per open such environment
 	inputNL        []int        // newlines of each \input file still being read (see endInput)
 	loadedNL       int          // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
 

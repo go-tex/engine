@@ -44,6 +44,10 @@ var expandableSet = map[string]bool{
 	"ifdim":   true,
 	"ifmmode": true, "ifhmode": true, "ifvmode": true, "ifinner": true,
 	"ifvoid": true, "ifhbox": true, "ifvbox": true,
+	// xparse argument tests (see xparse.go) act in the gullet like conditionals.
+	"IfNoValueTF": true, "IfNoValueT": true, "IfNoValueF": true,
+	"IfValueTF": true, "IfValueT": true, "IfValueF": true,
+	"IfBooleanTF": true, "IfBooleanT": true, "IfBooleanF": true,
 }
 
 func isExpandable(name string) bool { return expandableSet[name] }
@@ -164,6 +168,9 @@ func (e *Engine) loadPrimitives() {
 
 	// \selectfont's engine-side primitive — see font.go.
 	e.loadSelectFont()
+
+	// The xparse / LaTeX3 document-command interface — see xparse.go.
+	e.loadXparse()
 
 	// TeX's named integer/dimension/glue parameters — see texparams.go.
 	e.loadTeXParams()
