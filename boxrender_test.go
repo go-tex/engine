@@ -19,6 +19,16 @@ func mustContain(t *testing.T, svg, want string) {
 	}
 }
 
+// The page's root group must set color="black", not only fill="black": math
+// fragments (from go-tex/math) paint with fill="currentColor" so a formula can
+// follow the surrounding text colour. currentColor reads the CSS `color`
+// property, which on a host page (the playground) is a faint default — so without
+// color="black" on the root every formula renders nearly invisible.
+func TestRenderRootSetsColor(t *testing.T) {
+	svg := renderBox0(t, `\setbox0=\hbox{\vrule width2pt height10pt}`)
+	mustContain(t, svg, `<g fill="black" color="black">`)
+}
+
 // Two vertical rules 5pt apart in an hbox: exact rect positions and page size.
 func TestRenderHBoxRules(t *testing.T) {
 	svg := renderBox0(t, `\setbox0=\hbox{\vrule width2pt height10pt depth0pt\kern5pt\vrule width2pt height10pt}`)
