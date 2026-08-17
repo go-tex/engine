@@ -907,8 +907,9 @@ func (e *Engine) expandMacro(m *meaning) {
 	}
 	if e.argRunaway {
 		// A delimited argument ran away to a file-end sentinel: abandon this call.
-		// grabDelimited has already reinserted the scanned tokens, so just drop the
-		// macro (its body is not run) and let them process normally.
+		// grabDelimited has consumed the runaway text (as TeX does) and left the
+		// sentinel in the input, so dropping the macro lets the file's end and the
+		// document after it process normally.
 		e.argRunaway = false
 		return
 	}
@@ -1077,8 +1078,18 @@ func (e *Engine) grabDelimited(delim []tok) []tok {
 		// (matchParams/expandMacro) and reinserts everything scanned so the file's
 		// tail and the document after the sentinel process normally.
 		if isFileEndSentinel(t) {
+			// The scanned text is DROPPED, not put back: in TeX it has already been
+			// eaten as the argument ("Runaway argument? … File ended while scanning
+			// use of \x"), and TeX never re-reads it. Only the sentinel goes back,
+			// so the file's end and the document after it process normally.
+			//
+			// Putting the text back instead made it TYPESET, and what it says is
+			// internal: a runaway inside a class file reinserts the loader's own
+			// splice — \UseHook{package/…}\@gotex@endload — and a caller that has
+			// changed the catcode of \ (beamer's line-by-line comment skipper does
+			// \@makeother\\) prints it as literal characters onto the page.
 			e.argRunaway = true
-			e.push(append(arg, t))
+			e.back(t)
 			return nil
 		}
 		if depth == 0 && t.cat == catBegin && !t.cs_ {
