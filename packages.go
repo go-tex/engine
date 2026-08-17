@@ -518,8 +518,5 @@ func (e *Engine) doInputIfFileExists() {
 	if len(then) > 0 {
 		e.push(then)
 	}
-	insert := []rune(normalizeEOL(string(data)) + " ")
-	tail := append(insert, e.base[e.bpos:]...)
-	e.base = append(e.base[:e.bpos:e.bpos], tail...)
-	e.buildLineStarts()
+	e.spliceInputFile(data)
 }
