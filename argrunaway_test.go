@@ -43,3 +43,34 @@ func TestRunawayDelimitedArgAtEOF(t *testing.T) {
 		t.Error("runaway flag not set — the argument grab was not caught by the no-progress guard")
 	}
 }
+
+// The same guard must hold on the REAL path that motivated it: a class that
+// installs a delimited patch in the 2020 enddocument hook. This mirrors
+// revtex/aastex's \rvtx@enddocument@patch, which hunts for a \@checkend{document}
+// the engine's simplified \enddocument never emits — without the guard every
+// aastex/revtex paper hangs at \end{document}. Driving it through \AddToHook +
+// the \enddocument sequence (not just the grab primitive) means a regression in
+// the hook machinery that reopened the loop is caught here too.
+func TestRunawayEnddocumentHookPatch(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"rvtxmini.cls": `\NeedsTeXFormat{LaTeX2e}\ProvidesClass{rvtxmini}\LoadClass{article}` +
+			`\long\def\patch#1#2\ckend#3{\patchmore{#1#2}{#3}}` +
+			`\long\def\patchmore#1#2{\patch{#1\ckend{#2}}}` +
+			`\AddToHook{enddocument}{\patch{}first\ckend{x}}`,
+	}, func() {
+		src := `\documentclass{rvtxmini}\begin{document}BODYWORD one two three.\end{document}`
+		done := make(chan *Engine, 1)
+		go func() {
+			e, _ := compile([]byte(src), Options{Lenient: true})
+			done <- e
+		}()
+		select {
+		case e := <-done:
+			if !e.runaway {
+				t.Error("runaway flag not set — the enddocument-hook patch loop was not bounded")
+			}
+		case <-time.After(25 * time.Second):
+			t.Fatal("compile did not terminate: the enddocument-hook runaway was not caught")
+		}
+	})
+}
