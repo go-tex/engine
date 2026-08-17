@@ -165,6 +165,23 @@ const MiniLaTeXKernel = `
 % content it would have skipped, so it is a safe no-op for best-effort rendering.
 \def\include#1{\clearpage\input{#1}\clearpage}
 \def\includeonly#1{}
+% The float mechanism's list registers. LaTeX holds pending floats in these
+% token-list macros and empties them as the floats are placed; the engine has no
+% float mechanism, so they simply stay empty — but they must be DEFINED (as
+% \@empty) all the same. placeins's \FloatBarrier forms
+% \edef\@tempa{\@fb@botlist\@deferlist\@dbldeferlist} and only no-ops when that
+% expands to nothing; with the lists undefined the test never matches empty and its
+% "dump a float, \newpage, and recurse" branch runs without end — one forced page
+% break per turn, a 5000-page runaway on an ordinary article that loads placeins
+% and gives \section a \FloatBarrier (its [section] option).
+% Defined directly as empty (not \let\@empty): this kernel loads before \@empty
+% itself is defined, so a \let would capture an undefined meaning.
+\def\@botlist{}
+\def\@deferlist{}
+\def\@dbldeferlist{}
+\def\@toplist{}
+\def\@midlist{}
+\def\@currlist{}
 \def\hline{}
 \def\cline#1{}
 % amsthm-style theorem support. \newtheorem (a Go primitive) generates, per
