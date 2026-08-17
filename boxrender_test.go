@@ -19,14 +19,23 @@ func mustContain(t *testing.T, svg, want string) {
 	}
 }
 
-// The page's root group must set color="black", not only fill="black": math
-// fragments (from go-tex/math) paint with fill="currentColor" so a formula can
-// follow the surrounding text colour. currentColor reads the CSS `color`
-// property, which on a host page (the playground) is a faint default — so without
-// color="black" on the root every formula renders nearly invisible.
-func TestRenderRootSetsColor(t *testing.T) {
-	svg := renderBox0(t, `\setbox0=\hbox{\vrule width2pt height10pt}`)
-	mustContain(t, svg, `<g fill="black" color="black">`)
+// Math must be painted in an explicit colour (black by default), never left as
+// fill="currentColor": currentColor resolves to the host page's CSS `color`,
+// which on a themed page (the playground) is a faint default — so a formula would
+// render nearly invisible, or in a browser's auto-dark mode inconsistently with
+// the black body text. Baking the colour in makes math render identically to text.
+func TestMathRendersExplicitBlack(t *testing.T) {
+	pages, err := CompileToSVGPages([]byte(`\documentclass{article}\begin{document}$E=mc^2$\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svg := strings.Join(pages, "")
+	if strings.Contains(svg, "currentColor") {
+		t.Error("math SVG still uses fill=\"currentColor\" (faint/invisible on a themed host page)")
+	}
+	if !strings.Contains(svg, `<g fill="black"`) {
+		t.Error("math is not painted black")
+	}
 }
 
 // Two vertical rules 5pt apart in an hbox: exact rect positions and page size.

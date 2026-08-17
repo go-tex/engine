@@ -69,11 +69,7 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
-	// color="black" (not just fill) so the math fragments' fill="currentColor"
-	// (emitted by go-tex/math) resolves to black like the surrounding text.
-	// Without it, currentColor inherits the host page's CSS `color`, which on the
-	// playground is a faint default — making every formula nearly invisible.
-	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black" color="black">`, bg)
+	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black">`, bg)
 	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font)
 	sb.WriteString(`</g></svg>`)
 	// Driver literals may refer back to a picture origin declared by an earlier

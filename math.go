@@ -126,6 +126,18 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		e.fail("math error in $" + src + "$: " + err.Error())
 		return mathNode{}
 	}
+	// go-tex/math paints glyphs with fill="currentColor" so a formula can follow
+	// the surrounding text colour. Bake the ACTUAL current colour in (black by
+	// default, or the active \textcolor) instead of leaving currentColor to be
+	// resolved by the host page's CSS `color` — which on a themed page (the
+	// playground) is a faint default, rendering formulas nearly invisible or, in
+	// a browser's auto-dark mode, inconsistently with the body text. An explicit
+	// colour makes math and text always render identically.
+	color := "black"
+	if e.curColor != 0 {
+		color = hexColor(e.curColor)
+	}
+	svg = strings.ReplaceAll(svg, "currentColor", color)
 	// go-tex/math reports the true box: the baseline is at y=Height in the SVG,
 	// so the math baseline aligns with the surrounding text baseline (Height above,
 	// Depth below) instead of being centred on height/2 — which dropped inline math
