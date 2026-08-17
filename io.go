@@ -66,26 +66,51 @@ func (e *Engine) doInput() {
 		e.fail("input file not found: " + file)
 		return
 	}
-	insert := []rune(normalizeEOL(string(data)) + " ") // TeX appends a space at end of file
+	// Splice the file, then a marker that discounts its lines once they are behind
+	// the mouth. Without it every line of an \input'ed file would be counted in the
+	// document's own numbering, so an error or an editor's source map would point
+	// hundreds of lines past the real place — exactly what \usepackage already
+	// avoids for a class or package (see endLoad). The marker's name has no @ in
+	// it, since \input splices the file wherever the catcode of @ happens to be.
+	body := normalizeEOL(string(data))
+	e.inputNL = append(e.inputNL, strings.Count(body, "\n"))
+	insert := []rune(body + " \\gotexendinput ") // TeX appends a space at end of file
 	tail := append(insert, e.base[e.bpos:]...)
 	e.base = append(e.base[:e.bpos:e.bpos], tail...)
 	e.buildLineStarts() // the splice shifted every offset; rebuild the line table
 }
 
+// endInput discounts the lines of the \input file whose end the mouth has just
+// reached, so the document's own source lines keep their numbers.
+func (e *Engine) endInput() {
+	if n := len(e.inputNL); n > 0 {
+		e.loadedNL += e.inputNL[n-1]
+		e.inputNL = e.inputNL[:n-1]
+	}
+}
+
 // scanFileName reads a filename: optional spaces, then either a {braced} name
 // (spaces allowed) or characters up to the next space / control sequence.
+//
+// The name is EXPANDED as it is read, which is what TeX's file-name scanner does
+// and what lets a package build the name of the file it wants: pgf loads each of
+// its modules with \input{pgfmodule\pgf@temp.code.tex}, so reading the name
+// literally finds no file at all and the module silently never loads.
 func (e *Engine) scanFileName() string {
 	e.skipOptSpace()
-	t, ok := e.getNext()
+	t, ok := e.getXToken()
 	if !ok {
 		return ""
 	}
 	if t.cat == catBegin && !t.cs_ { // {name with spaces}
 		var b []rune
 		for {
-			u, ok := e.getNext()
+			u, ok := e.getXToken()
 			if !ok || (u.cat == catEnd && !u.cs_) {
 				break
+			}
+			if u.cs_ {
+				continue // a control sequence that expands to nothing nameable
 			}
 			b = append(b, u.ch)
 		}
@@ -97,7 +122,7 @@ func (e *Engine) scanFileName() string {
 	}
 	b := []rune{t.ch}
 	for {
-		u, ok := e.getNext()
+		u, ok := e.getXToken()
 		if !ok {
 			break
 		}

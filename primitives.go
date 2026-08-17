@@ -148,6 +148,10 @@ func (e *Engine) loadPrimitives() {
 	// TeX's named integer/dimension/glue parameters — see texparams.go.
 	e.loadTeXParams()
 
+	// The standard colour names, in the form a colour-reading package expects
+	// (see colorbridge.go).
+	e.publishNamedColors()
+
 	// siunitx subset (\num, \si, \unit, \SI/\qty, \ang) — see siunitx.go.
 	e.loadSIUnitx()
 }
@@ -475,6 +479,13 @@ func (e *Engine) doAdvance(global bool) {
 	// below never match them. Handle them explicitly so nested list
 	// environments can accumulate indentation with \advance\leftskip by24pt.
 	if t, ok := e.getXToken(); ok {
+		// The engine's own dimension parameters (\hsize and friends) are
+		// primitives, not registers, so the register paths below never match them.
+		if get, set, isParam := e.engineDimenParam(t); isParam {
+			e.skipByKeyword()
+			set(get() + e.scanDimen())
+			return
+		}
 		if t.cs_ {
 			if m := e.eq[t.cs]; m != nil && m.kind == mPrim && (m.name == "leftskip" || m.name == "rightskip") {
 				e.skipByKeyword()
@@ -516,7 +527,59 @@ func (e *Engine) doAdvance(global bool) {
 	}
 }
 
+// engineDimenParam matches the dimension parameters the engine models as
+// primitives of its own (\hsize and friends) rather than as registers, and gives
+// read/write access to the value behind the name. Arithmetic on them —
+// \advance\hsize, \divide\textwidth\p@ — has to work like arithmetic on any
+// other dimension: a class computes its page geometry that way (LaTeX's size
+// option files round every length with \divide…\multiply), and a parameter that
+// silently ignores the operation ends up holding nonsense.
+func (e *Engine) engineDimenParam(t tok) (get func() int, set func(int), ok bool) {
+	if !t.cs_ {
+		return nil, nil, false
+	}
+	m := e.eq[t.cs]
+	if m == nil || m.kind != mPrim {
+		return nil, nil, false
+	}
+	switch m.name {
+	case "hsize":
+		return func() int { return e.hsize }, func(v int) { e.hsize = v }, true
+	case "vsize":
+		return func() int { return e.vsize }, func(v int) { e.vsize = v }, true
+	case "parindent":
+		return func() int { return e.parindent }, func(v int) { e.parindent = v }, true
+	case "baselineskip":
+		return func() int { return e.baselineskip }, func(v int) { e.baselineskip = v }, true
+	}
+	return nil, nil, false
+}
+
+// scaleEngineParam performs \multiply/\divide on such a parameter, reading the
+// integer operand after the optional "by".
+func (e *Engine) scaleEngineParam(t tok, divide bool) bool {
+	get, set, ok := e.engineDimenParam(t)
+	if !ok {
+		return false
+	}
+	e.skipByKeyword()
+	v := e.scanInt()
+	switch {
+	case divide && v != 0:
+		set(get() / v)
+	case !divide:
+		set(get() * v)
+	}
+	return true
+}
+
 func (e *Engine) doMultiply(global bool) {
+	if t, ok := e.getXToken(); ok {
+		if e.scaleEngineParam(t, false) {
+			return
+		}
+		e.back(t)
+	}
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt()
@@ -665,7 +728,14 @@ func (e *Engine) doCsname() {
 	}
 	s := string(name)
 	if e.eq[s] == nil {
-		e.eq[s] = &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}
+		// A name \csname brings into existence means \relax, and that definition
+		// is LOCAL like any other: a package asks whether a control sequence
+		// exists by expanding \csname inside a group it then closes
+		// (\begingroup…\endgroup around \ifx\csname directlua\endcsname\relax),
+		// so that the question leaves no trace. Defining it globally would make
+		// every such test answer "yes" from then on — and pgf would take its
+		// LuaTeX branch on an engine that has no Lua.
+		e.define(s, &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}, false)
 	}
 	e.back(csTok(s))
 }
@@ -704,6 +774,12 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "dimexpr":
 				e.pushString(formatPt(e.scanExpr(true)))
+				return
+			case m.kind == mPrim && m.name == "lccode":
+				e.pushString(strconv.Itoa(int(e.caseOf(rune(e.scanInt()), false))))
+				return
+			case m.kind == mPrim && m.name == "uccode":
+				e.pushString(strconv.Itoa(int(e.caseOf(rune(e.scanInt()), true))))
 				return
 			case m.kind == mPrim && m.name == "catcode":
 				// \the\catcode`\@ — a file that changes a character's category
@@ -1079,6 +1155,8 @@ func roman(n int) string {
 // ── further mouth primitives (chaining toward parity) ───────────────────────
 
 func (e *Engine) loadMore() {
+	e.prim("lccode", func(e *Engine) { e.doCharCode(e.lccode) })
+	e.prim("uccode", func(e *Engine) { e.doCharCode(e.uccode) })
 	e.prim("uppercase", func(e *Engine) { e.doCase(true) })
 	e.prim("lowercase", func(e *Engine) { e.doCase(false) })
 	e.prim("ifcat", func(e *Engine) { e.doIf(e.evalIfcat()) })
@@ -1104,6 +1182,7 @@ func (e *Engine) loadMore() {
 	e.prim("IfFileExists", func(e *Engine) { e.doIfFileExists() })
 	e.prim("InputIfFileExists", func(e *Engine) { e.doInputIfFileExists() })
 	e.prim("@gotex@endload", func(e *Engine) { e.endLoad() })
+	e.prim("gotexendinput", func(e *Engine) { e.endInput() })
 	e.prim("@starttoc", func(e *Engine) { e.doStartTOC() }) // a real class's TOC command bridges to the engine's entry table
 	// NFSS size-switch commands a class redefines \normalsize/\small/… to call.
 	// The engine has no NFSS, but these MUST consume their arguments: a class body
@@ -1556,14 +1635,44 @@ func (e *Engine) doCase(up bool) {
 		if x.cs_ {
 			continue
 		}
-		r := x.ch
-		if up && r >= 'a' && r <= 'z' {
-			g[i].ch = r - 32
-		} else if !up && r >= 'A' && r <= 'Z' {
-			g[i].ch = r + 32
-		}
+		g[i].ch = e.caseOf(x.ch, up)
 	}
 	e.push(g)
+}
+
+// caseOf maps a character through the \uccode/\lccode table, falling back to the
+// ASCII letter case when the table has no entry (TeX's initial state, where only
+// the letters have one). A package sets an entry to make \lowercase substitute
+// one character for another — pgfmath builds its parser's catcode block that way
+// (\lccode of ~ set to ", then \lowercase{… \let~ …}) — so the table has to be
+// real, not just a letter-case rule.
+func (e *Engine) caseOf(r rune, up bool) rune {
+	table := e.lccode
+	if up {
+		table = e.uccode
+	}
+	if v, ok := table[r]; ok {
+		if v == 0 {
+			return r // 0 means "leave it alone", as in TeX
+		}
+		return rune(v)
+	}
+	if up && r >= 'a' && r <= 'z' {
+		return r - 32
+	}
+	if !up && r >= 'A' && r <= 'Z' {
+		return r + 32
+	}
+	return r
+}
+
+// doCharCode implements the \lccode/\uccode assignment: a character code, an
+// optional =, and the value.
+func (e *Engine) doCharCode(table map[rune]int) {
+	c := e.scanInt()
+	e.scanEquals()
+	v := e.scanInt()
+	table[rune(c)] = v
 }
 
 func (e *Engine) evalIfcat() bool {

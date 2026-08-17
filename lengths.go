@@ -3,6 +3,8 @@
 
 package engine
 
+import "strconv"
+
 // This file implements LaTeX's length interface on top of the engine's TeX
 // register machinery. In LaTeX a "length" is a rubber length: a \skip register
 // that may carry stretch and shrink components. \newlength therefore allocates a
@@ -182,18 +184,84 @@ func (e *Engine) readLengthCS() (tok, bool) {
 	if t.cat == catBegin && !t.cs_ {
 		inner, ok := e.getNext()
 		if !ok || !inner.cs_ {
+			e.skipToGroupEnd()
 			return tok{}, false
 		}
-		if c, ok := e.getNext(); ok && !(c.cat == catEnd && !c.cs_) {
-			e.back(c)
+		c, ok := e.getNext()
+		if !ok {
+			return inner, true
 		}
-		return inner, true
+		if c.cat == catEnd && !c.cs_ {
+			return inner, true
+		}
+		// More than a single control sequence in the braces: the target is a
+		// register reference such as {\skip\footins} — a class sets an insertion's
+		// skip that way. Resolve it to the register it names and hand back a
+		// handle for it; anything else is consumed whole so the value that follows
+		// is still read and nothing leaks onto the page.
+		e.back(c)
+		if ref, ok := e.registerHandle(inner); ok {
+			e.skipToGroupEnd()
+			return ref, true
+		}
+		e.skipToGroupEnd()
+		return tok{}, false
 	}
 	if t.cs_ {
 		return t, true
 	}
 	e.back(t)
 	return tok{}, false
+}
+
+// registerHandle turns a register primitive plus its number (\skip\footins,
+// \dimen4) into a control sequence that stands for that register, so an
+// assignment can be made to it through the same path as a named length.
+func (e *Engine) registerHandle(prim tok) (tok, bool) {
+	m := e.eq[prim.cs]
+	if m == nil || m.kind != mPrim {
+		return tok{}, false
+	}
+	var kind mkind
+	switch m.name {
+	case "skip":
+		kind = mSkipRef
+	case "dimen":
+		kind = mDimenRef
+	default:
+		return tok{}, false
+	}
+	i := e.scanInt()
+	if i < 0 || i >= 256 {
+		return tok{}, false
+	}
+	name := "gotex@reg@" + prim.cs + strconv.Itoa(i)
+	e.define(name, &meaning{kind: kind, code: i}, true)
+	return csTok(name), true
+}
+
+// skipToGroupEnd consumes tokens up to and including the matching end of the
+// group already opened, so a target this engine cannot assign to still leaves the
+// input where the caller expects it.
+func (e *Engine) skipToGroupEnd() {
+	depth := 1
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return
+		}
+		if t.cs_ {
+			continue
+		}
+		switch t.cat {
+		case catBegin:
+			depth++
+		case catEnd:
+			if depth--; depth == 0 {
+				return
+			}
+		}
+	}
 }
 
 // readBraceGlue reads a {glue} group (the value argument of \setlength) and

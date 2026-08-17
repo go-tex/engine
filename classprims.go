@@ -85,6 +85,12 @@ func (e *Engine) evalIfdim() bool {
 
 // doDivide handles \divide <reg> by <int> for count, dimen and skip registers.
 func (e *Engine) doDivide(global bool) {
+	if t, ok := e.getXToken(); ok {
+		if e.scaleEngineParam(t, true) {
+			return
+		}
+		e.back(t)
+	}
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		if v := e.scanInt(); v != 0 {
