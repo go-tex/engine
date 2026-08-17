@@ -14,6 +14,13 @@ type OpenTypeFont struct {
 	upem float64
 	px   int
 	data []byte // original font bytes (for PDF embedding)
+	// dimCache memoises CharDims per rune. Measuring a glyph's y-extent means
+	// running the (CFF Type2) outline interpreter, which is expensive; a face is
+	// a fixed size, so a glyph's dimensions never change and are safe to cache.
+	// Without it, a document re-interprets the outline of every character it sets
+	// (rawAppendChar → charDimsSP → CharDims), which dominates run time on
+	// glyph-heavy math papers.
+	dimCache map[rune][3]float64
 }
 
 // NewOpenTypeFont builds a metrics source from a font and a pixel size.
@@ -37,6 +44,9 @@ type embeddableFont interface {
 // CharDims returns a glyph's advance width and its ink height above and depth
 // below the baseline, in pixels.
 func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
+	if d, ok := o.dimCache[r]; ok {
+		return d[0], d[1], d[2]
+	}
 	gid, ok := o.f.GlyphIndex(r)
 	if !ok {
 		return 0, 0, 0
@@ -56,6 +66,10 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 			}
 		}
 	}
+	if o.dimCache == nil {
+		o.dimCache = map[rune][3]float64{}
+	}
+	o.dimCache[r] = [3]float64{w, -minY, maxY}
 	return w, -minY, maxY
 }
 
