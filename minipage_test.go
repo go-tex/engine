@@ -84,6 +84,28 @@ func TestMinipageNestedMinipage(t *testing.T) {
 	}
 }
 
+// An environment whose \end<name> macro PRODUCES the \end{minipage} that closes a
+// minipage it opened (elsarticle/ifacconf's abstract: \begin{abstract} opens a
+// \vbox…\begin{minipage}, \endabstract → \end{minipage}\egroup) must not swallow
+// the document body: the minipage's raw body scanner has to run \end<name> in
+// place so the generated \end{minipage} surfaces, rather than scanning to EOF.
+func TestMinipageWrapperEnd(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	src := `\def\myabs{\setbox0=\vbox\bgroup\begin{minipage}{40pt}}` +
+		`\def\endmyabs{\end{minipage}\egroup}` +
+		`\begin{myabs}words here\end{myabs}\begin{minipage}{77pt}tail\end{minipage}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	// The trailing 77pt minipage survives only if the wrapper's \end{minipage}
+	// closed the inner minipage instead of the scan eating everything after it.
+	if _, ok := firstVboxOfWidth(e.mvl, 77*unity); !ok {
+		t.Fatal("content after a minipage-wrapper environment was swallowed")
+	}
+}
+
 // braceNameToks rebuilds a {name} group as explicit-begin/other.../explicit-end
 // so a re-emitted \begin{other}/\end{other} tokenizes back to the same name.
 func TestBraceNameToks(t *testing.T) {

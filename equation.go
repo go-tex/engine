@@ -121,6 +121,17 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 // thin alias for expandsToCloseCS with the closing cs "end".
 func (e *Engine) expandsToEnd(t tok) bool { return e.expandsToCloseCS(t, "end") }
 
+// endMacroExpandsToEnd reports whether \end<name> is a parameterless macro whose
+// replacement text begins with \end — i.e. \end{name} is a wrapper that produces
+// another environment's terminator by expansion (ifacconf's \endabstract →
+// \end{minipage}…). A body scanner hunting for \end{inner} must run such a wrapper
+// in place, or the real terminator never surfaces and it swallows to EOF.
+func (e *Engine) endMacroExpandsToEnd(name string) bool {
+	m := e.eq["end"+name]
+	return m != nil && m.kind == mMacro && len(m.params) == 0 &&
+		len(m.body) > 0 && m.body[0].cs_ && m.body[0].cs == "end"
+}
+
 // expandsToCloseCS reports whether the control sequence t is a parameterless
 // macro whose replacement text begins with the control sequence named close —
 // i.e. a user shorthand that stands in for a raw-token scanner's terminator

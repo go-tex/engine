@@ -60,16 +60,26 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			e.expandMacro(e.meaningOf(t))
 		case t.cs_ && t.cs == "end":
 			n := e.readBraceName()
-			if n == name {
-				if depth == 0 {
-					return body // the matching \end{name}: consume it and stop
-				}
-				depth--
+			switch {
+			case n == name && depth == 0:
+				return body // the matching \end{name}: consume it and stop
+			case n == name:
+				depth-- // a nested instance closes; re-emit for the nested typeset
+				body = append(body, csTok("end"))
+				body = append(body, braceNameToks(n)...)
+			case e.endMacroExpandsToEnd(n):
+				// \end{n} whose \end<n> macro produces the real terminator by
+				// expansion rather than a literal token — elsarticle/ifacconf's
+				// abstract is \setbox…=\vbox\bgroup…\begin{minipage}… closed by
+				// \endabstract → \end{minipage}\hfill\egroup\egroup. Run \end<n> in
+				// place so the generated \end{minipage} surfaces next iteration;
+				// otherwise the raw scan runs past it to EOF, swallowing the body.
+				e.push(e.eq["end"+n].body)
+			default:
+				// re-emit \end{n} into the body (an ordinary non-matching \end).
+				body = append(body, csTok("end"))
+				body = append(body, braceNameToks(n)...)
 			}
-			// re-emit \end{n} into the body (a non-matching environment's \end, or
-			// a nested \end{name} that closes an inner instance, not this one).
-			body = append(body, csTok("end"))
-			body = append(body, braceNameToks(n)...)
 		case t.cs_ && t.cs == "begin":
 			n := e.readBraceName()
 			if n == name {
