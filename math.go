@@ -73,6 +73,10 @@ func (e *Engine) scanMathSource() (string, bool) {
 		if !ok {
 			break
 		}
+		if isFileEndSentinel(t) { // an unterminated $/$$ must not cross the file boundary
+			e.back(t)
+			break
+		}
 		// A $ inside a \mbox{…$…$…}/\text{…} group (depth > 0) is that group's own
 		// nested inline math, NOT the closing shift — treating it as the close used
 		// to truncate the math here and desynchronise every $ in the rest of the
@@ -584,6 +588,13 @@ func (e *Engine) collectMathUntilCS(close string) string {
 	for {
 		t, ok := e.getNext()
 		if !ok || (t.cs_ && t.cs == close) {
+			break
+		}
+		// Do not scan past the end of the file that opened the math: an unterminated
+		// \[ / \( (e.g. one reached through a class's runaway display-math patch)
+		// would otherwise consume the file-end sentinel and the rest of the document.
+		if isFileEndSentinel(t) {
+			e.back(t)
 			break
 		}
 		if t.cs_ && t.cs != close && e.expandsToCloseCS(t, close) {

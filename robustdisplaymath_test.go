@@ -76,6 +76,47 @@ func TestInputBodyAfterMaketitleSurvivesAmsart(t *testing.T) {
 	}
 }
 
+// Some amsart-derived classes (e.g. cip-v3-cls-submit) carry the \[ display-math
+// patch UNGUARDED — no \ifx\csname[ \endcsname\relax around it — as
+//
+//	\def\@tempa#1$#2#3\@nil{\def\[{#1$#2\def\@currenvir{displaymath}#3}}%
+//	\expandafter\@tempa\[\@nil
+//
+// With \[ a primitive rather than a $$-bearing macro, \@tempa's "#1 up to $" scan
+// finds no $ and, before the fix, ran off the end of the file the patch lives in,
+// past the file-end sentinel and into the main document, swallowing the entire body
+// (the paper rendered 0 pages). The delimited-argument scanner must stop at the
+// sentinel (TeX's "Runaway argument"), abandon the call, and let the rest process.
+// Regression for arXiv 2607.05870 (cip-v3-cls-submit), which rendered 0 pages of 13.
+func TestUnguardedDisplayMathPatchDoesNotSwallowBody(t *testing.T) {
+	const marker = "BODYAFTERPATCH"
+	dir := t.TempDir()
+	incPath := filepath.Join(dir, "gotex_dmpatch.tex")
+	inc := "\\makeatletter\n" +
+		"\\def\\@tempa#1$#2#3\\@nil{\\def\\[{#1$#2\\def\\@currenvir{displaymath}#3}}%\n" +
+		"\\expandafter\\@tempa\\[\\@nil\n" +
+		"\\makeatother\n"
+	if err := os.WriteFile(incPath, []byte(inc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// TeX \input uses forward slashes and no extension; ToSlash keeps t.TempDir
+	// (an OS temp dir, not /tmp) valid on Windows.
+	texPath := filepath.ToSlash(strings.TrimSuffix(incPath, ".tex"))
+	src := "\\documentclass{article}\n\\begin{document}\nBEFOREMARK\n\\input{" +
+		texPath + "}\n" + marker + " renders now.\n\\end{document}\n"
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("lenient compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "BEFOREMARK") {
+		t.Errorf("text before the \\input is missing; got %q", txt)
+	}
+	if !strings.Contains(txt, marker) {
+		t.Fatalf("body after the unguarded \\[ patch was swallowed; got %q", txt)
+	}
+}
+
 // The decoy must not disturb ordinary display math: \[ … \] still typesets through the
 // primitive and leaves nothing dropped.
 func TestOrdinaryDisplayMathStillWorks(t *testing.T) {

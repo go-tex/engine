@@ -237,6 +237,13 @@ type Engine struct {
 	condOpen  int
 	condMarks []int
 
+	// argRunaway: set when a delimited macro-argument scan reaches the end of the
+	// file that began it without finding its delimiter (a TeX "Runaway argument").
+	// matchParams stops grabbing and expandMacro abandons the call, pushing the
+	// consumed tokens back so the rest of the file (and the document after it)
+	// processes normally instead of being swallowed.
+	argRunaway bool
+
 	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
 	// loop (a self-referential macro, or a peeking idiom the kernel helpers
 	// approximate imperfectly — e.g. amsart's \newtheorem…[section]) churns
@@ -883,6 +890,13 @@ func (e *Engine) expandMacro(m *meaning) {
 	} else {
 		args = e.matchParams(m.params)
 	}
+	if e.argRunaway {
+		// A delimited argument ran away to a file-end sentinel: abandon this call.
+		// grabDelimited has already reinserted the scanned tokens, so just drop the
+		// macro (its body is not run) and let them process normally.
+		e.argRunaway = false
+		return
+	}
 	var body []tok
 	for i := 0; i < len(m.body); i++ {
 		b := m.body[i]
@@ -929,6 +943,9 @@ func (e *Engine) matchParams(params []tok) [][]tok {
 			default:
 				args = append(args, e.grabDelimited(delim))
 			}
+			if e.argRunaway {
+				return args // a runaway arg abandons the call (expandMacro checks the flag)
+			}
 			i = j
 			continue
 		}
@@ -972,10 +989,32 @@ func (e *Engine) grabUndelimited() []tok {
 	if !ok {
 		return nil
 	}
+	// Never swallow a file-end sentinel as an argument (see grabDelimited): a macro
+	// whose earlier delimited parameter ran away leaves the scan at the sentinel;
+	// grabbing it here would drop the file's end and desynchronise the input.
+	if isFileEndSentinel(t) {
+		e.argRunaway = true
+		e.back(t)
+		return nil
+	}
 	if t.cat == catBegin && !t.cs_ {
 		return e.grabGroup()
 	}
 	return []tok{t}
+}
+
+// isFileEndSentinel reports whether t is one of the control sequences the splicer
+// appends at the end of a loaded file (\gotexendinput / \@endofpackagehook /
+// \@endofclasshook, see io.go). These are hard "stop reading THIS file" markers.
+func isFileEndSentinel(t tok) bool {
+	if !t.cs_ {
+		return false
+	}
+	switch t.cs {
+	case "gotexendinput", "@endofpackagehook", "@endofclasshook", "@gotex@endload":
+		return true
+	}
+	return false
 }
 
 func (e *Engine) grabDelimited(delim []tok) []tok {
@@ -985,6 +1024,20 @@ func (e *Engine) grabDelimited(delim []tok) []tok {
 		t, ok := e.getNext()
 		if !ok {
 			return arg
+		}
+		// A delimited argument must not run past the end of the file that began it:
+		// if the closing delimiter is never found, scanning used to consume the
+		// file-end sentinel and every token of the PARENT file after it, swallowing
+		// the rest of the document. This bites real class code — amsart's unguarded
+		// \expandafter\@tempa\[\@nil display-math patch, where \@tempa's #1$… scan
+		// finds no $ because the engine's \[ is a primitive rather than a $$-macro.
+		// TeX reports "Runaway argument" here; the engine abandons the macro call
+		// (matchParams/expandMacro) and reinserts everything scanned so the file's
+		// tail and the document after the sentinel process normally.
+		if isFileEndSentinel(t) {
+			e.argRunaway = true
+			e.push(append(arg, t))
+			return nil
 		}
 		if depth == 0 && t.cat == catBegin && !t.cs_ {
 			depth++
