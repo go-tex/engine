@@ -497,17 +497,25 @@ func (e *Engine) scanBracketList() []string {
 	return out
 }
 
-// peekStar consumes and reports a leading * (after optional spaces).
+// peekStar consumes and reports a leading * (after optional spaces). When no star
+// follows, the input is restored EXACTLY as it stood — nothing is left pushed back.
+// A plain back() of the peeked token would strand it in a pending token list, ahead
+// of the base input it was read from. That is harmless until the caller then splices
+// a file into the base: \ProcessOptions runs a class option's code, and an option
+// that loads a companion file (svjour's [epj] \InputIfFileExists{svepj.clo}) splices
+// that file at the mouth position — landing it BETWEEN the stranded token and the
+// base tokens that followed it. svjour's next line, \ifx\journalopt\@empty, then has
+// its already-peeked \ifx bind to the loaded file's first token (\ProvidesFile{…})
+// instead of \journalopt, and the mismatched conditional skips to end-of-file,
+// swallowing the whole document (0 pages). Restoring the mark keeps the peeked token
+// attached to what genuinely follows it, so a later splice cannot slip in between.
 func (e *Engine) peekStar() bool {
+	m := e.markInput()
 	e.skipOptSpace()
-	t, ok := e.getNext()
-	if !ok {
-		return false
-	}
-	if !t.cs_ && t.ch == '*' {
+	if t, ok := e.getNext(); ok && !t.cs_ && t.ch == '*' {
 		return true
 	}
-	e.back(t)
+	e.restoreInput(m)
 	return false
 }
 
