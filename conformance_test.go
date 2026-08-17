@@ -34,6 +34,9 @@ func TestConformance(t *testing.T) {
 		// \if / \ifcat resolve a control sequence \let to a character
 		{`\def\g#1{}\futurelet\n\g p\message{\ifcat\n a LETTER\else OTHER\fi}`, " LETTER"},
 		{`\chardef\c=65 \message{\ifcat\c a LETTER\else OTHER\fi}`, "OTHER"},
+		// a delimited argument that is entirely ONE group loses its braces
+		{`\def\d[#1]{\message{<#1>}}\d[{g}]`, "<g>"},
+		{`\def\d[#1]{\message{<#1>}}\d[{a}{b}]`, "<{a}{b}>"},
 		// \endlinechar is the character appended to every input line
 		{"\\begingroup\\endlinechar=-1\n\\gdef\\A{a\nb}\\endgroup\n\\message{\\meaning\\A}", "macro:->ab"},
 	}
