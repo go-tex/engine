@@ -145,6 +145,9 @@ func (e *Engine) loadPrimitives() {
 	e.loadETeXConditionals()
 	e.loadETeXExpansion()
 
+	// \selectfont's engine-side primitive — see font.go.
+	e.loadSelectFont()
+
 	// TeX's named integer/dimension/glue parameters — see texparams.go.
 	e.loadTeXParams()
 

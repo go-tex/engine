@@ -221,7 +221,14 @@ const AMSClassSubstrate = `
 \def\lastbox{\hbox{}}
 \def\vrulefil{}
 % ── NFSS font selection: no real series/shape machinery, accept and drop ────
-\def\selectfont{}
+% \selectfont installs the font the current family/series/shape calls for. This
+% engine has one text face per family rather than NFSS's tables, so it
+% re-selects the roman face — which is what matters in practice: a package
+% switches to \nullfont around material it wants measured but not set, and
+% brings the real font back with \selectfont. Without that, everything typeset
+% afterwards is set in a font with no characters (pgf does this for every
+% picture, which left every node's text empty).
+\def\selectfont{\gotex@selectbasefont}
 \def\f@shape{n}
 \def\f@series{m}
 \def\f@family{}
