@@ -306,3 +306,39 @@ func TestSetfontsizeConsumesArgsNoRecursion(t *testing.T) {
 		}
 	})
 }
+
+// \ProcessOptions must not strand the token that follows it. A class that peeks for
+// \ProcessOptions* reads the next token; when that token is a control sequence (here
+// the \ifx opening the class's own \ifx\journalopt\@empty guard) and \ProcessOptions
+// then runs an option whose code \input's a companion file, the loaded file must not
+// be spliced between the peeked \ifx and its operands. This is the svjour [epj] flow:
+// \DeclareOption*{\InputIfFileExists{sv\CurrentOption.clo}{\let\journalopt…}{…}} loads
+// svepj.clo, and the very next source line is \ifx\journalopt\@empty. A stranding peek
+// let \ifx bind to the loaded file's first token, mis-firing a conditional that skipped
+// to end-of-file and swallowed the entire document (0 pages).
+func TestProcessOptionsPeekDoesNotStrandFollowingToken(t *testing.T) {
+	withTempDir(t, map[string]string{
+		"svmini.cls": `\NeedsTeXFormat{LaTeX2e}\ProvidesClass{svmini}` +
+			`\let\journalopt\@empty` +
+			`\DeclareOption*{\InputIfFileExists{sv\CurrentOption.clo}` +
+			`{\let\journalopt\CurrentOption}{\OptionNotUsed}}` +
+			`\ProcessOptions` + "\n" +
+			`\ifx\journalopt\@empty\ClassError{svmini}{no option}{}\fi` +
+			`\LoadClass{article}`,
+		"svepj.clo": `\ProvidesFile{svepj.clo}[2002/03/11 v1.2 test]` +
+			`\newif\if@normhead\@normheadtrue` +
+			`\AtEndOfClass{\let\if@runhead\iftrue\let\if@smartand\iftrue}`,
+	}, func() {
+		src := `\documentclass[epj]{svmini}\begin{document}BODYMARKER text here.\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		if e.runaway {
+			t.Fatal("expansion ran away: the peeked \\ifx was stranded across the \\input splice")
+		}
+		if got := pageChars(e); !strings.Contains(got, "BODYMARKER") {
+			t.Errorf("document body was swallowed; expected BODYMARKER in output, got %q", got)
+		}
+	})
+}
