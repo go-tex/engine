@@ -23,6 +23,11 @@ const MiniLaTeX = `
 // they let a document use the familiar commands without any Go-side support — the
 // same growth path as the kernel: add macros, do not hand-code commands.
 const Plain = `
+% Plain TeX's category-code constants. \active is the one a package reaches for
+% by name: it makes a character active, and asks whether one already is
+% (\ifnum\catcode of a character = \active). Without it such a block does not
+% run, and everything defined after it in that file is lost with it.
+\chardef\active=13
 \def\TeX{TeX}
 \def\LaTeX{LaTeX}
 \def\empty{}

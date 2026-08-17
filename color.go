@@ -180,6 +180,10 @@ func unitFloat(s string) float64 {
 // doColorlet implements \colorlet{name}{expr}: define a named colour equal to the
 // evaluated colour expression (so later \color{name} reuses the mix).
 func (e *Engine) doColorlet() {
+	// xcolor's optional model argument — \colorlet[named]{a}{b} asks it to convert
+	// through a colour model. This engine keeps colours as RGB throughout, so the
+	// hint changes nothing; it must still be consumed, or it lands on the page.
+	e.scanOptBracketToks()
 	name := e.readBraceName()
 	c := e.resolveColor(e.readBraceName())
 	if name == "" {

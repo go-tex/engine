@@ -180,6 +180,10 @@ const LaTeX2eClassKernel = `
 \def\loop#1\repeat{\def\iterate{#1\relax\expandafter\iterate\fi}\iterate\let\iterate\relax}
 \let\repeat\fi
 % ── \if@ boolean flags (\newif comes from the kernel-helper layer) ───────────
+% \@settopoint rounds a length down to a whole point, which the size option
+% files apply to the lengths they compute. Without it a class silently drops
+% those calls.
+\def\@settopoint#1{\divide#1\p@\multiply#1\p@}
 \newif\if@twocolumn
 \newif\if@twoside
 \newif\if@compatibility

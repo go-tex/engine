@@ -28,6 +28,17 @@ import (
 // values. The engine keeps colours as RGB, so the model published is rgb with
 // three 0–1 components — the model every driver understands.
 
+// publishNamedColors publishes the standard colour names at start-up, so a
+// package can read one that the document never defined itself. A drawing package
+// treats an unrecognised option as a colour name and asks whether it is one
+// (TikZ: \draw[red] works only because \color@red exists), so the built-in table
+// has to be visible too, not just what \definecolor added.
+func (e *Engine) publishNamedColors() {
+	for name, c := range namedColors {
+		e.publishColor(name, c)
+	}
+}
+
 // publishColor stores a colour under the name a colour-reading package expects,
 // alongside the engine's own table. It is called wherever a colour gets a name.
 func (e *Engine) publishColor(name string, c uint32) {

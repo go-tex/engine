@@ -212,7 +212,10 @@ type Engine struct {
 	loadDepth      int
 	loadedPackages map[string]bool
 	passedOptions  map[string][]string
-	loadedNL       int // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
+	lccode         map[rune]int // \lccode: what \lowercase maps a character to
+	uccode         map[rune]int // \uccode: what \uppercase maps a character to
+	inputNL        []int        // newlines of each \input file still being read (see endInput)
+	loadedNL       int          // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
 
 	// runaway guard: a bound on macro expansion so a pathological input (an
 	// infinite \def loop, or a tolerantly-skipped arg-consuming command that
@@ -304,14 +307,16 @@ type saveItem struct {
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
 	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10, allocToks: 10, toks: make([][]tok, 256)} // allocators start at 10
-	e.hsize = ptToSP(6.5 * 7227.0 / 100.0)                                                                                                   // plain TeX \hsize = 6.5in
-	e.vsize = ptToSP(8.9 * 7227.0 / 100.0)                                                                                                   // plain TeX \vsize = 8.9in
-	e.baselineskip = 12 * unity                                                                                                              // 12pt
-	e.baseBaselineskip = e.baselineskip                                                                                                      // setspace 1.0 ref
-	e.lineskip = unity                                                                                                                       // 1pt
-	e.parindent = 20 * unity                                                                                                                 // plain TeX \parindent = 20pt
-	e.columnsep = 10 * unity                                                                                                                 // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
-	e.hyphenpenalty = 50                                                                                                                     // plain TeX \hyphenpenalty
+	e.lccode = map[rune]int{}
+	e.uccode = map[rune]int{}
+	e.hsize = ptToSP(6.5 * 7227.0 / 100.0) // plain TeX \hsize = 6.5in
+	e.vsize = ptToSP(8.9 * 7227.0 / 100.0) // plain TeX \vsize = 8.9in
+	e.baselineskip = 12 * unity            // 12pt
+	e.baseBaselineskip = e.baselineskip    // setspace 1.0 ref
+	e.lineskip = unity                     // 1pt
+	e.parindent = 20 * unity               // plain TeX \parindent = 20pt
+	e.columnsep = 10 * unity               // LaTeX \columnsep = 10pt (\columnseprule defaults to 0)
+	e.hyphenpenalty = 50                   // plain TeX \hyphenpenalty
 	e.prevDepth = ignoreDepth
 	e.stepLimit = maxExpandSteps // absolute runaway-expansion ceiling (tests may lower it)
 	e.tightLimit = tightLoopSteps
@@ -355,6 +360,7 @@ func (e *Engine) Run(src string) (string, error) {
 	e.progBpos = 0    // fresh document: reset the no-progress guard
 	e.noProgSteps = 0 // (e.bpos is monotonic within a Run, so this is a clean baseline)
 	e.loadedNL = 0    // fresh document: no loaded-file lines discounted yet
+	e.inputNL = nil
 	e.buildLineStarts()
 	e.mainLoop()
 	return e.out.String(), e.err
