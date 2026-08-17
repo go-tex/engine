@@ -1455,6 +1455,30 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 			case m.kind == mPrim && m.name == "parindent":
 				return e.parindent, 0
 			}
+			// An internal INTEGER here is the FACTOR of the dimension, not the
+			// dimension itself: TeX's <dimen> is <factor><unit of measure>, and the
+			// factor may be a count register or a \chardef'd constant, with the unit
+			// following it — \dimen0=\count0\dimen1 is count0 times dimen1, and
+			// \setlength\textheight{\@tempcnta\baselineskip} is how a class states
+			// a height in lines.
+			//
+			// The unit must itself be a dimension for the factor to be read: TeX
+			// also accepts a spelled-out one (\dimen0=\count0 pt is five points
+			// when count0 is five), but taking that here disturbs a class file's
+			// own parse in a way not yet understood, and every source that relies
+			// on this writes the dimension form. When no dimension follows, the
+			// input is put back untouched and the caller sees what it would have
+			// seen before.
+			if e.isInternalInteger(t) {
+				e.back(t)
+				mark := e.markInput()
+				n := e.scanInt()
+				if e.upcomingInternalDimen() {
+					return e.applyUnit(n, 0), 0
+				}
+				e.restoreInput(mark)
+				return 0, 0
+			}
 		}
 		e.back(t)
 		return 0, 0
@@ -1472,6 +1496,60 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 	}
 	e.back(t)
 	return 0, 0
+}
+
+// isInternalInteger reports whether a control sequence denotes an integer, so it
+// can serve as the factor of a dimension.
+func (e *Engine) isInternalInteger(t tok) bool {
+	m := e.eq[t.cs]
+	if m == nil {
+		return false
+	}
+	switch m.kind {
+	case mCountRef, mCharDef:
+		return true
+	case mPrim:
+		switch m.name {
+		case "count", "numexpr", "catcode", "lccode", "uccode":
+			return true
+		}
+	}
+	return false
+}
+
+// upcomingInternalDimen reports whether the input begins with a control sequence
+// that denotes a dimension, without consuming anything. That is the unit a factor
+// taken from an integer register is measured in — \setlength\textheight{\@tempcnta
+// \baselineskip}, \pgfmath@ya=\c@pgfmath@counta\pgfmath@y — and restricting the
+// factor form to it keeps every other reading of an integer untouched.
+func (e *Engine) upcomingInternalDimen() bool {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return false
+	}
+	e.back(t)
+	return t.cs_ && e.isInternalDimen(t)
+}
+
+// inputMark is a position in the input: where the mouth stands in the base text
+// and what is stacked above it.
+type inputMark struct {
+	bpos  int
+	lists [][]tok
+}
+
+// markInput records where the input stands, so a scanner can read ahead and then
+// put back exactly what it read. Only the stack of pending lists is copied — the
+// lists themselves are never written to, only sliced down as they are read.
+func (e *Engine) markInput() inputMark {
+	return inputMark{bpos: e.bpos, lists: append([][]tok(nil), e.lists...)}
+}
+
+// restoreInput returns the input to a recorded position.
+func (e *Engine) restoreInput(m inputMark) {
+	e.bpos = m.bpos
+	e.lists = m.lists
 }
 
 // scanFil matches a "fil", "fill", or "filll" infinite-glue unit, returning its
@@ -1699,6 +1777,14 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 				return e.vsize, true
 			case m.kind == mPrim && m.name == "parindent":
 				return e.parindent, true
+			case m.kind == mPrim && m.name == "baselineskip":
+				return e.baselineskip, true
+			case m.kind == mPrim && m.name == "leftskip":
+				return e.leftskip.width, true
+			case m.kind == mPrim && m.name == "rightskip":
+				return e.rightskip.width, true
+			case m.kind == mPrim && m.name == "dimexpr":
+				return e.scanExpr(true), true
 			}
 		}
 	}
