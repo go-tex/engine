@@ -214,6 +214,7 @@ type Engine struct {
 	passedOptions  map[string][]string
 	lccode         map[rune]int // \lccode: what \lowercase maps a character to
 	uccode         map[rune]int // \uccode: what \uppercase maps a character to
+	afterGroup     [][]tok      // \aftergroup tokens, one list per open group
 	inputNL        []int        // newlines of each \input file still being read (see endInput)
 	loadedNL       int          // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
 
@@ -361,6 +362,7 @@ func (e *Engine) Run(src string) (string, error) {
 	e.noProgSteps = 0 // (e.bpos is monotonic within a Run, so this is a clean baseline)
 	e.loadedNL = 0    // fresh document: no loaded-file lines discounted yet
 	e.inputNL = nil
+	e.afterGroup = nil
 	e.buildLineStarts()
 	e.mainLoop()
 	return e.out.String(), e.err
@@ -603,7 +605,10 @@ func (e *Engine) setCat(r rune, c cat, global bool) {
 	e.catcode[r] = c
 }
 
-func (e *Engine) beginGroup() { e.groups = append(e.groups, len(e.save)) }
+func (e *Engine) beginGroup() {
+	e.groups = append(e.groups, len(e.save))
+	e.afterGroup = append(e.afterGroup, nil)
+}
 
 func (e *Engine) endGroup() {
 	if len(e.groups) == 0 {
@@ -611,6 +616,7 @@ func (e *Engine) endGroup() {
 	}
 	mark := e.groups[len(e.groups)-1]
 	e.groups = e.groups[:len(e.groups)-1]
+	after := e.takeAfterGroup()
 	for len(e.save) > mark {
 		s := e.save[len(e.save)-1]
 		e.save = e.save[:len(e.save)-1]
@@ -641,6 +647,35 @@ func (e *Engine) endGroup() {
 			e.everypar = s.oldtoks
 		}
 	}
+	// \aftergroup's tokens are put back once the group is closed and its values
+	// restored, so they act outside it — which is what makes them useful: a
+	// package builds something inside a box and arranges for the code that
+	// finishes it to run after the box is complete (every TikZ node ends that
+	// way). They are inserted in the order they were saved.
+	for i := len(after) - 1; i >= 0; i-- {
+		e.back(after[i])
+	}
+}
+
+// afterGroupToken saves a token for insertion when the current group ends. With
+// no group open TeX inserts it immediately, since there is nothing to wait for.
+func (e *Engine) afterGroupToken(t tok) {
+	if n := len(e.afterGroup); n > 0 {
+		e.afterGroup[n-1] = append(e.afterGroup[n-1], t)
+		return
+	}
+	e.back(t)
+}
+
+// takeAfterGroup pops the tokens saved for the group being closed.
+func (e *Engine) takeAfterGroup() []tok {
+	n := len(e.afterGroup)
+	if n == 0 {
+		return nil
+	}
+	ts := e.afterGroup[n-1]
+	e.afterGroup = e.afterGroup[:n-1]
+	return ts
 }
 
 // setEverypar assigns the \everypar hook, recording the old value on the save

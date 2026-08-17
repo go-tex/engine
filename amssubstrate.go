@@ -47,11 +47,14 @@ func (e *Engine) loadAMSPrims() {
 	e.prim("removelastskip", func(e *Engine) {})
 	// \immediate: a prefix to \write/\openout/\closeout; a no-op on its own.
 	e.prim("immediate", func(e *Engine) {})
-	// \aftergroup<token>: defer the token to the enclosing group's end. The engine
-	// has no after-group queue; consume the token (its deferred action is dropped)
-	// so it is not executed early. Best-effort: amsart uses it for paragraph-shape
-	// bookkeeping, not for output.
-	e.prim("aftergroup", func(e *Engine) { e.getNext() })
+	// \aftergroup<token>: hold the token back until the current group closes, then
+	// insert it (see endGroup). A package finishes what it built inside a box this
+	// way — every TikZ node ends by \aftergroup-ing the code that closes it.
+	e.prim("aftergroup", func(e *Engine) {
+		if t, ok := e.getNext(); ok {
+			e.afterGroupToken(t)
+		}
+	})
 	// \accent<code>: set an accent over the next char. Used only in amsart's \dh/\dj
 	// glyphs (themselves replaced when amsfonts is absent). Consume the code number.
 	e.prim("accent", func(e *Engine) { e.scanInt() })
