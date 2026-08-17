@@ -3,7 +3,44 @@ package engine
 import (
 	"strings"
 	"testing"
+	"time"
 )
+
+// A page break discards the glue/penalty/kern at the break. When a document
+// leaves a very long trailing run of such discardable nodes — some class macros
+// emit hundreds of thousands of forced-break \penalty nodes — Pages() must skip
+// that run in one linear pass. A regression once advanced one node at a time
+// while rescanning the whole remaining run each step, making pagination O(n²):
+// half a million nodes took ~90s. This builds one real page followed by a long
+// forced-break-penalty tail and asserts it paginates in linear time.
+func TestPageBuilderDiscardableTailLinear(t *testing.T) {
+	e := New()
+	e.vsize = 100 * unity
+	// One real box (becomes page 1), then a long run of forced-break penalties
+	// with nothing after them: every break lands on an empty page (emitted as
+	// none), so the loop must walk the whole tail without quadratic rescanning.
+	list := []node{&boxNode{width: 10 * unity, height: 10 * unity}}
+	const tail = 300000
+	for i := 0; i < tail; i++ {
+		list = append(list, penaltyNode{penalty: -int(InfPenalty)})
+	}
+	e.mvl = list
+
+	done := make(chan int, 1)
+	start := time.Now()
+	go func() { done <- len(e.Pages()) }()
+	select {
+	case n := <-done:
+		if n != 1 {
+			t.Fatalf("expected 1 page (one box, then only discardable nodes), got %d", n)
+		}
+		if el := time.Since(start); el > 10*time.Second {
+			t.Fatalf("pagination of a %d-node discardable tail took %s; expected linear time", tail, el)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatalf("Pages() did not finish in 20s on a %d-node discardable tail (quadratic page builder)", tail)
+	}
+}
 
 // With a small \vsize, a stack of boxes taller than one page splits into several.
 func TestPageBuilderSplits(t *testing.T) {

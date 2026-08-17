@@ -69,10 +69,6 @@ func (e *Engine) Pages() []*boxNode {
 		if page := trimTrailingGlue(list[start:end]); len(page) > 0 {
 			pages = append(pages, e.assemblePage(page, len(pages)+1))
 		}
-		start = skipDiscardable(list, end)
-		if end <= start-1 { // safety: always make progress
-			start = end + 1
-		}
 		if end == len(list) {
 			break
 		}
@@ -83,6 +79,15 @@ func (e *Engine) Pages() []*boxNode {
 			e.skippedCS["gotex@pagelimit"]++
 			break
 		}
+		// Discard the glue/penalty/kern at the break so the next page does not
+		// restart inside that run. Advancing by the full run (not end+1) is what
+		// keeps this loop linear: a long trailing discardable run would otherwise
+		// be rescanned on every one-node step, making pagination O(n²).
+		next := skipDiscardable(list, end)
+		if next <= start { // safety: always make progress
+			next = start + 1
+		}
+		start = next
 	}
 	return pages
 }
