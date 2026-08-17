@@ -59,7 +59,8 @@ type pdfDraw struct {
 	cur      float64 // font size currently selected in the content stream
 	curColor uint32  // fill colour currently selected (0xRRGGBB; 0 = black)
 	pageH    float64
-	specials []string // driver literals collected in paint order (see special)
+	specials []string   // driver literals collected in paint order (see special)
+	ctm      pictureCTM // the transformation those literals have in force
 }
 
 // setSize switches the PDF text size when a glyph's size differs from what's
@@ -109,6 +110,21 @@ func (d *pdfDraw) drawChar(x, y float64, ch rune) {
 	d.p.Text(x, y, string(ch))
 }
 
+// drawCharMapped draws a character at the engine position (x, baseline), through
+// the transformation the open picture scopes impose. Outside a picture there is
+// none and the character is drawn straight, exactly as before.
+func (d *pdfDraw) drawCharMapped(x, baseline float64, ch rune) {
+	if !d.ctm.active() {
+		d.drawChar(x, d.y(baseline), ch)
+		return
+	}
+	m := pdfMap(d.ctm.cur(), d.pageH)
+	d.p.Save()
+	d.p.Transform(m.a, m.b, m.c, m.d, m.e, m.f)
+	d.drawChar(x, d.y(baseline), ch)
+	d.p.Restore()
+}
+
 // box paints a box with left edge x and the given baseline (engine coordinates).
 func (d *pdfDraw) box(b *boxNode, x, baseline float64) {
 	if b.kind == hbox {
@@ -132,7 +148,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case charNode:
 			d.setSize(float64(c.size))
 			d.setColor(c.color)
-			d.drawChar(cx, d.y(baseline), c.ch)
+			d.drawCharMapped(cx, baseline, c.ch)
 			cx += spToPt(c.width)
 		case ruleNode:
 			d.setColor(0)
@@ -180,9 +196,15 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 // many specials that open and close shared graphics scopes, so they are
 // interpreted as one stream, not one by one.
 func (d *pdfDraw) special(s specialNode, x, baseline float64) {
-	if lit, ok := specialLiteral(s.text, x, baseline); ok {
-		d.specials = append(d.specials, lit)
+	lit, ok := specialLiteral(s.text, x, baseline)
+	if !ok {
+		return
 	}
+	// Finish the literal here rather than over the whole page: the scopes it
+	// opens have to be known now, since a character drawn after it is drawn
+	// through them (see pdfpicture.go).
+	lit = d.ctm.org.next(lit)
+	d.specials = append(d.specials, d.ctm.feed(lit))
 }
 
 // drawSpecials interprets the page's collected driver literals as vector marks.
@@ -192,7 +214,7 @@ func (d *pdfDraw) drawSpecials() {
 	if len(d.specials) == 0 {
 		return
 	}
-	drawSVGStream(d.p, resolveSpecialOrigins(strings.Join(d.specials, "")), d.pageH)
+	drawSVGStream(d.p, strings.Join(d.specials, ""), d.pageH)
 	d.specials = nil
 	d.curColor = 0
 	d.p.SetFillColor(pdfkit.RGB8(0, 0, 0))
