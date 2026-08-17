@@ -30,3 +30,32 @@ func TestFontFamilyBold(t *testing.T) {
 		t.Errorf("bold VA width == roman VA width (%d); expected the bold face to differ", rw)
 	}
 }
+
+// \textbf goes through \bfseries, which is a direct alias of the bold font switch
+// rather than a macro that names \bf. So a document that "modernises" the
+// deprecated switch with \renewcommand{\bf}{\textbf} (common in older sources)
+// does NOT turn \textbf into an infinite self-reference that swallows everything
+// after it (\textbf→\bfseries→\bf→\textbf…).
+func TestFontSwitchRenewNoSwallow(t *testing.T) {
+	reg := "/System/Library/Fonts/Supplemental/Georgia.ttf"
+	bold := "/System/Library/Fonts/Supplemental/Georgia Bold.ttf"
+	if _, err := os.Stat(bold); err != nil {
+		t.Skip("no bold system font")
+	}
+	rb, _ := os.ReadFile(reg)
+	bb, _ := os.ReadFile(bold)
+	e, err := buildEngine(Options{Font: rb, BoldFont: bb, Size: 20}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// \bfseries must be a real font switch (aliased), independent of \bf.
+	if m := e.eq["bfseries"]; m == nil || m.kind != mFont {
+		t.Fatalf("\\bfseries not aliased to a font switch: %+v", e.eq["bfseries"])
+	}
+	if _, err := e.Run(`\renewcommand{\bf}{\textbf}\textbf{X}\def\survived{yes}`); err != nil {
+		t.Fatal(err)
+	}
+	if e.eq["survived"] == nil {
+		t.Error("content after \\textbf was swallowed when \\bf was renewed to \\textbf")
+	}
+}

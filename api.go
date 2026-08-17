@@ -99,7 +99,28 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if err := e.bindOptionalFont("sf", opt.SansFont, opt.size()); err != nil {
 		return nil, err
 	}
+	e.aliasFontSwitches()
 	return e, nil
+}
+
+// aliasFontSwitches makes the NFSS declarations (\bfseries, \itshape, …) direct
+// copies of the low-level font switches (\bf, \it, …) rather than macros that
+// call them by name. LaTeX's \textbf/\textit/… go through the NFSS names, so a
+// document that "modernises" a deprecated switch with \renewcommand{\bf}{\textbf}
+// (common in older sources) must not turn \textbf into an infinite self-reference
+// (\textbf→\bfseries→\bf→\textbf…), which otherwise consumes the whole document.
+func (e *Engine) aliasFontSwitches() {
+	for _, p := range [][2]string{
+		{"bfseries", "bf"}, {"itshape", "it"}, {"slshape", "sl"},
+		{"ttfamily", "tt"}, {"sffamily", "sf"}, {"rmfamily", "rm"},
+		{"normalfont", "rm"}, {"upshape", "rm"}, {"mdseries", "rm"},
+	} {
+		if m := e.eq[p[1]]; m != nil {
+			cp := *m
+			cp.name = p[0]
+			e.eq[p[0]] = &cp
+		}
+	}
 }
 
 // bindFont defines a control sequence that selects the given font.

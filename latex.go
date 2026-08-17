@@ -26,12 +26,17 @@ const MiniLaTeXKernel = `
 \def\sl{}
 \def\tt{}
 \def\sf{}
-\def\textbf#1{{\bf #1}}
-\def\textit#1{{\it #1}}
-\def\texttt#1{{\tt #1}}
-\def\textsf#1{{\sf #1}}
-\def\textrm#1{{\rm #1}}
-\def\emph#1{{\it #1}}
+% \text… go through the NFSS declarations (\bfseries/\itshape/…), which the
+% engine aliases to the real font switches (see aliasFontSwitches). Using the
+% NFSS names — not the deprecated \bf/\it/… — keeps \textbf working even when a
+% document does \renewcommand{\bf}{\textbf}, which would otherwise make \textbf
+% recurse into itself and swallow the rest of the input.
+\def\textbf#1{{\bfseries #1}}
+\def\textit#1{{\itshape #1}}
+\def\texttt#1{{\ttfamily #1}}
+\def\textsf#1{{\sffamily #1}}
+\def\textrm#1{{\rmfamily #1}}
+\def\emph#1{{\itshape #1}}
 \def\textcolor#1#2{{\color{#1}#2}}
 \def\tiny{\gotexsize500\relax}
 \def\scriptsize{\gotexsize700\relax}
