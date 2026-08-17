@@ -413,6 +413,31 @@ const MiniLaTeXKernel = `
 \def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
 \def\@gobbleoptonly[#1]{}
 \def\hypersetup#1{}
+% xcolor's colour-model machinery, as a package reads it. This engine keeps
+% colours in RGB rather than xcolor's model tables, but a package that draws asks
+% which model is in force so it can pick the right device (pgf does this to choose
+% between RGB, CMYK and gray shadings). Answering "rgb" is both true here and what
+% lets those packages load at all — the TikZ fadings library stops on the very
+% first of these names otherwise.
+\def\XC@sdef#1#2{\edef#1{#2}}
+\def\XC@tgt@mod#1{rgb}
+\def\XC@mod@rgb{rgb}
+\def\XC@mod@cmyk{cmyk}
+\def\XC@mod@gray{gray}
+% \extractcolorspec{name}{\cmd} hands back a colour as {model}{values}, and
+% \convertcolorspec converts one to another model. Both read the stored form this
+% engine publishes for every named colour (see colorbridge.go); since that form is
+% RGB, a conversion to RGB is the value itself, and any other target is answered
+% in RGB — the only model this engine has.
+\def\extractcolorspec#1#2{%
+  \expandafter\ifx\csname\string\color@#1\endcsname\relax
+    \def#2{{rgb}{0,0,0}}%
+  \else
+    \expandafter\expandafter\expandafter\gotex@extractspec
+    \csname\string\color@#1\endcsname{#2}%
+  \fi}
+\def\gotex@extractspec#1#2#3#4#5#6{\def#6{{#4}{#5}}}
+\def\convertcolorspec#1#2#3#4{\def#4{#2}}
 % The pgf system layer picks its driver from \pgfsysdriver when one is already
 % defined, so naming this engine's own (texmf/pgfsys-gotex.def) here is what makes
 % the real pgf/TikZ draw rather than load and define nothing. Harmless when pgf is
