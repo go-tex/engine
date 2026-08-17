@@ -35,6 +35,24 @@ func TestInputAddsTexExtension(t *testing.T) {
 	}
 }
 
+// \endinput stops reading the current file: text after it — a package's trailing
+// documentation, or cite.sty's "Test file integrity: … \]^_ …" line — must be
+// ignored, not processed (which can hang the engine).
+func TestEndinputStopsFile(t *testing.T) {
+	dir := t.TempDir()
+	inc := filepath.ToSlash(filepath.Join(dir, "inc.tex"))
+	// After \endinput, the second \def and the stray text must not take effect.
+	os.WriteFile(inc, []byte(`\def\a{X}\endinput`+"\n"+`\def\a{Y} garbage \] ^_ line`), 0644)
+	e := New()
+	got, err := e.Run(`\input ` + inc + ` \message{\a}`)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if trimNL(got) != "X" {
+		t.Errorf("got %q want X (text after \\endinput was processed)", trimNL(got))
+	}
+}
+
 func TestFontPrimitiveSelectsFont(t *testing.T) {
 	font := "/System/Library/Fonts/Supplemental/Georgia.ttf"
 	if _, err := os.Stat(font); err != nil {

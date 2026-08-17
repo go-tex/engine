@@ -15,6 +15,38 @@ import (
 // sequence, and \input splices another source file into the input stream. Both
 // read a filename with TeX's rules (space-terminated, or braced to allow spaces).
 
+// fileEndMarkers are the control sequences the splicer appends at the end of a
+// loaded file: \gotexendinput after an \input (io.go), and the end-of-package /
+// end-of-class hooks after a \usepackage / \documentclass (packages.go).
+// \endinput skips forward to the nearest one to stop reading the current file
+// (see classprims.go). They must match the tokens the splicers emit.
+var fileEndMarkers = [][]rune{
+	[]rune(`\gotexendinput`),
+	[]rune(`\@endofpackagehook`),
+	[]rune(`\@endofclasshook`),
+}
+
+// runeIndexFrom returns the index of the first occurrence of needle in s at or
+// after from, or -1. Used by \endinput to find its file's end marker.
+func runeIndexFrom(s []rune, from int, needle []rune) int {
+	if from < 0 {
+		from = 0
+	}
+	for i := from; i+len(needle) <= len(s); i++ {
+		match := true
+		for j := range needle {
+			if s[i+j] != needle[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}
+
 // doFont handles \font\cs=<file> [at <dimen> | scaled <int>]: it loads the font
 // and defines \cs so that using it selects that font as the current one.
 func (e *Engine) doFont() {

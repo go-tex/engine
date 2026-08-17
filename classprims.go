@@ -55,10 +55,25 @@ func (e *Engine) loadClassPrims() {
 	e.prim("long", func(e *Engine) {})
 	// \outer: like \long, an accepted no-op prefix.
 	e.prim("outer", func(e *Engine) {})
-	// \endinput: stop reading the current file. In the splice model the remaining
-	// file text is already queued; accepting it as a no-op is close enough (real
-	// files put \endinput at end of file).
-	e.prim("endinput", func(e *Engine) {})
+	// \endinput: stop reading the current file. The splicer appends an end
+	// sentinel after each \input file (\gotexendinput, io.go) and each
+	// \usepackage/\documentclass file (\@endofpackagehook / \@endofclasshook,
+	// packages.go). Skip forward to the nearest one so text AFTER a file's
+	// \endinput — trailing documentation, cite.sty's "Test file integrity: …"
+	// line with its stray \] and ^_ characters — is not processed (which can hang
+	// the engine). Jumping to the package/class hook (not past it) keeps any
+	// \AtEndOfPackage/Class code and the frame-popping \@gotex@endload intact.
+	e.prim("endinput", func(e *Engine) {
+		best := -1
+		for _, m := range fileEndMarkers {
+			if i := runeIndexFrom(e.base, e.bpos, m); i >= 0 && (best < 0 || i < best) {
+				best = i
+			}
+		}
+		if best >= 0 {
+			e.bpos = best
+		}
+	})
 	// \hb@xt@: LaTeX's shorthand for "\hbox to".
 	e.eq["hb@xt@"] = &meaning{kind: mMacro, body: []tok{csTok("hbox"), chTok(' ', catSpace), chTok('t', catLetter), chTok('o', catLetter)}}
 }
