@@ -54,6 +54,13 @@ func vContribution(n node) int {
 // penalty, breaks at the least-cost point once the page would overflow, honours a
 // forced break (\penalty ≤ −10000) immediately, and never breaks at \penalty ≥
 // 10000. Each page is vpacked at natural height. (Insertions/\topskip are future.)
+// maxPages bounds how many pages Pages() will emit. No real document approaches
+// it (the largest in the arXiv corpus is ~150pp); it is a backstop against a
+// class whose page-fitting machinery runs away — WileyNJD's \BX box-splitter can
+// \vsplit a mis-sized box into hundreds of thousands of near-empty pages, which
+// would otherwise write that many SVG files and exhaust memory/disk.
+const maxPages = 5000
+
 func (e *Engine) Pages() []*boxNode {
 	var pages []*boxNode
 	list := e.mvl
@@ -67,6 +74,13 @@ func (e *Engine) Pages() []*boxNode {
 			start = end + 1
 		}
 		if end == len(list) {
+			break
+		}
+		if len(pages) >= maxPages {
+			if e.skippedCS == nil {
+				e.skippedCS = map[string]int{}
+			}
+			e.skippedCS["gotex@pagelimit"]++
 			break
 		}
 	}

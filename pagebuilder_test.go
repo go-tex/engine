@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // With a small \vsize, a stack of boxes taller than one page splits into several.
 func TestPageBuilderSplits(t *testing.T) {
@@ -65,6 +68,23 @@ func TestPageBuilderZeroVsize(t *testing.T) {
 	}
 	if rules != 60 {
 		t.Errorf("expected all 60 boxes preserved, got %d", rules)
+	}
+}
+
+// Pages() is capped at maxPages so a class whose page-fitting machinery runs
+// away (WileyNJD's \BX \vsplit loop can emit 142841 near-empty pages) cannot
+// exhaust memory/disk; the cap is recorded so it is not silent.
+func TestPageBuilderCap(t *testing.T) {
+	e := New()
+	e.baselineskip = 0
+	e.lineskip = 0
+	// far more forced breaks than the cap allows.
+	e.Run(strings.Repeat(`\hbox{\vrule width1pt height1pt}\penalty-10000 `, maxPages+1000))
+	if n := len(e.Pages()); n != maxPages {
+		t.Errorf("Pages() returned %d, want the cap %d", n, maxPages)
+	}
+	if e.skippedCS["gotex@pagelimit"] == 0 {
+		t.Error("page-limit cap was hit but not recorded")
 	}
 }
 

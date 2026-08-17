@@ -40,6 +40,9 @@ var texIntParams = map[string]int{
 	"errorstopmode": 0, "pausing": 0,
 }
 
+// maxDimenSP is TeX's \maxdimen (16383.99998pt) in scaled points: 2^30 − 1.
+const maxDimenSP = 1073741823
+
 // texDimenParams are TeX's dimension parameters.
 var texDimenParams = []string{
 	"maxdepth", "splitmaxdepth", "boxmaxdepth", "delimitershortfall",
@@ -74,6 +77,17 @@ func (e *Engine) loadTeXParams() {
 	for _, name := range texDimenParams {
 		if e.eq[name] != nil || e.allocDim >= 256 {
 			continue
+		}
+		// \pagegoal is \maxdimen while no page is being built — TeX's value for an
+		// empty page. The engine gathers the whole document into one vertical list
+		// and splits it into pages at the very end, so no output routine ever runs
+		// and, from a class's point of view, the page never fills. Leaving \pagegoal
+		// at 0 makes a class that sizes a title/box against the "free space left on
+		// the page" (WileyNJD's \ComputeFreeSpaceOnPage) think there is NO room and
+		// enter a \vsplit-to-fit \loop that never terminates — 142841 near-empty
+		// pages. Initialise it to \maxdimen so such code sees a full, empty page.
+		if name == "pagegoal" {
+			e.dimen[e.allocDim] = maxDimenSP
 		}
 		e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, true)
 		e.allocDim++
