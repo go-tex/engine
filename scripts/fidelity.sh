@@ -30,8 +30,19 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 # Prefer a real binary on PATH (CI installs them via apt); fall back to pkgx locally.
-tectonic() { command -v tectonic >/dev/null && command tectonic "$@" || pkgx tectonic "$@"; }
-pdftotext() { command -v pdftotext >/dev/null && command pdftotext "$@" || pkgx pdftotext "$@"; }
+# Pick each tool ONCE. Deciding per call ("run it, and on failure try pkgx")
+# would silently re-run a tool that had really failed, hiding the failure behind
+# a second, slower attempt.
+if command -v tectonic >/dev/null; then
+	tectonic() { command tectonic "$@"; }
+else
+	tectonic() { pkgx tectonic "$@"; }
+fi
+if command -v pdftotext >/dev/null; then
+	pdftotext() { command pdftotext "$@"; }
+else
+	pdftotext() { pkgx pdftotext "$@"; }
+fi
 
 echo "building gotex…"
 ( cd "$root" && GOWORK=off go build -o "$work/gotex" ./cmd/gotex ) || exit 1
@@ -54,6 +65,7 @@ norm() {
 check=0
 [ "${1:-}" = "--check" ] && check=1
 fail=0
+unchecked=0
 
 printf '%-8s %8s %8s %8s   %s\n' doc ref_words gotex common notes
 for tex in "$root"/testdata/fidelity/*.tex; do
@@ -67,10 +79,18 @@ for tex in "$root"/testdata/fidelity/*.tex; do
 	common=$(comm -12 "$work/$d.ref.txt" "$work/$d.got.txt" | wc -l | tr -d ' ')
 	missing=$(comm -23 "$work/$d.ref.txt" "$work/$d.got.txt" | tr '\n' ' ')
 
-	if [ "$d" = math ]; then
-		# vector math: require only that both engines produced a PDF with text.
+	# Tell the two engines' failures apart. gotex producing nothing is this
+	# repository's problem and fails the gate; the reference engine producing
+	# nothing (tectonic downloads what a document needs on first use, and that
+	# fetch can fail) leaves nothing to compare against — the document is then
+	# reported as unchecked, never as a pass, and never as gotex's fault.
+	if [ ! -s "$work/$d.got.pdf" ]; then
+		note="GOTEX DID NOT COMPILE"; fail=1
+	elif [ ! -s "$work/$d.pdf" ]; then
+		note="REFERENCE UNAVAILABLE — not compared"; unchecked=$((unchecked + 1))
+	elif [ "$d" = math ]; then
+		# vector math: both engines produced a PDF, which is all this doc checks.
 		note="math is vector (compile-only)"
-		[ -s "$work/$d.pdf" ] && [ -s "$work/$d.got.pdf" ] || { note="MATH DID NOT COMPILE"; fail=1; }
 	elif [ -n "$missing" ]; then
 		note="MISSING: $missing"; fail=1
 	else
@@ -79,8 +99,21 @@ for tex in "$root"/testdata/fidelity/*.tex; do
 	printf '%-8s %8s %8s %8s   %s\n' "$d" "$rw" "$gw" "$common" "$note"
 done
 
+total=$(ls "$root"/testdata/fidelity/*.tex | wc -l | tr -d ' ')
+compared=$((total - unchecked))
+if [ "$unchecked" -gt 0 ]; then
+	echo "fidelity: $unchecked of $total document(s) NOT compared — the reference engine produced nothing for them"
+fi
+
 if [ "$check" = 1 ]; then
-	[ "$fail" = 0 ] && echo "fidelity: OK — gotex reproduces the reference prose" \
-		|| echo "fidelity: FAILED — see MISSING lines above"
+	if [ "$fail" != 0 ]; then
+		echo "fidelity: FAILED — see the MISSING / DID NOT COMPILE lines above"
+	elif [ "$compared" = 0 ]; then
+		echo "fidelity: NOTHING CHECKED — no reference was available to compare against"
+	elif [ "$unchecked" -gt 0 ]; then
+		echo "fidelity: OK for the $compared document(s) compared"
+	else
+		echo "fidelity: OK — gotex reproduces the reference prose"
+	fi
 	exit "$fail"
 fi
