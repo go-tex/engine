@@ -35,6 +35,39 @@ func TestPageBuilderSplits(t *testing.T) {
 	}
 }
 
+// A class that computes its page height through a custom \output routine the
+// engine never runs (aastex/ltxgrid, revtex) leaves \vsize at 0. Breaking against
+// 0 would make every box its own overfull page — hundreds of near-empty pages.
+// The page builder falls back to a sane default height, so the material stays on
+// a handful of pages and every box survives.
+func TestPageBuilderZeroVsize(t *testing.T) {
+	e := New()
+	e.vsize = 0 // as a ltxgrid/aastex class leaves it
+	e.baselineskip = 0
+	e.lineskip = 0
+	for i := 0; i < 60; i++ {
+		e.Run(`\hbox{\vrule width5pt height8pt}\vskip2pt `)
+	}
+	pages := e.Pages()
+	if len(pages) == 0 {
+		t.Fatal("zero \\vsize produced no pages (content dropped)")
+	}
+	if len(pages) > 5 {
+		t.Fatalf("zero \\vsize exploded into %d pages for 60 small boxes; fallback height not applied", len(pages))
+	}
+	rules := 0
+	for _, p := range pages {
+		for _, n := range p.list {
+			if b, ok := n.(*boxNode); ok && len(b.list) == 1 {
+				rules++
+			}
+		}
+	}
+	if rules != 60 {
+		t.Errorf("expected all 60 boxes preserved, got %d", rules)
+	}
+}
+
 func TestVsizeParam(t *testing.T) {
 	e := New()
 	got, _ := e.Run(`\vsize=200pt \message{\the\vsize}`)

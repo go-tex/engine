@@ -73,8 +73,22 @@ func (e *Engine) Pages() []*boxNode {
 	return pages
 }
 
+// effectiveVsize is the page height used for breaking. It is \vsize, unless a
+// class left \vsize at 0 (or negative): journal classes that compute their page
+// height through a custom \output routine the engine does not run — aastex/ltxgrid,
+// revtex — never set \vsize, so it stays 0. Breaking against 0 makes every legal
+// breakpoint overfull, exploding a paper into hundreds of near-empty pages. Fall
+// back to the plain-TeX default page height so such a document paginates normally.
+func (e *Engine) effectiveVsize() int {
+	if e.vsize > 0 {
+		return e.vsize
+	}
+	return ptToSP(8.9 * 7227.0 / 100.0) // plain TeX \vsize = 8.9in
+}
+
 // findPageBreak returns the exclusive end index of the page beginning at start.
 func (e *Engine) findPageBreak(list []node, start int) int {
+	vsize := e.effectiveVsize()
 	h := 0
 	best := -1
 	least := math.Inf(1)
@@ -83,7 +97,7 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			if pen <= -10000 {
 				return i // forced break
 			}
-			b := pageBadness(h, e.vsize)
+			b := pageBadness(h, vsize)
 			if math.IsInf(b, 1) { // already overfull at a legal break
 				if best >= 0 {
 					return best
@@ -95,7 +109,7 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			}
 		}
 		h += vContribution(list[i])
-		if h > e.vsize && best >= 0 {
+		if h > vsize && best >= 0 {
 			return best
 		}
 	}
