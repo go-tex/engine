@@ -257,6 +257,7 @@ const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
 	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
 	tightLoopSteps = 2_000_000  // no-progress ceiling: expansion steps with no new base input consumed
+	maxArgToks     = 2_000_000  // single-argument ceiling: a runaway argument (TeX §338) is aborted here
 )
 
 // tolerant reports whether an unimplemented construct should be skipped rather
@@ -901,7 +902,31 @@ func (e *Engine) grabUntilBrace() []tok {
 			return arg
 		}
 		arg = append(arg, t)
+		if e.argOverrun(arg) {
+			return arg
+		}
 	}
+}
+
+// argOverrun reports a runaway argument (TeX §338): a macro argument grabbed
+// while no base input is consumed, past the point where that can be legitimate.
+// It charges each grabbed token to the same no-progress guard that catches a
+// self-expanding macro (stepOverrun): while grabbing reads new base input the
+// counter keeps resetting, so an ordinary — even very large — argument never
+// trips, but an argument assembled entirely from re-pushed tokens does. A class
+// whose kernel the engine models only in part supplies exactly such a case:
+// revtex/aastex adds \rvtx@enddocument@patch (parameter text "#1#2\@checkend#3")
+// to the enddocument hook, where it re-grabs and re-scans forever hunting for a
+// \@checkend{document} the engine's simplified \enddocument never emits — the
+// mouth already at end of file, so nothing advances while the loop churns. A hard
+// maxArgToks ceiling backs the guard up for the case a single grab balloons. When
+// either trips, tripRunaway unwinds the input so what was built still renders.
+func (e *Engine) argOverrun(arg []tok) bool {
+	if len(arg) > maxArgToks || e.stepOverrun() {
+		e.tripRunaway()
+		return true
+	}
+	return false
 }
 
 func (e *Engine) grabUndelimited() []tok {
@@ -920,6 +945,9 @@ func (e *Engine) grabDelimited(delim []tok) []tok {
 	var arg []tok
 	depth := 0
 	for {
+		if e.argOverrun(arg) {
+			return arg
+		}
 		t, ok := e.getNext()
 		if !ok {
 			return arg
@@ -1008,6 +1036,9 @@ func (e *Engine) grabGroup() []tok {
 			}
 		}
 		g = append(g, t)
+		if e.argOverrun(g) {
+			return g
+		}
 	}
 }
 
