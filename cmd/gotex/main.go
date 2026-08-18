@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	engine "github.com/go-tex/engine"
@@ -37,6 +38,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	margin := fs.Float64("margin", 72, "page margin in points")
 	date := fs.String("date", "", "date text bound to \\today")
 	lenient := fs.Bool("lenient", false, "skip undefined commands instead of aborting (best-effort preview of third-party documents)")
+	reportSkipped := fs.Bool("report-skipped", false, "after a lenient render, print (to stderr) the undefined commands that were skipped, most frequent first — surfaces the feature gaps a best-effort render hides")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -107,47 +109,78 @@ func run(args []string, stdout, stderr io.Writer) int {
 			outName = filepath.Join(*outdir, outName)
 		}
 	}
-	pages, err := writeOutput(src, outName, *format, opt)
+	pages, skipped, err := writeOutput(src, outName, *format, opt)
 	if err != nil {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "gotex: wrote %s (%d page%s)\n", outName, pages, plural(pages))
+	if *reportSkipped {
+		reportSkippedCommands(stderr, skipped)
+	}
 	return 0
 }
 
+// reportSkippedCommands prints the undefined commands a lenient render skipped,
+// most frequent first — the feature gaps that a best-effort compile hides. A
+// high-count entry is where a document is silently losing material.
+func reportSkippedCommands(w io.Writer, skipped map[string]int) {
+	if len(skipped) == 0 {
+		fmt.Fprintln(w, "gotex: no undefined commands skipped")
+		return
+	}
+	type kv struct {
+		name  string
+		count int
+	}
+	list := make([]kv, 0, len(skipped))
+	for name, count := range skipped {
+		list = append(list, kv{name, count})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].count != list[j].count {
+			return list[i].count > list[j].count
+		}
+		return list[i].name < list[j].name
+	})
+	fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(list))
+	for _, e := range list {
+		fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+	}
+}
+
 // writeOutput compiles src and emits it in the requested format, returning the
-// page count.
-func writeOutput(src []byte, name, format string, opt engine.Options) (int, error) {
+// page count and the tally of undefined commands the compile skipped.
+func writeOutput(src []byte, name, format string, opt engine.Options) (int, map[string]int, error) {
 	if format == "svg" {
-		pages, err := engine.CompileToSVGPages(src, opt)
+		pages, skipped, err := engine.CompileToSVGPagesReport(src, opt)
 		if err != nil {
-			return 0, err
+			return 0, skipped, err
 		}
 		if len(pages) <= 1 {
-			return len(pages), os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
+			return len(pages), skipped, os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
 		}
 		base := strings.TrimSuffix(name, ".svg")
 		for i, svg := range pages {
 			if err := os.WriteFile(fmt.Sprintf("%s-%d.svg", base, i+1), []byte(svg), 0644); err != nil {
-				return 0, err
+				return 0, skipped, err
 			}
 		}
-		return len(pages), nil
+		return len(pages), skipped, nil
 	}
 	f, err := os.Create(name)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	// Close deterministically and surface a write error in preference to the
 	// close error. Relying on a deferred Close alone would ignore its error and
 	// (on Windows) could keep the handle open past the caller's temp-dir
 	// cleanup; closing here releases the handle before writeOutput returns.
-	pages, err := engine.CompileToPDF(src, opt, f)
+	pages, skipped, err := engine.CompileToPDFReport(src, opt, f)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	return pages, err
+	return pages, skipped, err
 }
 
 // readIf reads a file, returning nil bytes (no error) when the path is empty.

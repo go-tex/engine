@@ -67,3 +67,26 @@ func TestRunOutdirLatexmkStyle(t *testing.T) {
 		t.Fatalf("bad PDF at outdir")
 	}
 }
+
+// -report-skipped lists the undefined commands a lenient render skipped, most
+// frequent first, so a silently-dropped command (which can take a document's whole
+// body with it) is visible instead of hidden.
+func TestRunReportSkipped(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}`+
+		`\weirdcmd{x} text \anotherundef \weirdcmd{y}\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	got := se.String()
+	if !bytes.Contains(se.Bytes(), []byte(`\weirdcmd`)) || !bytes.Contains(se.Bytes(), []byte(`\anotherundef`)) {
+		t.Errorf("report missing a skipped command; stderr=%q", got)
+	}
+	// \weirdcmd (twice) must be reported before \anotherundef (once).
+	if i, j := bytes.Index(se.Bytes(), []byte(`\weirdcmd`)), bytes.Index(se.Bytes(), []byte(`\anotherundef`)); i < 0 || j < 0 || i > j {
+		t.Errorf("skipped commands not ordered by frequency; stderr=%q", got)
+	}
+}
