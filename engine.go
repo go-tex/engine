@@ -1055,14 +1055,19 @@ func (e *Engine) grabUndelimited() []tok {
 	if !ok {
 		return nil
 	}
-	// Never swallow a file-end sentinel as an argument (see grabDelimited): a macro
-	// whose earlier delimited parameter ran away leaves the scan at the sentinel;
-	// grabbing it here would drop the file's end and desynchronise the input.
-	if isFileEndSentinel(t) {
-		e.argRunaway = true
-		e.back(t)
-		return nil
-	}
+	// An UNDELIMITED argument takes exactly one token and cannot run away, so the
+	// file-end sentinels are NOT special here — they are ordinary control sequences
+	// that LaTeX passes around by name. Refusing them broke the kernel's own
+	//
+	//	\AtEndOfPackage#1{\g@addto@macro\@endofpackagehook{#1}}
+	//
+	// whose FIRST argument is \@endofpackagehook: the call was abandoned, the
+	// {code} that followed executed on the spot instead of being stored, and the
+	// hook stayed empty. etoolbox registers its catcode restore that way
+	// (\AtEndOfPackage{\etb@catcodes…}), so | kept the catcode 3 etoolbox gives it,
+	// beamerbasedecode's |-delimited \beamer@@decodefind never matched, and every
+	// beamer document rendered zero pages. The guard belongs to grabDelimited,
+	// where a scan really can run past the end of its file.
 	if t.cat == catBegin && !t.cs_ {
 		return e.grabGroup()
 	}
