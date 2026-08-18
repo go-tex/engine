@@ -34,6 +34,27 @@ func TestMathAliases(t *testing.T) {
 	}
 }
 
+// Symbols and double-struck alphabets an arXiv corpus census found were dropping
+// whole equations, now resolved by the go-tex/math layer (v0.18.0): \mathbbm{1}
+// (1045 papers), \intercal (225), \dotplus, \Coloneqq, \mathbbmss/\mathbbb. Each
+// must typeset through the engine instead of landing in MathDropped.
+func TestMathCorpusCensusSymbols(t *testing.T) {
+	src := `\documentclass{article}\begin{document}` +
+		`$\mathbbm{1}_{\{x>0\}}$ $A^\intercal$ $a\dotplus b$ ` +
+		`$a\Coloneqq b$ $\mathbbmss{X}$ $\mathbbb{Z}$` +
+		`\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md := e.Diagnostics().MathDropped; len(md) != 0 {
+		t.Errorf("census symbols still dropped whole equations: %v", md)
+	}
+	if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
+		t.Error("rendered no glyph paths")
+	}
+}
+
 // \DeclarePairedDelimiter (mathtools) defines a one-argument delimiter macro; real
 // papers use it for \ceil \floor \abs \norm \set. It must expand textually so the
 // math resolver renders it instead of dropping the equation.
