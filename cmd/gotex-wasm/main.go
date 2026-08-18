@@ -85,11 +85,19 @@ func diagnosticsJS(d engine.Diagnostics) map[string]any {
 	for name, count := range d.Skipped {
 		skipped[name] = count
 	}
+	// Undefined environments are tracked apart from skipped commands: \begin{env}
+	// of a missing environment resolves to a silent \relax via \csname and never
+	// counts as an undefined command.
+	undefinedEnvs := make(map[string]any, len(d.UndefinedEnvs))
+	for name, count := range d.UndefinedEnvs {
+		undefinedEnvs[name] = count
+	}
 	return map[string]any{
-		"skipped":    skipped,
-		"runaway":    d.Runaway,
-		"openGroups": d.OpenGroups,
-		"pageCapHit": d.PageCapHit,
+		"skipped":       skipped,
+		"runaway":       d.Runaway,
+		"openGroups":    d.OpenGroups,
+		"pageCapHit":    d.PageCapHit,
+		"undefinedEnvs": undefinedEnvs,
 	}
 }
 

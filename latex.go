@@ -16,7 +16,7 @@ import "strings"
 // the Plain macros).
 const MiniLaTeXKernel = `
 \catcode64=11
-\def\begin#1{\csname #1\endcsname}
+\def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
 \def\end#1{\csname end#1\endcsname}
 \def\document{\catcode64=12 }
 \def\enddocument{\par\vfill\penalty-10000 }

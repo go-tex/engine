@@ -136,17 +136,40 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.PageCapHit {
 		fmt.Fprintln(w, "gotex: WARNING pagination hit the page cap — a page-count explosion")
 	}
+	// Undefined environments never show up as skipped commands: \begin{env} routes
+	// through \csname, which turns a missing \env into a silent \relax. Report them
+	// on their own so an unimplemented environment (whose body was then typeset in
+	// the wrong mode) is not mistaken for "nothing skipped".
+	if len(d.UndefinedEnvs) > 0 {
+		list := sortedCounts(d.UndefinedEnvs)
+		fmt.Fprintf(w, "gotex: %d undefined environment(s) — \\begin{…} of an environment the engine lacks (most frequent first):\n", len(list))
+		for _, e := range list {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 		return
 	}
-	type kv struct {
-		name  string
-		count int
+	list := sortedCounts(d.Skipped)
+	fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(list))
+	for _, e := range list {
+		fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
 	}
-	list := make([]kv, 0, len(d.Skipped))
-	for name, count := range d.Skipped {
-		list = append(list, kv{name, count})
+}
+
+// nameCount pairs a name with how many times it occurred, for sorted reporting.
+type nameCount struct {
+	name  string
+	count int
+}
+
+// sortedCounts flattens a name→count map into a slice ordered by descending count,
+// ties broken by name, so the report leads with where the most material was lost.
+func sortedCounts(m map[string]int) []nameCount {
+	list := make([]nameCount, 0, len(m))
+	for name, count := range m {
+		list = append(list, nameCount{name, count})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].count != list[j].count {
@@ -154,10 +177,7 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 		}
 		return list[i].name < list[j].name
 	})
-	fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(list))
-	for _, e := range list {
-		fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
-	}
+	return list
 }
 
 // writeOutput compiles src and emits it in the requested format, returning the
