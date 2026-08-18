@@ -828,10 +828,33 @@ func (e *Engine) doString() {
 		return
 	}
 	if t.cs_ {
-		e.pushString("\\" + t.cs)
+		e.pushString(e.escapeStr() + t.cs)
 	} else {
 		e.pushString(string(t.ch))
 	}
+}
+
+// escapeStr is what TeX puts in front of a control-sequence NAME when it prints
+// one — \string, \meaning, \message of a \the, an error report. It is the
+// character \escapechar, NOT a hardwired backslash, and NOTHING AT ALL when
+// \escapechar is outside 0..255 (TeX §63).
+//
+// The engine printed a backslash always, which is wrong wherever code sets
+// \escapechar to build a string it will later COMPARE. beamer does exactly that:
+//
+//	\begingroup \escapechar=-1 \xdef\beamer@stopmode{\string\\mode} \endgroup
+//
+// It wants the six characters "\mode" to recognise that line when it reads the
+// document verbatim; it got "\\mode" instead, so \beamer@processline — the reader
+// that skips material outside the current mode — never recognised its stop line
+// and LOOPED, eating the rest of the file and the whole document after it. That is
+// why a real beamer talk rendered zero pages while the emulation rendered three.
+func (e *Engine) escapeStr() string {
+	c := e.escapechar()
+	if c < 0 || c > 255 {
+		return ""
+	}
+	return string(rune(c))
 }
 
 func (e *Engine) doThe() {
@@ -1847,12 +1870,12 @@ func (e *Engine) meaningString(t tok) string {
 	case mMacro:
 		return "macro:" + e.toksToString(m.params) + "->" + e.toksToString(m.body)
 	case mPrim:
-		return "\\" + m.name
+		return e.escapeStr() + m.name
 	case mCharDef:
 		if m.mathChar {
-			return "\\mathchar\"" + itoaHex(m.code)
+			return e.escapeStr() + "mathchar\"" + itoaHex(m.code)
 		}
-		return "\\char\"" + itoaHex(m.code)
+		return e.escapeStr() + "char\"" + itoaHex(m.code)
 	case mLetChar:
 		return catName(m.cat) + " " + string(m.ch)
 	}

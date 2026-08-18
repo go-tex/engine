@@ -244,6 +244,9 @@ type Engine struct {
 	// endlineReg is the \count register \endlinechar is bound to (see
 	// loadTeXParams), cached because the mouth reads it at every line end.
 	endlineReg int
+	// escapeReg is the \count register \escapechar is bound to; read every time a
+	// control-sequence name is printed (see escapeStr).
+	escapeReg int
 	// condOpen counts the conditionals whose \else/\fi is still to come, and
 	// condMarks records that count at the start of each conditional-operand scan.
 	// Together they decide when TeX's "insert \relax" rule applies — see
@@ -638,6 +641,15 @@ func (e *Engine) rawAt(i int) (rune, int) {
 
 // endlinechar is the character TeX appends to every input line — 13 (^^M) unless
 // a package changes it. A value outside 0..255 means "append nothing".
+// escapechar is the character TeX prints in front of a control-sequence name —
+// 92 ("\") unless a package changes it. Outside 0..255 it prints nothing.
+func (e *Engine) escapechar() int {
+	if e.escapeReg < 0 || e.escapeReg >= len(e.count) {
+		return '\\'
+	}
+	return e.count[e.escapeReg]
+}
+
 func (e *Engine) endlinechar() int {
 	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
 		return '\r'
