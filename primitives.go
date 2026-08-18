@@ -1510,6 +1510,24 @@ func (e *Engine) loadMore() {
 	e.prim("endpgfpicture", func(e *Engine) {})
 	e.prim("tikzcd", func(e *Engine) { e.doGobbleEnv("tikzcd") })
 	e.prim("endtikzcd", func(e *Engine) {})
+	// comment package: \begin{comment}…\end{comment} is discarded ENTIRELY (no
+	// placeholder — a comment is invisible). \excludecomment{name} makes `name`
+	// a silently-gobbled environment too; \includecomment{name} makes its body
+	// typeset (begin/end become no-ops so the content just flows). 1616 corpus
+	// papers use \begin{comment}; typesetting the body instead of gobbling it
+	// leaks stray \item/\\/unbalanced braces and can swallow the whole page.
+	e.registerExcludedComment("comment")
+	e.prim("excludecomment", func(e *Engine) {
+		if n := e.grabEnvNameArg(); n != "" {
+			e.registerExcludedComment(n)
+		}
+	})
+	e.prim("includecomment", func(e *Engine) {
+		if n := e.grabEnvNameArg(); n != "" {
+			e.prim(n, func(e *Engine) {})
+			e.prim("end"+n, func(e *Engine) {})
+		}
+	})
 	e.prim("verb", func(e *Engine) { e.doVerb() })
 	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
 	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
