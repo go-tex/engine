@@ -109,23 +109,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 			outName = filepath.Join(*outdir, outName)
 		}
 	}
-	pages, skipped, err := writeOutput(src, outName, *format, opt)
+	pages, diag, err := writeOutput(src, outName, *format, opt)
 	if err != nil {
 		fmt.Fprintf(stderr, "gotex: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "gotex: wrote %s (%d page%s)\n", outName, pages, plural(pages))
 	if *reportSkipped {
-		reportSkippedCommands(stderr, skipped)
+		reportDiagnostics(stderr, diag)
 	}
 	return 0
 }
 
-// reportSkippedCommands prints the undefined commands a lenient render skipped,
-// most frequent first — the feature gaps that a best-effort compile hides. A
-// high-count entry is where a document is silently losing material.
-func reportSkippedCommands(w io.Writer, skipped map[string]int) {
-	if len(skipped) == 0 {
+// reportDiagnostics prints what a lenient render may have quietly lost: the
+// undefined commands it skipped (most frequent first — a high count is where
+// material is being dropped) and the silent-swallow alarms (a runaway that tripped,
+// groups left open at the end, a page-count explosion) that no skipped command
+// reveals.
+func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
+	if d.Runaway {
+		fmt.Fprintln(w, "gotex: WARNING runaway guard tripped — a loop or exponential scan was aborted (content may be lost)")
+	}
+	if d.OpenGroups > 0 {
+		fmt.Fprintf(w, "gotex: WARNING %d group(s) still open at end of document — an unbalanced { or \\begingroup (a likely swallow)\n", d.OpenGroups)
+	}
+	if d.PageCapHit {
+		fmt.Fprintln(w, "gotex: WARNING pagination hit the page cap — a page-count explosion")
+	}
+	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 		return
 	}
@@ -133,8 +144,8 @@ func reportSkippedCommands(w io.Writer, skipped map[string]int) {
 		name  string
 		count int
 	}
-	list := make([]kv, 0, len(skipped))
-	for name, count := range skipped {
+	list := make([]kv, 0, len(d.Skipped))
+	for name, count := range d.Skipped {
 		list = append(list, kv{name, count})
 	}
 	sort.Slice(list, func(i, j int) bool {
@@ -150,37 +161,37 @@ func reportSkippedCommands(w io.Writer, skipped map[string]int) {
 }
 
 // writeOutput compiles src and emits it in the requested format, returning the
-// page count and the tally of undefined commands the compile skipped.
-func writeOutput(src []byte, name, format string, opt engine.Options) (int, map[string]int, error) {
+// page count and the compile's Diagnostics.
+func writeOutput(src []byte, name, format string, opt engine.Options) (int, engine.Diagnostics, error) {
 	if format == "svg" {
-		pages, skipped, err := engine.CompileToSVGPagesReport(src, opt)
+		pages, diag, err := engine.CompileToSVGPagesDiag(src, opt)
 		if err != nil {
-			return 0, skipped, err
+			return 0, diag, err
 		}
 		if len(pages) <= 1 {
-			return len(pages), skipped, os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
+			return len(pages), diag, os.WriteFile(name, []byte(firstOr(pages, "")), 0644)
 		}
 		base := strings.TrimSuffix(name, ".svg")
 		for i, svg := range pages {
 			if err := os.WriteFile(fmt.Sprintf("%s-%d.svg", base, i+1), []byte(svg), 0644); err != nil {
-				return 0, skipped, err
+				return 0, diag, err
 			}
 		}
-		return len(pages), skipped, nil
+		return len(pages), diag, nil
 	}
 	f, err := os.Create(name)
 	if err != nil {
-		return 0, nil, err
+		return 0, engine.Diagnostics{}, err
 	}
 	// Close deterministically and surface a write error in preference to the
 	// close error. Relying on a deferred Close alone would ignore its error and
 	// (on Windows) could keep the handle open past the caller's temp-dir
 	// cleanup; closing here releases the handle before writeOutput returns.
-	pages, skipped, err := engine.CompileToPDFReport(src, opt, f)
+	pages, diag, err := engine.CompileToPDFDiag(src, opt, f)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	return pages, skipped, err
+	return pages, diag, err
 }
 
 // readIf reads a file, returning nil bytes (no error) when the path is empty.

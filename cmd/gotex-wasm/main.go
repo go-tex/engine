@@ -56,7 +56,7 @@ func toSVG(_ js.Value, args []js.Value) any {
 	if len(args) > 1 {
 		opt = optionsFrom(args[1])
 	}
-	pages, err := engine.CompileToSVGPages([]byte(args[0].String()), opt)
+	pages, diag, err := engine.CompileToSVGPagesDiag([]byte(args[0].String()), opt)
 	if err != nil {
 		// Keep `error` a string for existing callers; add the structured source
 		// location (1-based line, 0-based column) when the failure carries one so
@@ -74,7 +74,23 @@ func toSVG(_ js.Value, args []js.Value) any {
 	for i, p := range pages {
 		out[i] = p
 	}
-	return map[string]any{"pages": out}
+	return map[string]any{"pages": out, "diagnostics": diagnosticsJS(diag)}
+}
+
+// diagnosticsJS turns the compile Diagnostics into a plain JS object for the
+// playground's log panel: the undefined commands it skipped and the silent-swallow
+// flags (a runaway that tripped, groups left open, a page-count explosion).
+func diagnosticsJS(d engine.Diagnostics) map[string]any {
+	skipped := make(map[string]any, len(d.Skipped))
+	for name, count := range d.Skipped {
+		skipped[name] = count
+	}
+	return map[string]any{
+		"skipped":    skipped,
+		"runaway":    d.Runaway,
+		"openGroups": d.OpenGroups,
+		"pageCapHit": d.PageCapHit,
+	}
 }
 
 func version(js.Value, []js.Value) any { return "gotex-wasm (github.com/go-tex/engine)" }
