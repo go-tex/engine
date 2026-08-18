@@ -346,6 +346,15 @@ const LaTeX2eClassKernel = `
 \def\scaleto#1#2{#1}
 \def\@fontswitch#1#2{#2}
 \def\@nomath#1{}
+% \not@math@alphabet{switch}{mathversion} guards an NFSS font switch against use in
+% math mode: it consumes the switch and its math form and, in math mode only,
+% warns. It MUST grab both arguments even in text mode — the standard
+% \DeclareRobustCommand*{\bfseries}{\not@math@alphabet\bfseries\mathbf …} redefines
+% \bfseries with a reference to itself as the first argument; undefined,
+% \not@math@alphabet is skipped and that \bfseries re-executes, recursing forever
+% and swallowing the document (incl_settings.tex's \bfseries redefinition does
+% exactly this).
+\def\not@math@alphabet#1#2{\relax\ifmmode\@nomath#1\fi}
 % \DeclareOldFontCommand\rm{\normalfont\rmfamily}{\mathrm}: real LaTeX binds the
 % one-token font command to a text and a math form. In this engine \rm/\bf/\it/…
 % are ALREADY the font switches, and \normalfont/\rmfamily are defined above as
