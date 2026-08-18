@@ -4,17 +4,17 @@
 package engine
 
 import (
-	"github.com/go-tex/hyphenation"
-	"github.com/go-tex/linebreak"
+	"github.com/go-typeset/hyphenation"
+	"github.com/go-typeset/linebreak"
 )
 
 // Two pieces of this engine are algorithms in their own right, useful to anyone
 // laying out text and not only to a TeX engine, so they now live in their own
 // repositories and this file is the seam:
 //
-//   - github.com/go-tex/linebreak — Knuth–Plass optimal line breaking: the
+//   - github.com/go-typeset/linebreak — Knuth–Plass optimal line breaking: the
 //     box/glue/penalty model and the paragraph builder.
-//   - github.com/go-tex/hyphenation — Liang's algorithm: where a hyphen may fall
+//   - github.com/go-typeset/hyphenation — Liang's algorithm: where a hyphen may fall
 //     in a word, reading TeX's own pattern files.
 //
 // The aliases below keep the engine's own code reading as it did (Item, Line,
