@@ -3,7 +3,10 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // \textsuperscript / \textsubscript are the user-level scripts (only the internal
 // \@textsuperscript was defined). Undefined, they were skipped and their content —
@@ -22,5 +25,27 @@ func TestTextSuperscriptSubscriptNotDropped(t *testing.T) {
 	}
 	if !hasMathNode(e.mvl) && !hasMathNode(e.parList) {
 		t.Error("no script (math) box placed for \\textsuperscript/\\textsubscript")
+	}
+}
+
+// \text used in TEXT mode (amsmath's \text is handled inside math by the math
+// layer, but a \text{…} in ordinary text reached execCS undefined and dropped its
+// words). It now typesets its argument in place; math \text is unaffected because
+// the math layer reads the raw source, not this macro.
+func TestTextInTextModeKeepsContent(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\hsize=300pt A\text{BCD}E`); err != nil {
+		t.Fatal(err)
+	}
+	if e.skippedCS["text"] != 0 {
+		t.Fatalf("\\text was skipped as undefined in text mode: %v", e.skippedCS)
+	}
+	var b strings.Builder
+	collectChars(e.mvl, &b)
+	collectChars(e.parList, &b)
+	if got := b.String(); !strings.Contains(got, "BCD") {
+		t.Errorf("\\text dropped its argument in text mode; got %q", got)
 	}
 }
