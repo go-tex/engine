@@ -115,19 +115,31 @@ var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
 // realPGF reports whether the real pgf/TikZ sources may be loaded.
 func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 
-// realBeamer reports whether \documentclass{beamer} may load the REAL beamer.cls
-// (with the beamer sources, etoolbox and keyval on TEXINPUTS/GOTEX_TEXMF) instead
-// of the built-in emulation in beamer.go.
+// realBeamer reports whether \documentclass{beamer} loads the REAL beamer.cls
+// rather than the built-in emulation in beamer.go.
 //
-// Where this stands, honestly: the real class now LOADS — the whole beamer base,
-// its overlay decoder and its option machinery run with no undefined control
-// sequence, which is what the kernel work in this file, hooks.go and
-// kernelhelpers.go bought. It does not yet TYPESET a frame: beamer builds each
-// slide into a box and ships it out through machinery this engine's page builder
-// does not provide, so a talk still comes out nearly blank. Until that is done
-// the emulation (frames→pages, which renders the content) stays the default, and
-// this variable is how the real path is worked on.
-func realBeamer() bool { return os.Getenv("GOTEX_BEAMER") != "" }
+// It is decided by whether the class file can be RESOLVED — from the document's
+// directory, TEXINPUTS/GOTEX_TEXMF, the host's Options.Resolve, or the embedded
+// set. There is nothing to opt into: a caller that supplies beamer gets beamer,
+// and one that does not gets the emulation, which is what the fallback in
+// doDocumentClass already promised.
+//
+// It used to be gated on GOTEX_BEAMER because the real class loaded but was
+// believed not to typeset — "a talk still comes out nearly blank". That was true
+// when it was written and is not any more; the grabUndelimited fix in v0.160.0
+// is what changed it. Measured over 10025 real talks:
+//
+//	real beamer.cls   99.9% rendered   87209 pages   (~8.7 per talk)
+//	emulation         92.3% rendered   14162 pages   (~1.4 per talk)
+//
+// GOTEX_BEAMER=0 still forces the emulation, for comparing the two paths.
+func (e *Engine) realBeamer() bool {
+	if os.Getenv("GOTEX_BEAMER") == "0" {
+		return false
+	}
+	_, _, ok := e.findTeXFile("beamer", []string{".cls"})
+	return ok
+}
 
 // emulateOnly reports whether a package must use the built-in stubs rather than
 // its real file.
@@ -303,7 +315,7 @@ func (e *Engine) doDocumentClass() {
 		return
 	}
 	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
-	if name == "beamer" && !realBeamer() {
+	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
 		return
 	}
