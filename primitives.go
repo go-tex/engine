@@ -1305,6 +1305,8 @@ func (e *Engine) loadMore() {
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[
 	e.prim(")", func(e *Engine) {})                                 // consumed by \(
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
+	e.prim("equation*", func(e *Engine) { e.doEquationStar("equation*") })
+	e.prim("endequation*", func(e *Engine) {})
 	// amsmath multi-line displays: align/eqnarray/gather/multline and starred forms.
 	e.prim("align", func(e *Engine) { e.doAlignEnv("align", true, alignPairs) })
 	e.prim("align*", func(e *Engine) { e.doAlignEnv("align*", false, alignPairs) })
