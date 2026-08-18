@@ -90,3 +90,19 @@ func TestRunReportSkipped(t *testing.T) {
 		t.Errorf("skipped commands not ordered by frequency; stderr=%q", got)
 	}
 }
+
+// -report-skipped also surfaces the silent-swallow alarms: a runaway that tripped
+// is reported even though no command was "undefined".
+func TestRunReportRunawayWarning(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}\def\lp{\lp}\lp\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	if !bytes.Contains(se.Bytes(), []byte("runaway")) {
+		t.Errorf("report did not warn about the runaway; stderr=%q", se.String())
+	}
+}

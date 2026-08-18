@@ -1458,6 +1458,38 @@ func (e *Engine) skipUndefined(name string) {
 // It lets a caller surface "these commands were dropped" after a preview compile.
 func (e *Engine) SkippedCommands() map[string]int { return e.skippedCS }
 
+// Diagnostics summarises what a lenient compile may have quietly lost. Beyond the
+// undefined commands it skipped, it flags the signals of a SILENT swallow — content
+// dropped with no undefined command at all: a runaway loop or exponential scan that
+// tripped the guard, groups left open at the end of the document (an unbalanced {
+// or \begingroup, the fingerprint of an eager-box or delimited-scan swallow), and a
+// pagination explosion capped at maxPages. Aggregated over a corpus these surface
+// problems SkippedCommands cannot see.
+type Diagnostics struct {
+	Skipped    map[string]int // undefined control sequences, by count (internal markers removed)
+	Runaway    bool           // the expansion/argument runaway guard tripped
+	OpenGroups int            // groups still open at end of the document (a likely swallow)
+	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+}
+
+// Diagnostics returns the compile's Diagnostics (see the type). Internal markers
+// (the page-cap tally and the like) are lifted out of Skipped into their own flags.
+func (e *Engine) Diagnostics() Diagnostics {
+	skipped := map[string]int{}
+	for k, v := range e.skippedCS {
+		if strings.HasPrefix(k, "gotex@") {
+			continue // internal markers, surfaced as flags instead of fake commands
+		}
+		skipped[k] = v
+	}
+	return Diagnostics{
+		Skipped:    skipped,
+		Runaway:    e.runaway,
+		OpenGroups: len(e.groups),
+		PageCapHit: e.skippedCS["gotex@pagelimit"] > 0,
+	}
+}
+
 // stepOverrun tallies one expansion step and reports whether the runaway guard
 // should trip. Two independent conditions fire it: the absolute ceiling
 // (stepLimit — a coarse backstop) and the tight-loop guard. The latter measures

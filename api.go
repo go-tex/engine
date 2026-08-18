@@ -178,6 +178,29 @@ func CompileToSVGPagesReport(src []byte, opt Options) ([]string, map[string]int,
 	return e.RenderPages(e.renderMargin(opt.margin())), e.SkippedCommands(), nil
 }
 
+// CompileToSVGPagesDiag is CompileToSVGPages that also returns the compile's
+// Diagnostics (undefined commands plus the silent-swallow flags — see Diagnostics),
+// for a preview UI's log panel or a corpus report.
+func CompileToSVGPagesDiag(src []byte, opt Options) ([]string, Diagnostics, error) {
+	e, err := compile(src, opt)
+	if err != nil {
+		return nil, Diagnostics{}, err
+	}
+	return e.RenderPages(e.renderMargin(opt.margin())), e.Diagnostics(), nil
+}
+
+// CompileToPDFDiag is CompileToPDF that also returns the compile's Diagnostics.
+func CompileToPDFDiag(src []byte, opt Options, w io.Writer) (int, Diagnostics, error) {
+	e, err := compile(src, opt)
+	if err != nil {
+		return 0, Diagnostics{}, err
+	}
+	if err := e.RenderPDF(w, e.renderMargin(opt.margin())); err != nil {
+		return 0, e.Diagnostics(), err
+	}
+	return len(e.Pages()), e.Diagnostics(), nil
+}
+
 // CompileToPDFReport is CompileToPDF that also returns the skipped-command tally
 // (see CompileToSVGPagesReport / SkippedCommands).
 func CompileToPDFReport(src []byte, opt Options, w io.Writer) (int, map[string]int, error) {
