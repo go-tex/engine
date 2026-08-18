@@ -37,6 +37,26 @@ type Options struct {
 	// an editor preview shows the typesettable content instead of one hard error.
 	// The default (false) is strict: an undefined cs aborts, as TeX does.
 	Lenient bool
+
+	// Resolve supplies class, package and \input files that the process cannot
+	// read from disk, so a host can hand the engine a texmf tree it holds in
+	// memory. It is given the file name the document asked for, already carrying
+	// an extension (article.cls, beamerbasetitle.sty, pgfcore.code.tex), and
+	// returns the file's bytes.
+	//
+	// It is consulted AFTER the document's own directory and TEXINPUTS/
+	// GOTEX_TEXMF — a file next to the document still overrides — and BEFORE the
+	// small base set embedded in the binary, so a host that supplies a real
+	// article.cls gets its own rather than the built-in one.
+	//
+	// This is what a build with no filesystem needs: in js/wasm every os.ReadFile
+	// fails, so without it a browser host can compile nothing beyond the embedded
+	// set. Such a host fetches the files it needs (driven by a scan of the source
+	// for \usepackage and friends), keeps them in a map, and answers from it —
+	// the engine's own reading stays synchronous.
+	//
+	// nil (the default) means no host resolver: disk and the embedded set only.
+	Resolve func(name string) ([]byte, bool)
 }
 
 func (o Options) size() int {
@@ -65,6 +85,7 @@ func NewDocument(opt Options) (*Engine, error) {
 // after the macro layers so \rm/\bf/\it win over the LaTeX kernel's no-op stubs.
 func buildEngine(opt Options, latex bool) (*Engine, error) {
 	e := New()
+	e.resolve = opt.Resolve
 	if !opt.NoPlain {
 		if err := e.LoadPlain(); err != nil {
 			return nil, fmt.Errorf("texengine: loading macros: %w", err)

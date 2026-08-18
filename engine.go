@@ -119,6 +119,10 @@ type Engine struct {
 	save   []saveItem
 	groups []groupFrame // one frame per open group, innermost last
 
+	// resolve is Options.Resolve: a host-supplied source of texmf files, tried
+	// after the search path and before the embedded set (see hostTeXFile).
+	resolve func(name string) ([]byte, bool)
+
 	out    strings.Builder   // \message output
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
 	// typed cross-references (see typedrefs.go): recorded beside labels at \label

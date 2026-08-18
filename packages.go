@@ -76,8 +76,8 @@ func (e *Engine) findTeXFile(name string, exts []string) ([]byte, string, bool) 
 				return data, filepath.Join(d, c), true
 			}
 		}
-		if data, ok := embeddedTeXFile(c); ok {
-			return data, "<embedded>/" + c, true
+		if data, path, ok := e.hostTeXFile(c); ok {
+			return data, path, true
 		}
 	}
 	return nil, "", false

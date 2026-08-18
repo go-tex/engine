@@ -14,6 +14,24 @@ import "embed"
 //go:embed texmf/*.cls texmf/*.clo texmf/*.def
 var embeddedTeXMF embed.FS
 
+// hostTeXFile resolves one exact file name against the two sources that do not
+// need a filesystem: the host's Options.Resolve first, then the base set embedded
+// in the binary. Keeping the order in one place is what stops the two call sites
+// (\usepackage/\documentclass in packages.go, \input in io.go) from drifting
+// apart — a package found through the host whose own \input'ed parts were not
+// would load only its first file.
+func (e *Engine) hostTeXFile(name string) ([]byte, string, bool) {
+	if e.resolve != nil {
+		if data, ok := e.resolve(name); ok {
+			return data, "<host>/" + name, true
+		}
+	}
+	if data, ok := embeddedTeXFile(name); ok {
+		return data, "<embedded>/" + name, true
+	}
+	return nil, "", false
+}
+
 // embeddedTeXFile returns a base class/package file shipped in the binary, if the
 // embedded set has one by that exact name.
 func embeddedTeXFile(name string) ([]byte, bool) {

@@ -214,7 +214,7 @@ func (e *Engine) readInput(file string) ([]byte, error) {
 			}
 			err = e2
 		}
-		if data, ok := embeddedTeXFile(c); ok {
+		if data, _, ok := e.hostTeXFile(c); ok {
 			return data, nil
 		}
 	}
