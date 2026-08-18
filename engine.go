@@ -1071,6 +1071,15 @@ func isFileEndSentinel(t tok) bool {
 	return false
 }
 
+// noteExtraBrace records TeX's "Argument of \x has an extra }" the way the engine
+// records its other recoveries, so a document that trips it is not silently wrong.
+func (e *Engine) noteExtraBrace() {
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS["Argument has an extra }"]++
+}
+
 func (e *Engine) grabDelimited(delim []tok) []tok {
 	var arg []tok
 	depth := 0
@@ -1103,6 +1112,22 @@ func (e *Engine) grabDelimited(delim []tok) []tok {
 			// changed the catcode of \ (beamer's line-by-line comment skipper does
 			// \@makeother\\) prints it as literal characters onto the page.
 			e.argRunaway = true
+			e.back(t)
+			return nil
+		}
+		if depth == 0 && t.cat == catEnd && !t.cs_ {
+			// An UNMATCHED } can never be part of an argument. Real TeX stops here
+			// with "Argument of \x has an extra }" (checked against tectonic); this
+			// engine used to take the brace INTO the argument, where it went on to
+			// close a group it did not open. That is how a brace counter drifts: the
+			// box builder (buildBoxList, stomach.go) raises its depth on a { it sees
+			// and never gets the } back, so the box's own closing brace is spent on
+			// the wrong level and the loop reads past the end of the box.
+			//
+			// The brace goes back to whoever is reading, and the call is abandoned
+			// the same way a runaway argument is (see argRunaway just above).
+			e.argRunaway = true
+			e.noteExtraBrace()
 			e.back(t)
 			return nil
 		}
