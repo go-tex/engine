@@ -107,3 +107,27 @@ see \eqref{eq:a}.`
 		t.Errorf("\\eqref did not typeset (1); got %q", b.String())
 	}
 }
+
+// \begin{equation*} renders the body as an UNNUMBERED display: a math box is placed,
+// the environment is not skipped, and no "(N)" is printed. Undefined, the whole
+// environment was skipped and the \frac/\sum inside dropped as unknown text.
+func TestEquationStarUnnumbered(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	src := `\hsize=300pt \begin{equation*} \frac{x}{y} + a \end{equation*}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if e.skippedCS["equation*"] != 0 {
+		t.Fatal("equation* was skipped as an undefined environment")
+	}
+	if !hasMathNode(e.mvl) {
+		t.Fatal("no math box placed for equation*")
+	}
+	var b strings.Builder
+	collectChars(e.mvl, &b)
+	if strings.ContainsAny(b.String(), "()") {
+		t.Errorf("equation* printed a number %q; a starred equation is unnumbered", b.String())
+	}
+}

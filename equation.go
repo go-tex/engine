@@ -54,6 +54,31 @@ func (e *Engine) doEquationBody() {
 	e.contribute(hpackSP(row, packTo, e.hsize))
 }
 
+// doEquationStar handles \begin{equation*} (an unnumbered single-line display): the
+// same centred display as \begin{equation} but with no automatic number and no
+// counter step — the amsmath equivalent of \[ … \]. A \tag still prints and a
+// \label captures it. Without this, \begin{equation*} is an undefined environment:
+// it is skipped and every \frac / \sum / \left inside is dropped as an unknown
+// text-mode command.
+func (e *Engine) doEquationStar(name string) {
+	src, meta := e.collectMathUntilEnd(name)
+	meta.numbered = false // a starred environment never prints an automatic number
+	m := e.makeMath(src, true)
+	if meta.tag != "" {
+		for _, k := range meta.labels {
+			e.setLabel(k, meta.tag)
+			e.recordRefMeta(k)
+		}
+	}
+	e.endParagraph()
+	fil := glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}
+	row := []node{fil, m, fil}
+	if box := e.eqNumberBox(meta, ""); box != nil { // only a \tag prints for a starred env
+		row = append(row, box)
+	}
+	e.contribute(hpackSP(row, packTo, e.hsize))
+}
+
 // eqNumberBox builds the number box for a display line: the \tag (parenthesised
 // unless starred), else the automatic "(N)" when numbered, else nothing.
 func (e *Engine) eqNumberBox(meta eqMeta, autoNum string) *boxNode {
