@@ -172,6 +172,13 @@ const LaTeX2eClassLead = `
 \long\def\@xdblarg#1#2{#1[{#2}]{#2}}
 \def\@dottedtocline#1#2#3#4#5{}
 \def\@textsuperscript#1{#1}
+% \textsuperscript / \textsubscript: the user-level commands (only the internal
+% \@textsuperscript was defined). Undefined, they were skipped and their content —
+% the "2" in mc\textsuperscript{2}, footnote marks, "st"/"nd" ordinals — silently
+% dropped. Render through the math layer as a raised/lowered script, which both
+% preserves the text and sets it small and shifted as LaTeX does.
+\def\textsuperscript#1{\ensuremath{^{#1}}}
+\def\textsubscript#1{\ensuremath{_{#1}}}
 % \@thanks accumulates \thanks footnotes for \maketitle; \thanks is best-effort
 % (its note is dropped). Defining them keeps a real class's \maketitle from
 % aborting on \@thanks. (\@starttoc is a Go primitive bridging to the engine's
