@@ -123,9 +123,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // reportDiagnostics prints what a lenient render may have quietly lost: the
 // undefined commands it skipped (most frequent first — a high count is where
-// material is being dropped) and the silent-swallow alarms (a runaway that tripped,
-// groups left open at the end, a page-count explosion) that no skipped command
-// reveals.
+// material is being dropped), the math equations the go-tex/math layer dropped
+// (invisible content loss INSIDE a formula), and the silent-swallow alarms (a runaway
+// that tripped, groups left open at the end, a page-count explosion) that no skipped
+// command reveals.
 func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.Runaway {
 		fmt.Fprintln(w, "gotex: WARNING runaway guard tripped — a loop or exponential scan was aborted (content may be lost)")
@@ -138,15 +139,35 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
-		return
+	} else {
+		// Text-mode Skipped keys are the bare command name; print with a leading \.
+		fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(d.Skipped))
+		for _, e := range sortedByCount(d.Skipped) {
+			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+		}
 	}
-	type kv struct {
-		name  string
-		count int
+	if len(d.MathDropped) > 0 {
+		// MathDropped keys already carry their leading \ (or are the sentinel "$math$"),
+		// so print them verbatim.
+		fmt.Fprintf(w, "gotex: %d math equation group(s) dropped by the math layer (most frequent trigger first):\n", len(d.MathDropped))
+		for _, e := range sortedByCount(d.MathDropped) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
 	}
-	list := make([]kv, 0, len(d.Skipped))
-	for name, count := range d.Skipped {
-		list = append(list, kv{name, count})
+}
+
+// nameCount is a command name and how many times it was dropped/skipped.
+type nameCount struct {
+	name  string
+	count int
+}
+
+// sortedByCount flattens a name→count tally into a slice ordered by descending count,
+// ties broken by name, so the most frequent gap is listed first.
+func sortedByCount(m map[string]int) []nameCount {
+	list := make([]nameCount, 0, len(m))
+	for name, count := range m {
+		list = append(list, nameCount{name, count})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].count != list[j].count {
@@ -154,10 +175,7 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 		}
 		return list[i].name < list[j].name
 	})
-	fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(list))
-	for _, e := range list {
-		fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
-	}
+	return list
 }
 
 // writeOutput compiles src and emits it in the requested format, returning the

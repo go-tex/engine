@@ -78,18 +78,24 @@ func toSVG(_ js.Value, args []js.Value) any {
 }
 
 // diagnosticsJS turns the compile Diagnostics into a plain JS object for the
-// playground's log panel: the undefined commands it skipped and the silent-swallow
-// flags (a runaway that tripped, groups left open, a page-count explosion).
+// playground's log panel: the undefined commands it skipped, the math equations the
+// math layer dropped (invisible loss inside a formula), and the silent-swallow flags
+// (a runaway that tripped, groups left open, a page-count explosion).
 func diagnosticsJS(d engine.Diagnostics) map[string]any {
 	skipped := make(map[string]any, len(d.Skipped))
 	for name, count := range d.Skipped {
 		skipped[name] = count
 	}
+	mathDropped := make(map[string]any, len(d.MathDropped))
+	for name, count := range d.MathDropped {
+		mathDropped[name] = count
+	}
 	return map[string]any{
-		"skipped":    skipped,
-		"runaway":    d.Runaway,
-		"openGroups": d.OpenGroups,
-		"pageCapHit": d.PageCapHit,
+		"skipped":     skipped,
+		"mathDropped": mathDropped,
+		"runaway":     d.Runaway,
+		"openGroups":  d.OpenGroups,
+		"pageCapHit":  d.PageCapHit,
 	}
 }
 

@@ -91,6 +91,25 @@ func TestRunReportSkipped(t *testing.T) {
 	}
 }
 
+// -report-skipped also surfaces math equations the go-tex/math layer dropped: an
+// unknown command inside a formula takes the whole equation with it, which the
+// text-mode "undefined commands" list would never show.
+func TestRunReportMathDropped(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}`+
+		`A formula $\nosuchmathprimitive$ here.\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	if !bytes.Contains(se.Bytes(), []byte("math equation group(s) dropped")) ||
+		!bytes.Contains(se.Bytes(), []byte(`\nosuchmathprimitive`)) {
+		t.Errorf("report missing the dropped math equation; stderr=%q", se.String())
+	}
+}
+
 // -report-skipped also surfaces the silent-swallow alarms: a runaway that tripped
 // is reported even though no command was "undefined".
 func TestRunReportRunawayWarning(t *testing.T) {
