@@ -182,6 +182,22 @@ const MiniLaTeXKernel = `
 \def\@toplist{}
 \def\@midlist{}
 \def\@currlist{}
+% \subfile{file} / \subfileinclude{file} (subfiles package): typeset file.tex as
+% part of this document. A subfile is often bare section content, but it may carry
+% its own \documentclass[main]{subfiles} … \begin{document} … \end{document}
+% wrapper. Neutralise that wrapper for the duration of the input — gobble the
+% \documentclass line's [option]{class}, and make \begin{document}/\end{document}
+% (\document/\enddocument) no-ops so the subfile's \end{document} does not end the
+% WHOLE document — then \input the file. Grouping restores the three afterwards, so
+% the outer document's real \end{document} still fires. Without \subfile the whole
+% body of a paper split into subfiles is silently dropped (118 corpus papers use it).
+\long\def\subfile#1{{%
+  \let\documentclass\subfile@gobbleclass
+  \let\document\@empty \let\enddocument\@empty
+  \input{#1}}}
+\let\subfileinclude\subfile
+\def\subfile@gobbleclass{\@ifnextchar[{\subfile@gc}{\subfile@gc[]}}
+\def\subfile@gc[#1]#2{}
 \def\hline{}
 \def\cline#1{}
 % amsthm-style theorem support. \newtheorem (a Go primitive) generates, per
