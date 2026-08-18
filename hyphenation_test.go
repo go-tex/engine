@@ -6,11 +6,11 @@ import "testing"
 // any a and b; "2a1b" would suppress it (even wins). Test the odd/even merge.
 func TestHyphenationPoints(t *testing.T) {
 	h := newHyphenator()
-	h.lmin, h.rmin = 1, 1
-	h.addPattern("a1b") // break allowed between a,b
-	h.addPattern("b2a") // break suppressed between b,a
+	h.SetMins(1, 1)
+	h.AddPattern("a1b") // break allowed between a,b
+	h.AddPattern("b2a") // break suppressed between b,a
 	// word "abab": positions after 1(a|b odd),2(b|a even→no),3(a|b odd)
-	pts := h.points("abab")
+	pts := h.Points("abab")
 	got := map[int]bool{}
 	for _, p := range pts {
 		got[p] = true
@@ -23,10 +23,10 @@ func TestHyphenationPoints(t *testing.T) {
 // lefthyphenmin/righthyphenmin suppress breaks too near the word edges.
 func TestHyphenationAffixLimits(t *testing.T) {
 	h := newHyphenator()
-	h.lmin, h.rmin = 2, 2
-	h.addPattern("a1a")
+	h.SetMins(2, 2)
+	h.AddPattern("a1a")
 	// "aaaa": raw odd points at 1,2,3; limits keep only t in [2, 4-2]=[2,2]
-	pts := h.points("aaaa")
+	pts := h.Points("aaaa")
 	if len(pts) != 1 || pts[0] != 2 {
 		t.Errorf("affix-limited points=%v want [2]", pts)
 	}
@@ -39,8 +39,8 @@ func TestHyphenationInsertsHyphen(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{}) // letters 5pt, interword space 3pt (+1.5/−1)
 	e.hyph = newHyphenator()
-	e.hyph.lmin, e.hyph.rmin = 1, 1
-	e.hyph.addPattern("a1a") // breaks allowed between a's
+	e.hyph.SetMins(1, 1)
+	e.hyph.AddPattern("a1a") // breaks allowed between a's
 	e.hsize = 32 * unity
 	e.parindent = 0
 	if _, err := e.Run(`aa aaaaaa\par`); err != nil {

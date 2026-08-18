@@ -5,76 +5,10 @@ package engine
 
 import "strings"
 
-// This file implements Liang's hyphenation algorithm — the method TeX uses to
-// find legal break points inside words. Patterns (loaded with \patterns) carry
-// odd/even priority digits between letters; for a word, the maximum value at each
-// inter-letter position decides whether a break is allowed there (odd = allowed),
-// subject to \lefthyphenmin / \righthyphenmin. Allowed points become discretionary
-// nodes in the paragraph list; when a line breaks at one, a hyphen is appended.
-
-// hyphenator holds the loaded patterns and the min-affix limits.
-type hyphenator struct {
-	pat  map[string][]int
-	lmin int // \lefthyphenmin: min letters before the first hyphen
-	rmin int // \righthyphenmin: min letters after the last hyphen
-}
-
-func newHyphenator() *hyphenator {
-	return &hyphenator{pat: map[string][]int{}, lmin: 2, rmin: 3}
-}
-
-// addPattern parses one Liang pattern (e.g. "a1bc3d" or ".ach4") into its letter
-// key and inter-letter value array (length = letters+1).
-func (h *hyphenator) addPattern(p string) {
-	var letters strings.Builder
-	var vals []int
-	pending := 0
-	haveDigit := false
-	for _, r := range p {
-		if r >= '0' && r <= '9' {
-			pending = int(r - '0')
-			haveDigit = true
-			continue
-		}
-		vals = append(vals, pending)
-		letters.WriteRune(r)
-		pending, haveDigit = 0, false
-	}
-	vals = append(vals, pending)
-	_ = haveDigit
-	h.pat[letters.String()] = vals
-}
-
-// points returns the break positions in word: each value t means a hyphen is
-// allowed after the first t letters (so between word[t-1] and word[t]).
-func (h *hyphenator) points(word string) []int {
-	w := "." + strings.ToLower(word) + "."
-	n := len(w)
-	val := make([]int, n+1)
-	for i := 0; i < n; i++ {
-		for j := i + 1; j <= n; j++ {
-			v, ok := h.pat[w[i:j]]
-			if !ok {
-				continue
-			}
-			for k := 0; k < len(v); k++ {
-				if i+k < len(val) && v[k] > val[i+k] {
-					val[i+k] = v[k]
-				}
-			}
-		}
-	}
-	// The augmented word has a leading '.', so original letter t sits at w[t+1];
-	// the break after t letters uses val[t+1].
-	L := len([]rune(word))
-	var pts []int
-	for t := h.lmin; t <= L-h.rmin; t++ {
-		if val[t+1]%2 == 1 {
-			pts = append(pts, t)
-		}
-	}
-	return pts
-}
+// The Liang algorithm itself now lives in github.com/go-tex/hyphenation (see
+// libs.go). What stays here is what is TeX-specific: the \patterns primitive
+// that loads a pattern file, and the walk that turns a word's break points into
+// discretionary nodes in the paragraph list.
 
 // doPatterns handles \patterns{p1 p2 …}: load space-separated Liang patterns.
 func (e *Engine) doPatterns() {
@@ -91,7 +25,7 @@ func (e *Engine) doPatterns() {
 	var cur strings.Builder
 	flush := func() {
 		if cur.Len() > 0 {
-			e.hyph.addPattern(cur.String())
+			e.hyph.AddPattern(cur.String())
 			cur.Reset()
 		}
 	}
@@ -147,7 +81,7 @@ func (e *Engine) hyphenateList(list []node) []node {
 			break
 		}
 		breakAfter := map[int]bool{}
-		for _, t := range e.hyph.points(string(letters)) {
+		for _, t := range e.hyph.Points(string(letters)) {
 			breakAfter[t] = true
 		}
 		seen := 0

@@ -10,6 +10,10 @@ github.com/go-opentype/shape v0.3.2 h1:qaaUhg9m6yusm6MCfa07DhZ5Z0ZxOmGwLxHklVeLU
 github.com/go-opentype/shape v0.3.2/go.mod h1:oVq3kFGx6kIHKrFXfxqnp8JUYR7k9NzeY+E17LYHhrU=
 github.com/go-pdfkit/pdfkit v0.4.0 h1:gLC9YBK8Sq7OVoR6vjmO5k3tjzK++0UGGJcsWDCt2Xw=
 github.com/go-pdfkit/pdfkit v0.4.0/go.mod h1:HkjxMIqOjZvJT0KLme1WS6J9jguiTdWi+zLdTYbGIkc=
+github.com/go-tex/hyphenation v0.2.0 h1:q1d8zQe7pj6cLOTpxtPHGvH9TwOboPmEaz/p6G9KAps=
+github.com/go-tex/hyphenation v0.2.0/go.mod h1:RER3ubEHtMz2krMPT+dbFTwJE53CeOMyXKSw0MPnvRQ=
+github.com/go-tex/linebreak v0.2.0 h1:me6dkGL+s0dPJ2svb/j2mn3HP0K34YSmy1JbOG0f+Kc=
+github.com/go-tex/linebreak v0.2.0/go.mod h1:L0LLHY6eMeq80KtsJB0SPNPmZpoofPk+0sKj66zjXO8=
 github.com/go-tex/math v0.18.0 h1:rzFBFVvS5zKylsecY0fRkY3KWqVxiJQhFX6qXd7aEXQ=
 github.com/go-tex/math v0.18.0/go.mod h1:eNq1Js988sqQRsxNR08JFQ5dQfyqfd8CYf5fE3iWbhU=
 github.com/go-widgets/painter v0.2.0 h1:C7anwlKLYnlTeCK90xKYvy0srxYXqhuvyDFismlf2Sc=
