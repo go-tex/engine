@@ -78,8 +78,9 @@ func toSVG(_ js.Value, args []js.Value) any {
 }
 
 // diagnosticsJS turns the compile Diagnostics into a plain JS object for the
-// playground's log panel: the undefined commands it skipped and the silent-swallow
-// flags (a runaway that tripped, groups left open, a page-count explosion).
+// playground's log panel: the undefined commands it skipped, the math equations the
+// math layer dropped (invisible loss inside a formula), and the silent-swallow flags
+// (a runaway that tripped, groups left open, a page-count explosion).
 func diagnosticsJS(d engine.Diagnostics) map[string]any {
 	skipped := make(map[string]any, len(d.Skipped))
 	for name, count := range d.Skipped {
@@ -87,10 +88,15 @@ func diagnosticsJS(d engine.Diagnostics) map[string]any {
 	}
 	// Undefined environments are tracked apart from skipped commands: \begin{env}
 	// of a missing environment resolves to a silent \relax via \csname and never
-	// counts as an undefined command.
+	// counts as an undefined command. Math drops (whole equations refused by the
+	// math layer) are lifted out of skipped into their own key too.
 	undefinedEnvs := make(map[string]any, len(d.UndefinedEnvs))
 	for name, count := range d.UndefinedEnvs {
 		undefinedEnvs[name] = count
+	}
+	mathDropped := make(map[string]any, len(d.MathDropped))
+	for name, count := range d.MathDropped {
+		mathDropped[name] = count
 	}
 	return map[string]any{
 		"skipped":       skipped,
@@ -98,6 +104,7 @@ func diagnosticsJS(d engine.Diagnostics) map[string]any {
 		"openGroups":    d.OpenGroups,
 		"pageCapHit":    d.PageCapHit,
 		"undefinedEnvs": undefinedEnvs,
+		"mathDropped":   mathDropped,
 	}
 }
 

@@ -210,6 +210,12 @@ type Engine struct {
 	// undefined ENVIRONMENT never surfaces as an undefined command (see doCheckEnv,
 	// the \gotex@checkenv hook wired into \begin). nil until the first undefined env.
 	undefinedEnvs map[string]int
+	// mathDropped tallies equations the go-tex/math layer refused (an unknown math
+	// command or an unrecoverable math error), keyed the same as their skippedCS
+	// entry so Diagnostics can lift math drops out of the text-mode Skipped tally
+	// into their own MathDropped view. nil until the first math drop. See
+	// recordMathSkip; the raw entries also remain in skippedCS for SkippedCommands.
+	mathDropped map[string]int
 
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
@@ -1477,12 +1483,19 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
-
 	// UndefinedEnvs counts \begin{env} whose environment was undefined — a silent
 	// no-op that never appears in Skipped (\csname coerces the missing \env to
 	// \relax). Aggregated over a corpus it surfaces unimplemented environments
 	// (math/float/theorem) whose bodies were then typeset in the wrong mode.
 	UndefinedEnvs map[string]int
+
+	// MathDropped tallies whole equations the go-tex/math layer refused and the engine
+	// dropped, keyed by the unknown math command that triggered it ("\X") or "$math$"
+	// for a non-command math error. This is invisible content loss INSIDE a formula:
+	// one unrecognised token drops the entire equation. These are lifted out of Skipped
+	// (which stays text-mode undefined commands) so a math feature gap is not conflated
+	// with a missing text macro. nil/empty when no equation was dropped.
+	MathDropped map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -1493,11 +1506,21 @@ func (e *Engine) Diagnostics() Diagnostics {
 		if strings.HasPrefix(k, "gotex@") {
 			continue // internal markers, surfaced as flags instead of fake commands
 		}
+		if _, isMath := e.mathDropped[k]; isMath {
+			continue // math drops are surfaced under MathDropped, not conflated here
+		}
 		skipped[k] = v
 	}
 	undefinedEnvs := map[string]int{}
 	for k, v := range e.undefinedEnvs {
 		undefinedEnvs[k] = v
+	}
+	var mathDropped map[string]int
+	if len(e.mathDropped) > 0 {
+		mathDropped = make(map[string]int, len(e.mathDropped))
+		for k, v := range e.mathDropped {
+			mathDropped[k] = v
+		}
 	}
 	return Diagnostics{
 		Skipped:       skipped,
@@ -1505,6 +1528,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		OpenGroups:    len(e.groups),
 		PageCapHit:    e.skippedCS["gotex@pagelimit"] > 0,
 		UndefinedEnvs: undefinedEnvs,
+		MathDropped:   mathDropped,
 	}
 }
 

@@ -552,18 +552,27 @@ func unknownMathCommand(errMsg string) string {
 	return string(r)
 }
 
-// recordMathSkip tallies a dropped equation under skippedCS. When the error is
-// go-tex/math's "unknown command \X" it keys on that command (so the report shows
-// which math macro to implement next); otherwise it keys on a generic "$math$".
+// recordMathSkip tallies a dropped equation. When the error is go-tex/math's
+// "unknown command \X" it keys on that command (so the report shows which math macro
+// to implement next); otherwise it keys on a generic "$math$". The tally is written
+// to two maps under the SAME key: skippedCS keeps math drops in the general
+// SkippedCommands surface (unchanged, for existing callers), while mathDropped is the
+// dedicated view Diagnostics lifts out of the text-mode Skipped tally into its own
+// MathDropped field — so a formula's silently-lost content is visible as math, not
+// conflated with undefined text commands.
 func (e *Engine) recordMathSkip(errMsg string) {
 	if e.skippedCS == nil {
 		e.skippedCS = map[string]int{}
+	}
+	if e.mathDropped == nil {
+		e.mathDropped = map[string]int{}
 	}
 	key := "$math$"
 	if name := unknownMathCommand(errMsg); name != "" {
 		key = "\\" + name
 	}
 	e.skippedCS[key]++
+	e.mathDropped[key]++
 }
 
 // doMath handles a math-shift token: collect the source, render it, and place the

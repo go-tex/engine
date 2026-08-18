@@ -123,9 +123,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // reportDiagnostics prints what a lenient render may have quietly lost: the
 // undefined commands it skipped (most frequent first — a high count is where
-// material is being dropped) and the silent-swallow alarms (a runaway that tripped,
-// groups left open at the end, a page-count explosion) that no skipped command
-// reveals.
+// material is being dropped), the math equations the go-tex/math layer dropped
+// (invisible content loss INSIDE a formula), and the silent-swallow alarms (a runaway
+// that tripped, groups left open at the end, a page-count explosion) that no skipped
+// command reveals.
 func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.Runaway {
 		fmt.Fprintln(w, "gotex: WARNING runaway guard tripped — a loop or exponential scan was aborted (content may be lost)")
@@ -141,7 +142,7 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	// on their own so an unimplemented environment (whose body was then typeset in
 	// the wrong mode) is not mistaken for "nothing skipped".
 	if len(d.UndefinedEnvs) > 0 {
-		list := sortedCounts(d.UndefinedEnvs)
+		list := sortedByCount(d.UndefinedEnvs)
 		fmt.Fprintf(w, "gotex: %d undefined environment(s) — \\begin{…} of an environment the engine lacks (most frequent first):\n", len(list))
 		for _, e := range list {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
@@ -149,24 +150,32 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
-		return
+	} else {
+		// Text-mode Skipped keys are the bare command name; print with a leading \.
+		fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(d.Skipped))
+		for _, e := range sortedByCount(d.Skipped) {
+			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+		}
 	}
-	list := sortedCounts(d.Skipped)
-	fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(list))
-	for _, e := range list {
-		fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+	if len(d.MathDropped) > 0 {
+		// MathDropped keys already carry their leading \ (or are the sentinel "$math$"),
+		// so print them verbatim.
+		fmt.Fprintf(w, "gotex: %d math equation group(s) dropped by the math layer (most frequent trigger first):\n", len(d.MathDropped))
+		for _, e := range sortedByCount(d.MathDropped) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
 	}
 }
 
-// nameCount pairs a name with how many times it occurred, for sorted reporting.
+// nameCount is a command name and how many times it was dropped/skipped.
 type nameCount struct {
 	name  string
 	count int
 }
 
-// sortedCounts flattens a name→count map into a slice ordered by descending count,
+// sortedByCount flattens a name→count tally into a slice ordered by descending count,
 // ties broken by name, so the report leads with where the most material was lost.
-func sortedCounts(m map[string]int) []nameCount {
+func sortedByCount(m map[string]int) []nameCount {
 	list := make([]nameCount, 0, len(m))
 	for name, count := range m {
 		list = append(list, nameCount{name, count})
