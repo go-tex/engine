@@ -204,6 +204,13 @@ type Engine struct {
 	lenient   bool
 	skippedCS map[string]int
 
+	// undefinedEnvs tallies \begin{env} occurrences whose environment control
+	// sequence (\env) was undefined at \begin time — before \csname coerces it to
+	// \relax and swallows it silently. Kept separate from skippedCS because an
+	// undefined ENVIRONMENT never surfaces as an undefined command (see doCheckEnv,
+	// the \gotex@checkenv hook wired into \begin). nil until the first undefined env.
+	undefinedEnvs map[string]int
+
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
 	// options queued by \PassOptionsTo*, and a depth that makes loading tolerant of
@@ -1470,6 +1477,12 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+
+	// UndefinedEnvs counts \begin{env} whose environment was undefined — a silent
+	// no-op that never appears in Skipped (\csname coerces the missing \env to
+	// \relax). Aggregated over a corpus it surfaces unimplemented environments
+	// (math/float/theorem) whose bodies were then typeset in the wrong mode.
+	UndefinedEnvs map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -1482,11 +1495,16 @@ func (e *Engine) Diagnostics() Diagnostics {
 		}
 		skipped[k] = v
 	}
+	undefinedEnvs := map[string]int{}
+	for k, v := range e.undefinedEnvs {
+		undefinedEnvs[k] = v
+	}
 	return Diagnostics{
-		Skipped:    skipped,
-		Runaway:    e.runaway,
-		OpenGroups: len(e.groups),
-		PageCapHit: e.skippedCS["gotex@pagelimit"] > 0,
+		Skipped:       skipped,
+		Runaway:       e.runaway,
+		OpenGroups:    len(e.groups),
+		PageCapHit:    e.skippedCS["gotex@pagelimit"] > 0,
+		UndefinedEnvs: undefinedEnvs,
 	}
 }
 

@@ -91,6 +91,31 @@ func TestRunReportSkipped(t *testing.T) {
 	}
 }
 
+// -report-skipped surfaces undefined ENVIRONMENTS on their own line: \begin{env}
+// of an environment the engine lacks is a silent \relax (via \csname) and never
+// counts as an undefined command, so it needs its own reporting.
+func TestRunReportUndefinedEnvs(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}`+
+		`\begin{itemize}\item a\end{itemize}`+
+		`\begin{mysteryenv}body\end{mysteryenv}`+
+		`\begin{mysteryenv}more\end{mysteryenv}\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	got := se.String()
+	if !bytes.Contains(se.Bytes(), []byte("undefined environment")) || !bytes.Contains(se.Bytes(), []byte("mysteryenv")) {
+		t.Errorf("report did not list the undefined environment; stderr=%q", got)
+	}
+	// A defined environment (itemize) must not be reported as undefined.
+	if bytes.Contains(se.Bytes(), []byte("itemize")) {
+		t.Errorf("defined environment itemize wrongly reported as undefined; stderr=%q", got)
+	}
+}
+
 // -report-skipped also surfaces the silent-swallow alarms: a runaway that tripped
 // is reported even though no command was "undefined".
 func TestRunReportRunawayWarning(t *testing.T) {

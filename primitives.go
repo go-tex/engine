@@ -48,6 +48,9 @@ var expandableSet = map[string]bool{
 	"IfNoValueTF": true, "IfNoValueT": true, "IfNoValueF": true,
 	"IfValueTF": true, "IfValueT": true, "IfValueF": true,
 	"IfBooleanTF": true, "IfBooleanT": true, "IfBooleanF": true,
+	// \gotex@checkenv acts in the gullet exactly like \csname (into which \begin
+	// feeds), so \begin keeps expanding cleanly wherever it did before.
+	"gotex@checkenv": true,
 }
 
 func isExpandable(name string) bool { return expandableSet[name] }
@@ -776,6 +779,40 @@ func (e *Engine) doCsname() {
 	e.back(csTok(s))
 }
 
+// doCheckEnv implements \gotex@checkenv{env}, the probe \begin runs just before it
+// hands the name to \csname. \begin{env} expands to \csname env\endcsname, and an
+// UNDEFINED env resolves to \relax there — a silent no-op that never reaches the
+// undefined-command tally. This reads the same braced name (without expanding it,
+// exactly as \csname builds it from #1's literal characters) and, when \env has no
+// meaning yet, records it in undefinedEnvs so Diagnostics can surface the gap. It
+// produces no tokens: the following \csname env\endcsname behaves exactly as before,
+// so every DEFINED environment (equation, itemize, figure, \newenvironment's, …) is
+// untouched. Runs in the gullet (it is in expandableSet), like \csname itself.
+func (e *Engine) doCheckEnv() {
+	name := e.readBraceName()
+	if name == "" {
+		return // no braced argument, or an empty one: nothing meaningful to probe
+	}
+	if e.envUndefined(name) {
+		if e.undefinedEnvs == nil {
+			e.undefinedEnvs = map[string]int{}
+		}
+		e.undefinedEnvs[name]++
+	}
+}
+
+// envUndefined reports whether \name is not a real environment's opening control
+// sequence. It is true when \name has no meaning at all AND when it is \relax:
+// \csname coerces a missing \env to \relax the FIRST time \begin{env} runs (and
+// that definition persists for the rest of the group), so a second \begin{env}
+// would otherwise look "defined". A genuine environment's opening cs is always a
+// macro or a primitive, never \relax, so counting the \relax case gives the true
+// per-occurrence tally without ever flagging a defined environment.
+func (e *Engine) envUndefined(name string) bool {
+	m := e.eq[name]
+	return m == nil || (m.kind == mPrim && m.name == "relax")
+}
+
 func (e *Engine) doNoexpand() {
 	t, ok := e.getNext()
 	if !ok {
@@ -1304,6 +1341,7 @@ func (e *Engine) loadMore() {
 	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) })  // \( … \) inline math
 	e.prim("]", func(e *Engine) {})                                 // consumed by \[
 	e.prim(")", func(e *Engine) {})                                 // consumed by \(
+	e.prim("gotex@checkenv", func(e *Engine) { e.doCheckEnv() })    // \begin's undefined-environment probe (see doCheckEnv)
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
 	e.prim("equation*", func(e *Engine) { e.doEquationStar("equation*") })
 	e.prim("endequation*", func(e *Engine) {})
