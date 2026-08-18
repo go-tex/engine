@@ -80,6 +80,11 @@ func (e *Engine) loadTeXParams() {
 	if m := e.eq["endlinechar"]; m != nil && m.kind == mCountRef {
 		e.endlineReg = m.code
 	}
+	// \escapechar is read whenever a control-sequence NAME is printed; cache it
+	// the same way (see escapeStr).
+	if m := e.eq["escapechar"]; m != nil && m.kind == mCountRef {
+		e.escapeReg = m.code
+	}
 	for _, name := range texDimenParams {
 		if e.eq[name] != nil || e.allocDim >= 256 {
 			continue
