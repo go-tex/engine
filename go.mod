@@ -12,16 +12,18 @@ require (
 )
 
 require (
-	github.com/go-opentype/bidi v0.2.0 // indirect
-	github.com/go-opentype/shape v0.3.2 // indirect
+	github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38 // indirect
+	github.com/go-opentype/shape v0.5.0 // indirect
+	github.com/go-widgets/mvvm v0.5.0 // indirect
 )
 
 require (
 	github.com/go-opentype/fonts v0.6.0 // indirect
+	github.com/go-typeset/bidi v0.3.0 // indirect
 	github.com/go-typeset/hyphenation v1.0.0
 	github.com/go-typeset/linebreak v1.0.0
-	github.com/go-widgets/painter v0.2.0 // indirect
-	github.com/go-widgets/toolkit v0.79.0 // indirect
+	github.com/go-widgets/painter v0.11.0 // indirect
+	github.com/go-widgets/toolkit v0.199.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	golang.org/x/image v0.45.0 // indirect
