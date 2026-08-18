@@ -163,6 +163,34 @@ func CompileToSVGPages(src []byte, opt Options) ([]string, error) {
 	return e.RenderPages(e.renderMargin(opt.margin())), nil
 }
 
+// CompileToSVGPagesReport is CompileToSVGPages that also returns the tally of
+// undefined control sequences the (lenient) compile skipped — see SkippedCommands.
+// It lets a caller surface the feature gaps a best-effort render would otherwise
+// hide: an unimplemented command silently dropped can take a document's whole body
+// with it (a class's frontmatter macro, \subfile, …) while the page still looks
+// plausible. Ranked over a corpus, the tally points straight at what is worth
+// implementing.
+func CompileToSVGPagesReport(src []byte, opt Options) ([]string, map[string]int, error) {
+	e, err := compile(src, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+	return e.RenderPages(e.renderMargin(opt.margin())), e.SkippedCommands(), nil
+}
+
+// CompileToPDFReport is CompileToPDF that also returns the skipped-command tally
+// (see CompileToSVGPagesReport / SkippedCommands).
+func CompileToPDFReport(src []byte, opt Options, w io.Writer) (int, map[string]int, error) {
+	e, err := compile(src, opt)
+	if err != nil {
+		return 0, nil, err
+	}
+	if err := e.RenderPDF(w, e.renderMargin(opt.margin())); err != nil {
+		return 0, e.SkippedCommands(), err
+	}
+	return len(e.Pages()), e.SkippedCommands(), nil
+}
+
 // compile builds an engine and runs the source, ready for rendering. When the
 // document defines cross-reference \labels it compiles twice — the first pass
 // gathers the label table (so forward \refs resolve), exactly as LaTeX uses its
