@@ -179,6 +179,11 @@ const LaTeX2eClassLead = `
 % preserves the text and sets it small and shifted as LaTeX does.
 \def\textsuperscript#1{\ensuremath{^{#1}}}
 \def\textsubscript#1{\ensuremath{_{#1}}}
+% \text (amsmath) used in TEXT mode: the math layer handles \text inside $…$/\[…\]
+% from the raw source, but a \text{…} written in ordinary text reached execCS
+% undefined and was skipped, dropping its words. Typeset the argument in place. In
+% math this definition is never consulted (the source goes to the math layer).
+\def\text#1{#1}
 % \@thanks accumulates \thanks footnotes for \maketitle; \thanks is best-effort
 % (its note is dropped). Defining them keeps a real class's \maketitle from
 % aborting on \@thanks. (\@starttoc is a Go primitive bridging to the engine's
