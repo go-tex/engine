@@ -918,14 +918,31 @@ func (e *Engine) doGobbleOptAndGroup() {
 }
 
 // doGobbleEnv discards the body of a non-renderable environment (tikzpicture,
-// pgfpicture, tikzcd, …) whole. It is reached via \begin{name} — already expanded
-// to the \name control sequence — so the input cursor sits just past it. It
-// consumes tokens up to and including the matching \end{name}, honouring nested
-// \begin{name}…\end{name} of the same name. The scan is at the token level (via
-// getNext), so it works whether the environment sits in the raw source or is
-// replayed from a macro/box body; nothing is emitted, so no TikZ command
-// (\draw, \node, \path, \foreach, …) can leak into the typeset output.
+// pgfpicture, tikzcd, …) whole and leaves a framed placeholder box in its place.
+// It is reached via \begin{name} — already expanded to the \name control sequence
+// — so the input cursor sits just past it. See gobbleEnvBody.
 func (e *Engine) doGobbleEnv(name string) {
+	e.gobbleEnvBody(name, true)
+}
+
+// doGobbleEnvSilent discards an environment body whole and emits NOTHING — for
+// content that must vanish entirely rather than reserve space: the comment
+// package's \begin{comment}…\end{comment} (and any env made with
+// \excludecomment). Typesetting such a body instead of gobbling it lets stray
+// \item, \\, or an unbalanced brace inside the comment leak out and can leave a
+// group open at end of document, dropping the page it sits on (a whole-body
+// swallow on real papers).
+func (e *Engine) doGobbleEnvSilent(name string) {
+	e.gobbleEnvBody(name, false)
+}
+
+// gobbleEnvBody consumes tokens up to and including the matching \end{name},
+// honouring nested \begin{name}…\end{name} of the same name. The scan is at the
+// token level (via getNext), so it works whether the environment sits in the raw
+// source or is replayed from a macro/box body; nothing from the body is emitted,
+// so no command inside it can leak into the typeset output. When placeholder is
+// true a framed box is left where the environment sat; when false nothing is.
+func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 	depth := 1
 	for {
 		t, ok := e.getNext()
@@ -944,12 +961,37 @@ func (e *Engine) doGobbleEnv(name string) {
 			if e.gobbleEnvName() == name {
 				depth--
 				if depth == 0 {
-					e.emitPicturePlaceholder(name)
+					if placeholder {
+						e.emitPicturePlaceholder(name)
+					}
 					return
 				}
 			}
 		}
 	}
+}
+
+// registerExcludedComment makes `name` a silently-gobbled environment: its
+// \begin{name} triggers doGobbleEnvSilent(name) and its \end is consumed
+// literally by that scan (the endname prim is a no-op, defined for safety).
+func (e *Engine) registerExcludedComment(name string) {
+	e.prim(name, func(e *Engine) { e.doGobbleEnvSilent(name) })
+	e.prim("end"+name, func(e *Engine) {})
+}
+
+// grabEnvNameArg reads a required {name} argument as a plain string (the
+// environment name for \excludecomment / \includecomment), or "" if the next
+// token is not an opening brace (input left untouched in that case).
+func (e *Engine) grabEnvNameArg() string {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return ""
+	}
+	return trimSpaces(e.toksToString(e.grabGroup()))
 }
 
 // emitPicturePlaceholder stands a gobbled picture environment (TikZ/PGF/tikz-cd)
