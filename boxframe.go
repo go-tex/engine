@@ -89,7 +89,7 @@ func (e *Engine) grabHboxList() ([]node, bool) {
 		}
 		return nil, false
 	}
-	e.beginGroup()
+	e.beginGroupKind(boxGroup)
 	list := e.buildBoxList()
 	e.endGroup()
 	return list, true

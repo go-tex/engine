@@ -117,7 +117,7 @@ type Engine struct {
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save   []saveItem
-	groups []int // save-stack length at each group's start
+	groups []groupFrame // one frame per open group, innermost last
 
 	out    strings.Builder   // \message output
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
@@ -793,16 +793,118 @@ func (e *Engine) setCat(r rune, c cat, global bool) {
 	e.catcode[r] = c
 }
 
-func (e *Engine) beginGroup() {
-	e.groups = append(e.groups, len(e.save))
+// groupKind records what OPENED a level of grouping, mirroring tex.web
+// §5870-5884. Without it a closer cannot be recognised as belonging to another
+// level: \endgroup would happily pop a box group and leave the semi simple one
+// open for the rest of the document.
+type groupKind uint8
+
+const (
+	simpleGroup     groupKind = iota // an explicit { … }
+	boxGroup                         // the { … } of \hbox{…} / \vbox{…}
+	semiSimpleGroup                  // \begingroup … \endgroup
+)
+
+// groupFrame is one level of the grouping stack: where the save stack stood when
+// the group opened, and what opened it.
+type groupFrame struct {
+	mark int
+	kind groupKind
+}
+
+func (e *Engine) beginGroup() { e.beginGroupKind(simpleGroup) }
+
+func (e *Engine) beginGroupKind(k groupKind) {
+	e.groups = append(e.groups, groupFrame{mark: len(e.save), kind: k})
 	e.afterGroup = append(e.afterGroup, nil)
+}
+
+// curGroupKind reports what opened the innermost open group.
+func (e *Engine) curGroupKind() (groupKind, bool) {
+	if len(e.groups) == 0 {
+		return simpleGroup, false
+	}
+	return e.groups[len(e.groups)-1].kind, true
+}
+
+// closeBrace handles a } arriving in the stomach. It closes the group only when
+// that group was opened by a { — a simple or a box group. It reports whether it
+// closed one, so a caller that was waiting for its own closer (the box builder)
+// does not mistake a deleted brace for the end of its body.
+func (e *Engine) closeBrace() bool {
+	k, open := e.curGroupKind()
+	if !open {
+		// Real TeX says "! Too many }'s." here. This engine stays silent: several
+		// of its own recovery paths (a \rotatebox whose angle fails to parse, a
+		// delimited argument refusing a brace) drop a stray } into the stomach on
+		// purpose, and turning that into a document error would report the engine's
+		// bookkeeping as the author's mistake. Diagnose it once those paths balance.
+		return false
+	}
+	if k == semiSimpleGroup {
+		// tectonic: "! Extra }, or forgotten \endgroup.", whose help text says
+		// "I've deleted a group-closing symbol" — TeX DELETES the brace and leaves
+		// both groups open. This engine reports the mismatch but still closes the
+		// group, and the difference is deliberate: reproducing the deletion was
+		// MEASURED over the 10025-document beamer corpus and cost pages in two
+		// talks, because the brace lands on \end{document} with four groups still
+		// open that TeX never opened. Faithful recovery from a state TeX would
+		// never be in is not fidelity. Delete instead of closing once the engine's
+		// grouping state matches TeX's — the diagnostic below is what will show it.
+		e.groupError("Extra }, or forgotten \\endgroup.")
+	}
+	e.endGroup()
+	return true
+}
+
+// closeSemiSimple handles \endgroup. It closes the group only when \begingroup
+// opened it. Against a simple or box group TeX takes the OTHER of its two
+// recoveries: rather than delete the \endgroup it INSERTS the } that group is
+// waiting for, then re-reads the \endgroup, so both levels unwind.
+func (e *Engine) closeSemiSimple() {
+	k, open := e.curGroupKind()
+	if !open {
+		// Real TeX says "! Extra \endgroup." — silent here for the same reason as
+		// the stray } above.
+		return
+	}
+	if k != semiSimpleGroup {
+		// tectonic: "! Missing } inserted."
+		e.groupError("Missing } inserted.")
+		e.offSave(csTok("endgroup"), chTok('}', catEnd))
+		return
+	}
+	e.endGroup()
+}
+
+// offSave is tex.web §20659, the insert half. A closer has arrived at a level its
+// partner did not open. TeX does not pop the wrong group: it puts the offending
+// token back and INSERTS the closer the current group is waiting for, so both
+// levels unwind in order. Popping instead balances the COUNT while restoring the
+// wrong save-stack marks, which is how a value assigned inside a group survives
+// past its end.
+//
+// back pushes a fresh list that is read before the ones under it, so the offending
+// token goes down first and the inserted closer on top of it.
+func (e *Engine) offSave(offending, inserted tok) {
+	e.back(offending)
+	e.back(inserted)
+}
+
+// groupError reports a grouping mismatch. Real TeX reports these and recovers;
+// so does this engine in tolerant mode, where the partial document is still
+// worth rendering. Strict mode records the first one and stops.
+func (e *Engine) groupError(msg string) {
+	if !e.tolerant() {
+		e.fail(msg)
+	}
 }
 
 func (e *Engine) endGroup() {
 	if len(e.groups) == 0 {
 		return
 	}
-	mark := e.groups[len(e.groups)-1]
+	mark := e.groups[len(e.groups)-1].mark
 	e.groups = e.groups[:len(e.groups)-1]
 	after := e.takeAfterGroup()
 	for len(e.save) > mark {
@@ -1320,7 +1422,7 @@ func (e *Engine) stepToken(t tok) bool {
 		case catBegin:
 			e.beginGroup()
 		case catEnd:
-			e.endGroup()
+			e.closeBrace()
 		case catLetter, catOther, catParam:
 			// catParam here is a stray literal '#' (a ## reduced by scanBody that was
 			// not consumed as a parameter char by a nested \def); typeset it as text.

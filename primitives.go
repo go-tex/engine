@@ -106,8 +106,8 @@ func (e *Engine) loadPrimitives() {
 	e.prim("catcode", func(e *Engine) { e.doCatcode(false) })
 
 	// grouping & misc
-	e.prim("begingroup", func(e *Engine) { e.beginGroup() })
-	e.prim("endgroup", func(e *Engine) { e.endGroup() })
+	e.prim("begingroup", func(e *Engine) { e.beginGroupKind(semiSimpleGroup) })
+	e.prim("endgroup", func(e *Engine) { e.closeSemiSimple() })
 	// \bgroup and \egroup are \let to the group-opening/closing characters, so they
 	// act as an implicit { and } (TeX §1063). Real classes rely on this, e.g.
 	// amsart's \setbox\abstractbox=\vtop\bgroup … \egroup — without it the box never

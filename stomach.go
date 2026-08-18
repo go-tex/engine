@@ -410,7 +410,7 @@ func (e *Engine) makeBox(kind boxKind) *boxNode {
 		e.back(t)
 		return &boxNode{kind: kind} // malformed: empty box
 	}
-	e.beginGroup()
+	e.beginGroupKind(boxGroup)
 	list := e.buildBoxList()
 	e.endGroup()
 	if kind == hbox {
@@ -468,6 +468,13 @@ func (e *Engine) buildBoxList() []node {
 		if !t.cs_ {
 			switch t.cat {
 			case catEnd:
+				if k, open := e.curGroupKind(); open && k == semiSimpleGroup {
+					// A \begingroup inside the box is still open, so this brace is not
+					// the box's closer. Report it and close the group anyway — see
+					// closeBrace for why the engine does not yet delete the brace the
+					// way TeX does.
+					e.groupError("Extra }, or forgotten \\endgroup.")
+				}
 				if depth == 0 {
 					return list // the box's own closing brace (caller ends its group)
 				}
