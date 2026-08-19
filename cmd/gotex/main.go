@@ -38,6 +38,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	margin := fs.Float64("margin", 72, "page margin in points")
 	date := fs.String("date", "", "date text bound to \\today")
 	lenient := fs.Bool("lenient", false, "skip undefined commands instead of aborting (best-effort preview of third-party documents)")
+	offline := fs.Bool("offline", false, "never fetch a support tree: use only what is already on this machine (a cached bundle, TEXINPUTS/GOTEX_TEXMF, the embedded set)")
 	reportSkipped := fs.Bool("report-skipped", false, "after a lenient render, print (to stderr) the undefined commands that were skipped, most frequent first — surfaces the feature gaps a best-effort render hides")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -101,6 +102,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		defer os.Chdir(orig)
 	}
 	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date, Lenient: *lenient}
+	// A document may name a class this machine does not have. Fetch it before
+	// compiling — see texmf.go; nothing is fetched unless the source asks for it.
+	attachTeXMF(&opt, src, *offline, stderr)
 
 	outName := *out
 	if outName == "" {
