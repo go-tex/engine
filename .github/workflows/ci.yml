@@ -33,7 +33,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: stable }
+      # Bounded on purpose. On 2026-08-19 this step sat on an unreachable Ubuntu
+      # mirror for over an hour, in several repositories at once, and the lane
+      # reported "in progress" the whole time — a hung lane is indistinguishable
+      # from a slow one, and the default job timeout is six hours. These lanes
+      # normally finish in one to four minutes; ten turns an apt outage into a
+      # failure that can be read and re-run.
       - name: install qemu-user-static
+        timeout-minutes: 10
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
       - name: test under qemu
         run: |
