@@ -144,10 +144,25 @@ func (e *Engine) realBeamer() bool {
 // emulateOnly reports whether a package must use the built-in stubs rather than
 // its real file.
 func emulateOnly(name string) bool {
-	if pgfPackages[name] {
+	if isPGFFamily(name) {
 		return !realPGF()
 	}
 	return neverLoadReal[name]
+}
+
+// isPGFFamily reports whether a package name belongs to pgf. The whole family
+// has to be recognised, not the three headline names: pgf ships pgfcore,
+// pgfmath, pgfpages, pgffor, pgfkeys, pgfsys, pgfrcs and more, and BEAMER ITSELF
+// requires pgfpages, pgfmath and pgfcore directly.
+//
+// Guarding only {tikz, pgf, pgfplots} meant that the moment pgf's sources were
+// findable — which is now easy, since a host can hand the engine a texmf tree —
+// beamer pulled the REAL pgfcore through its own \RequirePackage, whatever
+// GOTEX_PGF said. Measured over 500 real talks with beamer.cls present: 4286
+// pages with pgf out of reach, 1487 with its sources on the search path and
+// GOTEX_PGF UNSET. The flag was not the switch it looked like; reachability was.
+func isPGFFamily(name string) bool {
+	return name == "tikz" || strings.HasPrefix(name, "pgf")
 }
 
 // loadTeXFile splices a resolved class/package file into the input with @ made a
