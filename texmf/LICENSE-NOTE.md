@@ -42,3 +42,40 @@ Sources fetched (verbatim, kept alongside in `..`):
 The macro **bodies are byte-for-byte the upstream code** (docstrip only strips
 `%`-documentation lines and evaluates the module guards); only the standard
 docstrip file header/preamble is reproduced by the emulator.
+
+## Support packages beamer loads (added 2026-08-19)
+
+`beamer.cls` requires these, and its own TDS distribution does **not** contain
+them. Measured over a 500-document sample of real talks, with `beamer.cls` on the
+search path and nothing else:
+
+| files present | pages typeset |
+|---|---|
+| beamer alone | 1 983 |
+| + `etoolbox` + the `iftex` family | 3 313 |
+| + `keyval` | **4 286** |
+
+Every document still *compiled* in all three cases — the loss is silent. Without
+these the engine ships a beamer that renders **less than half** the content, so
+they are embedded rather than left to a download: they are small, they are
+LPPL like everything else in this directory, and they must be there before the
+first page is typeset.
+
+| File | ProvidesPackage | Version | Upstream source |
+|------|-----------------|---------|-----------------|
+| `etoolbox.sty` | `etoolbox` | `2025/10/02 v2.5m` | CTAN `install/macros/latex/contrib/etoolbox.tds.zip`, `tex/latex/etoolbox/` |
+| `keyval.sty` | `keyval` | `2026-05-17 v1.15` | TeX Live tlnet `archive/graphics.tar.xz`, `tex/latex/graphics/` |
+| `iftex.sty` | `iftex` | `2024/12/12 v1.0g` | CTAN `install/macros/generic/iftex.tds.zip`, `tex/generic/iftex/` |
+| `ifetex.sty` | `ifetex` | `2019/10/25 v1.3` | idem |
+| `ifluatex.sty` | `ifluatex` | `2019/10/25 v1.5` | idem |
+| `ifpdf.sty` | `ifpdf` | `2019/10/25 v3.4` | idem |
+| `ifvtex.sty` | `ifvtex` | `2019/10/25 v1.7` | idem |
+| `ifxetex.sty` | `ifxetex` | `2019/10/25 v0.7` | idem |
+
+All eight are **verbatim** upstream files, LPPL 1.3c or later, with their own
+preamble intact — do not strip it.
+
+`keyval.sty` is generated from `keyval.dtx` by docstrip, so CTAN serves no
+pre-built copy; it is taken from the TeX Live tlnet archive, which ships the
+generated runtime file. `ifetex`/`ifvtex` are not loaded by any document in the
+corpus, but the `iftex` package is embedded whole rather than cherry-picked.
