@@ -44,6 +44,16 @@ const Plain = `
 \def\enspace{\hskip.5em}
 \def\thinspace{\hskip.16667em}
 \def\negthinspace{\hskip-.16667em}
+% TeX's four spacing commands, named by punctuation. They are measured in math
+% units, where 18mu is 1em: \, is 3mu, \: is 4mu, \; is 5mu and \! is −3mu. The
+% engine sets them as ordinary horizontal space of the same width, which is what
+% a real LaTeX produces in text — a\,b measures 1/6 em wider than ab there.
+% \, is by far the most common command in a mathematical paper, and all four
+% were undefined.
+\let\,\thinspace
+\let\!\negthinspace
+\def\:{\hskip.22222em}
+\def\;{\hskip.27778em}
 \def\raggedright{\rightskip=0pt plus 1fil\relax}
 \def\justified{\rightskip=0pt\relax}
 \def\vfill{\vskip0pt plus 1fil\relax}
