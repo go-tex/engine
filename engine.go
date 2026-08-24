@@ -1577,6 +1577,16 @@ func (e *Engine) execCS(t tok) bool {
 	}
 	defer e.flushAfterAssignment(m)
 	switch m.kind {
+	case mCharDef:
+		// \chardef\x=65 makes \x behave exactly as \char65 does: in horizontal
+		// mode it typesets that character. Without this the token was readable
+		// as a number and nothing else, so LaTeX's \# — a \chardef token, not a
+		// macro — put nothing on the page. A \mathchardef token is deliberately
+		// left alone: it names a class and family, not a glyph, and outside
+		// math mode TeX rejects it rather than typesetting anything.
+		if !m.mathChar {
+			e.startChar(rune(m.code))
+		}
 	case mCountRef:
 		e.countRefAssign(m.code, false) // \n=<v>
 	case mDimenRef:
