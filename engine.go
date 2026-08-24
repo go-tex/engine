@@ -278,11 +278,12 @@ type Engine struct {
 	// (Run resets it to 0; class/package loading splices file bodies into e.base at
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
-	afterToken  *tok // token saved by \afterassignment, inserted after the next one
-	expandDepth int  // >0 while an isolated expansion (\edef/\message) is running
-	progBpos    int  // e.bpos at the last observed forward progress
-	noProgSteps int  // expansion steps since e.bpos last advanced
-	tightLimit  int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
+	afterToken       *tok // token saved by \afterassignment, inserted after the next one
+	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
+	pendingProtected bool // a \protected prefix waiting for the \def it applies to
+	progBpos         int  // e.bpos at the last observed forward progress
+	noProgSteps      int  // expansion steps since e.bpos last advanced
+	tightLimit       int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
@@ -328,6 +329,11 @@ type meaning struct {
 	ch         rune   // let-char / chardef code
 	cat        cat
 	code       int
+	// protected marks a \protected macro. TeX expands such a macro when it is
+	// executed but NOT inside an isolated expansion (\edef, \message, \write,
+	// \special), which is how a macro survives being written into a token list
+	// and runs later instead. See doProtected.
+	protected bool
 	// mathChar marks a \mathchardef constant (as against \chardef): the two read as
 	// the same integer but are different meanings to \ifx and \meaning.
 	mathChar bool
@@ -1022,6 +1028,12 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		switch m.kind {
 		case mMacro:
+			// A \protected macro stays a token while an \edef (or \message,
+			// \write, \special) is building its list, and expands only when it
+			// is executed. That is the whole point of the prefix.
+			if m.protected && e.expandDepth > 0 {
+				return t, true
+			}
 			if e.stepOverrun() || len(e.lists) > maxInputDepth {
 				e.tripRunaway()
 				return tok{}, false
@@ -1574,6 +1586,15 @@ func (e *Engine) execCS(t tok) bool {
 	if m.kind == mPrim && m.name == "afterassignment" {
 		m.prim(e)
 		return true
+	}
+	// A \protected prefix applies to the definition it precedes and to nothing
+	// else. It survives the other prefixes, which may come in any order, and is
+	// consumed by the \def that follows; anything else ends it, so a stray
+	// \protected cannot silently protect a later, unrelated macro. TeX reports
+	// such a prefix as an error; ending it quietly is the tolerant equivalent
+	// and leaves the following definition correct either way.
+	if e.pendingProtected && !(m.kind == mPrim && keepsProtectedPrefix(m.name)) {
+		e.pendingProtected = false
 	}
 	defer e.flushAfterAssignment(m)
 	switch m.kind {
@@ -2497,4 +2518,15 @@ func isWord(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// keepsProtectedPrefix reports whether a primitive may stand between \protected
+// and the definition it applies to: the other prefixes, in any order, and the
+// four definition forms that consume it.
+func keepsProtectedPrefix(name string) bool {
+	switch name {
+	case "protected", "long", "outer", "global", "def", "edef", "gdef", "xdef":
+		return true
+	}
+	return false
 }

@@ -112,7 +112,7 @@ func (e *Engine) loadETeXExpansion() {
 	// \protected\def makes a macro that survives expansion in an \edef. The engine
 	// expands macros only where a value is wanted, so the prefix is accepted and
 	// the definition made as usual.
-	e.prim("protected", func(e *Engine) {})
+	e.prim("protected", func(e *Engine) { e.pendingProtected = true })
 	// \eTeXversion / \eTeXrevision identify the extended engine a package tests
 	// for. The version is an internal integer, so both \the\eTeXversion and
 	// \ifnum\eTeXversion>0 read it.
