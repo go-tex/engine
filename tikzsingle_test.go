@@ -53,3 +53,40 @@ func TestTikzSingleMatchesBracedForm(t *testing.T) {
 		t.Errorf("le tracé diagonal %q est absent du rendu sans accolades", want)
 	}
 }
+
+// Every node on a path must reach the page, not just the last one. A node voids
+// \tikz@figbox inside the group that collects its text (tikz.code.tex:3903) and
+// then appends itself to that same box; the nodes already accumulated there come
+// back only because the group restores the register. While box registers were
+// unscoped here, each node wiped its predecessors and a two-node path drew one
+// node.
+func TestTikzAllNodesOnAPathAreDrawn(t *testing.T) {
+	if os.Getenv("GOTEX_TEXMF") == "" {
+		t.Skip("sources pgf absentes : définir GOTEX_TEXMF sur un arbre qui contient tikz.code.tex")
+	}
+	t.Setenv("GOTEX_PGF", "1")
+	for _, c := range []struct {
+		name, body string
+		want       int
+	}{
+		{"un seul nœud", `\tikz \node {AAAA};`, 4},
+		{"deux nœuds sur un chemin", `\tikz \draw (0,0) node {AA} -- (2,0) node {BBBBBB};`, 8},
+		{"trois segments, deux nœuds", `\tikz \draw (0,0) node {AA} -- (2,0) -- (2,2) node {BBBBBB};`, 8},
+		{"nœuds dans des chemins séparés", `\tikz{\node {AA}; \node at (2,0) {BBBBBB};}`, 8},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e, err := buildEngine(Options{}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.Run(`\documentclass{article}\usepackage{tikz}\begin{document}` + c.body + `\end{document}`); err != nil {
+				t.Fatal(err)
+			}
+			svg := strings.Join(e.RenderPages(72), "")
+			// One <path transform= per glyph; the folio adds one.
+			if got := strings.Count(svg, `<path transform=`); got != c.want+1 {
+				t.Errorf("%s\n  %d glyphes rendus, attendu %d (le folio compris)", c.body, got, c.want+1)
+			}
+		})
+	}
+}

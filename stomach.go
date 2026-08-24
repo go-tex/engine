@@ -666,10 +666,32 @@ func (e *Engine) getBox(i int) *boxNode {
 	return e.box[i]
 }
 
-func (e *Engine) setBox(i int, b *boxNode) {
-	if i >= 0 && i < 256 {
-		e.box[i] = b
+// setBoxScoped is \setbox: an ordinary assignment, so a group restores the
+// register when it closes. Measured against a real TeX — \setbox0 inside { }
+// leaves box 0 as it was outside. tikz relies on it: a node voids \tikz@figbox
+// inside the group that collects its text, and every node already accumulated
+// there has to survive that.
+func (e *Engine) setBoxScoped(i int, b *boxNode, global bool) {
+	if i < 0 || i >= 256 {
+		return
 	}
+	if global {
+		e.forgetSaved(10, i, "")
+	} else if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 10, idx: i, oldbox: e.box[i]})
+	}
+	e.box[i] = b
+}
+
+// setBox is the unscoped assignment, used where TeX itself does not restore: a
+// register read with \box or \unhbox is voided for good, not until the end of
+// the group that read it. Measured the same way.
+func (e *Engine) setBox(i int, b *boxNode) {
+	if i < 0 || i >= 256 {
+		return
+	}
+	e.forgetSaved(10, i, "")
+	e.box[i] = b
 }
 
 // boxRegIndex reads a box-register reference: either a \newbox/\newsavebox-defined
@@ -690,10 +712,10 @@ func (e *Engine) boxRegIndex() int {
 }
 
 // doSetbox handles \setbox<n>=<box>.
-func (e *Engine) doSetbox() {
+func (e *Engine) doSetbox(global bool) {
 	i := e.boxRegIndex()
 	e.scanEquals()
-	e.setBox(i, e.scanBox())
+	e.setBoxScoped(i, e.scanBox(), global)
 }
 
 // boxDimAssign handles \wd/\ht/\dp <n>=<dimen>, overriding a box's dimension.

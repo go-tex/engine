@@ -102,7 +102,7 @@ func (e *Engine) doSbox() {
 	reg, ok := e.readBoxHandle()
 	list, _ := e.grabHboxList()
 	if ok {
-		e.setBox(reg, hpackSP(list, packNatural, 0))
+		e.setBoxScoped(reg, hpackSP(list, packNatural, 0), false)
 	}
 }
 
@@ -113,7 +113,7 @@ func (e *Engine) doSavebox() {
 	reg, ok := e.readBoxHandle()
 	b := e.doMakebox()
 	if ok {
-		e.setBox(reg, b)
+		e.setBoxScoped(reg, b, false)
 	}
 }
 
@@ -165,4 +165,41 @@ func (e *Engine) readBoxHandle() (int, bool) {
 		return m.code, true
 	}
 	return -1, false
+}
+
+// \unhbox<n> unpacks a box register onto the list being built, instead of
+// placing the box as a single item: the register's contents become part of the
+// surrounding list and the register is voided. \unhcopy leaves the register
+// alone, and \unvbox / \unvcopy are the vertical pair.
+//
+// This is how a file accumulates material a piece at a time —
+// \setbox0=\hbox{\unhbox0 <more>} appends to box 0 without nesting a box inside
+// a box, which would trap the contents at a fixed width. pgf builds a path's
+// nodes exactly that way, so while these consumed the register number and threw
+// the contents away, every node on a path but the last one disappeared.
+//
+// TeX refuses to unpack a vbox onto a horizontal list or the reverse; the engine
+// contributes nothing in that case, which is what the refusal amounts to here.
+func (e *Engine) installUnbox() {
+	e.prim("unhbox", func(e *Engine) { e.unbox(hbox, false) })
+	e.prim("unhcopy", func(e *Engine) { e.unbox(hbox, true) })
+	e.prim("unvbox", func(e *Engine) { e.unbox(vbox, false) })
+	e.prim("unvcopy", func(e *Engine) { e.unbox(vbox, true) })
+}
+
+func (e *Engine) unbox(want boxKind, keep bool) {
+	i := e.boxRegIndex()
+	b := e.getBox(i)
+	if b == nil || b.kind != want {
+		return
+	}
+	list := b.list
+	if keep {
+		list = cloneBox(b).list
+	} else {
+		e.setBox(i, nil)
+	}
+	for _, n := range list {
+		e.place(n)
+	}
 }

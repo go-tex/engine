@@ -85,12 +85,8 @@ func (e *Engine) loadAMSPrims() {
 			}
 		}
 	})
-	// \unhbox<n> / \unvbox<n>: unpack a box register onto the current list. Used
-	// inside \insert groups (dropped above) and footnote assembly; consume the index.
-	e.prim("unhbox", func(e *Engine) { e.scanInt() })
-	e.prim("unvbox", func(e *Engine) { e.scanInt() })
-	e.prim("unhcopy", func(e *Engine) { e.scanInt() })
-	e.prim("unvcopy", func(e *Engine) { e.scanInt() })
+	// \unhbox / \unvbox / \unhcopy / \unvcopy live in boxcmds.go.
+	e.installUnbox()
 	// aux-file writers: \newwrite\cs allocates a stream (a count is enough), and
 	// \openout / \write / \closeout are accepted and dropped (the engine's two-pass
 	// TOC/label machinery does not use TeX write streams).

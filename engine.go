@@ -341,7 +341,7 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind    int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip
+	kind    int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip 10=box
 	name    string
 	old     *meaning
 	idx     int
@@ -351,6 +351,7 @@ type saveItem struct {
 	oldg    glueSpec
 	oldf    fontFace
 	oldtoks []tok
+	oldbox  *boxNode
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
@@ -963,6 +964,8 @@ func (e *Engine) endGroup() {
 			e.curColor = uint32(s.oldi)
 		case 9:
 			e.everypar = s.oldtoks
+		case 10:
+			e.box[s.idx] = s.oldbox
 		}
 	}
 	// \aftergroup's tokens are put back once the group is closed and its values
