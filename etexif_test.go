@@ -125,10 +125,47 @@ func TestScantokens(t *testing.T) {
 	}
 }
 
-// \protected is accepted as a definition prefix, and the definition is made.
+// \protected marks a macro that does NOT expand inside an isolated expansion —
+// \edef, \message, \write, \special — but expands as usual when it is executed.
+// Measured against a real LaTeX (tectonic): with \protected\def\a{A},
+// \message{\a} prints "\a " and \edef\z{\a} leaves \z as macro:->\a , while an
+// unprotected \def prints and stores "A". The prefix is part of the meaning, so
+// \meaning names it and \ifx tells a protected macro from an identical
+// unprotected one.
+//
+// The prefix used to be accepted and dropped, which is worse than not having it:
+// a macro written into a token list to be run later ran immediately instead.
 func TestProtectedPrefix(t *testing.T) {
-	if got := runExpr(t, `\protected\def\a{A}\message{\a}`); got != "A" {
-		t.Errorf("\\protected\\def = %q, want A", got)
+	for _, c := range []struct{ name, src, want string }{
+		{"dans un \\message", `\protected\def\a{A}\message{\a}`, `\a `},
+		{"sans le préfixe, le contrôle", `\def\a{A}\message{\a}`, `A`},
+		{"dans un \\edef", `\protected\def\a{A}\edef\z{\a}\message{\meaning\z}`, `macro:->\a `},
+		{"protégé et non protégé côte à côte", `\protected\def\a{A}\def\b{B}\edef\z{\a\b}\message{\meaning\z}`, `macro:->\a B`},
+		{"\\meaning nomme le préfixe", `\protected\def\a{A}\message{\meaning\a}`, `\protected macro:->A`},
+		{"\\ifx distingue les deux", `\protected\def\a{A}\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `DIFF`},
+		{"\\ifx de deux protégés identiques", `\protected\def\a{A}\protected\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `SAME`},
+		{"\\protected\\edef", `\protected\edef\a{A}\message{\meaning\a}`, `\protected macro:->A`},
+		{"\\protected\\long\\def", `\protected\long\def\a{A}\message{\meaning\a}`, `\protected macro:->A`},
+		{"\\protected\\gdef", `{\protected\gdef\a{A}}\message{\meaning\a}`, `\protected macro:->A`},
+		{"le préfixe ne déborde pas sur la définition suivante", `\protected\def\a{A}\def\b{B}\message{\meaning\b}`, `macro:->B`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := runExpr(t, c.src); got != c.want {
+				t.Errorf("%s\n  obtenu %q, attendu %q", c.src, got, c.want)
+			}
+		})
+	}
+}
+
+// Executed rather than expanded, a protected macro runs exactly as any other.
+func TestProtectedMacroStillRuns(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\protected\def\a{A}\setbox0=\hbox{x\a y}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := boxChars(e.box[0]); got != "xAy" {
+		t.Errorf("une macro protégée exécutée compose %q, attendu \"xAy\"", got)
 	}
 }
 
@@ -227,5 +264,24 @@ func TestUnlessOfNonConditional(t *testing.T) {
 func TestNullfontSpace(t *testing.T) {
 	if s := (nullFont{}).spaceSP(); s != (glueSpec{}) {
 		t.Errorf("\\nullfont space = %+v, want no glue", s)
+	}
+}
+
+// A stray \protected must not reach a later definition. TeX reports a prefix
+// used with the wrong command as an error; ending it quietly is the tolerant
+// equivalent, and either way the following \def must come out unprotected.
+func TestProtectedPrefixDoesNotLeak(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		{"suivi de \\relax", `\protected\relax\def\b{B}\message{\meaning\b}`, `macro:->B`},
+		{"suivi d'une affectation", `\protected\count0=1 \def\b{B}\message{\meaning\b}`, `macro:->B`},
+		{"suivi d'un \\message", `\protected\message{}\def\b{B}\message{\meaning\b}`, `macro:->B`},
+		{"les préfixes se cumulent quand même", `\protected\global\long\def\b{B}\message{\meaning\b}`, `\protected macro:->B`},
+		{"ordre inverse des préfixes", `\long\protected\def\b{B}\message{\meaning\b}`, `\protected macro:->B`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := runExpr(t, c.src); got != c.want {
+				t.Errorf("%s\n  obtenu %q, attendu %q", c.src, got, c.want)
+			}
+		})
 	}
 }

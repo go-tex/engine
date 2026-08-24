@@ -194,8 +194,10 @@ func (e *Engine) doDef(global, expandBody bool) {
 	if expandBody {
 		body = e.expandList(body)
 	}
+	protected := e.pendingProtected
+	e.pendingProtected = false
 	if name != "" {
-		e.define(name, &meaning{kind: mMacro, params: params, body: body}, global)
+		e.define(name, &meaning{kind: mMacro, params: params, body: body, protected: protected}, global)
 	}
 }
 
@@ -1124,7 +1126,9 @@ func meaningEq(a, b *meaning) bool {
 	case mLetChar:
 		return a.ch == b.ch && a.cat == b.cat
 	case mMacro:
-		return sameToks(a.params, b.params) && sameToks(a.body, b.body)
+		// The prefix is part of the meaning, so \protected\def\p{P} and
+		// \def\q{P} are NOT \ifx-equal. Measured against a real TeX.
+		return a.protected == b.protected && sameToks(a.params, b.params) && sameToks(a.body, b.body)
 	}
 	return true
 }
@@ -1890,7 +1894,12 @@ func (e *Engine) meaningString(t tok) string {
 	}
 	switch m.kind {
 	case mMacro:
-		return "macro:" + e.toksToString(m.params) + "->" + e.toksToString(m.body)
+		// TeX names the prefix as part of the meaning: \protected macro:->…
+		pfx := ""
+		if m.protected {
+			pfx = e.escapeStr() + "protected "
+		}
+		return pfx + "macro:" + e.toksToString(m.params) + "->" + e.toksToString(m.body)
 	case mPrim:
 		return e.escapeStr() + m.name
 	case mCharDef:

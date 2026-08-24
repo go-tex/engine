@@ -420,6 +420,17 @@ const LaTeX2eClassKernel = `
 \chardef\#=35
 \chardef\%=37
 \chardef\&=38
+% \$ \_ \{ \} are robust under LaTeX: \{ and \} are \protected macros and \$ and
+% \_ are robust commands, which come to the same thing here — none of the four
+% expands inside an \edef. Measured against a real LaTeX, \meaning\{ is
+% "\protected macro:->\ifmmode \lbrace \else \textbraceleft \fi". The engine has
+% no \ifmmode-driven text/math split for them, so the body stays what it was and
+% only the prefix is added: what changes is that writing one into a token list
+% now stores the command rather than the characters it would produce.
+\protected\def\${\char36\relax}
+\protected\def\_{\char95\relax}
+\protected\def\{{\char123\relax}
+\protected\def\}{\char125\relax}
 % ── text symbols (simple literal glyphs) ────────────────────────────────────
 \def\textbullet{•}
 \def\textendash{–}
