@@ -12,6 +12,7 @@
 package engine
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -735,14 +736,31 @@ func (e *Engine) forgetSaved(kind, idx int, name string) {
 	if len(e.save) == 0 {
 		return
 	}
+	var dropped []int
 	out := e.save[:0]
-	for _, it := range e.save {
+	for i, it := range e.save {
 		if it.kind == kind && ((kind == 0 && it.name == name) || (kind != 0 && it.idx == idx)) {
+			dropped = append(dropped, i)
 			continue
 		}
 		out = append(out, it)
 	}
+	if len(dropped) == 0 {
+		return
+	}
 	e.save = out
+	// Every open group remembers where the save stack stood when it opened and
+	// restores down to that index when it closes. Dropping entries from the
+	// middle shifts everything above them down, so a mark taken earlier would
+	// point past its own entries and the group would close restoring too few —
+	// often none at all, leaving an inner value in force outside the group that
+	// made it. Each mark moves down by however many entries were dropped from
+	// below it. This is what makes a \global assignment inside a group safe:
+	// pgf performs them constantly while it builds a path, and every one of
+	// them used to shift the marks of the groups enclosing it.
+	for j := range e.groups {
+		e.groups[j].mark -= sort.SearchInts(dropped, e.groups[j].mark)
+	}
 }
 
 func (e *Engine) setCount(i, v int, global bool) {
@@ -1770,6 +1788,11 @@ func (e *Engine) scanInt() int {
 				if m.kind == mPrim && m.name == "catcode" {
 					return sign * int(e.catcode[rune(e.scanInt())])
 				}
+				if m.kind == mPrim {
+					if v, ok := e.groupQuery(m.name); ok {
+						return sign * v
+					}
+				}
 				if m.kind == mPrim && m.name == "numexpr" {
 					return sign * e.scanExpr(false)
 				}
@@ -2012,6 +2035,8 @@ func (e *Engine) isInternalInteger(t tok) bool {
 	case mPrim:
 		switch m.name {
 		case "count", "numexpr", "catcode", "lccode", "uccode":
+			return true
+		case "currentgrouplevel", "currentgrouptype":
 			return true
 		}
 	}
