@@ -1770,6 +1770,11 @@ func (e *Engine) scanInt() int {
 				if m.kind == mPrim && m.name == "catcode" {
 					return sign * int(e.catcode[rune(e.scanInt())])
 				}
+				if m.kind == mPrim {
+					if v, ok := e.groupQuery(m.name); ok {
+						return sign * v
+					}
+				}
 				if m.kind == mPrim && m.name == "numexpr" {
 					return sign * e.scanExpr(false)
 				}
@@ -2012,6 +2017,8 @@ func (e *Engine) isInternalInteger(t tok) bool {
 	case mPrim:
 		switch m.name {
 		case "count", "numexpr", "catcode", "lccode", "uccode":
+			return true
+		case "currentgrouplevel", "currentgrouptype":
 			return true
 		}
 	}

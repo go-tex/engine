@@ -865,6 +865,10 @@ func (e *Engine) doThe() {
 	if t.cs_ {
 		if m := e.eq[t.cs]; m != nil {
 			switch {
+			case m.kind == mPrim && isGroupQuery(m.name):
+				v, _ := e.groupQuery(m.name)
+				e.pushString(strconv.Itoa(v))
+				return
 			case m.kind == mPrim && m.name == "numexpr":
 				e.pushString(strconv.Itoa(e.scanExpr(false)))
 				return

@@ -119,6 +119,9 @@ func (e *Engine) loadETeXExpansion() {
 	e.eq["eTeXversion"] = &meaning{kind: mCharDef, code: 2}
 	e.prim("eTeXrevision", func(e *Engine) { e.pushString(".6") })
 	expandableSet["eTeXrevision"] = true
+	// \currentgrouplevel and \currentgrouptype say where the file stands in the
+	// grouping stack; see etexgroup.go.
+	e.installGroupQueries()
 }
 
 // rawGroup reads a braced group without expanding it. An argument that is not a
