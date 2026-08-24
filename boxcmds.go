@@ -102,7 +102,7 @@ func (e *Engine) doSbox() {
 	reg, ok := e.readBoxHandle()
 	list, _ := e.grabHboxList()
 	if ok {
-		e.setBox(reg, hpackSP(list, packNatural, 0))
+		e.setBoxScoped(reg, hpackSP(list, packNatural, 0), false)
 	}
 }
 
@@ -113,7 +113,7 @@ func (e *Engine) doSavebox() {
 	reg, ok := e.readBoxHandle()
 	b := e.doMakebox()
 	if ok {
-		e.setBox(reg, b)
+		e.setBoxScoped(reg, b, false)
 	}
 }
 

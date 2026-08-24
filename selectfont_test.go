@@ -20,8 +20,8 @@ func TestSelectfontRestoresTheFont(t *testing.T) {
 	}
 	e.SetFont(testFont(t))
 	out, err := e.Run(`\setbox0=\hbox{A}\message{[avant:\the\wd0]}` +
-		`{\nullfont\setbox1=\hbox{A}\message{[nullfont:\the\wd1]}` +
-		`\selectfont\setbox2=\hbox{A}\message{[apres selectfont:\the\wd2]}}`)
+		`{\nullfont\global\setbox1=\hbox{A}\message{[nullfont:\the\wd1]}` +
+		`\selectfont\global\setbox2=\hbox{A}\message{[apres selectfont:\the\wd2]}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestSelectfontIsScoped(t *testing.T) {
 	e.LoadPlain()
 	e.LoadLaTeX()
 	e.SetFont(testFont(t))
-	if _, err := e.Run(`{\nullfont{\selectfont\setbox0=\hbox{A}}\setbox1=\hbox{A}}`); err != nil {
+	if _, err := e.Run(`{\nullfont{\selectfont\global\setbox0=\hbox{A}}\global\setbox1=\hbox{A}}`); err != nil {
 		t.Fatal(err)
 	}
 	if b := e.getBox(0); b == nil || b.width == 0 {
@@ -95,3 +95,8 @@ func TestVoidBox(t *testing.T) {
 		t.Errorf("= %q, want box 3 emptied and box 0 untouched", got)
 	}
 }
+
+// The boxes above are set \global on purpose: a plain \setbox inside a group is
+// restored when the group closes (measured against a real TeX), so a local one
+// would be gone before the assertion could read it. What is under test is the
+// scope of the FONT, and the box is only the ruler.

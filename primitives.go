@@ -316,6 +316,8 @@ func (e *Engine) doGlobal() {
 		e.doChardef(true, false)
 	case "mathchardef":
 		e.doChardef(true, true)
+	case "setbox":
+		e.doSetbox(true)
 	case "catcode":
 		e.doCatcode(true)
 	default:
@@ -1658,7 +1660,7 @@ func (e *Engine) loadMore() {
 // kern producers scan and discard their argument to keep the parser in sync; the
 // real work happens when they are reached inside \setbox via scanBox/buildBoxList.
 func (e *Engine) loadStomach() {
-	e.prim("setbox", func(e *Engine) { e.doSetbox() })
+	e.prim("setbox", func(e *Engine) { e.doSetbox(false) })
 	// At top level (vertical mode) box/rule/glue producers contribute to the main
 	// vertical list; inside \setbox they are reached via scanBox/buildBoxList.
 	e.prim("hbox", func(e *Engine) { e.place(e.makeBox(hbox)) })
