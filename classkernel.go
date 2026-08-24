@@ -408,6 +408,18 @@ const LaTeX2eClassKernel = `
 \def\@font@warning#1{\message{Font Warning: #1}}
 % ── misc structural no-ops ──────────────────────────────────────────────────
 \def\null{\hbox{}}
+% LaTeX makes the three escaped characters that stand for nothing but themselves
+% into \chardef tokens rather than macros: under a real LaTeX, \meaning\# is
+% \char"23. The difference that matters is that a \chardef token is
+% UNEXPANDABLE, so it survives \edef and can be \let to something else for the
+% length of one expansion. pgf depends on exactly that — it builds an SVG
+% fragment with \edef and rebinds \# to a raw catcode-11 # while the fragment is
+% written out, which is how a shading's fill:url(#pgfsh7) gets its reference. As
+% expandable macros these turned into \char 35\relax inside pgf's \edef and every
+% gradient reference in the output was dead text.
+\chardef\#=35
+\chardef\%=37
+\chardef\&=38
 % ── text symbols (simple literal glyphs) ────────────────────────────────────
 \def\textbullet{•}
 \def\textendash{–}
