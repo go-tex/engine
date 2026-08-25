@@ -99,36 +99,36 @@ func TestCharSizePt(t *testing.T) {
 // not a word separator, an unsized run falls back to a readable size and a
 // zero-advance word is emitted without a meaningless textLength.
 func TestTextRunEdges(t *testing.T) {
-	var sb strings.Builder
-	(&textRun{}).emit(&sb, &textCursor{}) // nothing accumulated
-	if sb.String() != "" {
-		t.Errorf("empty run emitted %q", sb.String())
+	l := newTextLayer()
+	(&textRun{}).flush(l) // nothing accumulated
+	if l.String() != "" {
+		t.Errorf("empty run emitted %q", l.String())
 	}
 
-	sb.Reset()
+	l = newTextLayer()
 	tr := &textRun{}
 	tr.addSpace() // before any word: no separator is owed
 	tr.addChar('a', 1, 2, 0)
-	tr.emit(&sb, &textCursor{})
-	if got := sb.String(); !strings.Contains(got, `font-size="10"`) {
+	tr.flush(l)
+	if got := l.String(); !strings.Contains(got, `font-size="10"`) {
 		t.Errorf("unsized run should fall back to 10pt: %s", got)
 	}
 	if tr.words != nil || tr.space || tr.size != 0 {
 		t.Errorf("emit must reset the run: %+v", tr)
 	}
 
-	sb.Reset()
+	l = newTextLayer()
 	zero := &textRun{}
 	zero.addChar('a', 5, 0, 11) // a zero-advance character
-	zero.emit(&sb, &textCursor{})
-	if got := sb.String(); strings.Contains(got, "textLength") {
+	zero.flush(l)
+	if got := l.String(); strings.Contains(got, "textLength") {
 		t.Errorf("a zero-width word must not be pinned: %s", got)
 	}
 
-	sb.Reset()
+	l = newTextLayer()
 	blank := &textRun{words: []textWord{{x: 1}, {x: 2, runes: []rune("b")}}}
-	blank.emit(&sb, &textCursor{}) // a word carrying no runes is skipped, the next one still emits
-	if got := sb.String(); !strings.Contains(got, ">b</tspan>") {
+	blank.flush(l) // a word carrying no runes is skipped, the next one still emits
+	if got := l.String(); !strings.Contains(got, ">b</tspan>") {
 		t.Errorf("word after an empty one lost: %s", got)
 	}
 }
@@ -209,13 +209,13 @@ func TestNoSpaceAfterAHyphenatedBreak(t *testing.T) {
 		t.Error("an ordinary letter is not a break hyphen")
 	}
 
-	var sb strings.Builder
-	cur := &textCursor{live: true, baseline: 100, endX: 400, size: 10, lastRune: '-'}
+	l := newTextLayer()
+	l.cur = textCursor{live: true, baseline: 100, endX: 400, size: 10, lastRune: '-'}
 	run := &textRun{baseline: 112, size: 10}
 	run.addChar('a', 70, 5, 10)
-	run.emit(&sb, cur)
-	if strings.Contains(sb.String(), "> a") {
-		t.Errorf("a hyphenated break must not gain a space: %s", sb.String())
+	run.flush(l)
+	if strings.Contains(l.String(), "> <tspan") {
+		t.Errorf("a hyphenated break must not gain a space: %s", l.String())
 	}
 }
 
@@ -250,5 +250,88 @@ func TestWordBoundariesAcrossInterruptions(t *testing.T) {
 		if got := textLayerContent(string(pages[0])); !strings.Contains(got, c.want) {
 			t.Errorf("%s: layer = %q, want it to contain %q", c.name, got, c.want)
 		}
+	}
+}
+
+// The whole page is ONE <text>, and that is the property search depends on: a
+// browser's find does not match a phrase spanning two <text> elements, whatever
+// their text content says. Measured in Chrome — the same words in two <text>
+// are unfindable while the same words as two <tspan> of one <text> are found —
+// so this is the assertion that keeps the page searchable across formulas,
+// table cells and line breaks.
+func TestPageIsOneTextElement(t *testing.T) {
+	doc := `\documentclass{article}\begin{document}
+Words before. The rest mass is $E = mc^2$ exactly, and a table:
+\begin{tabular}{ll}alpha & beta\\ gamma & delta\end{tabular}
+Words after, on another line entirely.
+\end{document}`
+	pages, _, err := CompileToSVGPagesDiag([]byte(doc), Options{Size: 11, Lenient: true})
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("compile: %v (%d pages)", err, len(pages))
+	}
+	svg := string(pages[0])
+	if n := strings.Count(svg, "<text"); n != 1 {
+		t.Errorf("the page has %d <text> elements; a phrase cannot be found across two", n)
+	}
+	got := textLayerContent(svg)
+	for _, want := range []string{
+		"The rest mass is exactly", // across a formula
+		"alpha beta",               // across two table cells
+		"Words after, on another",  // across a line break
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("layer does not carry %q:\n%s", want, got)
+		}
+	}
+}
+
+// The text layer is written BEFORE the outlines, so a selection's background
+// paints behind the glyphs instead of hiding the words it highlights.
+func TestTextLayerPrecedesTheGlyphGroup(t *testing.T) {
+	pages, _, err := CompileToSVGPagesDiag([]byte(`\documentclass{article}\begin{document}ab\end{document}`),
+		Options{Size: 11, Lenient: true})
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("compile: %v", err)
+	}
+	svg := string(pages[0])
+	text, path := strings.Index(svg, "<text"), strings.Index(svg, "<path")
+	if text < 0 || path < 0 {
+		t.Fatalf("expected both a text layer and an outline")
+	}
+	if text > path {
+		t.Errorf("<text> at %d comes after <path> at %d; the highlight would cover the glyphs", text, path)
+	}
+}
+
+// Text under a matrix is PLACED by that matrix, so it cannot join the page's one
+// <text>: it gets its own, inside the same transform. A rotated caption that
+// joined the page chunk would be laid out at the wrong place entirely.
+func TestTransformedTextGetsItsOwnChunk(t *testing.T) {
+	l := newTextLayer()
+	plain := &textRun{baseline: 10, size: 10}
+	plain.addChar('a', 0, 5, 10)
+	plain.flush(l)
+
+	l.pushTransform("matrix(0,1,-1,0,0,0)")
+	rot := &textRun{baseline: 20, size: 10}
+	rot.addChar('b', 0, 5, 10)
+	rot.flush(l)
+	l.popTransform()
+
+	after := &textRun{baseline: 30, size: 10}
+	after.addChar('c', 0, 5, 10)
+	after.flush(l)
+
+	out := l.String()
+	if n := strings.Count(out, "<text"); n != 3 {
+		t.Errorf("expected three chunks (before, transformed, after), got %d: %s", n, out)
+	}
+	if !strings.Contains(out, `<g transform="matrix(0,1,-1,0,0,0)"><text`) {
+		t.Errorf("the transformed chunk must sit inside its own <g>: %s", out)
+	}
+	// The cursor is reset across the boundary: a rotated caption is not a
+	// continuation of the text beside it.
+	if strings.Index(out, ">b</tspan>") < strings.Index(out, `<g transform`) {
+		t.Errorf("the rotated run escaped its transform: %s", out)
 	}
 }

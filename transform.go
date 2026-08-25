@@ -257,11 +257,16 @@ func (e *Engine) skipOptBracketGroup() {
 // y-up frame) becomes matrix(a, -b, -c, d, ox, baseline): a local SVG point
 // (lx, ly) = (x_m, -y_m) maps to (a*x_m - c*ly, -b*x_m + d*ly) = (x'_m, -y'_m),
 // i.e. the transformed point re-expressed y-down, then shifted to the origin.
-func paintTransformSP(sb *strings.Builder, tn transformNode, x, baseline float64, font fontFace, tc *textCursor) {
+func paintTransformSP(sb *strings.Builder, tn transformNode, x, baseline float64, font fontFace, tl *textLayer) {
 	ox := x + spToPt(tn.refDX)
-	fmt.Fprintf(sb, `<g transform="matrix(%s,%s,%s,%s,%s,%s)">`,
+	matrix := fmt.Sprintf(`matrix(%s,%s,%s,%s,%s,%s)`,
 		f(zeroSafe(tn.a)), f(zeroSafe(-tn.b)), f(zeroSafe(-tn.c)), f(zeroSafe(tn.d)), f(ox), f(baseline))
-	paintBoxSP(sb, tn.inner, 0, 0, font, tc)
+	fmt.Fprintf(sb, `<g transform="%s">`, matrix)
+	// Text under a matrix is PLACED by that matrix, so it cannot join the page's
+	// one <text>: it gets its own, inside the same transform.
+	tl.pushTransform(matrix)
+	paintBoxSP(sb, tn.inner, 0, 0, font, tl)
+	tl.popTransform()
 	sb.WriteString(`</g>`)
 }
 

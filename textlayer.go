@@ -8,24 +8,35 @@ import (
 	"strings"
 )
 
-// This file adds the SELECTABLE TEXT LAYER to the engine's SVG output.
+// This file carries the page's characters in a SELECTABLE TEXT LAYER.
 //
 // The glyphs themselves are emitted as <path> outlines (boxrender.go): that is
-// what makes the page look right at any zoom and independent of the reader's
-// installed fonts. But an outline is a shape, not a character — a page made only
-// of paths cannot be searched, selected, copied or read aloud, whichever way it
-// is displayed. Rasterising it to a bitmap does not lose that information; the
-// SVG never carried it.
+// what makes a page look right at any zoom and independent of the reader's
+// installed fonts. But an outline is a shape, not a character — a page made
+// only of paths cannot be searched, selected, copied or read aloud. Rasterising
+// it to a bitmap does not lose that information; the SVG never carried it.
 //
-// So alongside each run of glyphs this file emits the run's actual characters as
-// an invisible <text> positioned over them, the way a PDF viewer overlays a text
-// layer on a rendered page. Each word is a <tspan> pinned at the x where its
-// glyphs start and forced to their measured width (textLength +
-// lengthAdjust="spacingAndGlyphs"), so a selection highlight lands on the words
-// it covers; the literal spaces between the tspans (kept by xml:space="preserve")
-// are what let a phrase search match across a space.
+// So the characters are emitted a second time, invisibly, positioned over their
+// own outlines, the way a PDF viewer overlays a text layer on a rendered page.
 //
-// The layer is inert for a rasteriser — go-gfx/gfx/svg draws shapes and skips
+// ⚠ THE WHOLE PAGE IS ONE <text>, and that is the point. A browser's find does
+// NOT match a phrase spanning two <text> elements — measured, in Chrome: the
+// same words in two <text> elements are unfindable while the same words as two
+// <tspan> of ONE <text> are found. Emitting a <text> per line, or per run of
+// glyphs, therefore caps search at whatever fits in one of them, which is how
+// "The rest mass is $E=mc^2$ exactly" stayed unsearchable even after its word
+// boundaries were correct: the boundaries fixed textContent, which screen
+// readers and copy read, and did nothing for find.
+//
+// So every run becomes a <tspan> carrying its own absolute x and y inside a
+// single page-level <text>. The one thing that splits it is a TRANSFORM: text
+// inside \rotatebox or \scalebox is positioned by that matrix and cannot be
+// hoisted out of it, so it gets its own <text> inside the same <g>. A document
+// with no rotated text — nearly all of them — is one chunk from corner to
+// corner, and a phrase is findable across formulas, table cells and line
+// breaks alike.
+//
+// The layer is inert to a rasteriser — go-gfx/gfx/svg draws shapes and skips
 // <text> — so the bitmap path is byte-for-byte unchanged. It only comes alive
 // when the SVG is handed to something that lays out text: a browser's DOM.
 
@@ -36,9 +47,10 @@ type textWord struct {
 	runes    []rune
 }
 
-// textRun accumulates the characters painted along one baseline so they can be
-// emitted as a single <text>. Words are split on inter-word glue; a kern stays
-// inside the word it belongs to (it is a fit adjustment, not a space).
+// textRun accumulates the characters painted along one baseline until something
+// that is not a glyph interrupts them. Words are split on inter-word glue; a
+// kern stays inside the word it belongs to (it is a fit adjustment, not a
+// space).
 type textRun struct {
 	baseline float64
 	size     float64 // largest character size in the run, in points
@@ -46,18 +58,88 @@ type textRun struct {
 	space    bool // an inter-word space is owed before the next character
 }
 
+// textChunk is one <text> element under construction: everything written while
+// the same transform was in force.
+type textChunk struct {
+	transform string // the enclosing <g transform="…">, empty when there is none
+	body      strings.Builder
+	any       bool
+}
+
+// textLayer collects the whole page's chunks, in document order, and the cursor
+// that decides where word boundaries go.
+type textLayer struct {
+	chunks []*textChunk
+	stack  []string // enclosing transforms, innermost last
+	cur    textCursor
+}
+
+// newTextLayer starts a layer with one untransformed chunk open.
+func newTextLayer() *textLayer {
+	l := &textLayer{}
+	l.open("")
+	return l
+}
+
+// open starts a new chunk under the given transform and makes it current.
+func (l *textLayer) open(transform string) {
+	l.chunks = append(l.chunks, &textChunk{transform: transform})
+}
+
+// chunk is the chunk being written to.
+func (l *textLayer) chunk() *textChunk { return l.chunks[len(l.chunks)-1] }
+
+// pushTransform enters a transformed context: its text needs its own <text>
+// inside the same <g>, because the matrix is what places it.
+//
+// The cursor is reset, so no word boundary is inferred across the boundary — a
+// rotated caption is not a continuation of the paragraph beside it.
+func (l *textLayer) pushTransform(transform string) {
+	l.stack = append(l.stack, transform)
+	l.open(strings.Join(l.stack, " "))
+	l.cur = textCursor{}
+}
+
+// popTransform leaves it, resuming the enclosing context in a fresh chunk so
+// the document order of the output is preserved.
+func (l *textLayer) popTransform() {
+	l.stack = l.stack[:len(l.stack)-1]
+	l.open(strings.Join(l.stack, " "))
+	l.cur = textCursor{}
+}
+
+// String renders every non-empty chunk. An empty layer renders nothing, so a
+// page of pure rules or images gains no elements.
+func (l *textLayer) String() string {
+	var sb strings.Builder
+	for _, c := range l.chunks {
+		if !c.any {
+			continue
+		}
+		if c.transform != "" {
+			fmt.Fprintf(&sb, `<g transform="%s">`, c.transform)
+		}
+		sb.WriteString(`<text fill-opacity="0" xml:space="preserve">`)
+		sb.WriteString(c.body.String())
+		sb.WriteString(`</text>`)
+		if c.transform != "" {
+			sb.WriteString(`</g>`)
+		}
+	}
+	return sb.String()
+}
+
 // textCursor remembers where the last run ended, so the next one can tell
 // whether a word boundary belongs between them.
 //
 // A run ends whenever anything that is not a glyph interrupts it — a formula, a
-// table cell, an inline box, the end of a line — and each becomes its own
-// <text>. Adjacent elements concatenate with NOTHING between them, so without a
-// boundary the page read "The mass isexactly" around every formula and
-// "alphabeta" across every table cell: a phrase search spanning the
-// interruption found nothing, silently. A page that claims to be searchable and
-// is wrong about it is worse than one that makes no claim.
+// table cell, an inline box, the end of a line. Without a boundary the page
+// read "The mass isexactly" around every formula and "alphabeta" across every
+// table cell, and a phrase search spanning the interruption found nothing while
+// reporting nothing wrong. A page that claims to be searchable and is wrong
+// about it is worse than one that makes no claim.
 //
-// The rule is the one a PDF text extractor uses, and it is geometric rather
+// The rule is the one a PDF text extractor uses, and it is GEOMETRIC rather
 // than structural: a boundary exists where the reader can SEE one. Deciding
 // from the kind of node that interrupted, or from the kind of glue around it,
 // gets it wrong in both directions — a list label is centred with the same
@@ -79,8 +161,8 @@ func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
 	if baseline != c.baseline && x < c.endX {
 		// The text went back to the left on a new baseline: a line ended, which is
 		// a word boundary however the words wrapped. A baseline change that keeps
-		// moving RIGHT is not a new line — it is a superscript or a subscript,
-		// and a footnote marker belongs to the word it hangs off.
+		// moving RIGHT is not a new line — it is a superscript or a subscript, and
+		// a footnote marker belongs to the word it hangs off.
 		return true
 	}
 	em := size
@@ -93,7 +175,7 @@ func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
 }
 
 // addChar extends the run with one character whose glyph origin is at x and
-// which advances by width (points), setting the character at size points.
+// which advances by width (points), set at size points.
 func (t *textRun) addChar(ch rune, x, width, size float64) {
 	if size > t.size {
 		t.size = size
@@ -111,7 +193,7 @@ func (t *textRun) addChar(ch rune, x, width, size float64) {
 // still yields a single space: the layer describes what the reader would type to
 // search for the text, not the typesetter's spacing. Glue arriving before the
 // run has any word is ignored — the boundary in front of a run is the cursor's
-// decision, not this one's (see [textCursor]).
+// decision, not this one's.
 func (t *textRun) addSpace() {
 	if len(t.words) > 0 {
 		t.space = true
@@ -128,12 +210,12 @@ func (t *textRun) empty() bool {
 	return true
 }
 
-// reset clears the run for the next baseline.
+// reset clears the run for the next stretch of glyphs.
 func (t *textRun) reset() { t.words, t.space, t.size = nil, false, 0 }
 
-// emit writes the run as one invisible <text> and clears it. Nothing is written
-// for an empty run, so a page of pure rules or images gains no elements.
-func (t *textRun) emit(sb *strings.Builder, cur *textCursor) {
+// flush appends the run to the layer's current chunk as one <tspan> per word,
+// then clears it.
+func (t *textRun) flush(l *textLayer) {
 	if t.empty() {
 		t.reset()
 		return
@@ -142,10 +224,9 @@ func (t *textRun) emit(sb *strings.Builder, cur *textCursor) {
 	if size <= 0 {
 		size = 10
 	}
-	fmt.Fprintf(sb, `<text x="%s" y="%s" font-size="%s" fill-opacity="0" xml:space="preserve">`,
-		f(t.words[0].x), f(t.baseline), f(size))
-	if cur.wantsSpace(t.words[0].x, t.baseline, size) && !endsWithHyphen(cur.lastRune) {
-		sb.WriteString(" ")
+	c := l.chunk()
+	if l.cur.wantsSpace(t.words[0].x, t.baseline, size) && !endsWithHyphen(l.cur.lastRune) {
+		c.body.WriteString(" ")
 	}
 	wrote := false
 	for _, w := range t.words {
@@ -153,7 +234,7 @@ func (t *textRun) emit(sb *strings.Builder, cur *textCursor) {
 			continue
 		}
 		if wrote {
-			sb.WriteString(" ")
+			c.body.WriteString(" ")
 		}
 		wrote = true
 		// textLength pins the word to the advance its glyphs actually occupy, so
@@ -161,14 +242,15 @@ func (t *textRun) emit(sb *strings.Builder, cur *textCursor) {
 		// browser substitutes. A non-positive width (a zero-advance combining run)
 		// is emitted unpinned rather than with a meaningless textLength.
 		if w.width > 0 {
-			fmt.Fprintf(sb, `<tspan x="%s" textLength="%s" lengthAdjust="spacingAndGlyphs">%s</tspan>`,
-				f(w.x), f(w.width), escapeXMLText(string(w.runes)))
+			fmt.Fprintf(&c.body, `<tspan x="%s" y="%s" font-size="%s" textLength="%s" lengthAdjust="spacingAndGlyphs">%s</tspan>`,
+				f(w.x), f(t.baseline), f(size), f(w.width), escapeXMLText(string(w.runes)))
 		} else {
-			fmt.Fprintf(sb, `<tspan x="%s">%s</tspan>`, f(w.x), escapeXMLText(string(w.runes)))
+			fmt.Fprintf(&c.body, `<tspan x="%s" y="%s" font-size="%s">%s</tspan>`,
+				f(w.x), f(t.baseline), f(size), escapeXMLText(string(w.runes)))
 		}
 	}
-	sb.WriteString(`</text>`)
-	t.advance(cur)
+	c.any = true
+	t.advance(&l.cur)
 	t.reset()
 }
 
