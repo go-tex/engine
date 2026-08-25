@@ -332,3 +332,77 @@ func charSizePt(c charNode, font fontFace) float64 {
 	}
 	return float64(font.sizePt())
 }
+
+// addPhrase appends a stretch of text that is not a run of glyphs — a formula's
+// LaTeX source over the formula it was typeset from — as one word occupying
+// [x, x+width) on the baseline.
+//
+// It goes through the ordinary run machinery, so it inherits the boundary rules
+// exactly: a space in front of it when one is owed or the gap warrants it, and
+// a cursor left at its end for whatever follows.
+func (l *textLayer) addPhrase(s string, x, width, baseline, size float64) {
+	s = collapseSpace(s)
+	if s == "" || width <= 0 {
+		return
+	}
+	r := textRun{baseline: baseline, size: size}
+	r.words = []textWord{{x: x, width: width, runes: []rune(s)}}
+	r.flush(l)
+}
+
+// collapseSpace squeezes runs of whitespace to a single space, trims the ends,
+// and drops the spaces the math tokeniser INSERTED rather than the ones the
+// author typed — see [dropSyntheticSpaces].
+func collapseSpace(s string) string {
+	return dropSyntheticSpaces(squeezeSpace(s))
+}
+
+// dropSyntheticSpaces removes the space the math tokeniser writes after every
+// control sequence, but ONLY where TeX did not need it: a control-sequence name
+// ends at the first non-letter, so "\sum _{i=1}" is the tokeniser talking and
+// "\alpha b" is not. The author's own spacing is untouched — the space in
+// "E = mc^2" does not follow a control sequence, and removing it would make a
+// search for what they typed fail.
+func dropSyntheticSpaces(s string) string {
+	var b strings.Builder
+	r := []rune(s)
+	for i := 0; i < len(r); i++ {
+		if r[i] == ' ' && i+1 < len(r) && !isLetterRune(r[i+1]) && endsControlSequence(r[:i]) {
+			continue
+		}
+		b.WriteRune(r[i])
+	}
+	return b.String()
+}
+
+// endsControlSequence reports whether r ends with a backslash followed by one or
+// more letters — the shape whose trailing space the tokeniser supplies.
+func endsControlSequence(r []rune) bool {
+	i := len(r)
+	for i > 0 && isLetterRune(r[i-1]) {
+		i--
+	}
+	return i < len(r) && i > 0 && r[i-1] == '\\'
+}
+
+func isLetterRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// squeezeSpace collapses runs of whitespace to a single space and trims the ends.
+func squeezeSpace(s string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			space = true
+			continue
+		}
+		if space && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		space = false
+		b.WriteRune(r)
+	}
+	return b.String()
+}

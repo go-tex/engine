@@ -152,6 +152,10 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			lg.close()
 			// embed the math SVG with its top at (cx, baseline-height): centred
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
+			// What the formula SAYS, over the formula: its own outlines carry no
+			// characters either, and without this the sentence around it reads with
+			// a silent hole where the equation was.
+			tl.addPhrase(c.src, cx, spToPt(c.width), baseline, mathLayerSize(c))
 			cx += spToPt(c.width)
 		case imageNode:
 			lg.close()
@@ -241,6 +245,16 @@ func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font f
 	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font, tl)
 }
 
+// mathLayerSize is the font size the text layer gives a formula's source: the
+// formula's own height, so a selection over a big display equation is the size
+// of what it covers rather than of the body text.
+func mathLayerSize(c mathNode) float64 {
+	if h := spToPt(c.height + c.depth); h > 0 {
+		return h
+	}
+	return 10
+}
+
 // crect fills a rectangle in the given colour (0xRRGGBB), or black when color is 0
 // (using the enclosing <g fill="black">).
 func crect(sb *strings.Builder, x, y, w, h float64, color uint32) {
@@ -317,6 +331,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
+			tl.addPhrase(c.src, x, spToPt(c.width), cy+spToPt(c.height), mathLayerSize(c))
 			cy += spToPt(c.height + c.depth)
 		case specialNode: // a driver literal between two vertical items
 			if lit, ok := specialLiteral(c.text, x, cy); ok {
