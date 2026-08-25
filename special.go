@@ -70,6 +70,20 @@ const originMark = "<gotex:origin/>"
 // finished stream.
 const originElem = "gotex:origin"
 
+// A picture can sit inside another, and a box placed inside a picture is wrapped
+// in that picture's inverse. Both nest, so the resolver keeps a stack of what is
+// in force rather than a single current value, and the driver declares all four
+// events: a picture opening and closing, and an inverse opening and closing.
+const (
+	endOriginMark = "<gotex:endorigin/>"
+	unmapMark     = "<gotex:unmap/>"
+	endUnmapMark  = "<gotex:endunmap/>"
+
+	endOriginElem = "gotex:endorigin"
+	unmapElem     = "gotex:unmap"
+	endUnmapElem  = "gotex:endunmap"
+)
+
 // specialLiteral returns the drawable payload of a special: the text after the
 // "gotex:" namespace with its own-position placeholders resolved against (x, y),
 // the special's reference point in page coordinates (points). ok is false for a
@@ -83,6 +97,11 @@ func specialLiteral(text string, x, y float64) (string, bool) {
 	s = strings.TrimPrefix(s, gotexSpecial)
 	s = strings.ReplaceAll(s, originMark,
 		`<`+originElem+` x="`+f(x)+`" y="`+f(y)+`"/>`)
+	for mark, elem := range map[string]string{
+		endOriginMark: endOriginElem, unmapMark: unmapElem, endUnmapMark: endUnmapElem,
+	} {
+		s = strings.ReplaceAll(s, mark, `<`+elem+`/>`)
+	}
 	r := strings.NewReplacer("{?x}", f(x), "{?y}", f(y), "{?nl}", "\n")
 	return r.Replace(s), true
 }
@@ -92,21 +111,79 @@ func specialLiteral(text string, x, y float64) (string, bool) {
 // stream in one go uses resolveSpecialOrigins; one that walks the page and needs
 // each literal finished as it reaches it (the PDF driver, which has to know the
 // transformation in force when it draws a character) resolves them one at a time.
-type originResolver struct{ ox, oy float64 }
+// scopeKind says what a level of the resolver's stack is: a picture applies the
+// page map, an inverse takes it back off again.
+type scopeKind uint8
+
+const (
+	pictureScope scopeKind = iota
+	unmapScope
+)
+
+type scopeLevel struct {
+	kind scopeKind
+	x, y float64 // a picture's origin
+}
+
+type originResolver struct {
+	ox, oy float64
+	// stack is every picture and every inverse still open, outermost first. The
+	// two cancel, so what is in force is the pictures with no inverse after them.
+	stack []scopeLevel
+}
+
+// inForce returns the picture maps still applying, outermost first: the ones a
+// box or a nested picture would be transformed by. An inverse cancels the
+// picture before it, which is exactly what happens when a picture is placed
+// inside a node's box.
+func (r *originResolver) inForce() []scopeLevel {
+	var out []scopeLevel
+	for _, s := range r.stack {
+		switch s.kind {
+		case pictureScope:
+			out = append(out, s)
+		case unmapScope:
+			if n := len(out); n > 0 {
+				out = out[:n-1]
+			}
+		}
+	}
+	return out
+}
+
+// unmapChain is the inverse of the page maps in force, innermost first. One
+// picture's map is translate(ox,oy)scale(0.996264,-0.996264), so its inverse is
+// scale(1.00375,-1.00375)translate(-ox,-oy).
+//
+// It is empty whenever nothing is in force, which is the ordinary case and also
+// the case of a picture placed inside a node's box — there the box's own inverse
+// already brought us back to the page. It is not empty when a picture opens
+// directly inside another, as pgfplots' axis does, and that is what stops the
+// page map being applied twice.
+func (r *originResolver) unmapChain() string {
+	force := r.inForce()
+	var b strings.Builder
+	for i := len(force) - 1; i >= 0; i-- {
+		b.WriteString("scale(1.00375,-1.00375)translate(")
+		b.WriteString(f(-force[i].x))
+		b.WriteString(",")
+		b.WriteString(f(-force[i].y))
+		b.WriteString(")")
+	}
+	return b.String()
+}
 
 // next finishes one literal: the declarations in it are consumed (and become the
 // origin from here on) and the back-references before each are resolved against
 // the origin that was in force.
 func (r *originResolver) next(s string) string {
-	if !strings.Contains(s, "{?ox}") && !strings.Contains(s, "{?oy}") &&
-		!strings.Contains(s, "{?-ox}") && !strings.Contains(s, "{?-oy}") &&
-		!strings.Contains(s, "<"+originElem) {
+	if !strings.Contains(s, "{?") && !strings.Contains(s, "<gotex:") {
 		return s
 	}
 	var out strings.Builder
 	rest := s
 	for {
-		i := strings.Index(rest, "<"+originElem)
+		i, kind, closing := nextScopeDecl(rest)
 		if i < 0 {
 			break
 		}
@@ -115,12 +192,66 @@ func (r *originResolver) next(s string) string {
 			break
 		}
 		decl := rest[i : i+j+2]
-		out.WriteString(substOrigin(rest[:i], r.ox, r.oy))
-		r.ox, r.oy = originCoords(decl)
+		// The segment before the declaration resolves against the state as it
+		// stands, which is what lets a picture's own transform name the maps
+		// enclosing it rather than itself.
+		out.WriteString(r.subst(rest[:i]))
+		if closing {
+			r.pop()
+		} else if kind == pictureScope {
+			x, y := originCoords(decl)
+			r.ox, r.oy = x, y
+			r.stack = append(r.stack, scopeLevel{kind: pictureScope, x: x, y: y})
+		} else {
+			r.stack = append(r.stack, scopeLevel{kind: unmapScope})
+		}
 		rest = rest[i+j+2:]
 	}
-	out.WriteString(substOrigin(rest, r.ox, r.oy))
+	out.WriteString(r.subst(rest))
 	return out.String()
+}
+
+// pop closes the innermost scope and restores the origin a back-reference sees.
+func (r *originResolver) pop() {
+	if n := len(r.stack); n > 0 {
+		r.stack = r.stack[:n-1]
+	}
+	r.ox, r.oy = 0, 0
+	for i := len(r.stack) - 1; i >= 0; i-- {
+		if r.stack[i].kind == pictureScope {
+			r.ox, r.oy = r.stack[i].x, r.stack[i].y
+			break
+		}
+	}
+}
+
+// nextScopeDecl finds the next declaration and says what it is.
+func nextScopeDecl(s string) (at int, kind scopeKind, closing bool) {
+	type cand struct {
+		i       int
+		kind    scopeKind
+		closing bool
+	}
+	best := cand{i: -1}
+	for _, c := range []cand{
+		{strings.Index(s, "<"+originElem+" "), pictureScope, false},
+		{strings.Index(s, "<"+endOriginElem), pictureScope, true},
+		{strings.Index(s, "<"+unmapElem+"/"), unmapScope, false},
+		{strings.Index(s, "<"+endUnmapElem), unmapScope, true},
+	} {
+		if c.i >= 0 && (best.i < 0 || c.i < best.i) {
+			best = c
+		}
+	}
+	return best.i, best.kind, best.closing
+}
+
+// subst resolves one segment's back-references against the state in force.
+func (r *originResolver) subst(s string) string {
+	if strings.Contains(s, "{?unmap}") {
+		s = strings.ReplaceAll(s, "{?unmap}", r.unmapChain())
+	}
+	return substOrigin(s, r.ox, r.oy)
 }
 
 // resolveSpecialOrigins finishes a page's emitted stream: each declaration is

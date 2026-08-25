@@ -41,13 +41,23 @@
 
 \def\pgfsys@svg@newline{{?nl}}
 
-% A picture opens a scope at its own reference point and declares that point as
-% the origin, so a box placed inside can undo the mapping (see \pgfsys@hbox).
+% A picture maps pgf's coordinates (big points, y up) onto the page (points, y
+% down) and declares its own reference point as the origin, so a box placed
+% inside can undo the mapping (see \pgfsys@hbox).
+%
+% {?unmap} first undoes whatever mapping is ALREADY in force. Usually there is
+% none and it is empty. But a picture can sit inside another: when the inner one
+% is placed by a node's box, the box's own inverse already brought us back to
+% page coordinates and {?unmap} is again empty — while pgfplots opens its axis
+% picture directly inside the surrounding tikzpicture, with nothing between, and
+% there {?unmap} is what stops the page map being applied twice. Applied twice,
+% the y-flip does not cancel: a pgfplots curve came out upside down and its tick
+% labels mirrored.
 \def\pgfsys@beginpicture{%
   \pgfsys@svg@boxmodefalse%
-  \pgfsys@invoke{<gotex:origin/><g stroke-miterlimit="10" %
-transform="translate({?x},{?y})scale(0.996264,-0.996264)">}}
-\def\pgfsys@endpicture{\pgfsys@invoke{</g>}}
+  \pgfsys@invoke{<g stroke-miterlimit="10" %
+transform="{?unmap}translate({?x},{?y})scale(0.996264,-0.996264)"><gotex:origin/>}}
+\def\pgfsys@endpicture{\pgfsys@invoke{<gotex:endorigin/></g>}}
 
 % A box typeset inside a picture is painted by the engine at the page position TeX
 % gave it, but it is painted *inside* the picture's scope, which would transform
@@ -62,9 +72,9 @@ transform="translate({?x},{?y})scale(0.996264,-0.996264)">}}
     \ht#1=0pt%
     \dp#1=0pt%
     \pgfsys@begin@idscope%
-    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap">}%
+    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap"><gotex:unmap/>}%
     \box#1%
-    \pgfsys@invoke{</g>}%
+    \pgfsys@invoke{<gotex:endunmap/></g>}%
     \pgfsys@end@idscope%
   }%
 }
@@ -78,9 +88,9 @@ transform="translate({?x},{?y})scale(0.996264,-0.996264)">}}
     \pgfsys@begin@idscope%
     \pgfsys@beginscope%
     \pgflowlevelsynccm%
-    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap">}%
+    \pgfsys@invoke{<g stroke="none" transform="\pgf@sys@gotex@unmap"><gotex:unmap/>}%
     \box#1%
-    \pgfsys@invoke{</g>}%
+    \pgfsys@invoke{<gotex:endunmap/></g>}%
     \pgfsys@endscope%
     \pgfsys@end@idscope%
   }%
