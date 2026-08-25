@@ -100,7 +100,7 @@ func TestCharSizePt(t *testing.T) {
 // zero-advance word is emitted without a meaningless textLength.
 func TestTextRunEdges(t *testing.T) {
 	var sb strings.Builder
-	(&textRun{}).emit(&sb) // nothing accumulated
+	(&textRun{}).emit(&sb, &textCursor{}) // nothing accumulated
 	if sb.String() != "" {
 		t.Errorf("empty run emitted %q", sb.String())
 	}
@@ -109,7 +109,7 @@ func TestTextRunEdges(t *testing.T) {
 	tr := &textRun{}
 	tr.addSpace() // before any word: no separator is owed
 	tr.addChar('a', 1, 2, 0)
-	tr.emit(&sb)
+	tr.emit(&sb, &textCursor{})
 	if got := sb.String(); !strings.Contains(got, `font-size="10"`) {
 		t.Errorf("unsized run should fall back to 10pt: %s", got)
 	}
@@ -120,14 +120,14 @@ func TestTextRunEdges(t *testing.T) {
 	sb.Reset()
 	zero := &textRun{}
 	zero.addChar('a', 5, 0, 11) // a zero-advance character
-	zero.emit(&sb)
+	zero.emit(&sb, &textCursor{})
 	if got := sb.String(); strings.Contains(got, "textLength") {
 		t.Errorf("a zero-width word must not be pinned: %s", got)
 	}
 
 	sb.Reset()
 	blank := &textRun{words: []textWord{{x: 1}, {x: 2, runes: []rune("b")}}}
-	blank.emit(&sb) // a word carrying no runes is skipped, the next one still emits
+	blank.emit(&sb, &textCursor{}) // a word carrying no runes is skipped, the next one still emits
 	if got := sb.String(); !strings.Contains(got, ">b</tspan>") {
 		t.Errorf("word after an empty one lost: %s", got)
 	}
@@ -169,5 +169,86 @@ func stripTags(s string) string {
 			return out.String()
 		}
 		s = s[i+j+1:]
+	}
+}
+
+// The boundary between two runs is geometric: it exists where a reader can see
+// a gap. Deciding from the kind of node that interrupted, or from the kind of
+// glue around it, gets it wrong in both directions.
+func TestTextCursorWantsSpace(t *testing.T) {
+	cases := []struct {
+		name          string
+		cur           textCursor
+		x, base, size float64
+		want          bool
+	}{
+		{"first text on the page", textCursor{}, 10, 100, 10, false},
+		{"continues where it stopped", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 20, 100, 10, false},
+		{"a kern-sized gap is not a space", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 22, 100, 10, false},
+		{"a visible gap is", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 26, 100, 10, true},
+		{"a new line, back to the margin", textCursor{live: true, baseline: 100, endX: 400, size: 10}, 70, 112, 10, true},
+		{"a superscript keeps moving right", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 20, 96, 7, false},
+		{"the gap scales with the larger size", textCursor{live: true, baseline: 100, endX: 20, size: 24}, 25, 100, 10, false},
+	}
+	for _, c := range cases {
+		if got := c.cur.wantsSpace(c.x, c.base, c.size); got != c.want {
+			t.Errorf("%s: wantsSpace = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// A word TeX broke across lines keeps its hyphen and gains no space, so
+// "hyphen-ated" does not become "hyphen- ated".
+func TestNoSpaceAfterAHyphenatedBreak(t *testing.T) {
+	for _, r := range []rune{'-', 0x2010, 0x2011} {
+		if !endsWithHyphen(r) {
+			t.Errorf("%q must count as a break hyphen", r)
+		}
+	}
+	if endsWithHyphen('a') {
+		t.Error("an ordinary letter is not a break hyphen")
+	}
+
+	var sb strings.Builder
+	cur := &textCursor{live: true, baseline: 100, endX: 400, size: 10, lastRune: '-'}
+	run := &textRun{baseline: 112, size: 10}
+	run.addChar('a', 70, 5, 10)
+	run.emit(&sb, cur)
+	if strings.Contains(sb.String(), "> a") {
+		t.Errorf("a hyphenated break must not gain a space: %s", sb.String())
+	}
+}
+
+// A run of nothing leaves the cursor where it was: an empty element must not
+// teleport the next run's boundary decision.
+func TestAdvanceIgnoresEmptyWords(t *testing.T) {
+	cur := &textCursor{live: true, baseline: 5, endX: 9, size: 10}
+	(&textRun{baseline: 50, words: []textWord{{x: 1}}}).advance(cur)
+	if cur.baseline != 5 || cur.endX != 9 {
+		t.Errorf("an empty run moved the cursor: %+v", cur)
+	}
+}
+
+// End to end, over the real engine: the constructs that used to glue.
+func TestWordBoundariesAcrossInterruptions(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"inline math", `The mass is $E = mc^2$ exactly.`, "The mass is exactly."},
+		{"table cells", `\begin{tabular}{ll}alpha & beta\\ gamma & delta\end{tabular}`, "alpha beta gamma delta"},
+		{"a boxed word", `a \fbox{boxed} word.`, "a boxed word."},
+		{"a link", `see \href{http://x}{here} now.`, "see here now."},
+		{"a footnote marker", `Text\footnote{a note}.`, "Text1."},
+		{"an inline font change", `un\textbf{break}able works.`, "unbreakable works."},
+		{"a list", `\begin{itemize}\item first \item second\end{itemize}`, "first"},
+	}
+	for _, c := range cases {
+		doc := `\documentclass{article}\begin{document}` + c.src + `\end{document}`
+		pages, _, err := CompileToSVGPagesDiag([]byte(doc), Options{Size: 11, Lenient: true})
+		if err != nil || len(pages) == 0 {
+			t.Errorf("%s: %v (%d pages)", c.name, err, len(pages))
+			continue
+		}
+		if got := textLayerContent(string(pages[0])); !strings.Contains(got, c.want) {
+			t.Errorf("%s: layer = %q, want it to contain %q", c.name, got, c.want)
+		}
 	}
 }
