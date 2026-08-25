@@ -150,6 +150,11 @@ type textCursor struct {
 	size     float64
 	lastRune rune
 	live     bool
+	// owed records that inter-word glue was pending when the last run ended —
+	// the run did not stop because something interrupted it, it stopped holding a
+	// space. That is EXACT information and it outranks the geometric guess below,
+	// which cannot see a space narrow enough to be mistaken for a kern.
+	owed bool
 }
 
 // wantsSpace reports whether a run starting at x on the given baseline needs a
@@ -157,6 +162,14 @@ type textCursor struct {
 func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
 	if !c.live {
 		return false // the first text on the page begins nothing
+	}
+	if c.owed {
+		// A space was typed and the run ended before writing it. This is the
+		// common case that no gap threshold can catch: a source-line break closes
+		// the <g data-l> group mid-output-line, and JUSTIFICATION can shrink the
+		// space between the two runs to less than a kern is wide — 2.5pt against a
+		// 2.75pt threshold, in the paragraph that found this.
+		return true
 	}
 	if baseline != c.baseline && x < c.endX {
 		// The text went back to the left on a new baseline: a line ended, which is
@@ -264,6 +277,7 @@ func (t *textRun) advance(cur *textCursor) {
 		}
 		cur.baseline, cur.endX, cur.size, cur.live = t.baseline, w.x+w.width, t.size, true
 		cur.lastRune = w.runes[len(w.runes)-1]
+		cur.owed = t.space
 		return
 	}
 }
