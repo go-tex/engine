@@ -73,15 +73,15 @@ func (e *Engine) doInternalLink(target bool) {
 // <a href="#name"> (a same-document click, no target=_blank). The name is escaped
 // for the id/href attribute. x is the node's left edge; baseline is the content
 // baseline.
-func paintInternalLinkSP(sb *strings.Builder, n internalLinkNode, x, baseline float64, font fontFace, tc *textCursor) {
+func paintInternalLinkSP(sb *strings.Builder, n internalLinkNode, x, baseline float64, font fontFace, tl *textLayer) {
 	if n.target {
 		fmt.Fprintf(sb, `<g id="%s">`, escapeXMLAttr(n.name))
-		paintBoxSP(sb, n.inner, x, baseline, font, tc)
+		paintBoxSP(sb, n.inner, x, baseline, font, tl)
 		sb.WriteString(`</g>`)
 		return
 	}
 	fmt.Fprintf(sb, `<a href="#%s">`, escapeXMLAttr(n.name))
-	paintBoxSP(sb, n.inner, x, baseline, font, tc)
+	paintBoxSP(sb, n.inner, x, baseline, font, tl)
 	sb.WriteString(`</a>`)
 }
 

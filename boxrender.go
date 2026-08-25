@@ -69,9 +69,18 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
-	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/><g fill="black">`, bg)
-	// The page itself: its vertical list supplies the lines.
-	paintBoxSP(&sb, b, margin, margin+spToPt(b.height), font, &textCursor{})
+	fmt.Fprintf(&sb, `<rect width="100%%" height="100%%" fill="%s"/>`, bg)
+	// The glyph outlines are painted into their own builder so the selectable
+	// text layer can be written BEFORE them: a selection paints its background
+	// with the text it belongs to, and a layer above the outlines would hide the
+	// very words it highlights. Underneath, the highlight sits behind the glyphs
+	// with no CSS required of the page showing it.
+	var glyphs strings.Builder
+	layer := newTextLayer()
+	paintBoxSP(&glyphs, b, margin, margin+spToPt(b.height), font, layer)
+	sb.WriteString(layer.String())
+	sb.WriteString(`<g fill="black">`)
+	sb.WriteString(glyphs.String())
 	sb.WriteString(`</g></svg>`)
 	// Driver literals may refer back to a picture origin declared by an earlier
 	// one; that is resolved over the finished page (see special.go).
@@ -80,26 +89,25 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 
 // paintBoxSP paints a box whose left edge is at x and whose baseline is at the
 // given y (SVG coordinates, points).
-// tc carries the searchable text layer's cursor across every box on the page,
-// so a run can tell whether a word boundary belongs in front of it. See
-// [textCursor].
-func paintBoxSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace, tc *textCursor) {
+// tl is the searchable text layer every box on the page contributes to. See
+// [textLayer].
+func paintBoxSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace, tl *textLayer) {
 	if b.kind == hbox {
-		paintHListSP(sb, b, x, baseline, font, tc)
+		paintHListSP(sb, b, x, baseline, font, tl)
 	} else {
-		paintVListSP(sb, b, x, baseline-spToPt(b.height), font, tc)
+		paintVListSP(sb, b, x, baseline-spToPt(b.height), font, tl)
 	}
 }
 
 // paintHListSP lays an hbox's material along the baseline, advancing the cursor
 // by each item's (set) width.
-func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace, tc *textCursor) {
+func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fontFace, tl *textLayer) {
 	cx := x
 	// Group consecutive glyphs sharing a source line into a <g data-l="N"> so the
 	// SVG preview can map a click → source line (and a line → its output). Kerns
 	// and inter-word glue are transparent (they stay inside a run); boxes, rules
 	// and math close the current run (they manage their own annotation).
-	lg := lineGrouper{sb: sb, line: -1, cur: tc}
+	lg := lineGrouper{sb: sb, line: -1, tl: tl}
 	// Every glyph this hlist paints shares one baseline, so the text layer the
 	// grouper accumulates is positioned once here.
 	lg.text.baseline = baseline
@@ -129,9 +137,9 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 					// The glyph path is at the render font's size; scale it to the
 					// glyph's own size (from \large/\small/…) about the baseline.
 					if sc := glyphScale(c, font); sc != 1 {
-						fmt.Fprintf(&lg.buf, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
+						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
 					} else {
-						fmt.Fprintf(&lg.buf, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
+						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
 					}
 					// The character behind the outline just painted, for the
 					// selectable layer. Only a glyph that was drawn is recorded:
@@ -160,27 +168,27 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += w
 		case *boxNode:
 			lg.close()
-			paintBoxSP(sb, c, cx, baseline+spToPt(c.shift), font, tc) // shift>0 lowers the box
+			paintBoxSP(sb, c, cx, baseline+spToPt(c.shift), font, tl) // shift>0 lowers the box
 			cx += spToPt(c.width)
 		case frameNode:
 			lg.close()
-			paintFrameSP(sb, c, cx, baseline, font, tc)
+			paintFrameSP(sb, c, cx, baseline, font, tl)
 			cx += spToPt(c.width())
 		case linkNode:
 			lg.close()
-			paintLinkSP(sb, c, cx, baseline, font, tc)
+			paintLinkSP(sb, c, cx, baseline, font, tl)
 			cx += spToPt(c.width())
 		case internalLinkNode:
 			lg.close()
-			paintInternalLinkSP(sb, c, cx, baseline, font, tc)
+			paintInternalLinkSP(sb, c, cx, baseline, font, tl)
 			cx += spToPt(c.width())
 		case decoNode:
 			lg.close()
-			paintDecoSP(sb, c, cx, baseline, font, tc)
+			paintDecoSP(sb, c, cx, baseline, font, tl)
 			cx += spToPt(c.width())
 		case transformNode:
 			lg.close()
-			paintTransformSP(sb, c, cx, baseline, font, tc)
+			paintTransformSP(sb, c, cx, baseline, font, tl)
 			cx += spToPt(c.width())
 		case specialNode:
 			// A driver literal: emitted verbatim at its reference point, taking no
@@ -198,8 +206,8 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 
 // paintDecoSP paints an under/over/strike-out decoration: the inner box on the
 // baseline, then a thin rule at the decoration's y position, in the rule's colour.
-func paintDecoSP(sb *strings.Builder, dn decoNode, x, baseline float64, font fontFace, tc *textCursor) {
-	paintBoxSP(sb, dn.inner, x, baseline, font, tc)
+func paintDecoSP(sb *strings.Builder, dn decoNode, x, baseline float64, font fontFace, tl *textLayer) {
+	paintBoxSP(sb, dn.inner, x, baseline, font, tl)
 	crect(sb, x, baseline+spToPt(dn.decoRuleTop()), spToPt(dn.width()), spToPt(decoRule), dn.color)
 }
 
@@ -207,16 +215,16 @@ func paintDecoSP(sb *strings.Builder, dn decoNode, x, baseline float64, font fon
 // box, so a click on the content opens the URL. SVG supports <a> natively, which
 // makes the engine's SVG a genuinely clickable document in a browser. x is the
 // link's left edge; baseline is the content baseline.
-func paintLinkSP(sb *strings.Builder, ln linkNode, x, baseline float64, font fontFace, tc *textCursor) {
+func paintLinkSP(sb *strings.Builder, ln linkNode, x, baseline float64, font fontFace, tl *textLayer) {
 	fmt.Fprintf(sb, `<a href="%s" target="_blank" rel="noopener">`, escapeXMLAttr(ln.url))
-	paintBoxSP(sb, ln.inner, x, baseline, font, tc)
+	paintBoxSP(sb, ln.inner, x, baseline, font, tl)
 	sb.WriteString(`</a>`)
 }
 
 // paintFrameSP draws a framed box: four thin rules of thickness fr.rule form the
 // border, then the inner box is painted on the same baseline, inset by rule+sep
 // from the left edge. x is the frame's left edge; baseline is the content baseline.
-func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font fontFace, tc *textCursor) {
+func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font fontFace, tl *textLayer) {
 	w := spToPt(fr.width())
 	top := baseline - spToPt(fr.height())
 	total := spToPt(fr.height() + fr.depth())
@@ -230,7 +238,7 @@ func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font f
 		crect(sb, x, top, ru, total, fr.ruleColor)      // left edge
 		crect(sb, x+w-ru, top, ru, total, fr.ruleColor) // right edge
 	}
-	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font, tc)
+	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font, tl)
 }
 
 // crect fills a rectangle in the given colour (0xRRGGBB), or black when color is 0
@@ -248,15 +256,9 @@ func crect(sb *strings.Builder, x, y, w, h float64, color uint32) {
 // on demand. A line of 0 (unknown) still groups, without the attribute.
 type lineGrouper struct {
 	sb   *strings.Builder
-	cur  *textCursor // the page-wide text-layer cursor
-	line int         // current open group's line; -1 = none open
-	text textRun     // the characters painted since the group opened
-	// The run's glyph outlines, held back so the text layer can be written
-	// FIRST: a selection paints its background with the text it belongs to, and
-	// an invisible layer above the outlines would hide the very words it
-	// highlights. Underneath, the highlight sits behind the glyphs, the way a
-	// native text view looks — with no CSS required of the page showing it.
-	buf strings.Builder
+	tl   *textLayer // the page-wide searchable text layer
+	line int        // current open group's line; -1 = none open
+	text textRun    // the characters painted since the group opened
 }
 
 func (g *lineGrouper) set(line int) {
@@ -274,11 +276,7 @@ func (g *lineGrouper) set(line int) {
 
 func (g *lineGrouper) close() {
 	if g.line != -1 {
-		// The selectable text layer for this run goes inside the group it
-		// describes, so any transform that placed the glyphs places it too.
-		g.text.emit(g.sb, g.cur)
-		g.sb.WriteString(g.buf.String())
-		g.buf.Reset()
+		g.text.flush(g.tl)
 		g.sb.WriteString(`</g>`)
 		g.line = -1
 	}
@@ -286,7 +284,7 @@ func (g *lineGrouper) close() {
 
 // paintVListSP stacks a vbox's material from the top edge (top), advancing the
 // vertical cursor by each item's size and carrying the running depth.
-func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace, tc *textCursor) {
+func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace, tl *textLayer) {
 	cy := top
 	for _, n := range b.list {
 		switch c := n.(type) {
@@ -300,22 +298,22 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			rect(sb, x, cy, spToPt(w), hd)
 			cy += hd
 		case *boxNode:
-			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font, tc)
+			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font, tl)
 			cy += spToPt(c.height + c.depth)
 		case frameNode:
-			paintFrameSP(sb, c, x, cy+spToPt(c.height()), font, tc)
+			paintFrameSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case decoNode:
-			paintDecoSP(sb, c, x, cy+spToPt(c.height()), font, tc)
+			paintDecoSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case transformNode:
-			paintTransformSP(sb, c, x, cy+spToPt(c.height()), font, tc)
+			paintTransformSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case linkNode:
-			paintLinkSP(sb, c, x, cy+spToPt(c.height()), font, tc)
+			paintLinkSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case internalLinkNode:
-			paintInternalLinkSP(sb, c, x, cy+spToPt(c.height()), font, tc)
+			paintInternalLinkSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
