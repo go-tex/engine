@@ -21,7 +21,7 @@ require (
 
 require (
 	github.com/go-opentype/fonts v0.8.0 // indirect
-	github.com/go-tex/texmf v0.1.0
+	github.com/go-tex/texmf v0.4.0
 	github.com/go-typeset/bidi v0.3.0 // indirect
 	github.com/go-typeset/hyphenation v1.0.0
 	github.com/go-typeset/linebreak v1.0.0

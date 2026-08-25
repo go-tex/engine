@@ -14,8 +14,8 @@ github.com/go-pdfkit/pdfkit v0.5.0 h1:G6Bk9Q7p3e8ZQ9JEhvcLldVfDZCEAWVsautpjE19qV
 github.com/go-pdfkit/pdfkit v0.5.0/go.mod h1:Sn8fhz2CjcZgTIXXDBV6r741fsZF/MZafKw9cHD6Qj0=
 github.com/go-tex/math v0.18.0 h1:rzFBFVvS5zKylsecY0fRkY3KWqVxiJQhFX6qXd7aEXQ=
 github.com/go-tex/math v0.18.0/go.mod h1:eNq1Js988sqQRsxNR08JFQ5dQfyqfd8CYf5fE3iWbhU=
-github.com/go-tex/texmf v0.1.0 h1:jALp9Y1E1d2fhgN7IoQUkxu8X9DH90NTXKh92Ubg77w=
-github.com/go-tex/texmf v0.1.0/go.mod h1:nZtEGwpAGkhH6U1hRGG9ilccZbJhMSK2Xk2omIWdq+k=
+github.com/go-tex/texmf v0.4.0 h1:jgiOpywfMPVcwGvSYiDLjOKXrQJxec1Ea3mPZn3Rh+U=
+github.com/go-tex/texmf v0.4.0/go.mod h1:nZtEGwpAGkhH6U1hRGG9ilccZbJhMSK2Xk2omIWdq+k=
 github.com/go-typeset/bidi v0.3.0 h1:4fjGjejvjE2LzLNzY4si8PkVO321NcsKIiANhWT3jF4=
 github.com/go-typeset/bidi v0.3.0/go.mod h1:ct3cmYT8Qt1FGJQ+2QaakrUxqaP4ZysgdQQg2ym5+Xo=
 github.com/go-typeset/hyphenation v1.0.0 h1:4N0gdMbLTmL+/B8D3nufrFicD02jN2RymwQzvZ5ri4I=
