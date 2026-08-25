@@ -335,3 +335,62 @@ func TestTransformedTextGetsItsOwnChunk(t *testing.T) {
 		t.Errorf("the rotated run escaped its transform: %s", out)
 	}
 }
+
+// A run can end holding a space: a source-line break closes the <g data-l>
+// group mid-output-line, and the glue that separated the two words is still
+// pending. That is exact information, and it has to outrank the geometric
+// guess — justification can shrink an inter-word space below the gap a kern
+// would occupy (2.5pt against a 2.75pt threshold, in the paragraph that found
+// this), so the guess alone glued "every word" into "everyword".
+func TestPendingSpaceOutranksTheGap(t *testing.T) {
+	l := newTextLayer()
+	first := &textRun{baseline: 100, size: 11}
+	first.addChar('a', 0, 5, 11)
+	first.addSpace() // glue arrived, then the group closed
+	first.flush(l)
+	if !l.cur.owed {
+		t.Fatal("a run that ended holding glue must say so")
+	}
+
+	// The next run starts closer than the geometric threshold would accept.
+	second := &textRun{baseline: 100, size: 11}
+	second.addChar('b', 7, 5, 11)
+	second.flush(l)
+
+	if !strings.Contains(l.String(), "</tspan> <tspan") {
+		t.Errorf("the pending space was dropped: %s", l.String())
+	}
+}
+
+// A run that ended because something interrupted it owes nothing, and the
+// geometric rule decides as before.
+func TestNoPendingSpaceLeavesTheGapInCharge(t *testing.T) {
+	l := newTextLayer()
+	first := &textRun{baseline: 100, size: 11}
+	first.addChar('a', 0, 5, 11) // no glue: a box interrupted it
+	first.flush(l)
+	if l.cur.owed {
+		t.Fatal("a run interrupted without glue owes no space")
+	}
+	second := &textRun{baseline: 100, size: 11}
+	second.addChar('b', 5.5, 5, 11) // abutting: a footnote marker, not a word
+	second.flush(l)
+	if strings.Contains(l.String(), "</tspan> <tspan") {
+		t.Errorf("an abutting run must not gain a space: %s", l.String())
+	}
+}
+
+// End to end: a paragraph whose SOURCE wraps mid-sentence reads as one sentence,
+// justified spacing and all.
+func TestSourceNewlineDoesNotGlueWords(t *testing.T) {
+	doc := "\\documentclass{article}\\begin{document}\n" +
+		"This paragraph is blitted pixels on a canvas, and every\nword of it can be found.\n" +
+		"\\end{document}"
+	pages, _, err := CompileToSVGPagesDiag([]byte(doc), Options{Size: 11, Lenient: true})
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("compile: %v", err)
+	}
+	if got := textLayerContent(string(pages[0])); !strings.Contains(got, "every word of it can be found") {
+		t.Errorf("layer = %q", got)
+	}
+}
