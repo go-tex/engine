@@ -101,15 +101,21 @@ func (e *Engine) loadAMSPrims() {
 	// \newread\cs allocates an input stream the same way; the engine reads no
 	// TeX streams, but a package that allocates one (pgf's \r@pgf@reada) must not
 	// see \newread undefined.
+	// \openin / \closein / \read / \ifeof live in readstreams.go.
+	e.installReadStreams()
+	// \newread\cs allocates an input stream. TeX allocates it with \chardef, so
+	// the handle IS the stream number — \meaning of one is \char"2. Allocating it
+	// as a count register instead made \openin\cs read the register's VALUE,
+	// which is zero until something writes it, so every stream a document opened
+	// collided on number 0.
 	e.prim("newread", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" || e.allocCnt >= 256 {
+		if name == "" || e.allocRead >= maxReadStreams {
 			return
 		}
-		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
-		e.allocCnt++
+		e.define(name, &meaning{kind: mCharDef, code: e.allocRead}, false)
+		e.allocRead++
 	})
-	e.prim("openout", func(e *Engine) { e.scanInt(); e.skipWriteFilename() })
 	e.prim("closeout", func(e *Engine) { e.scanInt() })
 	e.prim("write", func(e *Engine) {
 		e.scanInt()
