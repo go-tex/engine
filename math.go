@@ -24,7 +24,14 @@ type mathRendererT = *texmath.Renderer
 // mathNode is a rendered piece of math: its self-contained SVG plus the box
 // dimensions (sp) used to place and line-break it.
 type mathNode struct {
-	svg                  string
+	svg string
+	// src is the formula's LaTeX source, carried so the searchable text layer
+	// can say what the formula IS. A rendered formula is glyph outlines like any
+	// other text, and without this a page reads "The mass is exactly" with a
+	// silent hole where the equation was. The source is what the author typed
+	// and what they would type to search for it again; a spoken form ("E equals
+	// m c squared") is a separate, language-dependent problem.
+	src                  string
 	width, height, depth int
 }
 
@@ -146,7 +153,7 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	// so the math baseline aligns with the surrounding text baseline (Height above,
 	// Depth below) instead of being centred on height/2 — which dropped inline math
 	// below the line — and the tight width removes the old padding's side-space.
-	return mathNode{svg: svg, width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
+	return mathNode{svg: svg, src: src, width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
 }
 
 // renderMathResolvingMacros renders src, and when go-tex/math rejects a command it

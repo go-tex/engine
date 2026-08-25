@@ -232,7 +232,9 @@ func TestAdvanceIgnoresEmptyWords(t *testing.T) {
 // End to end, over the real engine: the constructs that used to glue.
 func TestWordBoundariesAcrossInterruptions(t *testing.T) {
 	cases := []struct{ name, src, want string }{
-		{"inline math", `The mass is $E = mc^2$ exactly.`, "The mass is exactly."},
+		// The formula now speaks its own source, so the words no longer join
+		// across it — they join across what it says.
+		{"inline math", `The mass is $E = mc^2$ exactly.`, "The mass is E = mc^2 exactly."},
 		{"table cells", `\begin{tabular}{ll}alpha & beta\\ gamma & delta\end{tabular}`, "alpha beta gamma delta"},
 		{"a boxed word", `a \fbox{boxed} word.`, "a boxed word."},
 		{"a link", `see \href{http://x}{here} now.`, "see here now."},
@@ -275,9 +277,9 @@ Words after, on another line entirely.
 	}
 	got := textLayerContent(svg)
 	for _, want := range []string{
-		"The rest mass is exactly", // across a formula
-		"alpha beta",               // across two table cells
-		"Words after, on another",  // across a line break
+		"The rest mass is E = mc^2 exactly", // across a formula, which now speaks
+		"alpha beta",                        // across two table cells
+		"Words after, on another",           // across a line break
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("layer does not carry %q:\n%s", want, got)
@@ -392,5 +394,75 @@ func TestSourceNewlineDoesNotGlueWords(t *testing.T) {
 	}
 	if got := textLayerContent(string(pages[0])); !strings.Contains(got, "every word of it can be found") {
 		t.Errorf("layer = %q", got)
+	}
+}
+
+// A formula's outlines carry no characters either, so the layer says what the
+// formula IS: the source the author typed, and would type again to search for
+// it. A spoken form is a separate, language-dependent problem.
+func TestFormulaSourceIsSearchable(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"inline", `The mass is $E = mc^2$ exactly.`, "The mass is E = mc^2 exactly."},
+		{"display", `A formula: \[ \sum_{i=1}^{n} x_i \]`, `\sum_{i=1}^{n} x_i`},
+	}
+	for _, c := range cases {
+		doc := `\documentclass{article}\begin{document}` + c.src + `\end{document}`
+		pages, _, err := CompileToSVGPagesDiag([]byte(doc), Options{Size: 11, Lenient: true})
+		if err != nil || len(pages) == 0 {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if got := textLayerContent(string(pages[0])); !strings.Contains(got, c.want) {
+			t.Errorf("%s: layer = %q, want it to contain %q", c.name, got, c.want)
+		}
+	}
+}
+
+// The tokeniser writes a space after every control sequence. That space is
+// dropped where TeX never needed it and kept where it did — and the author's own
+// spacing is never touched.
+func TestCollapseSpace(t *testing.T) {
+	cases := map[string]string{
+		`\sum _{i=1}^{n}`: `\sum_{i=1}^{n}`, // the tokeniser's, before a non-letter
+		`\alpha b`:        `\alpha b`,       // needed: the name would run on
+		`E = mc^2`:        `E = mc^2`,       // the author's own, before a non-letter
+		"  a \n b  ":      "a b",            // runs squeezed, ends trimmed
+		`\frac {a}{b}`:    `\frac{a}{b}`,
+		"":                "",
+		` `:               "",
+	}
+	for in, want := range cases {
+		if got := collapseSpace(in); got != want {
+			t.Errorf("collapseSpace(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if endsControlSequence([]rune("abc")) {
+		t.Error("plain letters do not end a control sequence")
+	}
+	if endsControlSequence([]rune(`\`)) {
+		t.Error("a lone backslash names nothing")
+	}
+}
+
+// A phrase with no width, or no text, contributes nothing rather than an
+// unplaceable element.
+func TestAddPhraseRefusesTheUnplaceable(t *testing.T) {
+	l := newTextLayer()
+	l.addPhrase("", 0, 10, 100, 10)
+	l.addPhrase("x", 0, 0, 100, 10)
+	l.addPhrase("   ", 0, 10, 100, 10)
+	if got := l.String(); got != "" {
+		t.Errorf("expected nothing, got %q", got)
+	}
+}
+
+// A big display equation gets a layer size matching what it covers, so a
+// selection over it is the size of the formula rather than of the body text.
+func TestMathLayerSize(t *testing.T) {
+	if got := mathLayerSize(mathNode{height: 20 * unity, depth: 4 * unity}); got != 24 {
+		t.Errorf("mathLayerSize = %v, want 24", got)
+	}
+	if got := mathLayerSize(mathNode{}); got != 10 {
+		t.Errorf("a zero-height formula must fall back to a readable size, got %v", got)
 	}
 }
