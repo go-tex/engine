@@ -5,7 +5,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/xml"
 	"math"
 	"os"
 	"path/filepath"
@@ -13,16 +12,6 @@ import (
 	"testing"
 	"time"
 )
-
-// startElem builds an xml.StartElement carrying the given attributes, for the
-// attrFloat unit test.
-func startElem(attrs map[string]string) xml.StartElement {
-	var a []xml.Attr
-	for k, v := range attrs {
-		a = append(a, xml.Attr{Name: xml.Name{Local: k}, Value: v})
-	}
-	return xml.StartElement{Name: xml.Name{Local: "page"}, Attr: a}
-}
 
 // bboxDoc wraps page/word body XML in the same boilerplate pdftotext -bbox
 // emits, so the fixtures exercise the real parser path (doctype, html/head/body).
@@ -82,29 +71,51 @@ func TestParseBBoxWordBeforePageIgnored(t *testing.T) {
 	}
 }
 
-func TestParseBBoxNonCharDataWord(t *testing.T) {
-	// A <word> whose content is a nested element (not character data) yields an
-	// empty token but is still recorded with its geometry.
+func TestParseBBoxDecodesEntities(t *testing.T) {
+	// pdftotext escapes &, <, > as XML entities in word text; they are decoded.
 	data := bboxDoc(`  <page width="600" height="800">
-    <word xMin="100" yMin="100" xMax="140" yMax="112"><b/></word>
+    <word xMin="100" yMin="100" xMax="140" yMax="112">A&amp;B</word>
   </page>`)
 	pl := parseBBox(data)
-	if len(pl.words) != 1 || pl.words[0].text != "" {
-		t.Fatalf("expected one empty-text word, got %+v", pl.words)
+	if len(pl.words) != 1 || pl.words[0].text != "A&B" {
+		t.Fatalf("entity not decoded: %+v", pl.words)
 	}
 }
 
 func TestParseBBoxTruncatedWord(t *testing.T) {
-	// Input that ends immediately after a <word> open tag: reading the text token
-	// errors, so the word keeps an empty text; the parser then stops cleanly.
+	// Input that ends mid-<word> (no closing </word>) contributes no word, but the
+	// preceding page still stands and the scan does not panic.
 	data := []byte(`<doc><page width="600" height="800"><word xMin="1" yMin="1" xMax="2" yMax="2">`)
 	pl := parseBBox(data)
 	if len(pl.pages) != 1 {
 		t.Fatalf("pages=%d want 1", len(pl.pages))
 	}
-	// The word may or may not be recorded depending on where the EOF lands; the
-	// contract under test is only that parsing does not panic and the page stands.
-	_ = pl.words
+	if len(pl.words) != 0 {
+		t.Fatalf("unterminated word should not be recorded: %+v", pl.words)
+	}
+}
+
+func TestParseBBoxSurvivesXMLHostileBytes(t *testing.T) {
+	// The regression this parser exists for: a real reference PDF's extracted text
+	// carries bytes that are not valid XML (here a raw form-feed 0x0c and a bare
+	// ampersand). An XML parser aborts on the first such byte, truncating a long
+	// document to the pages before it. The byte scanner must parse ALL pages.
+	body := "  <page width=\"600\" height=\"800\">\n" +
+		"    <word xMin=\"100\" yMin=\"100\" xMax=\"140\" yMax=\"112\">bad\x0cchar & more</word>\n" +
+		"  </page>\n" +
+		"  <page width=\"600\" height=\"800\">\n" +
+		"    <word xMin=\"100\" yMin=\"100\" xMax=\"140\" yMax=\"112\">page2word</word>\n" +
+		"  </page>\n" +
+		"  <page width=\"600\" height=\"800\">\n" +
+		"    <word xMin=\"100\" yMin=\"100\" xMax=\"140\" yMax=\"112\">page3word</word>\n" +
+		"  </page>"
+	pl := parseBBox(bboxDoc(body))
+	if len(pl.pages) != 3 {
+		t.Fatalf("hostile bytes truncated the parse: got %d pages want 3", len(pl.pages))
+	}
+	if len(pl.words) != 3 || pl.words[2].text != "page3word" {
+		t.Fatalf("words after the hostile byte were lost: %+v", pl.words)
+	}
 }
 
 func TestParseBBoxUnparseableDimension(t *testing.T) {
@@ -557,15 +568,15 @@ func TestBBoxRunner(t *testing.T) {
 	_, _ = direct(10*time.Second, filepath.Join(t.TempDir(), "x.pdf"))
 }
 
-func TestAttrFloat(t *testing.T) {
-	se := startElem(map[string]string{"width": "12.5", "bad": "nope"})
-	if got := attrFloat(se, "width"); got != 12.5 {
-		t.Fatalf("width=%v want 12.5", got)
+func TestAttrMap(t *testing.T) {
+	a := attrMap([]byte(` width="12.5" height="800" bad="nope"`))
+	if a["width"] != 12.5 || a["height"] != 800 {
+		t.Fatalf("numeric attrs = %v", a)
 	}
-	if got := attrFloat(se, "bad"); got != 0 {
-		t.Fatalf("unparseable=%v want 0", got)
+	if _, ok := a["bad"]; ok {
+		t.Fatalf("unparseable attr should be omitted: %v", a)
 	}
-	if got := attrFloat(se, "missing"); got != 0 {
-		t.Fatalf("missing attr=%v want 0", got)
+	if _, ok := a["missing"]; ok {
+		t.Fatalf("absent attr should be omitted: %v", a)
 	}
 }

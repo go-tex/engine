@@ -25,13 +25,14 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -90,63 +91,73 @@ type normWord struct {
 	lineStart bool
 }
 
+// bboxElemRe matches, in document order, either a <page> open tag (its
+// attributes captured) or a whole <word>…</word> element (its attributes and its
+// text captured). A deliberately robust byte scanner rather than an XML parser:
+// `pdftotext -bbox` regularly emits extracted glyphs that are not valid XML
+// characters (control bytes, invalid UTF-8 from a PDF's custom encoding), on
+// which encoding/xml aborts — which would silently truncate a long reference
+// document to however many pages precede the first bad byte, inflating every
+// downstream page-count and displacement measure. The regex reacts only to the
+// two tags it needs and is immune to whatever bytes a word carries.
+var bboxElemRe = regexp.MustCompile(`(?s)<page\b([^>]*)>|<word\b([^>]*)>(.*?)</word>`)
+
+// attrRe extracts name="value" attribute pairs from a tag's attribute run.
+var attrRe = regexp.MustCompile(`([A-Za-z]+)="([^"]*)"`)
+
 // parseBBox parses the XHTML that `pdftotext -bbox` emits into a pdfLayout,
-// tagging the first word of each text line. It is tolerant of the surrounding
-// html/head/body boilerplate: it reacts only to <page> and <word> elements and
-// ignores everything else, so a missing or malformed wrapper does not derail it.
+// tagging the first word of each text line. It reacts only to <page> and <word>
+// elements and ignores everything else (the html/head/body boilerplate), and —
+// unlike an XML parser — never aborts on content: a word carrying bytes that are
+// not valid XML does not stop the scan, so a long reference document is parsed in
+// full.
 func parseBBox(data []byte) pdfLayout {
 	var pl pdfLayout
-	dec := xml.NewDecoder(bytes.NewReader(data))
-	dec.Strict = false
-	dec.AutoClose = xml.HTMLAutoClose
-	dec.Entity = xml.HTMLEntity
-
 	page := -1        // current 0-based page index (-1 before the first <page>)
 	lineY := 0.0      // baseline (yMin) of the current line
 	haveLine := false // whether a line is open on the current page
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			break // EOF or an unrecoverable parse error: stop with what we have
-		}
-		se, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		switch se.Name.Local {
-		case "page":
-			pl.pages = append(pl.pages, pageDim{
-				w: attrFloat(se, "width"),
-				h: attrFloat(se, "height"),
-			})
+	for _, m := range bboxElemRe.FindAllSubmatch(data, -1) {
+		if bytes.HasPrefix(m[0], []byte("<page")) {
+			a := attrMap(m[1])
+			pl.pages = append(pl.pages, pageDim{w: a["width"], h: a["height"]})
 			page++
 			haveLine = false
-		case "word":
-			wb := wordBox{
-				page: page,
-				xMin: attrFloat(se, "xMin"),
-				yMin: attrFloat(se, "yMin"),
-				xMax: attrFloat(se, "xMax"),
-				yMax: attrFloat(se, "yMax"),
-			}
-			if text, err := dec.Token(); err == nil {
-				if cd, ok := text.(xml.CharData); ok {
-					wb.text = string(cd)
-				}
-			}
-			if page < 0 {
-				continue // a <word> before any <page>: no geometry to anchor it
-			}
-			tol := lineTolFrac * (wb.yMax - wb.yMin)
-			if !haveLine || math.Abs(wb.yMin-lineY) > tol {
-				wb.lineStart = true
-				lineY = wb.yMin
-				haveLine = true
-			}
-			pl.words = append(pl.words, wb)
+			continue
 		}
+		if page < 0 {
+			continue // a <word> before any <page>: no geometry to anchor it
+		}
+		a := attrMap(m[2])
+		wb := wordBox{
+			page: page,
+			text: html.UnescapeString(string(m[3])),
+			xMin: a["xMin"],
+			yMin: a["yMin"],
+			xMax: a["xMax"],
+			yMax: a["yMax"],
+		}
+		tol := lineTolFrac * (wb.yMax - wb.yMin)
+		if !haveLine || math.Abs(wb.yMin-lineY) > tol {
+			wb.lineStart = true
+			lineY = wb.yMin
+			haveLine = true
+		}
+		pl.words = append(pl.words, wb)
 	}
 	return pl
+}
+
+// attrMap parses the numeric name="value" attributes out of a tag's attribute
+// run. Non-numeric values (and absent attributes) are simply omitted, so a
+// missing or unparseable dimension reads back as the zero value.
+func attrMap(attrs []byte) map[string]float64 {
+	out := make(map[string]float64)
+	for _, kv := range attrRe.FindAllSubmatch(attrs, -1) {
+		if f, err := strconv.ParseFloat(string(kv[2]), 64); err == nil {
+			out[string(kv[1])] = f
+		}
+	}
+	return out
 }
 
 // normalize masks and projects a pdfLayout into the comparable word stream. It
@@ -578,16 +589,4 @@ func bboxRunner(name string) func(timeout time.Duration, pdf string) ([]byte, er
 		}
 		return cmd.Output()
 	}
-}
-
-// attrFloat returns the named attribute of a start element parsed as a float, or
-// zero when it is absent or unparseable.
-func attrFloat(se xml.StartElement, name string) float64 {
-	for _, a := range se.Attr {
-		if a.Name.Local == name {
-			f, _ := strconv.ParseFloat(a.Value, 64)
-			return f
-		}
-	}
-	return 0
 }
