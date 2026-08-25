@@ -96,6 +96,9 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 	// and inter-word glue are transparent (they stay inside a run); boxes, rules
 	// and math close the current run (they manage their own annotation).
 	lg := lineGrouper{sb: sb, line: -1}
+	// Every glyph this hlist paints shares one baseline, so the text layer the
+	// grouper accumulates is positioned once here.
+	lg.text.baseline = baseline
 	for _, n := range b.list {
 		switch c := n.(type) {
 		case kernNode:
@@ -106,6 +109,10 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 				lg.close()
 			}
 			paintLeader(sb, c.leader, cx, baseline, w, font)
+			if c.leader == leaderNone {
+				// Ordinary inter-word glue: the space a reader would type.
+				lg.text.addSpace()
+			}
 			cx += w
 		case charNode:
 			lg.set(c.srcLine)
@@ -118,10 +125,14 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 					// The glyph path is at the render font's size; scale it to the
 					// glyph's own size (from \large/\small/…) about the baseline.
 					if sc := glyphScale(c, font); sc != 1 {
-						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
+						fmt.Fprintf(&lg.buf, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
 					} else {
-						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
+						fmt.Fprintf(&lg.buf, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
 					}
+					// The character behind the outline just painted, for the
+					// selectable layer. Only a glyph that was drawn is recorded:
+					// the layer must describe what is on the page.
+					lg.text.addChar(c.ch, cx, spToPt(c.width), charSizePt(c, font))
 				}
 			}
 			cx += spToPt(c.width)
@@ -233,7 +244,14 @@ func crect(sb *strings.Builder, x, y, w, h float64, color uint32) {
 // on demand. A line of 0 (unknown) still groups, without the attribute.
 type lineGrouper struct {
 	sb   *strings.Builder
-	line int // current open group's line; -1 = none open
+	line int     // current open group's line; -1 = none open
+	text textRun // the characters painted since the group opened
+	// The run's glyph outlines, held back so the text layer can be written
+	// FIRST: a selection paints its background with the text it belongs to, and
+	// an invisible layer above the outlines would hide the very words it
+	// highlights. Underneath, the highlight sits behind the glyphs, the way a
+	// native text view looks — with no CSS required of the page showing it.
+	buf strings.Builder
 }
 
 func (g *lineGrouper) set(line int) {
@@ -251,6 +269,11 @@ func (g *lineGrouper) set(line int) {
 
 func (g *lineGrouper) close() {
 	if g.line != -1 {
+		// The selectable text layer for this run goes inside the group it
+		// describes, so any transform that placed the glyphs places it too.
+		g.text.emit(g.sb)
+		g.sb.WriteString(g.buf.String())
+		g.buf.Reset()
 		g.sb.WriteString(`</g>`)
 		g.line = -1
 	}
