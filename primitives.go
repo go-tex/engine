@@ -141,7 +141,7 @@ func (e *Engine) loadPrimitives() {
 	e.prim("ifnum", func(e *Engine) { e.doIf(e.scanCond(e.evalIfnum)) })
 	e.prim("ifodd", func(e *Engine) { e.doIf(e.scanCond(func() bool { return e.scanInt()%2 != 0 })) })
 	e.prim("ifx", func(e *Engine) { e.doIf(e.evalIfx()) })
-	e.prim("if", func(e *Engine) { e.doIf(e.evalIf()) })
+	e.prim("if", func(e *Engine) { e.doIf(e.scanCond(e.evalIf)) })
 	e.prim("iftrue", func(e *Engine) { e.doIf(true) })
 	e.prim("iffalse", func(e *Engine) { e.doIf(false) })
 	e.prim("ifcase", func(e *Engine) { e.doIfcase() })
@@ -957,13 +957,32 @@ func (e *Engine) doThe() {
 // while it is running, an \else/\fi that belongs to THIS conditional (rather than
 // to one opened inside the scan) ends the scan instead of expanding. See
 // insertRelax.
+//
+// It also records how many conditionals the scan LEFT OPEN. Expanding an operand
+// can run a conditional of its own — \if u\pos where \pos is itself
+// \if 3\num u\else l\fi, which is how pgfplots asks which side an axis label
+// goes on — and that inner one's \fi is still in the input when this conditional
+// comes to skip its own false branch. Mistaking it for one's own ends the skip at
+// the wrong place: the outer conditional then executes the text that follows,
+// which is the true branch it had just decided against.
 func (e *Engine) scanCond(f func() bool) bool {
-	e.condMarks = append(e.condMarks, e.condOpen)
+	mark := e.condOpen
+	e.condMarks = append(e.condMarks, mark)
 	defer func() { e.condMarks = e.condMarks[:len(e.condMarks)-1] }()
-	return f()
+	r := f()
+	// A scan can also CLOSE a conditional that was already open, by expanding
+	// a \fi that belongs to it; nothing is pending then, and max keeps the count
+	// from going negative without a branch no input can reach.
+	e.condPending = max(0, e.condOpen-mark)
+	return r
 }
 
 func (e *Engine) doIf(cond bool) {
+	// Conditionals the operand scan left open: their \fi's come before this
+	// one's, and the skip below has to let them past. Read once and cleared, so
+	// a conditional that scans no operand (\iftrue) is unaffected.
+	pending := e.condPending
+	e.condPending = 0
 	// \unless (e-TeX) reverses the sense of the conditional it prefixes.
 	if e.negateNextIf > 0 {
 		e.negateNextIf--
@@ -973,9 +992,50 @@ func (e *Engine) doIf(cond bool) {
 		e.condOpen++ // its \else or \fi is still to come
 		return       // execute the true branch; \else/\fi handle the rest
 	}
-	if e.skipToElseOrFi() == "else" {
+	if e.skipToElseOrFiPast(pending) == "else" {
 		e.condOpen++ // the \fi that closes the else branch is still to come
 		return       // execute the else branch
+	}
+}
+
+// skipToElseOrFiPast skips a false branch, letting the \else/\fi of `pending`
+// conditionals opened by the operand scan go by first.
+func (e *Engine) skipToElseOrFiPast(pending int) string {
+	depth := 0
+	for {
+		t, ok := e.getNext()
+		if !ok {
+			return "fi"
+		}
+		if !t.cs_ {
+			continue
+		}
+		m := e.eq[t.cs]
+		if m == nil || m.kind != mPrim {
+			continue
+		}
+		switch {
+		case isIfPrim(m.name):
+			depth++
+		case m.name == "fi":
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if pending > 0 {
+				pending--
+				if e.condOpen > 0 {
+					e.condOpen--
+				}
+				continue
+			}
+			return "fi"
+		case m.name == "else" && depth == 0:
+			if pending > 0 {
+				continue // it closes an inner conditional's true branch
+			}
+			return "else"
+		}
 	}
 }
 
@@ -1333,7 +1393,7 @@ func (e *Engine) loadMore() {
 	e.prim("uccode", func(e *Engine) { e.doCharCode(e.uccode) })
 	e.prim("uppercase", func(e *Engine) { e.doCase(true) })
 	e.prim("lowercase", func(e *Engine) { e.doCase(false) })
-	e.prim("ifcat", func(e *Engine) { e.doIf(e.evalIfcat()) })
+	e.prim("ifcat", func(e *Engine) { e.doIf(e.scanCond(e.evalIfcat)) })
 	e.prim("meaning", func(e *Engine) { e.doMeaning() })
 	expandableSet["meaning"] = true
 	// \empty and \space are ordinary macros, defined as in plain TeX.

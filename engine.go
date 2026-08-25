@@ -258,8 +258,9 @@ type Engine struct {
 	// condMarks records that count at the start of each conditional-operand scan.
 	// Together they decide when TeX's "insert \relax" rule applies — see
 	// insertRelax in primitives.go.
-	condOpen  int
-	condMarks []int
+	condOpen    int
+	condPending int
+	condMarks   []int
 
 	// argRunaway: set when a delimited macro-argument scan reaches the end of the
 	// file that began it without finding its delimiter (a TeX "Runaway argument").
