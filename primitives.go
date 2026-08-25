@@ -1909,6 +1909,20 @@ func (e *Engine) meaningString(t tok) string {
 			return e.escapeStr() + "mathchar\"" + itoaHex(m.code)
 		}
 		return e.escapeStr() + "char\"" + itoaHex(m.code)
+	case mCountRef:
+		return e.escapeStr() + "count" + strconv.Itoa(m.code)
+	case mDimenRef:
+		return e.escapeStr() + "dimen" + strconv.Itoa(m.code)
+	case mSkipRef:
+		return e.escapeStr() + "skip" + strconv.Itoa(m.code)
+	case mToksRef:
+		return e.escapeStr() + "toks" + strconv.Itoa(m.code)
+	case mBoxRef:
+		// \newbox allocates with \chardef, so its handle reads as a character
+		// constant: \meaning of one is \char"33 under a real TeX, not \box51.
+		return e.escapeStr() + "char\"" + itoaHex(m.code)
+	case mFont:
+		return "select font " + m.name
 	case mLetChar:
 		return catName(m.cat) + " " + string(m.ch)
 	}

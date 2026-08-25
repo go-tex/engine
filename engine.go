@@ -117,8 +117,10 @@ type Engine struct {
 	geom          *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
-	save   []saveItem
-	groups []groupFrame // one frame per open group, innermost last
+	save        []saveItem
+	groups      []groupFrame               // one frame per open group, innermost last
+	readStreams [maxReadStreams]readStream // \openin streams
+	allocRead   int                        // next \newread stream number
 
 	// resolve is Options.Resolve: a host-supplied source of texmf files, tried
 	// after the search path and before the embedded set (see hostTeXFile).
