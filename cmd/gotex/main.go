@@ -101,7 +101,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		defer os.Chdir(orig)
 	}
-	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date, Lenient: *lenient}
+	opt := engine.Options{Font: fontBytes, BoldFont: boldBytes, ItalicFont: italicBytes, MonoFont: monoBytes, SansFont: sansBytes, Size: *size, Margin: *margin, Date: *date, Lenient: *lenient,
+		// gotex renders whole documents, where a package that legitimately
+		// expands for millions of steps without reading further — pgfplots does
+		// — must not be mistaken for a loop.
+		NoProgressLimit: engine.NoProgressLimitHeavy}
 	// A document may name a class this machine does not have. Fetch it before
 	// compiling — see texmf.go; nothing is fetched unless the source asks for it.
 	attachTeXMF(&opt, src, *offline, stderr)

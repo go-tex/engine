@@ -9,8 +9,8 @@ import (
 )
 
 // The no-progress ceiling has two jobs and both are load-bearing: stop a genuine
-// loop, and let a heavy but terminating package through. Raising it for pgfplots
-// is only defensible while the first still holds.
+// loop, and let a heavy but terminating expansion through when the caller has
+// asked for the headroom.
 func TestRunawayGuardStopsARealLoop(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
 		{"macro qui s'appelle elle-même", `\def\zx{\zx}\zx`},
@@ -26,9 +26,8 @@ func TestRunawayGuardStopsARealLoop(t *testing.T) {
 				t.Fatalf("%s : la boucle n'a pas été arrêtée", c.src)
 			}
 			// Generous on purpose: what is under test is that the guard fires at
-			// all, and -race slows the engine by about an order of magnitude, so
-			// a tight bound here would fail for a reason unrelated to the guard.
-			// Without -race these abort in under two seconds.
+			// all, and both -race and a slow runner stretch this by an order of
+			// magnitude. Without -race these abort in about two seconds.
 			if d := time.Since(start); d > 60*time.Second {
 				t.Errorf("%s : arrêtée en %v, ce qui est trop long", c.src, d)
 			}
@@ -36,24 +35,45 @@ func TestRunawayGuardStopsARealLoop(t *testing.T) {
 	}
 }
 
-// The other half: expansion that never touches base input again, but terminates,
-// must get through. This is pgfplots' shape — it spends three to four million
-// steps inside token lists before reading further — at a scale the old ceiling
-// of two million would have cut off.
-func TestRunawayGuardLetsHeavyExpansionThrough(t *testing.T) {
-	e := New()
-	e.SetFont(spMock{})
-	const rounds = 1500000
-	src := `\count0=0 \def\zloop{\advance\count0 by1 ` +
-		`\ifnum\count0<1500000 \expandafter\zloop\fi}\zloop`
-	if _, err := e.Run(src); err != nil {
-		t.Fatalf("une expansion lourde mais finie a échoué : %v", err)
-	}
-	if e.runaway {
-		t.Error("une expansion lourde mais finie a déclenché le garde-fou")
-	}
-	if e.count[0] != rounds {
-		t.Errorf("la boucle s'est arrêtée à %d au lieu de %d", e.count[0], rounds)
+// The same expansion, stopped by default and let through with the headroom. That
+// is the whole point of Options.NoProgressLimit: a caller rendering documents
+// wants the ceiling generous — pgfplots needs three to four million steps inside
+// token lists before it reads further — and a caller exercising the guard wants
+// it tight. Neither default serves both.
+//
+// 750000 rounds is just over what the default allows (it stops this loop at
+// 666667) and no more: the test has to discriminate, and every round costs time
+// on a slow runner.
+func TestNoProgressLimitIsWhatMakesTheDifference(t *testing.T) {
+	const src = `\count0=0 \def\zloop{\advance\count0 by1 ` +
+		`\ifnum\count0<750000 \expandafter\zloop\fi}\zloop`
+	for _, c := range []struct {
+		name  string
+		limit int
+		fires bool
+	}{
+		{"par défaut", 0, true},
+		{"avec la marge", NoProgressLimitHeavy, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e, err := buildEngine(Options{NoProgressLimit: c.limit}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.SetFont(spMock{})
+			// In strict mode a runaway IS the error, so only the case that must
+			// get through is held to returning none.
+			if _, err := e.Run(src); err != nil && !c.fires {
+				t.Fatal(err)
+			}
+			if e.runaway != c.fires {
+				t.Errorf("garde-fou déclenché = %v, attendu %v (le compteur s'est arrêté à %d)",
+					e.runaway, c.fires, e.count[0])
+			}
+			if !c.fires && e.count[0] != 750000 {
+				t.Errorf("avec la marge, la boucle s'est arrêtée à %d au lieu de 750000", e.count[0])
+			}
+		})
 	}
 }
 
