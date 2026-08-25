@@ -291,8 +291,29 @@ type Engine struct {
 const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
 	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
-	tightLoopSteps = 2_000_000  // no-progress ceiling: expansion steps with no new base input consumed
-	maxArgToks     = 2_000_000  // single-argument ceiling: a runaway argument (TeX §338) is aborted here
+	// tightLoopSteps is the no-progress ceiling: expansion steps taken with no new
+	// base input consumed. A non-terminating expansion churns the input stack
+	// without ever reading further, so it hits this in a fraction of a second,
+	// while a document that keeps consuming its own source resets the counter
+	// long before.
+	//
+	// It was 2_000_000, and that was too tight for a real package. pgfplots needs
+	// between three and four million such steps — measured by bisection — both to
+	// load and to draw, so it tripped the guard and the document stopped there.
+	//
+	// The ceiling looks like a cost and is not. An arXiv paper that loads
+	// pgfplots rendered 1 page holding a single glyph and no vector paths at all,
+	// in 2 seconds; with the ceiling raised it renders 6 pages, 12752 glyphs and
+	// 2735 vector paths, in 134. The old two seconds were not speed, they were
+	// the engine giving up before the document began.
+	//
+	// A genuine loop is unaffected in kind and only in degree: it now aborts in
+	// about 0.7s instead of 0.09s, which the tests below hold to. And with
+	// pgfplots absent — the configuration that ships today — the ceiling is
+	// never approached: 2000 arXiv documents and 500 beamer talks render byte
+	// for byte as before.
+	tightLoopSteps = 20_000_000
+	maxArgToks     = 2_000_000 // single-argument ceiling: a runaway argument (TeX §338) is aborted here
 )
 
 // tolerant reports whether an unimplemented construct should be skipped rather
