@@ -19,6 +19,17 @@
 // The recall ratio is robust to the three known-expected engine differences
 // documented in scripts/fidelity.sh (page numbers, math rendered as vector
 // paths, and the fi/fl ligature ToUnicode gap); see contentWords in analyze.go.
+//
+// The -layout flag switches to the geometric complement of the recall measure.
+// Recall says WHAT text gotex reproduced; the layout diff says WHERE it landed.
+// It reuses the same corpus sampler, top-level resolution and compile wiring, but
+// extracts per-word bounding boxes with `pdftotext -bbox`, aligns the two word
+// streams by content, and ranks papers worst-first by a layout-divergence score
+// combining matched-word displacement, page-count agreement, and line-break
+// agreement. It masks the same three known differences, so the score reflects
+// REAL layout divergence. See layout.go. Example:
+//
+//	GOWORK=off go run ./cmd/gotex-refdiff -corpus /path/to/arxiv/work -n 40 -layout
 package main
 
 import (
@@ -44,6 +55,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	n := fs.Int("n", 40, "number of papers to sample")
 	seed := fs.Int64("seed", 1, "random seed for the sample (reproducible)")
 	timeout := fs.Duration("timeout", 90*time.Second, "per-engine compile timeout for one paper")
+	layout := fs.Bool("layout", false, "geometric layout-diff mode: rank papers by how far matched words drift plus page-count and line-break divergence (needs pdftotext -bbox), instead of the default word-recall")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -79,6 +91,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if out, err := buildGotex(gotexBin); err != nil {
 		fmt.Fprintf(stderr, "gotex-refdiff: building gotex failed: %v\n%s", err, out)
 		return 1
+	}
+
+	if *layout {
+		pipe := realLayoutPipeline(gotexBin, *timeout)
+		results := make([]layoutResult, 0, len(sample))
+		for i, dir := range sample {
+			id := filepath.Base(dir)
+			fmt.Fprintf(stderr, "  [%d/%d] %s\n", i+1, len(sample), id)
+			results = append(results, analyzeLayout(dir, id, filepath.Join(work, id), pipe))
+		}
+		reportLayout(results, stdout)
+		return 0
 	}
 
 	pipe := realPipeline(gotexBin, *timeout)
