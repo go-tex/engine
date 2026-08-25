@@ -46,6 +46,52 @@ type textRun struct {
 	space    bool // an inter-word space is owed before the next character
 }
 
+// textCursor remembers where the last run ended, so the next one can tell
+// whether a word boundary belongs between them.
+//
+// A run ends whenever anything that is not a glyph interrupts it — a formula, a
+// table cell, an inline box, the end of a line — and each becomes its own
+// <text>. Adjacent elements concatenate with NOTHING between them, so without a
+// boundary the page read "The mass isexactly" around every formula and
+// "alphabeta" across every table cell: a phrase search spanning the
+// interruption found nothing, silently. A page that claims to be searchable and
+// is wrong about it is worse than one that makes no claim.
+//
+// The rule is the one a PDF text extractor uses, and it is geometric rather
+// than structural: a boundary exists where the reader can SEE one. Deciding
+// from the kind of node that interrupted, or from the kind of glue around it,
+// gets it wrong in both directions — a list label is centred with the same
+// infinitely stretchable glue that separates two table cells.
+type textCursor struct {
+	baseline float64
+	endX     float64 // where the last run's last glyph stopped
+	size     float64
+	lastRune rune
+	live     bool
+}
+
+// wantsSpace reports whether a run starting at x on the given baseline needs a
+// leading space to separate it from what came before.
+func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
+	if !c.live {
+		return false // the first text on the page begins nothing
+	}
+	if baseline != c.baseline && x < c.endX {
+		// The text went back to the left on a new baseline: a line ended, which is
+		// a word boundary however the words wrapped. A baseline change that keeps
+		// moving RIGHT is not a new line — it is a superscript or a subscript,
+		// and a footnote marker belongs to the word it hangs off.
+		return true
+	}
+	em := size
+	if c.size > em {
+		em = c.size
+	}
+	// A quarter of an em: wider than any kern or italic correction, narrower
+	// than any inter-word space.
+	return x-c.endX > 0.25*em
+}
+
 // addChar extends the run with one character whose glyph origin is at x and
 // which advances by width (points), setting the character at size points.
 func (t *textRun) addChar(ch rune, x, width, size float64) {
@@ -63,7 +109,9 @@ func (t *textRun) addChar(ch rune, x, width, size float64) {
 
 // addSpace records that the next character starts a new word. Repeated glue
 // still yields a single space: the layer describes what the reader would type to
-// search for the text, not the typesetter's spacing.
+// search for the text, not the typesetter's spacing. Glue arriving before the
+// run has any word is ignored — the boundary in front of a run is the cursor's
+// decision, not this one's (see [textCursor]).
 func (t *textRun) addSpace() {
 	if len(t.words) > 0 {
 		t.space = true
@@ -85,7 +133,7 @@ func (t *textRun) reset() { t.words, t.space, t.size = nil, false, 0 }
 
 // emit writes the run as one invisible <text> and clears it. Nothing is written
 // for an empty run, so a page of pure rules or images gains no elements.
-func (t *textRun) emit(sb *strings.Builder) {
+func (t *textRun) emit(sb *strings.Builder, cur *textCursor) {
 	if t.empty() {
 		t.reset()
 		return
@@ -96,13 +144,18 @@ func (t *textRun) emit(sb *strings.Builder) {
 	}
 	fmt.Fprintf(sb, `<text x="%s" y="%s" font-size="%s" fill-opacity="0" xml:space="preserve">`,
 		f(t.words[0].x), f(t.baseline), f(size))
-	for i, w := range t.words {
+	if cur.wantsSpace(t.words[0].x, t.baseline, size) && !endsWithHyphen(cur.lastRune) {
+		sb.WriteString(" ")
+	}
+	wrote := false
+	for _, w := range t.words {
 		if len(w.runes) == 0 {
 			continue
 		}
-		if i > 0 {
+		if wrote {
 			sb.WriteString(" ")
 		}
+		wrote = true
 		// textLength pins the word to the advance its glyphs actually occupy, so
 		// the invisible text tracks the visible outlines whatever font the reader's
 		// browser substitutes. A non-positive width (a zero-advance combining run)
@@ -115,7 +168,33 @@ func (t *textRun) emit(sb *strings.Builder) {
 		}
 	}
 	sb.WriteString(`</text>`)
+	t.advance(cur)
 	t.reset()
+}
+
+// advance records where this run left the cursor: the end of its last glyph, on
+// its own baseline.
+func (t *textRun) advance(cur *textCursor) {
+	for i := len(t.words) - 1; i >= 0; i-- {
+		w := t.words[i]
+		if len(w.runes) == 0 {
+			continue
+		}
+		cur.baseline, cur.endX, cur.size, cur.live = t.baseline, w.x+w.width, t.size, true
+		cur.lastRune = w.runes[len(w.runes)-1]
+		return
+	}
+}
+
+// endsWithHyphen reports whether the previous run ended on a hyphen TeX inserted
+// to break a word across lines. Separating there would turn "hyphen-ated" into
+// "hyphen- ated", moving the damage rather than repairing it.
+func endsWithHyphen(r rune) bool {
+	switch r {
+	case '-', 0x2010, 0x2011: // hyphen-minus, hyphen, non-breaking hyphen
+		return true
+	}
+	return false
 }
 
 // expandLigature returns the characters a reader would type for a glyph the
