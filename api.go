@@ -38,6 +38,19 @@ type Options struct {
 	// The default (false) is strict: an undefined cs aborts, as TeX does.
 	Lenient bool
 
+	// NoProgressLimit raises the ceiling on expansion steps taken with no new
+	// base input consumed — the guard that stops a non-terminating expansion.
+	// Zero keeps the engine's own, which is tight enough that a loop aborts in a
+	// tenth of a second.
+	//
+	// A program that renders whole documents should ask for
+	// NoProgressLimitHeavy: two million steps is too tight for a real
+	// package, and pgfplots — which needs three to four million both to load and
+	// to draw — stops the document dead without the headroom. It is not the
+	// default because a genuine loop then takes ten times as long to abort, and a
+	// caller exercising the guard wants it tight.
+	NoProgressLimit int
+
 	// Resolve supplies class, package and \input files that the process cannot
 	// read from disk, so a host can hand the engine a texmf tree it holds in
 	// memory. It is given the file name the document asked for, already carrying
@@ -86,6 +99,9 @@ func NewDocument(opt Options) (*Engine, error) {
 func buildEngine(opt Options, latex bool) (*Engine, error) {
 	e := New()
 	e.resolve = opt.Resolve
+	if opt.NoProgressLimit > 0 {
+		e.tightLimit = opt.NoProgressLimit
+	}
 	if !opt.NoPlain {
 		if err := e.LoadPlain(); err != nil {
 			return nil, fmt.Errorf("texengine: loading macros: %w", err)
@@ -281,3 +297,8 @@ func compile(src []byte, opt Options) (*Engine, error) {
 func isLaTeX(src []byte) bool {
 	return bytes.Contains(src, []byte(`\documentclass`))
 }
+
+// NoProgressLimitHeavy is the ceiling a program that renders whole documents
+// should put in Options.NoProgressLimit. See tightLoopStepsHeavy for what it
+// costs and what it buys.
+const NoProgressLimitHeavy = tightLoopStepsHeavy

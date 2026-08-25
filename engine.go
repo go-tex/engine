@@ -291,8 +291,31 @@ type Engine struct {
 const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
 	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
-	tightLoopSteps = 2_000_000  // no-progress ceiling: expansion steps with no new base input consumed
-	maxArgToks     = 2_000_000  // single-argument ceiling: a runaway argument (TeX §338) is aborted here
+	// tightLoopSteps is the no-progress ceiling: expansion steps taken with no new
+	// base input consumed. A non-terminating expansion churns the input stack
+	// without ever reading further, so it hits this in a fraction of a second,
+	// while a document that keeps consuming its own source resets the counter
+	// long before.
+	tightLoopSteps = 2_000_000
+	// tightLoopStepsHeavy is the ceiling a program that renders whole documents
+	// should ask for through Options.NoProgressLimit. Two million is too tight
+	// for a real package: pgfplots needs between three and four million such
+	// steps — measured by bisection — both to load and to draw, so it tripped the
+	// guard and the document stopped there.
+	//
+	// The ceiling looks like a cost and is not. An arXiv paper that loads
+	// pgfplots rendered 1 page holding a single glyph and no vector paths at all,
+	// in 2 seconds; with the ceiling raised it renders 6 pages, 12752 glyphs and
+	// 2735 vector paths. The old two seconds were not speed, they were the engine
+	// giving up before the document began.
+	//
+	// It is not the default because the cost is real where the guard is what is
+	// under test: a genuine loop takes ten times as long to abort, which on a CI
+	// runner turned a nine-minute suite into a failing one. A caller that renders
+	// documents wants the headroom; a caller that exercises the guard wants it
+	// tight.
+	tightLoopStepsHeavy = 20_000_000
+	maxArgToks          = 2_000_000 // single-argument ceiling: a runaway argument (TeX §338) is aborted here
 )
 
 // tolerant reports whether an unimplemented construct should be skipped rather
