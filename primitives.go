@@ -1666,6 +1666,7 @@ func (e *Engine) loadMore() {
 	})
 	e.prim("verb", func(e *Engine) { e.doVerb() })
 	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
+	e.prim("Url", func(e *Engine) { e.doBigURL() })              // url.sty low-level \Url: typeset + close its \begingroup
 	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
 	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })     // hyperref: literal URL, no link
 	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() }) // hyperref: named in-document destination
@@ -1682,6 +1683,7 @@ func (e *Engine) loadMore() {
 	e.prim("citet", func(e *Engine) { e.doCitet() })                         // natbib: "Author [n]"
 	e.prim("bibliographystyle", func(e *Engine) { e.doBibliographyStyle() }) // accepted; only plain modelled
 	e.prim("bibliography", func(e *Engine) { e.doBibliography() })           // read .bib, emit thebibliography
+	e.prim("gotex@putbib", func(e *Engine) { e.doPutbib() })                 // bibunits: \input the current unit's bu<N>.bbl
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("endtabular", func(e *Engine) {}) // consumed by doTabular; defined for safety
 	e.prim("tabularx", func(e *Engine) { e.doTabularx() })

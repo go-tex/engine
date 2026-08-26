@@ -136,7 +136,32 @@ const MiniLaTeXKernel = `
 \def\thebibitem{\the\c@bibitem}
 \def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
 \def\endthebibliography{\par\endgroup\smallskip}
-\def\bibitem#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+% \bibitem[⟨label⟩]{⟨key⟩}: a one-argument \bibitem read the "[" as its mandatory
+% key and printed the rest of the [label] and the {key} as body text, desyncing the
+% entry. The optional argument is the entry's citation label — an author-year string
+% in natbib (\bibitem[Smith et~al.(2020)…]{Smith2020}), the \citenamefont author
+% list in REVTeX/apsrev. Standard LaTeX prints it as the marker; this numbered
+% kernel keeps the running [N] marker but typesets the label at the head of the
+% entry, so its author/year content is recovered even for a .bbl whose entry BODY
+% (apsrev's \bibinfo{author}{…}) this kernel renders only in part. \bibitem{⟨key⟩}
+% (no bracket) is unchanged.
+\def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
+\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}#1 }
+\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+% \newblock separates the logical blocks of a bibliography entry (author / title /
+% publication); in a .bbl it appears hundreds of times. It is an interword space
+% here — left undefined it was skipped, which merely lost the space between blocks.
+\def\newblock{\space}
+% bibunits: a document with per-part bibliographies wraps each in
+% \begin{bibunit}…\putbib[db]…\end{bibunit}. \putbib \input's the current unit's
+% pre-generated bu<N>.bbl (see doPutbib); the [db] database name is consumed. The
+% environment is otherwise transparent — its body is ordinary text — and tolerates
+% the optional [style] some documents pass. \defaultbibliographystyle is a no-op.
+\def\bibunit{\@ifnextbracket\@gobbleoptonly\relax}
+\def\endbibunit{}
+\def\putbib{\@ifnextbracket\@putbibopt\gotex@putbib}
+\def\@putbibopt[#1]{\gotex@putbib}
+\def\defaultbibliographystyle#1{}
 \newcount\c@figure
 \newcount\c@table
 \def\thefigure{\the\c@figure}
