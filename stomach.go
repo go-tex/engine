@@ -411,12 +411,66 @@ func (e *Engine) makeBox(kind boxKind) *boxNode {
 		return &boxNode{kind: kind} // malformed: empty box
 	}
 	e.beginGroupKind(boxGroup)
+	if kind == vbox {
+		// A \vbox is INTERNAL VERTICAL mode: its text is a paragraph, broken to
+		// \hsize, and the resulting LINES are what the box stacks.
+		list := e.buildVBoxList()
+		e.endGroup()
+		return vpackSP(list, mode, target)
+	}
 	list := e.buildBoxList()
 	e.endGroup()
-	if kind == hbox {
-		return hpackSP(list, mode, target)
+	return hpackSP(list, mode, target)
+}
+
+// buildVBoxList builds a \vbox's vertical list, up to the box's matching '}'
+// (left for the caller's endGroup, as buildBoxList does).
+//
+// It runs the material in INTERNAL VERTICAL mode: text starts a paragraph, the
+// paragraph is broken to \hsize, and its lines are appended to the box. That is
+// what TeX does, and it is what the engine does for the page already — the
+// vertical list, the paragraph list and the mode flag are simply swapped out so
+// the same machinery fills this box instead of the page.
+//
+// Treating a \vbox as restricted horizontal mode, as the hbox path does, dropped
+// its text: \vbox{\hbox{X}} rendered because X was already boxed, while \vbox{X}
+// stacked the letters as if each were a line and painted none of them. Every
+// \vbox{ text } in the fleet lost its text that way — including the body of a
+// beamer frame, which the class builds as \vbox\bgroup … \egroup and then
+// contributes with \box.
+func (e *Engine) buildVBoxList() []node {
+	savedMvl, savedPar, savedIn, savedPD := e.mvl, e.parList, e.inPar, e.prevDepth
+	e.mvl, e.parList, e.inPar, e.prevDepth = nil, nil, false, ignoreDepth
+
+	depth := 0
+	for e.err == nil {
+		t, ok := e.getXToken()
+		if !ok {
+			break
+		}
+		if c, isChar := e.implicitChar(t); isChar {
+			t = c // \egroup closes the box, \bgroup opens a nested group
+		}
+		if !t.cs_ && t.cat == catEnd && depth == 0 {
+			break // the box's own closing brace
+		}
+		if !t.cs_ {
+			switch t.cat {
+			case catBegin:
+				depth++
+			case catEnd:
+				depth--
+			}
+		}
+		if !e.stepToken(t) {
+			break
+		}
 	}
-	return vpackSP(list, mode, target)
+	e.endParagraph() // break the last paragraph into the box
+
+	list := e.mvl
+	e.mvl, e.parList, e.inPar, e.prevDepth = savedMvl, savedPar, savedIn, savedPD
+	return list
 }
 
 // makeVtop builds a \vtop: the same contents as a \vbox, but the reference point
