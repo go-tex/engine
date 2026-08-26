@@ -188,6 +188,42 @@ func (e *Engine) applyGeometry(opts string) {
 	}
 }
 
+// applyAmsartGeometry gives the emulated amsart class its real text-block size.
+//
+// amsart (amslatex) sizes the text block itself, unlike article which the engine
+// serves from its embedded, real .cls (that .cls computes \textwidth=345pt and
+// \textheight=550pt via a size1x.clo, and the engine honours it). amsart is served
+// from the built-in emulation instead — its real class runs, but is gated because
+// its \newtheorem machinery could once run away — so the assignments amsart.cls makes
+//
+//	\textwidth=30pc            % 360pt
+//	\textheight=50.5pc         % 606pt (54.5pc, 654pt, on a4paper)
+//	\headheight=8pt \headsep=14pt
+//	\def\calclayout{\advance\textheight -\headheight \advance\textheight -\headsep …}
+//
+// never run. Without them \hsize/\vsize keep the plain-TeX defaults set in New
+// (6.5in × 8.9in = 469.8pt × 643.2pt): a text block far larger than amsart's real
+// 360pt × 584pt. That over-large budget packs ~1.4× more material onto every page,
+// which roughly halved amsart's page count versus the reference. Reproduce amsart's
+// own geometry here so the emulated page budget matches the real class.
+//
+// The size options (10/11/12pt) do NOT change amsart's text block — only its leading
+// — so this is size-independent; the paper option does (letterpaper vs a4paper).
+func (e *Engine) applyAmsartGeometry(opts []string) {
+	const pica = 12.0 // 1pc = 12pt
+	textHeightPc := 50.5
+	for _, o := range opts {
+		if strings.TrimSpace(o) == "a4paper" {
+			textHeightPc = 54.5
+		}
+	}
+	// \calclayout removes \headheight (8pt) and \headsep (14pt) from \textheight;
+	// the remainder is the text area, i.e. the page builder's \vsize.
+	const headAllowance = 8.0 + 14.0 // \headheight + \headsep, in pt
+	e.hsize = ptToSP(30 * pica)      // \textwidth = 30pc = 360pt
+	e.vsize = ptToSP(textHeightPc*pica - headAllowance)
+}
+
 // renderMargin returns the page margin (in points) the drivers should use: the
 // geometry left margin when geometry is active, otherwise the caller's fallback
 // (the compile Option's margin). See the box-model note at the top of this file.
