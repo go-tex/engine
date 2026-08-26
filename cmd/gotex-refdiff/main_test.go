@@ -27,12 +27,12 @@ func fakePipe(refText, gotText *string) pipeline {
 	return pipeline{
 		compileRef: writeOrSkip(refText),
 		compileGot: writeOrSkip(gotText),
-		extract: func(pdf string) string {
+		extract: func(pdf string) extraction {
 			b, err := os.ReadFile(pdf)
 			if err != nil {
-				return ""
+				return extraction{} // absent PDF: a genuine empty result
 			}
-			return string(b)
+			return extraction{text: string(b), nonTrivial: len(b) >= nonTrivialPDFBytes}
 		},
 	}
 }
@@ -284,31 +284,39 @@ func TestRunTectonicErrorPropagates(t *testing.T) {
 
 func TestExtractText(t *testing.T) {
 	work := t.TempDir()
-	// Missing file → "".
-	if got := extractText(nil, time.Second, filepath.Join(work, "absent.pdf")); got != "" {
-		t.Fatalf("missing file: got %q", got)
+	// Missing file → zero extraction (genuine empty, not a tool error).
+	if got := extractText(nil, time.Second, filepath.Join(work, "absent.pdf")); got != (extraction{}) {
+		t.Fatalf("missing file: got %+v", got)
 	}
-	// Empty file → "".
+	// Empty file → zero extraction.
 	empty := filepath.Join(work, "empty.pdf")
 	if err := os.WriteFile(empty, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := extractText(nil, time.Second, empty); got != "" {
-		t.Fatalf("empty file: got %q", got)
+	if got := extractText(nil, time.Second, empty); got != (extraction{}) {
+		t.Fatalf("empty file: got %+v", got)
 	}
-	// Non-empty file, runner returns text.
-	full := filepath.Join(work, "full.pdf")
-	if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+	// Small (sub-threshold) file, runner returns text: text kept, nonTrivial false.
+	small := filepath.Join(work, "small.pdf")
+	if err := os.WriteFile(small, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ok := func(_ time.Duration, pdf string) (string, error) { return "the words", nil }
-	if got := extractText(ok, time.Second, full); got != "the words" {
-		t.Fatalf("ok runner: got %q", got)
+	if got := extractText(ok, time.Second, small); got.text != "the words" || got.nonTrivial || got.toolErr {
+		t.Fatalf("small ok runner: got %+v", got)
 	}
-	// Runner error → "".
+	// Non-trivial file, runner returns text: nonTrivial true.
+	big := filepath.Join(work, "big.pdf")
+	if err := os.WriteFile(big, make([]byte, nonTrivialPDFBytes), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := extractText(ok, time.Second, big); !got.nonTrivial || got.toolErr || got.text != "the words" {
+		t.Fatalf("big ok runner: got %+v", got)
+	}
+	// Runner error on a present, non-trivial file → toolErr, no text.
 	bad := func(_ time.Duration, pdf string) (string, error) { return "", os.ErrClosed }
-	if got := extractText(bad, time.Second, full); got != "" {
-		t.Fatalf("error runner: got %q", got)
+	if got := extractText(bad, time.Second, big); !got.toolErr || got.text != "" || !got.nonTrivial {
+		t.Fatalf("error runner: got %+v", got)
 	}
 }
 
@@ -316,8 +324,8 @@ func TestRealPipelineConstructs(t *testing.T) {
 	// Construct the real pipeline and exercise the extract closure on a missing
 	// file (no external tool needed). This covers the wiring in realPipeline.
 	p := realPipeline("/nonexistent/gotex", 100*time.Millisecond)
-	if got := p.extract(filepath.Join(t.TempDir(), "absent.pdf")); got != "" {
-		t.Fatalf("extract of missing pdf: %q", got)
+	if got := p.extract(filepath.Join(t.TempDir(), "absent.pdf")); got != (extraction{}) {
+		t.Fatalf("extract of missing pdf: %+v", got)
 	}
 	// compileGot over a missing binary must error (not panic).
 	if err := p.compileGot("/x/paper.tex", filepath.Join(t.TempDir(), "o.pdf")); err == nil {
@@ -345,6 +353,166 @@ func TestBuildGotex(t *testing.T) {
 	}
 	if _, err := os.Stat(bin); err != nil {
 		t.Fatalf("gotex binary not produced: %v", err)
+	}
+}
+
+// guardPipe builds a pipeline whose compiles always "succeed" (a dummy file is
+// written so a real workDir exists) and whose extractor returns exactly the given
+// extraction for the reference and gotex PDFs in turn — so the empty-extraction
+// guard can be driven directly, without any external tool.
+func guardPipe(ref, got extraction) pipeline {
+	write := func(_, outPDF string) error { return os.WriteFile(outPDF, []byte("PDF"), 0o644) }
+	first := true
+	return pipeline{
+		compileRef: write,
+		compileGot: write,
+		extract: func(string) extraction {
+			if first {
+				first = false
+				return ref
+			}
+			return got
+		},
+	}
+}
+
+func TestAnalyzePaperExtractErrorReferenceToolErr(t *testing.T) {
+	// A real reference PDF the extractor could not read (a tool error) must NOT be
+	// reported as a missing ground truth — it is an extract-error, excluded, with
+	// a diagnostic naming the reference.
+	dir := makePaper(t, "article", "body")
+	res := analyzePaper(dir, "p", filepath.Join(t.TempDir(), "w"), guardPipe(extraction{toolErr: true, nonTrivial: true}, extraction{}))
+	if res.status != statusExtractError {
+		t.Fatalf("status=%s want extract-error", res.status)
+	}
+	if !strings.Contains(res.diag, "reference") || res.diag == "" {
+		t.Fatalf("diag=%q want a reference tool-error message", res.diag)
+	}
+}
+
+func TestAnalyzePaperExtractErrorReferenceEmptyNonTrivial(t *testing.T) {
+	// A non-trivial reference PDF that extracted to nothing (no tool error, but a
+	// big PDF and zero words) is a silent extractor failure, not a missing paper.
+	dir := makePaper(t, "article", "body")
+	res := analyzePaper(dir, "p", filepath.Join(t.TempDir(), "w"), guardPipe(extraction{nonTrivial: true}, extraction{}))
+	if res.status != statusExtractError {
+		t.Fatalf("status=%s want extract-error", res.status)
+	}
+	if !strings.Contains(res.diag, "non-trivial") {
+		t.Fatalf("diag=%q want a non-trivial-PDF message", res.diag)
+	}
+}
+
+func TestAnalyzePaperExtractErrorGotex(t *testing.T) {
+	// Reference extracts fine; a non-trivial gotex PDF that extracts to nothing is
+	// an extract-error (not a bogus recall-0), and the reference word count is kept.
+	dir := makePaper(t, "article", "body")
+	ref := extraction{text: "alpha beta gamma delta"}
+	res := analyzePaper(dir, "p", filepath.Join(t.TempDir(), "w"), guardPipe(ref, extraction{toolErr: true, nonTrivial: true}))
+	if res.status != statusExtractError {
+		t.Fatalf("status=%s want extract-error", res.status)
+	}
+	if !strings.Contains(res.diag, "gotex") {
+		t.Fatalf("diag=%q want a gotex message", res.diag)
+	}
+	if res.refWords != 4 {
+		t.Fatalf("refWords=%d want 4 (kept even on a gotex extract-error)", res.refWords)
+	}
+}
+
+func TestClassifyExtraction(t *testing.T) {
+	// Usable text: no status.
+	if s, d := classifyExtraction(false, false, 5, "reference", statusRefMissing); s != "" || d != "" {
+		t.Fatalf("usable: status=%q diag=%q want empty", s, d)
+	}
+	// Tool error → extract-error with a tool diagnostic.
+	if s, d := classifyExtraction(true, false, 0, "reference", statusRefMissing); s != statusExtractError || !strings.Contains(d, "tool error") {
+		t.Fatalf("toolErr: status=%q diag=%q", s, d)
+	}
+	// Non-trivial empty PDF → extract-error with a non-trivial diagnostic.
+	if s, d := classifyExtraction(false, true, 0, "gotex", statusGotexFailed); s != statusExtractError || !strings.Contains(d, "non-trivial") {
+		t.Fatalf("nonTrivial: status=%q diag=%q", s, d)
+	}
+	// Genuinely empty tiny PDF → the caller's genuineEmpty status, no diagnostic.
+	if s, d := classifyExtraction(false, false, 0, "gotex", statusGotexFailed); s != statusGotexFailed || d != "" {
+		t.Fatalf("genuine: status=%q diag=%q", s, d)
+	}
+}
+
+func TestPkgxArgs(t *testing.T) {
+	// A poppler tool is pinned to its project so pkgx does not hit MultipleProjects.
+	got := pkgxArgs("pdftotext", "file.pdf", "-")
+	want := []string{"+" + popplerProject, "pdftotext", "file.pdf", "-"}
+	if !equal(got, want) {
+		t.Fatalf("pkgxArgs(pdftotext)=%v want %v", got, want)
+	}
+	// pdftoppm is pinned the same way.
+	if got := pkgxArgs("pdftoppm", "-png", "f.pdf"); got[0] != "+"+popplerProject || got[1] != "pdftoppm" {
+		t.Fatalf("pkgxArgs(pdftoppm)=%v not pinned", got)
+	}
+	// A non-poppler tool is passed through unpinned.
+	if got := pkgxArgs("tectonic", "-o", "d"); !equal(got, []string{"tectonic", "-o", "d"}) {
+		t.Fatalf("pkgxArgs(tectonic)=%v want unpinned", got)
+	}
+}
+
+func TestReportShowsExtractErrorDiag(t *testing.T) {
+	results := []paperResult{
+		{id: "good", class: "article", status: statusOK, ratio: 0.9, refWords: 100, common: 90},
+		{id: "toolbroke", class: "revtex", status: statusExtractError, diag: "reference: a non-trivial PDF extracted to zero content words"},
+	}
+	var buf bytes.Buffer
+	report(results, &buf)
+	out := buf.String()
+	if !strings.Contains(out, "extract-error") || !strings.Contains(out, "zero content words") {
+		t.Fatalf("extract-error diag missing from report:\n%s", out)
+	}
+	// An extract-error paper is excluded from the score (mean over the one ok paper).
+	if !strings.Contains(out, "1 paper(s) scored") {
+		t.Fatalf("extract-error should be excluded from the score:\n%s", out)
+	}
+}
+
+func TestDiagSuffix(t *testing.T) {
+	if diagSuffix("") != "" {
+		t.Fatalf("empty diag should render nothing")
+	}
+	if got := diagSuffix("boom"); got != "  — boom" {
+		t.Fatalf("diagSuffix=%q", got)
+	}
+}
+
+func TestWarnExtractErrorsAndDiagnostics(t *testing.T) {
+	// No extract-errors → nothing printed.
+	var buf bytes.Buffer
+	warnExtractErrors(&buf, paperDiagnostics([]paperResult{{id: "a", status: statusOK}}))
+	if buf.String() != "" {
+		t.Fatalf("no extract-error should print nothing, got %q", buf.String())
+	}
+	// Recall-mode diagnostics gather every extract-error, and the warning names them.
+	results := []paperResult{
+		{id: "a", status: statusOK},
+		{id: "bad1", status: statusExtractError, diag: "reference: tool error"},
+		{id: "bad2", status: statusExtractError, diag: "gotex: non-trivial"},
+	}
+	diags := paperDiagnostics(results)
+	if len(diags) != 2 {
+		t.Fatalf("paperDiagnostics=%v want 2", diags)
+	}
+	buf.Reset()
+	warnExtractErrors(&buf, diags)
+	out := buf.String()
+	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "2 paper(s)") ||
+		!strings.Contains(out, "bad1") || !strings.Contains(out, "bad2") {
+		t.Fatalf("warning missing content:\n%s", out)
+	}
+	// Layout-mode diagnostics behave identically.
+	ld := layoutDiagnostics([]layoutResult{
+		{id: "lok", status: statusOK},
+		{id: "lbad", status: statusExtractError, diag: "reference: tool error"},
+	})
+	if len(ld) != 1 || !strings.Contains(ld[0], "lbad") {
+		t.Fatalf("layoutDiagnostics=%v", ld)
 	}
 }
 

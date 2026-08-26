@@ -12,7 +12,11 @@
 //
 // It is a developer tool, not a CI gate: it needs network (tectonic downloads
 // its package bundle on first use) and poppler's pdftotext. tectonic and
-// pdftotext are taken from PATH when present, else from pkgx. Example:
+// pdftotext are taken from PATH when present, else from pkgx (with the poppler
+// project pinned so `pkgx pdftotext` does not stall on MultipleProjects). A real
+// PDF that the extractor fails to read is marked extract-error and excluded from
+// the score — never scored as lost content — and surfaced loudly on stderr, so a
+// broken extractor cannot silently corrupt a measurement. Example:
 //
 //	GOWORK=off go run ./cmd/gotex-refdiff -corpus /path/to/arxiv/work -n 40
 //
@@ -101,6 +105,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "  [%d/%d] %s\n", i+1, len(sample), id)
 			results = append(results, analyzeLayout(dir, id, filepath.Join(work, id), pipe))
 		}
+		warnExtractErrors(stderr, layoutDiagnostics(results))
 		reportLayout(results, stdout)
 		return 0
 	}
@@ -112,8 +117,46 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "  [%d/%d] %s\n", i+1, len(sample), id)
 		results = append(results, analyzePaper(dir, id, filepath.Join(work, id), pipe))
 	}
+	warnExtractErrors(stderr, paperDiagnostics(results))
 	report(results, stdout)
 	return 0
+}
+
+// paperDiagnostics collects the "id: diag" lines of every extract-error paper in
+// recall mode, so a silently-failed extraction is surfaced loudly rather than
+// buried in the report.
+func paperDiagnostics(results []paperResult) []string {
+	var out []string
+	for _, r := range results {
+		if r.status == statusExtractError {
+			out = append(out, r.id+": "+r.diag)
+		}
+	}
+	return out
+}
+
+// layoutDiagnostics is paperDiagnostics for layout mode.
+func layoutDiagnostics(results []layoutResult) []string {
+	var out []string
+	for _, r := range results {
+		if r.status == statusExtractError {
+			out = append(out, r.id+": "+r.diag)
+		}
+	}
+	return out
+}
+
+// warnExtractErrors prints a loud, unmissable summary to stderr when any paper
+// hit an extract-error, so a broken text extractor cannot corrupt a run in
+// silence. It prints nothing when diags is empty.
+func warnExtractErrors(stderr io.Writer, diags []string) {
+	if len(diags) == 0 {
+		return
+	}
+	fmt.Fprintf(stderr, "gotex-refdiff: WARNING: %d paper(s) hit extract-error and were EXCLUDED from the score — the text extractor failed on a real PDF (check pdftotext):\n", len(diags))
+	for _, d := range diags {
+		fmt.Fprintf(stderr, "    %s\n", d)
+	}
 }
 
 // discoverPapers lists the immediate sub-directories of the corpus root; each is
@@ -148,6 +191,7 @@ func samplePapers(dirs []string, n int, seed int64) []string {
 }
 
 // paperResult is one paper's outcome. status is one of the statusXxx constants.
+// diag carries a human-readable reason when status is statusExtractError.
 type paperResult struct {
 	id       string
 	class    string
@@ -155,14 +199,78 @@ type paperResult struct {
 	ratio    float64
 	refWords int
 	common   int
+	diag     string
 }
 
 const (
-	statusOK          = "ok"              // both engines produced text; ratio is meaningful
-	statusNoToplevel  = "no-toplevel"     // could not resolve a .tex to compile
-	statusRefMissing  = "ref-unavailable" // tectonic produced no text — nothing to score against
-	statusGotexFailed = "gotex-failed"    // gotex produced no text — it lost everything (ratio 0)
+	statusOK           = "ok"              // both engines produced text; ratio is meaningful
+	statusNoToplevel   = "no-toplevel"     // could not resolve a .tex to compile
+	statusRefMissing   = "ref-unavailable" // tectonic produced no text — nothing to score against
+	statusGotexFailed  = "gotex-failed"    // gotex produced no text — it lost everything (ratio 0)
+	statusExtractError = "extract-error"   // a real PDF compiled but the text extractor failed on it — NOT a scorable result
 )
+
+// nonTrivialPDFBytes is the size above which a compiled PDF is taken to carry
+// real content. A genuine multi-page arXiv PDF is tens to hundreds of KB; a
+// failed or empty compile is a few hundred bytes to ~1 KB. When a PDF this large
+// extracts to zero content words the extractor — not the compile — is at fault,
+// so the paper is marked statusExtractError and excluded from the score rather
+// than masquerading as a total content loss (recall 0 / total layout divergence).
+const nonTrivialPDFBytes = 4096
+
+// extraction is one PDF's text-extraction outcome, carrying enough context to
+// tell a genuine empty result (no PDF, or a failed compile) apart from a SILENT
+// extractor failure (a real PDF the tool could not read). text is the extracted
+// text; nonTrivial is set when the source PDF was large enough to hold real
+// content; toolErr is set when the extractor errored on a present PDF.
+type extraction struct {
+	text       string
+	nonTrivial bool
+	toolErr    bool
+}
+
+// classifyExtraction decides, for an extraction that yielded tokens content
+// tokens, whether scoring can proceed and — when it cannot — why. It returns an
+// empty status when the text is usable (tokens > 0). Otherwise an empty
+// extraction is split by cause: a tool error, or a non-trivial PDF that extracted
+// to nothing, is a SILENT extractor failure (statusExtractError, excluded from
+// the score) with a human diagnostic; a genuinely absent or tiny PDF is the
+// caller's genuineEmpty status (statusRefMissing / statusGotexFailed), a real
+// compile result. side ("reference"/"gotex") names the affected engine in the
+// diagnostic.
+func classifyExtraction(toolErr, nonTrivial bool, tokens int, side, genuineEmpty string) (status, diag string) {
+	if tokens > 0 {
+		return "", "" // usable text
+	}
+	switch {
+	case toolErr:
+		return statusExtractError, fmt.Sprintf("%s: the text extractor failed on a present PDF (a tool error, e.g. a missing or ambiguous pdftotext) — extraction produced no text", side)
+	case nonTrivial:
+		return statusExtractError, fmt.Sprintf("%s: a non-trivial PDF (>=%d bytes) extracted to zero content words — a silent extractor failure, not a real content loss", side, nonTrivialPDFBytes)
+	default:
+		return genuineEmpty, "" // no content PDF to read: a real compile result
+	}
+}
+
+// popplerProject is the pkgx project id that unambiguously provides poppler's
+// command-line tools. On some machines a bare `pkgx pdftotext` fails with
+// MultipleProjects (ambiguous between poppler.freedesktop.org and
+// freedesktop.org/poppler-qt5); pinning the project resolves it so the pkgx
+// fallback runs the extractor instead of silently producing no text.
+const popplerProject = "poppler.freedesktop.org"
+
+// pkgxArgs builds the argument list after `pkgx` to run tool name with toolArgs,
+// pinning the poppler project for poppler's ambiguous tools (pdftotext,
+// pdftoppm) so pkgx resolves a single package rather than erroring. Other tools
+// are passed through unpinned.
+func pkgxArgs(name string, toolArgs ...string) []string {
+	args := make([]string, 0, len(toolArgs)+2)
+	if name == "pdftotext" || name == "pdftoppm" {
+		args = append(args, "+"+popplerProject)
+	}
+	args = append(args, name)
+	return append(args, toolArgs...)
+}
 
 // pipeline is the set of external actions analyzePaper needs, injected so the
 // per-paper logic is testable without tectonic, gotex or a network.
@@ -170,8 +278,9 @@ type pipeline struct {
 	// compileRef and compileGot compile texPath to outPDF (reference / gotex).
 	compileRef func(texPath, outPDF string) error
 	compileGot func(texPath, outPDF string) error
-	// extract returns the text of a PDF (empty string when it has none).
-	extract func(pdf string) string
+	// extract returns a PDF's text extraction, distinguishing a genuine empty
+	// result from a silent extractor failure (see extraction).
+	extract func(pdf string) extraction
 }
 
 // analyzePaper runs the full per-paper pipeline: resolve the top-level .tex,
@@ -195,18 +304,25 @@ func analyzePaper(dir, id, workDir string, pipe pipeline) paperResult {
 	gotPDF := filepath.Join(workDir, "got.pdf")
 
 	// Reference first: if the ground truth is unavailable there is nothing to
-	// score, so gotex's own success or failure is not reported as a pass.
+	// score, so gotex's own success or failure is not reported as a pass. An
+	// empty extraction from a real reference PDF is a tool failure, not a missing
+	// ground truth — classifyExtraction keeps the two apart so a broken extractor
+	// cannot silently corrupt the measurement.
 	_ = pipe.compileRef(tex, refPDF)
-	refWords := contentWords(pipe.extract(refPDF))
-	if len(refWords) == 0 {
-		res.status = statusRefMissing
+	refX := pipe.extract(refPDF)
+	refWords := contentWords(refX.text)
+	if s, diag := classifyExtraction(refX.toolErr, refX.nonTrivial, len(refWords), "reference", statusRefMissing); s != "" {
+		res.status = s
+		res.diag = diag
 		return res
 	}
 
 	_ = pipe.compileGot(tex, gotPDF)
-	gotWords := contentWords(pipe.extract(gotPDF))
-	if len(gotWords) == 0 {
-		res.status = statusGotexFailed
+	gotX := pipe.extract(gotPDF)
+	gotWords := contentWords(gotX.text)
+	if s, diag := classifyExtraction(gotX.toolErr, gotX.nonTrivial, len(gotWords), "gotex", statusGotexFailed); s != "" {
+		res.status = s
+		res.diag = diag
 		res.refWords = len(refWords)
 		return res
 	}
@@ -247,11 +363,20 @@ func report(results []paperResult, w io.Writer) {
 		fmt.Fprintf(w, "\nmean recall over scored papers: %.1f%%\n", sum/float64(len(scored))*100)
 	}
 	if len(unscored) > 0 {
-		fmt.Fprintf(w, "\nnot scored (no ground truth or no top-level .tex):\n")
+		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, or a failed extractor):\n")
 		for _, r := range unscored {
-			fmt.Fprintf(w, "  %-12s %-16s %s\n", r.id, truncate(r.class, 16), r.status)
+			fmt.Fprintf(w, "  %-12s %-16s %s%s\n", r.id, truncate(r.class, 16), r.status, diagSuffix(r.diag))
 		}
 	}
+}
+
+// diagSuffix renders a status's diagnostic as a trailing "  — <diag>" when one
+// is present, and nothing otherwise, so extract-error rows explain themselves.
+func diagSuffix(diag string) string {
+	if diag == "" {
+		return ""
+	}
+	return "  — " + diag
 }
 
 // truncate shortens s to at most n runes, appending an ellipsis marker when cut.
@@ -286,7 +411,7 @@ func realPipeline(gotexBin string, timeout time.Duration) pipeline {
 		compileGot: func(texPath, outPDF string) error {
 			return runCmd(timeout, gotexBin, "-lenient", "-o", outPDF, texPath)
 		},
-		extract: func(pdf string) string {
+		extract: func(pdf string) extraction {
 			return extractText(pdftotext, timeout, pdf)
 		},
 	}
@@ -307,18 +432,23 @@ func runTectonic(run func(time.Duration, ...string) error, timeout time.Duration
 	return nil
 }
 
-// extractText returns a PDF's text via the given capture runner, or "" when the
-// file is absent, empty, or the extractor fails — the sampler treats all three
-// the same (no comparable text).
-func extractText(run func(time.Duration, string) (string, error), timeout time.Duration, pdf string) string {
-	if fi, err := os.Stat(pdf); err != nil || fi.Size() == 0 {
-		return ""
+// extractText returns a PDF's text extraction via the given capture runner. An
+// absent or zero-byte PDF is a genuine empty result (a failed compile). A present
+// PDF on which the runner ERRORS is a tool failure (toolErr) — not "no text" —
+// so a broken extractor is not mistaken for lost content. nonTrivial records
+// whether the source PDF was large enough to hold real content, so the caller
+// can tell a legitimately empty tiny PDF from a big one the tool failed to read.
+func extractText(run func(time.Duration, string) (string, error), timeout time.Duration, pdf string) extraction {
+	fi, err := os.Stat(pdf)
+	if err != nil || fi.Size() == 0 {
+		return extraction{}
 	}
+	nonTrivial := fi.Size() >= nonTrivialPDFBytes
 	out, err := run(timeout, pdf)
 	if err != nil {
-		return ""
+		return extraction{nonTrivial: nonTrivial, toolErr: true}
 	}
-	return out
+	return extraction{text: out, nonTrivial: nonTrivial}
 }
 
 // toolRunner returns a function that runs a tool with args, preferring a binary
@@ -332,7 +462,7 @@ func toolRunner(name string) func(timeout time.Duration, args ...string) error {
 		}
 	}
 	return func(timeout time.Duration, args ...string) error {
-		return runCmd(timeout, "pkgx", append([]string{name}, args...)...)
+		return runCmd(timeout, "pkgx", pkgxArgs(name, args...)...)
 	}
 }
 
@@ -349,7 +479,7 @@ func captureRunner(name string) func(timeout time.Duration, pdf string) (string,
 		defer cancel()
 		var cmd *exec.Cmd
 		if usePkgx {
-			cmd = exec.CommandContext(ctx, "pkgx", name, pdf, "-")
+			cmd = exec.CommandContext(ctx, "pkgx", pkgxArgs(name, pdf, "-")...)
 		} else {
 			cmd = exec.CommandContext(ctx, name, pdf, "-")
 		}
