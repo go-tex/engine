@@ -57,6 +57,17 @@ func TestTrueUnitPrefix(t *testing.T) {
 	}
 }
 
+// A space between "true" and its unit ("9.0 true in", as written in tmlr.sty and
+// other class files) must still be read as inches, not silently defaulted to pt.
+// The bug made \textheight 9.0 true in resolve to 9pt, giving tiny pages and a
+// hundreds-of-pages runaway (arXiv 2608.12489: 306 pages vs a reference 40).
+func TestTrueUnitPrefixWithSpace(t *testing.T) {
+	out := mustRun(t, `\dimen4=9.0 true in \dimen6=9in \ifdim\dimen4=\dimen6 \message{SAME}\else\message{DIFF}\fi`)
+	if !strings.Contains(out, "SAME") {
+		t.Errorf("9.0 true in != 9in: %q", out)
+	}
+}
+
 // \setbox accepts a \newbox-allocated control sequence as its target, not only a bare
 // register number (amsart's \setbox\abstractbox=\vtop…). Otherwise the '=' leaks.
 func TestSetboxAcceptsBoxRef(t *testing.T) {

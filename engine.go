@@ -2263,8 +2263,14 @@ func (e *Engine) applyUnit(intPart, f int) int {
 	e.skipOptSpace()
 	// Optional "true" prefix (TeX's magnification-independent units, e.g. .5truein).
 	// The engine has no \mag, so a true<unit> length equals the plain <unit>; consume
-	// the keyword and fall through to the ordinary unit scan.
-	e.scanKeyword("true")
+	// the keyword and fall through to the ordinary unit scan. TeX scans the unit with
+	// its own scan_keyword calls, each of which skips leading spaces, so a space
+	// between "true" and the unit (e.g. "9.0 true in", common in class files like
+	// tmlr.sty) must be skipped here too — otherwise the space is misread as the unit
+	// and the length silently defaults to pt, wrecking the page geometry.
+	if e.scanKeyword("true") {
+		e.skipOptSpace()
+	}
 	a, ok := e.getXToken()
 	if !ok {
 		return intPart*unity + f // bare number ⇒ pt
