@@ -51,7 +51,7 @@ func (e *Engine) doEquationBody() {
 	if box := e.eqNumberBox(meta, number); box != nil {
 		row = append(row, box)
 	}
-	e.contribute(hpackSP(row, packTo, e.hsize))
+	e.placeDisplay([]*boxNode{hpackSP(row, packTo, e.hsize)})
 }
 
 // doEquationStar handles \begin{equation*} (an unnumbered single-line display): the
@@ -76,7 +76,7 @@ func (e *Engine) doEquationStar(name string) {
 	if box := e.eqNumberBox(meta, ""); box != nil { // only a \tag prints for a starred env
 		row = append(row, box)
 	}
-	e.contribute(hpackSP(row, packTo, e.hsize))
+	e.placeDisplay([]*boxNode{hpackSP(row, packTo, e.hsize)})
 }
 
 // eqNumberBox builds the number box for a display line: the \tag (parenthesised

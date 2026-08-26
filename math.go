@@ -640,7 +640,7 @@ func (e *Engine) placeMath(m mathNode, display bool) {
 	if display {
 		e.endParagraph()
 		fil := glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}
-		e.contribute(hpackSP([]node{fil, m, fil}, packTo, e.hsize))
+		e.placeDisplay([]*boxNode{hpackSP([]node{fil, m, fil}, packTo, e.hsize)})
 		return
 	}
 	if !e.inPar {
