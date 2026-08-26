@@ -229,6 +229,11 @@ const AMSClassSubstrate = `
 \newskip\xspaceskip
 \newskip\parfillskip
 \newskip\normalbaselineskip
+% \lastskip reads the last glue on the current list. The engine does not expose
+% list surgery, and every use is a spacing tweak off the critical path (amsart's
+% footnote \advance\skip@-\lastskip, and \removelastskip), so a permanently zero
+% skip register is a safe stand-in — reads yield 0, the subtraction a no-op.
+\newskip\lastskip
 \newtoks\everydisplay
 \newtoks\everymath
 % list / equation scratch counters and skips amsart references directly

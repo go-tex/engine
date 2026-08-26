@@ -248,9 +248,14 @@ const LaTeX2eClassLead = `
 % leaving an undefined \@trivlist that swallows the rest of the document. \list is
 % deliberately left ungrouped here (the corpus's article itemize/enumerate are
 % sensitive to \list's exact behavior); only the trivlist path is scoped.
-\def\@trivlist{\par\begingroup}
+% \@trivlist clears \@itemlabel: a trivlist item (amsart's \maketitle author block
+% \item\relax, and a theorem's \trivlist) carries NO bullet — real \trivlist gives
+% a bare \item an empty label. Scoped by the \begingroup so \@itemlabel reverts to
+% its bullet default (for a stray \item outside any real itemize) at \endtrivlist.
+\def\@trivlist{\par\begingroup\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
 \def\endtrivlist{\endgroup\par}
-\def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\textbullet]}}
+\def\@itemlabel{\textbullet}
+\def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 \def\@gotexitem[#1]{\par\noindent#1\ }
 `
