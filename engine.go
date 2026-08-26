@@ -107,6 +107,7 @@ type Engine struct {
 	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
 	parindent        int    // width of the indentation box at a paragraph's start (sp)
 	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
+	suppressParskip  bool   // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
 	hyph          *hyphenator // loaded hyphenation patterns (nil = no hyphenation)
 	hyphenpenalty int         // penalty at a discretionary hyphen
@@ -1565,6 +1566,25 @@ func lastChar(list []node) (rune, bool) {
 // (an empty hbox of that width) as TeX does for an indented paragraph.
 func (e *Engine) beginParagraph(indent bool) {
 	e.inPar = true
+	// TeX puts \parskip glue on the vertical list before a paragraph that begins
+	// in vertical mode (it is discarded at a page top). \parskip is ~0 in the
+	// standard classes, so this is a no-op for a plain article; but parskip.sty and
+	// the Pandoc article preamble set it to a real length (e.g. 6pt plus 2pt) and
+	// separate EVERY paragraph by it. Without the glue such a document packed the
+	// inter-paragraph space onto the page and under-paginated. The glue is appended
+	// only once the vertical list is non-empty, mirroring TeX's page-top discard for
+	// the first paragraph; it sits in ADDITION to the interline glue the first line
+	// then gets (prevDepth is left untouched), as TeX stacks \parskip and the
+	// baselineskip between two paragraphs. It is suppressed once right after a
+	// display: in TeX the text following \[…\]/equation/align resumes the SAME
+	// paragraph, so no \parskip falls there — but this engine ends the paragraph at
+	// a display and starts a fresh one for the trailing text, which would otherwise
+	// insert a spurious \parskip after every display (hundreds of them, and hundreds
+	// of surplus points, in a math paper that set \parskip).
+	if len(e.mvl) > 0 && !e.suppressParskip {
+		e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("parskip")})
+	}
+	e.suppressParskip = false
 	if indent {
 		e.parList = append(e.parList, &boxNode{kind: hbox, width: e.parindent})
 	}

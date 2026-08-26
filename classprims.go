@@ -151,17 +151,39 @@ const LaTeX2eClassLead = `
 \providecommand{\textbullet}{*}
 % ── sectioning ───────────────────────────────────────────────────────────────
 % \@startsection{name}{level}{indent}{beforeskip}{afterskip}{style} then *|[toc]|{title}.
-% The five layout arguments are accepted (only a little vertical space is used). The
-% unstarred form NUMBERS the heading: when level<=secnumdepth it steps the name's
-% counter and prefixes \the<name>; the starred form is unnumbered. The optional
-% [toc-title] is accepted and ignored.
-\def\@startsection#1#2#3#4#5#6{\par\@ifstar{\@gxsec{#1}{#2}{#6}\@gxstar}{\@gxsec{#1}{#2}{#6}\@gxnum}}
-\def\@gxsec#1#2#3#4{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}}{\@gxsecplain{#1}{#2}{#3}{#4}}}
-\def\@gxsecopt#1#2#3#4[#5]#6{#4{#1}{#2}{#3}{#6}}
-\def\@gxsecplain#1#2#3#4#5{#4{#1}{#2}{#3}{#5}}
-\def\@gxstar#1#2#3#4{\@gxhead{#3}{#4}}
-\def\@gxnum#1#2#3#4{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#4}\else\refstepcounter{#1}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#4}\@gxhead{#3}{\csname the#1\endcsname\quad#4}\fi}
-\def\@gxhead#1#2{\par\medskip\noindent{#1 #2}\par}
+% The unstarred form NUMBERS the heading: when level<=secnumdepth it steps the
+% name's counter and prefixes \the<name>; the starred form is unnumbered. The
+% optional [toc-title] is accepted and ignored.
+%
+% The beforeskip (#4) and afterskip (#5) are the real vertical space a heading
+% consumes and MUST be honoured, not replaced by a fixed \medskip: article.cls
+% passes \section a beforeskip of 3.5ex (≈15pt) and an afterskip of 2.3ex (≈10pt),
+% so a heading spaced with a rigid 6pt \medskip and nothing after saves ~19pt —
+% and a section-heavy article (dozens of headings) then packs several extra pages
+% of them, under-paginating against tectonic. beforeskip is applied here as
+% vertical space above the heading (its sign is LaTeX's indent flag, so the space
+% is its magnitude); afterskip is threaded through to \@gxhead, which puts it below
+% a display heading (positive) or runs the text in beside the heading (negative).
+\def\@startsection#1#2#3#4#5#6{\par
+  \@tempskipa#4\relax
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \vskip\@tempskipa
+  \@ifstar{\@gxsec{#1}{#2}{#6}{#5}\@gxstar}{\@gxsec{#1}{#2}{#6}{#5}\@gxnum}}
+\def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
+\def\@gxsecopt#1#2#3#4#5[#6]#7{#5{#1}{#2}{#3}{#4}{#7}}
+\def\@gxsecplain#1#2#3#4#5#6{#5{#1}{#2}{#3}{#4}{#6}}
+\def\@gxstar#1#2#3#4#5{\@gxhead{#3}{#5}{#4}}
+\def\@gxnum#1#2#3#4#5{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#5}{#4}\else\refstepcounter{#1}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#5}\@gxhead{#3}{\csname the#1\endcsname\quad#5}{#4}\fi}
+% \@gxhead{style}{title}{afterskip}: set the heading, then its trailing space. A
+% positive afterskip is a display heading — end the line and skip that far down; a
+% negative one is a run-in heading — leave horizontal space and let the body text
+% follow on the same line (\paragraph/\subparagraph).
+\def\@gxhead#1#2#3{\@tempskipa#3\relax
+  \ifdim\@tempskipa<\z@
+    \noindent{#1 #2}\hskip-\@tempskipa
+  \else
+    \noindent{#1 #2}\par\vskip\@tempskipa
+  \fi}
 \def\@afterheading{}
 % \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
 % optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title

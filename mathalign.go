@@ -101,6 +101,7 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		leftPad = 0
 	}
 
+	var rowBoxes []*boxNode
 	for _, br := range built {
 		var numBox *boxNode
 		switch {
@@ -155,8 +156,9 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		if numBox != nil {
 			row = append(row, numBox)
 		}
-		e.contribute(hpackSP(row, packTo, e.hsize))
+		rowBoxes = append(rowBoxes, hpackSP(row, packTo, e.hsize))
 	}
+	e.placeDisplay(rowBoxes)
 }
 
 // doMultline typesets a multline/multline* environment: one long equation split
@@ -196,6 +198,7 @@ func (e *Engine) doMultline(name string, numbered bool) {
 	}
 
 	last := len(lines) - 1
+	var rowBoxes []*boxNode
 	for i, m := range lines {
 		var row []node
 		switch {
@@ -209,8 +212,9 @@ func (e *Engine) doMultline(name string, numbered bool) {
 		if i == last && number != "" {
 			row = append(row, e.hfil(), e.textToHbox("("+number+")"))
 		}
-		e.contribute(hpackSP(row, packTo, e.hsize))
+		rowBoxes = append(rowBoxes, hpackSP(row, packTo, e.hsize))
 	}
+	e.placeDisplay(rowBoxes)
 }
 
 // hfil returns an infinitely stretchable glue (first-order fil), used to centre or
