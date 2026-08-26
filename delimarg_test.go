@@ -101,11 +101,33 @@ func TestStripOuterGroupShapes(t *testing.T) {
 	}
 }
 
-// An argument count written with a control sequence in it: the reader takes the
-// digits and ignores the rest rather than aborting.
+// An argument count that holds a control sequence is SCANNED AS A NUMBER, the way
+// LaTeX scans it (\@tempcnta#1\relax): a register gives the number it holds, and
+// something that cannot begin a number gives zero.
+//
+// Reading only the digits and ignoring the rest looked forgiving and was not: a
+// command written \newcommand\foo[\somecount]{…} took ZERO arguments, and every
+// argument the caller passed was left in the input to be typeset. beamer generates
+// its whole overlay layer that way — \newcommand\cs[\beamer@argscount]{…} — so
+// \defbeamertemplate printed each template's body onto the page.
+//
+// Checked against real LaTeX: \newcommand\ca[\nn]{<#1>} with \nn=1 gives <X> for
+// \ca{X}; \newcommand\cb[\relax 1]{…} raises "Missing number, treated as zero"
+// and defines a command of no arguments.
 func TestArgumentCountWithControlSequences(t *testing.T) {
-	if got := ckRun(t, `\newcommand\c[\relax 1]{<#1>}\message{[\c A]}`); got != "[<A>]" {
-		t.Errorf("count with a control sequence = %q, want [<A>]", got)
+	if got := ckRun(t, `\newcount\nn \nn=1 \newcommand\c[\nn]{<#1>}\message{[\c A]}`); got != "[<A>]" {
+		t.Errorf("count from a register = %q, want [<A>]", got)
+	}
+	if got := ckRun(t, `\newcount\nn \nn=2 \newcommand\c[\nn]{<#1|#2>}\message{[\c AB]}`); got != "[<A|B>]" {
+		t.Errorf("two arguments from a register = %q, want [<A|B>]", got)
+	}
+	// \the\nn spells the number through expansion; the scanner expands to reach it.
+	if got := ckRun(t, `\newcount\nn \nn=1 \newcommand\c[\the\nn]{<#1>}\message{[\c A]}`); got != "[<A>]" {
+		t.Errorf("count from \\the = %q, want [<A>]", got)
+	}
+	// Not a number: zero arguments, and what followed stays in the input.
+	if got := ckRun(t, `\newcommand\c[\relax 1]{<#1>}\message{[\c A]}`); got != "[<>A]" {
+		t.Errorf("count that is not a number = %q, want [<>A]", got)
 	}
 	if got := ckRun(t, `\newcommand\c[1][{a}b]{<#1>}\message{[\c]}`); got != "[<{a}b>]" {
 		t.Errorf("default whose group ends early = %q, want [<{a}b>]", got)
