@@ -356,12 +356,31 @@ func layoutFakePipe(refBody, gotBody *string) layoutPipeline {
 	return layoutPipeline{
 		compileRef: writeOrSkip(refBody),
 		compileGot: writeOrSkip(gotBody),
-		extract: func(pdf string) pdfLayout {
+		extract: func(pdf string) layoutExtraction {
 			b, err := os.ReadFile(pdf)
 			if err != nil {
-				return pdfLayout{}
+				return layoutExtraction{}
 			}
-			return parseBBox(b)
+			return layoutExtraction{layout: parseBBox(b), nonTrivial: len(b) >= nonTrivialPDFBytes}
+		},
+	}
+}
+
+// layoutGuardPipe returns a layoutPipeline whose compiles succeed (a dummy file
+// is written) and whose extractor yields exactly ref then got, so the layout
+// empty-extraction guard can be driven directly.
+func layoutGuardPipe(ref, got layoutExtraction) layoutPipeline {
+	write := func(_, outPDF string) error { return os.WriteFile(outPDF, []byte("PDF"), 0o644) }
+	first := true
+	return layoutPipeline{
+		compileRef: write,
+		compileGot: write,
+		extract: func(string) layoutExtraction {
+			if first {
+				first = false
+				return ref
+			}
+			return got
 		},
 	}
 }
@@ -513,38 +532,72 @@ func TestLayoutNote(t *testing.T) {
 
 func TestExtractLayout(t *testing.T) {
 	work := t.TempDir()
-	// Missing file → empty.
-	if pl := extractLayout(nil, time.Second, filepath.Join(work, "absent.pdf")); len(pl.words) != 0 {
-		t.Fatalf("missing file: got %+v", pl)
+	// Missing file → zero extraction.
+	if x := extractLayout(nil, time.Second, filepath.Join(work, "absent.pdf")); len(x.layout.words) != 0 || x.toolErr {
+		t.Fatalf("missing file: got %+v", x)
 	}
-	// Empty file → empty.
+	// Empty file → zero extraction.
 	empty := filepath.Join(work, "empty.pdf")
 	if err := os.WriteFile(empty, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if pl := extractLayout(nil, time.Second, empty); len(pl.words) != 0 {
-		t.Fatalf("empty file: got %+v", pl)
+	if x := extractLayout(nil, time.Second, empty); len(x.layout.words) != 0 || x.toolErr {
+		t.Fatalf("empty file: got %+v", x)
 	}
-	// Non-empty file, runner returns bbox → parsed.
-	full := filepath.Join(work, "full.pdf")
-	if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+	// Small file, runner returns bbox → parsed, nonTrivial false.
+	small := filepath.Join(work, "small.pdf")
+	if err := os.WriteFile(small, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ok := func(_ time.Duration, _ string) ([]byte, error) { return bboxDoc(twoWordPage), nil }
-	if pl := extractLayout(ok, time.Second, full); len(pl.words) != 2 {
-		t.Fatalf("ok runner: got %d words", len(pl.words))
+	if x := extractLayout(ok, time.Second, small); len(x.layout.words) != 2 || x.nonTrivial {
+		t.Fatalf("small ok runner: got %+v", x)
 	}
-	// Runner error → empty.
+	// Non-trivial file, runner returns bbox → nonTrivial true.
+	big := filepath.Join(work, "big.pdf")
+	if err := os.WriteFile(big, make([]byte, nonTrivialPDFBytes), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if x := extractLayout(ok, time.Second, big); len(x.layout.words) != 2 || !x.nonTrivial {
+		t.Fatalf("big ok runner: got %+v", x)
+	}
+	// Runner error on a present, non-trivial file → toolErr.
 	bad := func(_ time.Duration, _ string) ([]byte, error) { return nil, os.ErrClosed }
-	if pl := extractLayout(bad, time.Second, full); len(pl.words) != 0 {
-		t.Fatalf("error runner: got %+v", pl)
+	if x := extractLayout(bad, time.Second, big); !x.toolErr || len(x.layout.words) != 0 || !x.nonTrivial {
+		t.Fatalf("error runner: got %+v", x)
+	}
+}
+
+func TestAnalyzeLayoutExtractError(t *testing.T) {
+	// A non-trivial gotex PDF that extracts to no words is a silent extractor
+	// failure, not a bogus total layout divergence: it is marked extract-error and
+	// the reference page count is still recorded.
+	dir := layoutPaper(t, "article", "body")
+	refX := layoutExtraction{layout: parseBBox(bboxDoc(twoWordPage))} // 2 words: usable
+	gotX := layoutExtraction{toolErr: true, nonTrivial: true}
+	res := analyzeLayout(dir, "p", filepath.Join(t.TempDir(), "w"), layoutGuardPipe(refX, gotX))
+	if res.status != statusExtractError {
+		t.Fatalf("status=%s want extract-error", res.status)
+	}
+	if !strings.Contains(res.diag, "gotex") {
+		t.Fatalf("diag=%q want a gotex message", res.diag)
+	}
+	if res.score.refPages != 1 {
+		t.Fatalf("refPages=%d want 1 (kept on a gotex extract-error)", res.score.refPages)
+	}
+	// A reference that fails to extract from a non-trivial PDF is an extract-error
+	// too (not a missing ground truth).
+	resRef := analyzeLayout(dir, "p", filepath.Join(t.TempDir(), "w"),
+		layoutGuardPipe(layoutExtraction{nonTrivial: true}, refX))
+	if resRef.status != statusExtractError || !strings.Contains(resRef.diag, "reference") {
+		t.Fatalf("reference extract-error: status=%s diag=%q", resRef.status, resRef.diag)
 	}
 }
 
 func TestRealLayoutPipelineConstructs(t *testing.T) {
 	p := realLayoutPipeline("/nonexistent/gotex", 100*time.Millisecond)
-	if pl := p.extract(filepath.Join(t.TempDir(), "absent.pdf")); len(pl.words) != 0 {
-		t.Fatalf("extract of missing pdf: %+v", pl)
+	if x := p.extract(filepath.Join(t.TempDir(), "absent.pdf")); len(x.layout.words) != 0 {
+		t.Fatalf("extract of missing pdf: %+v", x)
 	}
 	if err := p.compileGot("/x/paper.tex", filepath.Join(t.TempDir(), "o.pdf")); err == nil {
 		t.Fatal("expected compileGot with a missing gotex binary to error")

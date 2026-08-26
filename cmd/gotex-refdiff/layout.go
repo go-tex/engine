@@ -398,12 +398,14 @@ func lineBreakAgreement(pairs []alignPair, ref, got []normWord) float64 {
 
 // layoutResult is one paper's layout outcome, mirroring paperResult. status is
 // one of the shared statusXxx constants (statusOK, statusNoToplevel,
-// statusRefMissing, statusGotexFailed).
+// statusRefMissing, statusGotexFailed, statusExtractError). diag carries a
+// human-readable reason when status is statusExtractError.
 type layoutResult struct {
 	id     string
 	class  string
 	status string
 	score  layoutScore
+	diag   string
 }
 
 // analyzeLayout runs the full per-paper layout pipeline: resolve the top-level
@@ -427,23 +429,29 @@ func analyzeLayout(dir, id, workDir string, pipe layoutPipeline) layoutResult {
 	refPDF := filepath.Join(workDir, "ref.pdf")
 	gotPDF := filepath.Join(workDir, "got.pdf")
 
+	// As in analyzePaper, classifyExtraction keeps a silently-failed extractor
+	// (a real PDF that the bbox extractor could not read) apart from a genuinely
+	// missing reference or a gotex compile that produced nothing, so a broken
+	// extractor cannot masquerade as total layout divergence.
 	_ = pipe.compileRef(tex, refPDF)
-	refLayout := pipe.extract(refPDF)
-	refWords := normalize(refLayout)
-	if len(refWords) == 0 {
-		res.status = statusRefMissing
+	refX := pipe.extract(refPDF)
+	refWords := normalize(refX.layout)
+	if s, diag := classifyExtraction(refX.toolErr, refX.nonTrivial, len(refWords), "reference", statusRefMissing); s != "" {
+		res.status = s
+		res.diag = diag
 		return res
 	}
 
 	_ = pipe.compileGot(tex, gotPDF)
-	gotLayout := pipe.extract(gotPDF)
-	gotWords := normalize(gotLayout)
-	if len(gotWords) == 0 {
-		res.status = statusGotexFailed
-		res.score.refPages = len(refLayout.pages)
+	gotX := pipe.extract(gotPDF)
+	gotWords := normalize(gotX.layout)
+	if s, diag := classifyExtraction(gotX.toolErr, gotX.nonTrivial, len(gotWords), "gotex", statusGotexFailed); s != "" {
+		res.status = s
+		res.diag = diag
+		res.score.refPages = len(refX.layout.pages)
 		return res
 	}
-	res.score = scoreLayout(refWords, gotWords, len(refLayout.pages), len(gotLayout.pages))
+	res.score = scoreLayout(refWords, gotWords, len(refX.layout.pages), len(gotX.layout.pages))
 	res.status = statusOK
 	return res
 }
@@ -483,9 +491,9 @@ func reportLayout(results []layoutResult, w io.Writer) {
 		fmt.Fprintf(w, "\nmean divergence over scored papers: %.3f\n", sum/float64(len(scored)))
 	}
 	if len(unscored) > 0 {
-		fmt.Fprintf(w, "\nnot scored (no ground truth or no top-level .tex):\n")
+		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, or a failed extractor):\n")
 		for _, r := range unscored {
-			fmt.Fprintf(w, "  %-12s %-14s %s\n", r.id, truncate(r.class, 14), r.status)
+			fmt.Fprintf(w, "  %-12s %-14s %s%s\n", r.id, truncate(r.class, 14), r.status, diagSuffix(r.diag))
 		}
 	}
 }
@@ -516,7 +524,17 @@ func layoutNote(r layoutResult) string {
 type layoutPipeline struct {
 	compileRef func(texPath, outPDF string) error
 	compileGot func(texPath, outPDF string) error
-	extract    func(pdf string) pdfLayout
+	extract    func(pdf string) layoutExtraction
+}
+
+// layoutExtraction is the layout-mode counterpart of extraction: the parsed bbox
+// layout plus the two silent-failure signals. nonTrivial is set when the source
+// PDF was large enough to hold real content; toolErr is set when the bbox
+// extractor errored on a present PDF.
+type layoutExtraction struct {
+	layout     pdfLayout
+	nonTrivial bool
+	toolErr    bool
 }
 
 // realLayoutPipeline wires the external binaries for layout mode: tectonic for
@@ -532,24 +550,28 @@ func realLayoutPipeline(gotexBin string, timeout time.Duration) layoutPipeline {
 		compileGot: func(texPath, outPDF string) error {
 			return runCmd(timeout, gotexBin, "-lenient", "-o", outPDF, texPath)
 		},
-		extract: func(pdf string) pdfLayout {
+		extract: func(pdf string) layoutExtraction {
 			return extractLayout(bbox, timeout, pdf)
 		},
 	}
 }
 
-// extractLayout returns a PDF's parsed bbox layout via the given runner, or an
-// empty layout when the file is absent, empty, or the extractor fails — the same
-// three-way handling as extractText.
-func extractLayout(run func(time.Duration, string) ([]byte, error), timeout time.Duration, pdf string) pdfLayout {
-	if fi, err := os.Stat(pdf); err != nil || fi.Size() == 0 {
-		return pdfLayout{}
+// extractLayout returns a PDF's parsed bbox layout via the given runner. Like
+// extractText it distinguishes a genuine empty result (absent or zero-byte PDF)
+// from a tool failure (a present PDF the runner ERRORS on → toolErr) and records
+// whether the source PDF was non-trivial, so analyzeLayout can tell a broken
+// extractor from real lost layout.
+func extractLayout(run func(time.Duration, string) ([]byte, error), timeout time.Duration, pdf string) layoutExtraction {
+	fi, err := os.Stat(pdf)
+	if err != nil || fi.Size() == 0 {
+		return layoutExtraction{}
 	}
+	nonTrivial := fi.Size() >= nonTrivialPDFBytes
 	out, err := run(timeout, pdf)
 	if err != nil {
-		return pdfLayout{}
+		return layoutExtraction{nonTrivial: nonTrivial, toolErr: true}
 	}
-	return parseBBox(out)
+	return layoutExtraction{layout: parseBBox(out), nonTrivial: nonTrivial}
 }
 
 // foldToken normalises one extracted bbox word to its comparable content form,
@@ -583,7 +605,7 @@ func bboxRunner(name string) func(timeout time.Duration, pdf string) ([]byte, er
 		defer cancel()
 		var cmd *exec.Cmd
 		if usePkgx {
-			cmd = exec.CommandContext(ctx, "pkgx", name, "-bbox", pdf, "-")
+			cmd = exec.CommandContext(ctx, "pkgx", pkgxArgs(name, "-bbox", pdf, "-")...)
 		} else {
 			cmd = exec.CommandContext(ctx, name, "-bbox", pdf, "-")
 		}
