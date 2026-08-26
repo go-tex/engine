@@ -305,5 +305,17 @@ const AMSClassSubstrate = `
 % \@ifclasswith{class}{opt}{then}{else}: the class-file analogue of
 % \@ifpackagewith, consulting the option list the loader recorded in opt@class.cls.
 \def\@ifclasswith#1#2{\@ifundefined{opt@#1.cls}{\@secondoftwo}{\@ifinlist{#2}{\@nameuse{opt@#1.cls}}\ifin@\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}}
+% ── amsthm counter-representation hooks (normally from amsmath.sty) ──────────
+% amsart.cls's \@xthm builds a within-numbered theorem's printed number as
+%   \the<thm> := \the<within>\@thmcountersep\@thmcounter{<thm>}
+% (see amsart.cls \@xthm). \@thmcountersep is the separator between the parent
+% and child number ("." → "Theorem 1.1"), and \@thmcounter{c} yields \arabic{c}
+% kept unexpanded (\noexpand) so the \xdef freezes "\arabic{c}" into \the<thm> and
+% it re-evaluates at every use. amsmath.sty defines both; the engine stubs amsmath,
+% so without these the two control sequences would survive verbatim into \the<thm>
+% and print literally ("1\@thmcountersep\@thmcounter{thm}") instead of "1.1".
+% \providecommand so a real amsmath, if ever supplied, still wins.
+\providecommand{\@thmcountersep}{.}
+\providecommand{\@thmcounter}[1]{\noexpand\arabic{#1}}
 \catcode64=11
 `
