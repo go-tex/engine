@@ -105,20 +105,33 @@ func TestGraphicsSize(t *testing.T) {
 	cases := []struct {
 		iw, ih, wReq, hReq int
 		scale              float64
+		dpiX, dpiY         float64
 		wantW, wantH       int
 	}{
-		{100, 50, 0, 0, 0, 100 * unity, 50 * unity},                  // intrinsic (1px=1pt)
-		{100, 50, 200 * unity, 0, 0, 200 * unity, 100 * unity},       // width → aspect height
-		{100, 50, 0, 25 * unity, 0, 50 * unity, 25 * unity},          // height → aspect width
-		{100, 50, 60 * unity, 40 * unity, 0, 60 * unity, 40 * unity}, // both explicit
-		{100, 50, 0, 0, 2.0, 200 * unity, 100 * unity},               // scale
+		{100, 50, 0, 0, 0, 0, 0, 100 * unity, 50 * unity},                  // intrinsic, no dpi (1px=1pt)
+		{100, 50, 200 * unity, 0, 0, 0, 0, 200 * unity, 100 * unity},       // width → aspect height
+		{100, 50, 0, 25 * unity, 0, 0, 0, 50 * unity, 25 * unity},          // height → aspect width
+		{100, 50, 60 * unity, 40 * unity, 0, 0, 0, 60 * unity, 40 * unity}, // both explicit
+		{100, 50, 0, 0, 2.0, 0, 0, 200 * unity, 100 * unity},               // scale, no dpi
+		// A declared resolution converts pixels through px/dpi×72.27pt: a 144px
+		// image at 144 dpi is 1in = 72.27pt, half its 1px=1pt fallback size.
+		{144, 72, 0, 0, 0, 144, 144, natSP(144, 144), natSP(72, 144)},
+		// dpi participates in scale and in single-dimension aspect (via natural size).
+		{144, 72, 0, 0, 0.5, 144, 144, int(float64(natSP(144, 144))*0.5 + 0.5), int(float64(natSP(72, 144))*0.5 + 0.5)},
+		{144, 72, 100 * unity, 0, 0, 144, 144, 100 * unity, 50 * unity}, // aspect from natural (2:1)
+		{144, 72, 0, 50 * unity, 0, 144, 144, 100 * unity, 50 * unity},  // aspect from natural
+		{0, 0, 0, 0, 0, 300, 300, 0, 0},                                 // zero pixels → zero box
 	}
 	for _, c := range cases {
-		w, h := graphicsSize(c.iw, c.ih, c.wReq, c.hReq, c.scale)
+		w, h := graphicsSize(c.iw, c.ih, c.wReq, c.hReq, c.scale, c.dpiX, c.dpiY)
 		if w != c.wantW || h != c.wantH {
-			t.Errorf("graphicsSize(%d,%d,%d,%d,%v) = (%d,%d), want (%d,%d)",
-				c.iw, c.ih, c.wReq, c.hReq, c.scale, w, h, c.wantW, c.wantH)
+			t.Errorf("graphicsSize(%d,%d,%d,%d,%v,dpi %v/%v) = (%d,%d), want (%d,%d)",
+				c.iw, c.ih, c.wReq, c.hReq, c.scale, c.dpiX, c.dpiY, w, h, c.wantW, c.wantH)
 		}
+	}
+	// natSP with a zero resolution keeps the pixel-as-point fallback.
+	if got := natSP(10, 0); got != 10*unity {
+		t.Errorf("natSP(10,0) = %d, want %d", got, 10*unity)
 	}
 }
 
