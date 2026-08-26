@@ -68,12 +68,25 @@ const MiniLaTeXKernel = `
 \def\@nsubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\@ssubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\paragraph#1{\par\noindent#1\quad}
-\def\title#1{\def\@title{#1}}
-\def\author#1{\def\@author{#1}}
+% \title and \author accept an OPTIONAL short form — \title[short]{full} — in the
+% amsart family (used for the running head). The short argument is only STORED
+% (in \@shorttitle / \@shortauthor); executing it would run any font or spacing
+% command it carries in global scope. A real paper writes \title[\tiny …]{…}, and
+% taking that short form as the mandatory argument let the \tiny escape into the
+% document body and set every following paragraph half-size. Detect the bracket and
+% keep the short form unexpanded; with no bracket the plain one-argument form holds.
+\def\title{\@ifnextchar[{\@titleopt}{\@titlemand}}
+\def\@titleopt[#1]#2{\def\@shorttitle{#1}\def\@title{#2}}
+\def\@titlemand#1{\def\@title{#1}}
+\def\author{\@ifnextchar[{\@authoropt}{\@authormand}}
+\def\@authoropt[#1]#2{\def\@shortauthor{#1}\def\@author{#2}}
+\def\@authormand#1{\def\@author{#1}}
 \def\date#1{\def\@date{#1}}
 \def\@title{}
 \def\@author{}
 \def\@date{}
+\def\@shorttitle{}
+\def\@shortauthor{}
 \def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}

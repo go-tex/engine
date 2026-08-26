@@ -1534,8 +1534,8 @@ func (e *Engine) loadMore() {
 	e.prim("fancyhf", func(e *Engine) { e.doFancyhf() })
 	// setspace line spacing (see setspace.go).
 	e.prim("singlespacing", func(e *Engine) { e.setLineStretch(1) })
-	e.prim("onehalfspacing", func(e *Engine) { e.setLineStretch(1.5) })
-	e.prim("doublespacing", func(e *Engine) { e.setLineStretch(2) })
+	e.prim("onehalfspacing", func(e *Engine) { e.setLineStretch(onehalfStretch(e.ptsizeCode())) })
+	e.prim("doublespacing", func(e *Engine) { e.setLineStretch(doubleStretch(e.ptsizeCode())) })
 	e.prim("setstretch", func(e *Engine) { e.doSetstretch() })
 	e.prim("linespread", func(e *Engine) { e.doSetstretch() })
 	e.prim("spacing", func(e *Engine) { e.doSpacing() })

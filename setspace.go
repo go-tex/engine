@@ -21,6 +21,49 @@ func (e *Engine) setLineStretch(f float64) {
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 }
 
+// ptsizeCode returns the class base-size code \@ptsize — 0/1/2 for 10/11/12pt,
+// defaulting to 0 — read from the macro setPtsize defines. setspace's named
+// spacing commands tune their stretch to this size.
+func (e *Engine) ptsizeCode() int {
+	m := e.eq["@ptsize"]
+	if m == nil || m.kind != mMacro {
+		return 0
+	}
+	switch trimSpaces(e.toksToString(m.body)) {
+	case "1":
+		return 1
+	case "2":
+		return 2
+	}
+	return 0
+}
+
+// onehalfStretch / doubleStretch give the \baselinestretch setspace.sty selects
+// for \onehalfspacing and \doublespacing. The factor is size-dependent — setspace
+// tunes it per \@ptsize so the visual leading, not the raw multiple, is one-and-a-
+// half / double the single-spaced body. A flat 1.5 / 2.0 overstated the leading (at
+// 12pt real \onehalfspacing is 1.241, not 1.5), which inflated the page count of
+// every setspace document by roughly a fifth.
+func onehalfStretch(ptsize int) float64 {
+	switch ptsize {
+	case 1:
+		return 1.213
+	case 2:
+		return 1.241
+	}
+	return 1.25
+}
+
+func doubleStretch(ptsize int) float64 {
+	switch ptsize {
+	case 1:
+		return 1.618
+	case 2:
+		return 1.655
+	}
+	return 1.667
+}
+
 // doSetstretch implements \setstretch{f} and \linespread{f}: read the factor and
 // apply it. A malformed factor leaves the spacing unchanged.
 func (e *Engine) doSetstretch() {
