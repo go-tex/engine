@@ -823,11 +823,29 @@ func (e *Engine) scanOptBracketInt() int {
 		// reader always finds it.
 		e.back(t)
 		toks, _ := e.scanOptBracketToks()
+		// A control sequence in the brackets NAMES the number instead of spelling
+		// it: \newcommand\foo[\beamer@argscount]{…}. Reading only the digits made
+		// that command take ZERO arguments, and every argument the caller passed was
+		// then left in the input to be typeset. beamer generates its whole overlay
+		// layer this way, so \defbeamertemplate printed each template's body onto the
+		// page instead of storing it.
+		//
+		// Hand such a bracket to the engine's own integer scanner, on an ISOLATED
+		// input stack so nothing it leaves unread can escape into the document.
+		for _, u := range toks {
+			if u.cs_ {
+				saved := e.lists
+				e.lists = nil
+				e.push(append(append([]tok{}, toks...), csTok("relax")))
+				n := e.scanInt()
+				e.lists = saved
+				return n
+			}
+		}
 		n := 0
 		neg := false
 		for _, u := range toks {
 			switch {
-			case u.cs_:
 			case u.ch == '-':
 				neg = !neg
 			case u.ch >= '0' && u.ch <= '9':
