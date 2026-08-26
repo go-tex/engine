@@ -30,7 +30,7 @@ func f(v float64) string {
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
 func (e *Engine) RenderBox(i int, margin float64) string {
-	return renderBoxSVG(e.getBox(i), margin, e.renderFont(), e.pageFill())
+	return renderBoxSVG(e.getBox(i), margin, margin, e.renderFont(), e.pageFill())
 }
 
 // pageFill returns the SVG/CSS background colour for a page: the \pagecolor when
@@ -53,19 +53,21 @@ func (e *Engine) Page() *boxNode {
 
 // RenderPage renders the main vertical list to an SVG page with the given margin.
 func (e *Engine) RenderPage(margin float64) string {
-	return renderBoxSVG(e.Page(), margin, e.renderFont(), e.pageFill())
+	return renderBoxSVG(e.Page(), margin, e.renderVMargin(margin), e.renderFont(), e.pageFill())
 }
 
-// renderBoxSVG paints a packed box onto an SVG sized to the box plus a uniform
-// margin (in points). The box's reference point (left edge, baseline) sits at
-// (margin, margin+height). font (may be nil) draws character glyphs; bg is the
-// page-background colour ("white" unless \pagecolor set one).
-func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
+// renderBoxSVG paints a packed box onto an SVG sized to the box plus its margins
+// (in points): margin at the left and right, vmargin above and below. The box's
+// reference point (left edge, baseline) sits at (margin, vmargin+height). The two
+// are equal unless a class asks for a page whose side and top margins differ.
+// font (may be nil) draws character glyphs; bg is the page-background colour
+// ("white" unless \pagecolor set one).
+func renderBoxSVG(b *boxNode, margin, vmargin float64, font fontFace, bg string) string {
 	if b == nil {
 		return ""
 	}
 	pageW := spToPt(b.width) + 2*margin
-	pageH := spToPt(b.height+b.depth) + 2*margin
+	pageH := spToPt(b.height+b.depth) + 2*vmargin
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
@@ -77,7 +79,7 @@ func renderBoxSVG(b *boxNode, margin float64, font fontFace, bg string) string {
 	// with no CSS required of the page showing it.
 	var glyphs strings.Builder
 	layer := newTextLayer()
-	paintBoxSP(&glyphs, b, margin, margin+spToPt(b.height), font, layer)
+	paintBoxSP(&glyphs, b, margin, vmargin+spToPt(b.height), font, layer)
 	sb.WriteString(layer.String())
 	sb.WriteString(`<g fill="black">`)
 	sb.WriteString(glyphs.String())

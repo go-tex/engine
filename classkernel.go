@@ -89,6 +89,17 @@ const LaTeX2eClassKernel = `
 % \baselineskip / \hsize / \vsize are engine parameters (untouched).
 \newdimen\paperwidth
 \newdimen\paperheight
+% The geometry package publishes its computed margins under these names, and
+% packages read them rather than recomputing: beamer's headline and footline
+% templates indent by \Gm@lmargin, and beamer decides between the current and the
+% pre-5.0 geometry interface by testing whether \Gm@lmargin is defined at all.
+% Allocating them (the engine's own geometry handler fills them in — see
+% publishGeometry) is what puts beamer on its modern path; left undefined, it took
+% the compatibility branch and every frame lost its width.
+\newdimen\Gm@lmargin
+\newdimen\Gm@rmargin
+\newdimen\Gm@tmargin
+\newdimen\Gm@bmargin
 \newdimen\hangindent
 \newdimen\overfullrule
 \newdimen\maxdepth

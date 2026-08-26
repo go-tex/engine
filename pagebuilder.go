@@ -245,9 +245,10 @@ func (e *Engine) doVsplit() *boxNode {
 // RenderPages renders each page of the main vertical list to its own SVG string.
 func (e *Engine) RenderPages(margin float64) []string {
 	pages := e.Pages()
+	vmargin := e.renderVMargin(margin)
 	out := make([]string, len(pages))
 	for i, p := range pages {
-		out[i] = renderBoxSVG(p, margin, e.renderFont(), e.pageFill())
+		out[i] = renderBoxSVG(p, margin, vmargin, e.renderFont(), e.pageFill())
 	}
 	return out
 }

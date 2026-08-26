@@ -9,22 +9,28 @@ package engine
 // height) and the render margin used by the PDF/SVG drivers.
 //
 // Box-model mapping. The geometry package models a full four-sided margin box on
-// a paper of a given size. This engine's renderers, however, take a single
-// uniform margin and derive the physical page from the content box: a page's
-// paper width is spToPt(content.width) + 2*margin (see pdfdriver.go /
-// pagebuilder.go). We map geometry's box model onto that single-margin renderer
-// as follows:
+// a paper of a given size. This engine's renderers derive the physical page from
+// the content box plus a margin: a page's paper width is spToPt(content.width) +
+// 2*margin (see pdfdriver.go / pagebuilder.go). We map geometry's box model onto
+// that as follows:
 //
-//   - \hsize = paperwidth  − left − right   (or textwidth,  if given)
-//   - \vsize = paperheight − top  − bottom  (or textheight, if given)
-//   - the render margin is the LEFT margin, applied uniformly on all sides.
+//   - \hsize = paperwidth  − left − right                        (or textwidth,  if given)
+//   - \vsize = paperheight − top  − bottom − head − headsep − foot (or textheight, if given)
+//   - the horizontal render margin is the LEFT margin;
+//   - the vertical render margin is the TOP margin plus the running-head band
+//     (top + head + headsep) — the whole distance from the paper edge to the first
+//     line.
 //
-// When the horizontal margins are equal (the common margin=<d> / hmargin=<d>
-// case) the rendered paper width equals the requested paperwidth exactly, and
-// likewise vertically. LIMITATION: with asymmetric margins (e.g. left≠right) the
-// single-margin renderer cannot reproduce the off-centre text block — \hsize is
-// still the correct text width, but the physical page is centred on the left
-// margin, so the right/bottom paper edges are not modelled independently.
+// The two render margins are separate because a class may spend its vertical
+// budget quite differently from its horizontal one: beamer's slide is 1cm at the
+// sides but 0.5cm top and bottom, all of it in the head and foot bands. When the
+// margins are uniform the two agree and the rendered paper equals the requested
+// paper exactly, in both directions.
+//
+// LIMITATION: with asymmetric margins (left≠right, or top≠bottom) the renderer
+// still centres the text block on the leading margin, so the trailing paper edge
+// is not modelled independently — \hsize and \vsize are right, the page is
+// symmetric.
 //
 // Timing. geometry is meant to configure the WHOLE document, so the case that
 // matters is applying it in the preamble (before \begin{document}); \hsize and
@@ -38,24 +44,32 @@ import (
 	"strings"
 )
 
-// paperSize is a named paper dimension pair, in scaled points.
-type paperSize struct{ w, h int }
-
-// inToSP, mmToSP and cmToSP convert physical lengths to scaled points using the
-// same TeX point (1in = 72.27pt) as parseDimenStr, so paper-vs-margin arithmetic
-// is exact.
-func inToSP(in float64) int { return ptToSP(in * 72.27) }
-func mmToSP(mm float64) int { return ptToSP(mm * 72.27 / 25.4) }
+// paperSize is a named paper size, held as the dimensions the paper is DEFINED by
+// so they are converted once, by the engine's own scanner, exactly as TeX converts
+// them. Holding scaled points computed in floating point instead put a second
+// conversion in this file, a scaled point or two away from the first.
+type paperSize struct{ w, h string }
 
 // paperSizes maps geometry's paper-size keywords to their dimensions. Portrait
 // orientation (width < height); the landscape flag swaps them.
 var paperSizes = map[string]paperSize{
-	"a4paper":        {mmToSP(210), mmToSP(297)},
-	"a5paper":        {mmToSP(148), mmToSP(210)},
-	"b5paper":        {mmToSP(176), mmToSP(250)},
-	"letterpaper":    {inToSP(8.5), inToSP(11)},
-	"legalpaper":     {inToSP(8.5), inToSP(14)},
-	"executivepaper": {inToSP(7.25), inToSP(10.5)},
+	"a4paper":        {"210mm", "297mm"},
+	"a5paper":        {"148mm", "210mm"},
+	"b5paper":        {"176mm", "250mm"},
+	"letterpaper":    {"8.5in", "11in"},
+	"legalpaper":     {"8.5in", "14in"},
+	"executivepaper": {"7.25in", "10.5in"},
+}
+
+// paper returns a named paper size in scaled points.
+func (e *Engine) paper(name string) (w, h int, ok bool) {
+	p, ok := paperSizes[name]
+	if !ok {
+		return 0, 0, false
+	}
+	w, _ = e.geomEval(p.w)
+	h, _ = e.geomEval(p.h)
+	return w, h, true
 }
 
 // geomState is the accumulated geometry layout. It persists on the Engine so a
@@ -65,36 +79,138 @@ type geomState struct {
 	left, right, top, bottom int  // margins (sp)
 	textW, textH             int  // explicit text dimensions (sp), valid iff the has* flag is set
 	hasTextW, hasTextH       bool // textwidth / textheight were given (override margin arithmetic)
+	// head, headsep and foot are the running-head and running-foot bands geometry
+	// reserves between the top/bottom margins and the text block:
+	//
+	//	paperheight = top + head + headsep + textheight + foot + bottom
+	//
+	// They default to zero — a document that never names them keeps the plain
+	// top/bottom arithmetic — and matter for a class that spends its vertical
+	// budget there instead of on margins. beamer is the case in point: vmargin=0
+	// with head=0.5cm and foot=0.5cm, so ignoring the bands overstated its text
+	// height by the whole 1cm.
+	head, headsep, foot int
 }
 
 // newGeomState returns the geometry defaults: letterpaper (the geometry package's
 // default when the class does not pick one) with 1in margins on every side.
-func newGeomState() *geomState {
-	p := paperSizes["letterpaper"]
-	m := inToSP(1)
-	return &geomState{paperW: p.w, paperH: p.h, left: m, right: m, top: m, bottom: m}
+func (e *Engine) newGeomState() *geomState {
+	w, h, _ := e.paper("letterpaper")
+	m, _ := e.geomEval("1in")
+	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m}
 }
 
-// geomDimen parses a geometry dimension value ("1in", "2.5cm", "30pt"). It
-// reports ok=false for an empty or malformed value so callers can ignore the key
-// rather than storing a bogus (zero) length. A missing unit means points, as in
-// parseDimenStr.
-func geomDimen(s string) (int, bool) {
+// geomLooksDimen reports whether a geometry option value could be a dimension at
+// all: a signed decimal, or something naming a control sequence. It is the guard
+// that lets a malformed value be ignored instead of stored as a bogus zero.
+func geomLooksDimen(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return 0, false
+		return false
+	}
+	if strings.Contains(s, "\\") {
+		return true
 	}
 	i := 0
 	for i < len(s) && (s[i] == '.' || s[i] == '-' || s[i] == '+' || (s[i] >= '0' && s[i] <= '9')) {
 		i++
 	}
 	if i == 0 {
+		return false
+	}
+	_, err := strconv.ParseFloat(s[:i], 64)
+	return err == nil
+}
+
+// splitOptsTopLevel splits a comma-separated option list on the commas OUTSIDE any
+// brace group, so a value that is itself a list survives as one item. geometry's
+// papersize={<width>,<height>} is exactly that shape, and a naive split tore it
+// into two malformed halves — which is how beamer's own paper size was lost.
+func splitOptsTopLevel(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, s[start:])
+}
+
+// unbrace strips one enclosing {...} from a value.
+func unbrace(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '{' && s[len(s)-1] == '}' {
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
+}
+
+// geomToks retokenises a geometry option value under the engine's CURRENT catcode
+// table. The document's own catcodes are what matters here: a class sets the option
+// while @ is a letter, so \beamer@paperwidth has to tokenise as the one control
+// sequence it is rather than \beamer followed by four other characters.
+func (e *Engine) geomToks(s string) []tok {
+	rs := []rune(s)
+	ts := make([]tok, 0, len(rs))
+	for i := 0; i < len(rs); i++ {
+		if rs[i] != '\\' {
+			ts = append(ts, chTok(rs[i], e.catcode[rs[i]]))
+			continue
+		}
+		j := i + 1
+		if j >= len(rs) {
+			break // a trailing backslash names nothing
+		}
+		if e.catcode[rs[j]] != catLetter {
+			ts = append(ts, csTok(string(rs[j])))
+			i = j
+			continue
+		}
+		k := j
+		for k < len(rs) && e.catcode[rs[k]] == catLetter {
+			k++
+		}
+		ts = append(ts, csTok(string(rs[j:k])))
+		i = k - 1
+	}
+	return ts
+}
+
+// geomEval reads a geometry option value as a dimension, through the engine's OWN
+// dimension scanner — the one that converts units by TeX's exact integer
+// arithmetic. That is what a literal ("1cm", "30pt") deserves, and it is the only
+// thing that can read a value naming a length: beamer passes its paper size as
+// \beamer@paperwidth, not as a number.
+//
+// Parsing the literals separately, in floating point, put a second and slightly
+// different conversion in the same file: 12.8cm came out 5sp short of what TeX
+// makes of it, so a beamer page missed its reference width by a rounding step for
+// no reason at all.
+//
+// The scan runs on an ISOLATED input stack: whatever the value leaves unread is
+// dropped with it, and nothing can escape into the document being processed.
+func (e *Engine) geomEval(s string) (int, bool) {
+	s = unbrace(s)
+	if !geomLooksDimen(s) {
 		return 0, false
 	}
-	if _, err := strconv.ParseFloat(s[:i], 64); err != nil {
-		return 0, false
-	}
-	return parseDimenStr(s), true
+	saved := e.lists
+	e.lists = nil
+	e.push(append(e.geomToks(s), csTok("relax")))
+	d := e.scanDimen()
+	e.lists = saved
+	return d, true
 }
 
 // applyGeometry parses a geometry option string (the [...] of
@@ -103,12 +219,12 @@ func geomDimen(s string) (int, bool) {
 // \hsize and \vsize. The render margin is read from the state by renderMargin.
 func (e *Engine) applyGeometry(opts string) {
 	if e.geom == nil {
-		e.geom = newGeomState()
+		e.geom = e.newGeomState()
 	}
 	g := e.geom
 	landscape := false
 
-	for _, raw := range strings.Split(opts, ",") {
+	for _, raw := range splitOptsTopLevel(opts) {
 		item := strings.TrimSpace(raw)
 		if item == "" {
 			continue
@@ -125,15 +241,29 @@ func (e *Engine) applyGeometry(opts string) {
 			case "portrait":
 				landscape = false
 			default:
-				if p, ok := paperSizes[key]; ok {
-					g.paperW, g.paperH = p.w, p.h
+				if w, h, ok := e.paper(key); ok {
+					g.paperW, g.paperH = w, h
 				}
 				// Any other bare flag is silently ignored.
 			}
 			continue
 		}
 
-		d, ok := geomDimen(val)
+		if key == "papersize" {
+			// papersize={<width>,<height>}, or papersize=<size> for a square page.
+			parts := splitOptsTopLevel(unbrace(val))
+			w, wok := e.geomEval(parts[0])
+			h, hok := w, wok
+			if len(parts) > 1 {
+				h, hok = e.geomEval(parts[1])
+			}
+			if wok && hok && w > 0 && h > 0 {
+				g.paperW, g.paperH = w, h
+			}
+			continue
+		}
+
+		d, ok := e.geomEval(val)
 		if !ok {
 			continue // malformed dimension: ignore the key, never panic.
 		}
@@ -167,6 +297,12 @@ func (e *Engine) applyGeometry(opts string) {
 			g.paperW = d
 		case "paperheight":
 			g.paperH = d
+		case "head", "headheight":
+			g.head = d
+		case "headsep":
+			g.headsep = d
+		case "foot", "footskip":
+			g.foot = d
 		default:
 			// Unknown key: ignored.
 		}
@@ -184,8 +320,9 @@ func (e *Engine) applyGeometry(opts string) {
 	if g.hasTextH {
 		e.vsize = g.textH
 	} else {
-		e.vsize = g.paperH - g.top - g.bottom
+		e.vsize = g.paperH - g.top - g.bottom - g.head - g.headsep - g.foot
 	}
+	e.publishGeometry(g)
 }
 
 // applyAmsartGeometry gives the emulated amsart class its real text-block size.
@@ -224,12 +361,67 @@ func (e *Engine) applyAmsartGeometry(opts []string) {
 	e.vsize = ptToSP(textHeightPc*pica - headAllowance)
 }
 
+// publish writes the layout back into the LaTeX length registers a class reads.
+//
+// \hsize and \vsize are engine parameters (\textwidth and \textheight are \let to
+// them), so those follow from the assignments above. \paperwidth and \paperheight
+// are ORDINARY registers, allocated by the class kernel and never written until
+// now — and a class that sizes itself from the paper rather than from \textwidth
+// read zero. beamer is that class: it derives every frame dimension from
+// \paperwidth, so an unpublished paper size collapsed the whole slide, which is
+// how a 4:3 talk came out 78pt wide.
+//
+// The assignment is global: geometry configures the document, not a group.
+func (e *Engine) publishGeometry(g *geomState) {
+	e.setNamedDimen("paperwidth", g.paperW)
+	e.setNamedDimen("paperheight", g.paperH)
+	e.setNamedDimen("Gm@lmargin", g.left)
+	e.setNamedDimen("Gm@rmargin", g.right)
+	e.setNamedDimen("Gm@tmargin", g.top)
+	e.setNamedDimen("Gm@bmargin", g.bottom)
+}
+
+// setNamedDimen assigns a value to an allocated \newdimen / \newlength by name,
+// doing nothing when the name is not one. It is how the Go side writes a length
+// the TeX side declared.
+func (e *Engine) setNamedDimen(name string, v int) {
+	m := e.eq[name]
+	if m == nil {
+		return
+	}
+	switch m.kind {
+	case mDimenRef:
+		e.setDimen(m.code, v, true)
+	case mSkipRef:
+		sp := e.skip[m.code]
+		sp.width = v
+		e.setSkip(m.code, sp, true)
+	}
+}
+
 // renderMargin returns the page margin (in points) the drivers should use: the
 // geometry left margin when geometry is active, otherwise the caller's fallback
 // (the compile Option's margin). See the box-model note at the top of this file.
 func (e *Engine) renderMargin(fallback float64) float64 {
 	if e.geom != nil {
 		return spToPt(e.geom.left)
+	}
+	return fallback
+}
+
+// renderVMargin returns the margin the drivers should leave above and below the
+// text block. It is the top margin PLUS the running-head band, because the head
+// sits between the paper edge and the text: what the renderer needs is the whole
+// distance from the paper edge down to the first line.
+//
+// A document with equal margins all round gets the same number as renderMargin, so
+// nothing changes for it. A class that spends its vertical budget differently from
+// its horizontal one does not: beamer's page is 1cm at the sides and 0.5cm top and
+// bottom, and taking the side margin vertically as well made every slide 28pt too
+// tall.
+func (e *Engine) renderVMargin(fallback float64) float64 {
+	if e.geom != nil {
+		return spToPt(e.geom.top + e.geom.head + e.geom.headsep)
 	}
 	return fallback
 }
