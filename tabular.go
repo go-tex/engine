@@ -645,10 +645,27 @@ func (e *Engine) readBraceName() string {
 		return ""
 	}
 	var b []rune
+	depth := 0
 	for {
 		u, ok := e.getNext()
-		if !ok || (u.cat == catEnd && !u.cs_) {
+		if !ok {
 			break
+		}
+		if !u.cs_ && u.cat == catEnd {
+			if depth == 0 {
+				break // the matching close brace of the whole group
+			}
+			// A nested }: part of the argument (e.g. \tag{L~\ref{key}}). Balance
+			// it so a group that closes an inner { does not leak its outer } into
+			// the caller's token stream — an unconsumed } drives an align/tabular
+			// cell scanner's brace depth negative, after which \end is no longer
+			// recognised and the rest of the document is swallowed.
+			depth--
+			b = append(b, u.ch)
+			continue
+		}
+		if !u.cs_ && u.cat == catBegin {
+			depth++
 		}
 		if !u.cs_ {
 			b = append(b, u.ch)
