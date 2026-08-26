@@ -40,6 +40,22 @@ func (e *Engine) doAccent(accent string) {
 	if !ok {
 		return
 	}
+	if t.cat == catBegin && !t.cs_ {
+		// A LaTeX text accent takes one argument, and \^{a} braces its base
+		// letter. Read the balanced group, accent its first token and re-inject
+		// the rest so it typesets normally. Consuming the group's close brace is
+		// what matters: left in the stream it closes an enclosing group (a
+		// \raisebox box, a tabular cell) and the rest of the document is silently
+		// swallowed — the eptcs \publicationstatus "C\^{a}mpeanu" truncation.
+		group := e.readGroupToks()
+		if len(group) == 0 {
+			return // \^{}: an empty argument accents nothing.
+		}
+		t = group[0]
+		if len(group) > 1 {
+			e.push(group[1:])
+		}
+	}
 	base := t.ch
 	if t.cs_ {
 		// \i / \j (dotless) as accent bases: use the dotted letter for composition.
@@ -54,6 +70,31 @@ func (e *Engine) doAccent(accent string) {
 		}
 	}
 	e.startChar(precompose(accent, base))
+}
+
+// readGroupToks reads the balanced {…} whose opening brace has already been
+// consumed and returns the tokens inside it, excluding the outer braces but
+// keeping any nested braces so the returned run stays balanced. It stops at the
+// matching close brace (which it consumes) or at end of input.
+func (e *Engine) readGroupToks() []tok {
+	var toks []tok
+	depth := 0
+	for {
+		u, ok := e.getNext()
+		if !ok {
+			break
+		}
+		if !u.cs_ && u.cat == catEnd {
+			if depth == 0 {
+				break // the matching close brace of the whole group
+			}
+			depth--
+		} else if !u.cs_ && u.cat == catBegin {
+			depth++
+		}
+		toks = append(toks, u)
+	}
+	return toks
 }
 
 // precompose combines a base rune with an accent's combining mark and returns the
