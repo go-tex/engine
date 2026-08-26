@@ -1423,6 +1423,9 @@ func (e *Engine) loadMore() {
 	// like \renewcommand\normalsize{\@setfontsize\normalsize\@xpt\@xiipt …} would
 	// otherwise leave \normalsize in the stream and recurse forever. Gobbling the
 	// arguments makes the size switch a no-op (size is left unchanged) without loop.
+	// The class's BASE point size (10/11/12pt) reaches the glyphs through the font
+	// system instead — setPtsize rescales the bound text faces — not through this
+	// token, so a size clo's \@setfontsize stays a pure, expansion-safe gobble.
 	e.prim("@setfontsize", func(e *Engine) { e.grabUndelimited(); e.grabUndelimited(); e.grabUndelimited() })
 	e.prim("@setsize", func(e *Engine) {
 		e.grabUndelimited()

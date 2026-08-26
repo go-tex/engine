@@ -524,18 +524,29 @@ func setCurrentOptionToks(opt string) []tok {
 }
 
 // setPtsize records the base type size selected by a class option so \@ptsize
-// (used by size1x.clo names) reflects 10/11/12pt; it defaults to 10pt.
+// (used by size1x.clo names) reflects 10/11/12pt; it defaults to 10pt. It also
+// wires the base size into the engine's font scale and leading: a [11pt]/[12pt]
+// class sets \normalsize at 110%/120% of the 10pt design with the size clo's
+// baselineskip (13.6/14.5pt), so body text is set at 11/12pt and wraps like real
+// LaTeX. 10pt is the 100% default — byte-identical to the pre-existing behaviour.
 func (e *Engine) setPtsize(opts []string) {
-	pt := "0" // \@ptsize is (size-10): 0/1/2 for 10/11/12pt
+	pt := "0"                           // \@ptsize is (size-10): 0/1/2 for 10/11/12pt
+	permille, leading := 1000, 12*unity // class base size and \normalsize leading
 	for _, o := range opts {
 		switch strings.TrimSpace(o) {
+		case "10pt":
+			pt, permille, leading = "0", 1000, 12*unity
 		case "11pt":
-			pt = "1"
+			pt, permille, leading = "1", 1100, ptToSP(13.6)
 		case "12pt":
-			pt = "2"
+			pt, permille, leading = "2", 1200, ptToSP(14.5)
 		}
 	}
 	e.define("@ptsize", &meaning{kind: mMacro, body: stringToToks(pt)}, true)
+	// Wire the class base size into the font system and the leading. 10pt is the
+	// 100% default, so both are no-ops and 10pt documents stay byte-identical.
+	e.baselineskip, e.baseBaselineskip = leading, leading
+	e.scaleClassFontsToBase(permille)
 }
 
 // ── scanning helpers ─────────────────────────────────────────────────────────

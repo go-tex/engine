@@ -177,6 +177,41 @@ func (e *Engine) doFontSize() {
 	e.selectFont(sf.atSizePx(px))
 }
 
+// scaleClassFontsToBase re-faces every bound TEXT face — the \normalsize base
+// (which \selectfont/\normalfont/\rmfamily reselect and the drivers render from)
+// and the roman/bold/italic/typewriter/sans bindings — to the class's base point
+// size, then makes the base face current. A [11pt]/[12pt] document class scales
+// the 10pt design by 110%/120% (permille), so \normalsize body text is set at
+// 11/12pt and wraps like real LaTeX; \large/\small/… follow, scaling off the new
+// base through \gotexsize. This drives the class base size entirely through the
+// font system, so it is robust against every font-selection command and needs no
+// change to \@setfontsize's tokens. A 10pt class (permille 1000) is a no-op, so
+// 10pt documents stay byte-identical. Non-scalable faces (mocks) are left as-is.
+func (e *Engine) scaleClassFontsToBase(permille int) {
+	if permille == 0 || permille == 1000 || e.baseFontPx == 0 {
+		return
+	}
+	px := (e.baseFontPx*permille + 500) / 1000
+	if px < 1 {
+		px = 1
+	}
+	e.baseFontPx = px
+	if sf, ok := e.baseFont.(scalableFont); ok {
+		e.baseFont = sf.atSizePx(px)
+		e.curFont = e.baseFont
+	}
+	// Re-face the family bindings (\rm/\bf/\it/\tt/\sf and their NFSS aliases) so a
+	// switch inside 11/12pt body text stays at the class size rather than snapping
+	// back to the 10pt design.
+	for _, m := range e.eq {
+		if m != nil && m.kind == mFont && m.font != nil {
+			if sf, ok := m.font.(scalableFont); ok {
+				m.font = sf.atSizePx(px)
+			}
+		}
+	}
+}
+
 // scalableFont is a font that can produce a copy of itself at a different pixel
 // size (same shapes, scaled metrics) — the basis for \large/\small/… . Only real
 // fonts implement it; a mock or a font that can't rescale simply keeps its size.
