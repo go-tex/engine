@@ -235,7 +235,15 @@ const AMSClassSubstrate = `
 \def\f@series{m}
 \def\f@family{}
 \def\fontsize#1#2{}
+% \@setfontsize gobbles: a size clo redefines \normalsize/\small/…/\Huge as
+% \@setfontsize\<cmd>\<size>{<leading>}, and executing that primitive inside a
+% \normalsize expanded in a moving/\edef context (the size clo's \MakeRobust) would
+% corrupt argument scanning and swallow the document. The clo's (size,leading)
+% still reach the glyphs — \gotex@sizeclosetup reads them off each redefined
+% command at \begin{document} and rewires the command through the font system
+% (\gotexsize + \gotexleading), robust because that macro is \protected.
 \def\@setfontsize#1#2#3{}
+\AtBeginDocument{\gotex@sizeclosetup}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}

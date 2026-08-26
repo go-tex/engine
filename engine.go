@@ -368,7 +368,7 @@ type meaning struct {
 }
 
 type saveItem struct {
-	kind    int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip 10=box
+	kind    int // 0=eqtb 1=count 2=catcode 3=dimen 4=skip 5=font 6=leftskip 7=rightskip 10=box 11=baselineskip
 	name    string
 	old     *meaning
 	idx     int
@@ -993,6 +993,8 @@ func (e *Engine) endGroup() {
 			e.everypar = s.oldtoks
 		case 10:
 			e.box[s.idx] = s.oldbox
+		case 11:
+			e.baselineskip = s.oldi
 		}
 	}
 	// \aftergroup's tokens are put back once the group is closed and its values

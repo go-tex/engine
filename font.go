@@ -177,6 +177,23 @@ func (e *Engine) doFontSize() {
 	e.selectFont(sf.atSizePx(px))
 }
 
+// doLeading implements the \gotexleading primitive: it reads a dimension and sets
+// \baselineskip to it, saving the old value so the change is scoped to the current
+// group — exactly as \selectfont scopes a font change. The size commands
+// (\Large, \small, …) pair it with \gotexsize so a heading's larger baseline glue
+// and a footnote's smaller one follow the font, the way a size clo's
+// \@setfontsize\<cmd>\<size>{<leading>} intends. Driving the leading through the
+// font system (not through \@setfontsize's tokens) keeps the size commands robust
+// in a moving context. With no group open the assignment is global, like a
+// dimension register set at the outer level.
+func (e *Engine) doLeading() {
+	d := e.scanDimen()
+	if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: 11, oldi: e.baselineskip})
+	}
+	e.baselineskip = d
+}
+
 // scaleClassFontsToBase re-faces every bound TEXT face — the \normalsize base
 // (which \selectfont/\normalfont/\rmfamily reselect and the drivers render from)
 // and the roman/bold/italic/typewriter/sans bindings — to the class's base point

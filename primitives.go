@@ -1608,7 +1608,9 @@ func (e *Engine) loadMore() {
 	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() }) // hyperref: named in-document destination
 	e.prim("hyperlink", func(e *Engine) { e.doHyperlink() })     // hyperref: same-document link to a target
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
-	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
+	e.prim("gotexsize", func(e *Engine) { e.doFontSize() })                  // \gotexsize<permille>: scale the base font
+	e.prim("gotexleading", func(e *Engine) { e.doLeading() })                // \gotexleading<dimen>: set \baselineskip, group-scoped
+	e.prim("gotex@sizeclosetup", func(e *Engine) { e.rewireSizeCommands() }) // \begin{document}: revive the size clo's \tiny…\Huge
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
