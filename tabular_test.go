@@ -193,3 +193,48 @@ func TestTabularRightAlign(t *testing.T) {
 		t.Errorf("right-aligned cell should lead with fil glue, got %T", cell.list[0])
 	}
 }
+
+// A conditional at a tabular body's top level is evaluated as the body is scanned
+// (as TeX's alignment scanner does), so only the taken branch's rows and text —
+// including any \\ it carries — reach the row/cell splitter. Here \iffalse drops
+// its row and \iftrue keeps "B"; the text after the box survives.
+func TestTabularConditionalEvaluated(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.hsize = 500 * unity
+	if _, err := e.Run(
+		`\hbox{\begin{tabular}{l}` +
+			`\iffalse A\\ \fi` +
+			`\iftrue B\\ \fi` +
+			`\end{tabular}}AFTER\par`); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "BAFTER" {
+		t.Errorf("conditional tabular text = %q want %q (only the taken branch should appear)", got, "BAFTER")
+	}
+}
+
+// A conditional nested inside a cell's {…} group stays raw and is evaluated when
+// the cell is typeset, so it must not be consumed by the body scanner. Both cells
+// render their taken branch.
+func TestTabularConditionalInsideBraces(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.hsize = 500 * unity
+	if _, err := e.Run(
+		`\begin{tabular}{ll}{\iftrue P\fi} & {\iffalse Q\fi}\\ ` +
+			`{\iffalse R\fi} & {\iftrue S\fi}\end{tabular}ZZ\par`); err != nil {
+		t.Fatal(err)
+	}
+	got := mvlText(e.mvl)
+	for _, want := range []string{"P", "S", "ZZ"} {
+		if !contains(got, want) {
+			t.Errorf("tabular text %q missing %q", got, want)
+		}
+	}
+	if contains(got, "Q") || contains(got, "R") {
+		t.Errorf("tabular text %q kept a false branch", got)
+	}
+}

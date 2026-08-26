@@ -558,6 +558,22 @@ func (e *Engine) breakToVbox(hlist []node, width int) *boxNode {
 	return b
 }
 
+// isTabularConditional reports whether t is a TeX conditional primitive that the
+// tabular body scanner must evaluate in place: an \if… test (including a \newif
+// switch, which is \let to \iftrue/\iffalse), or the \else/\fi/\or that continue
+// or close one. Evaluating these as the body is scanned keeps a conditional that
+// spans a \\ or & (the eptcs licence block) from being split across cells, which
+// would leave a lone \if whose skip later runs off the cell and swallows the
+// document. Only conditional control words qualify; every other control sequence
+// (macros, font changes, \multicolumn, …) is stored raw and typeset per cell.
+func (e *Engine) isTabularConditional(t tok) bool {
+	m := e.eq[t.cs]
+	if m == nil || m.kind != mPrim {
+		return false
+	}
+	return isIfPrim(m.name) || m.name == "else" || m.name == "fi" || m.name == "or"
+}
+
 // collectTabularBody reads raw tokens up to \end{env} (env is "tabular" or
 // "tabularx"), returning the rows and \hline markers. & separates cells, \\ separates
 // rows, \hline is a rule marker.
@@ -580,6 +596,21 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			break
 		}
 		switch {
+		case depth == 0 && t.cs_ && e.isTabularConditional(t):
+			// A conditional at the body's top level (\ifcopyright … \\ … \fi, as in
+			// the eptcs licence block): evaluate it here rather than storing it raw.
+			// TeX evaluates such a conditional as the alignment is scanned, so only
+			// the live branch — and any \\ or & it contains — reaches the row/cell
+			// splitter. Storing it raw would split the body at a \\ inside the
+			// conditional, leaving one cell holding a lone \if whose \else/\fi sits
+			// in a sibling cell; when that cell is later typeset the conditional's
+			// skip finds no \fi in the cell and runs off its end into the enclosing
+			// box and the rest of the document, silently swallowing it. Conditionals
+			// are expandable, so run the primitive directly (execCS would skip it):
+			// \if… tests and branches, \else/\fi/\or close, exactly as the gullet
+			// would. Only at brace depth 0: a conditional nested inside a cell's {…}
+			// stays raw and is evaluated when that cell is typeset.
+			e.eq[t.cs].prim(e)
 		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\etab{\end{tabular}}):
 			// read raw here it hides the \end, so the body scanner would run to EOF and

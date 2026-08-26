@@ -135,6 +135,44 @@ AFTERMARK
 	}
 }
 
+// A conditional whose branches carry their own \\ — the eptcs \maketitle licence
+// block, \ifpublicdomain …\else …\ifcopyright …\\… \fi… \fi inside a \makebox'd
+// tabular — must be evaluated as the tabular body is scanned, not stored raw.
+// Splitting the body at a \\ inside the conditional leaves one cell holding a lone
+// \if whose \else/\fi sits in a sibling cell; when that cell is typeset the
+// conditional's skip finds no \fi in the cell and, because the cell's tokens came
+// from a macro expansion, runs on through the enclosing \makebox and every token
+// to EOF — swallowing the document into one over-long box. Regression for arXiv
+// 2606.26684 (eptcs), which rendered 3 pages of 16 (69 extractable words of 5000+).
+func TestTabularConditionalDoesNotSwallowBody(t *testing.T) {
+	const src = `\documentclass{article}
+\newif\ifpublicdomain
+\newif\ifcopyright \copyrighttrue
+\def\licence{\makebox[0pt][r]{\begin{tabular}{l@{}}
+\ifpublicdomain public\\ \else \ifcopyright \copyright~Author\\ \fi licensed\\ under CC.\fi
+\end{tabular}}}
+\begin{document}
+BEFOREMARK
+
+\licence
+
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "BEFOREMARK") {
+		t.Errorf("text before the box is missing; got %q", txt)
+	}
+	// A swallow traps AFTERMARK inside the \makebox with the licence text; the fix
+	// keeps it a page-level paragraph, free of the in-box marker.
+	if !topLevelHas(e.mvl, "AFTERMARK", "licensed") {
+		t.Fatalf("a tabular conditional swallowed the rest of the document; got %q", txt)
+	}
+}
+
 // readBraceName must consume a balanced group, keeping nested braces as literal
 // characters and stopping only at the matching close — leaving no stray } for the
 // caller. A flat "stop at the first }" under-reads \tag{L~\ref{key}} and leaks the
