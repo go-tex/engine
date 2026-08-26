@@ -513,6 +513,25 @@ func (e *Engine) scan() (tok, bool) {
 			for e.bpos < len(e.base) && e.base[e.bpos] != '\n' {
 				e.bpos++
 			}
+			// tex.web §350: a comment is <Finish line, goto switch>, i.e.
+			// loc := limit+1 — PAST the \endlinechar the line carries (§362 puts it
+			// at buffer[limit]). The line's end is therefore discarded with the rest
+			// of the line, positionally, WHATEVER its catcode.
+			//
+			// Stopping on the end-of-line and letting the next scan classify it was
+			// invisible while \catcode`\^^M was 5 — the loop below swallowed it as
+			// an end-of-line anyway. It stopped being invisible the moment a package
+			// changed that catcode: beamer reads a line verbatim under
+			// \catcode`\^^M=12, and every %-terminated line inside that group then
+			// left a category-12 character to be TYPESET.
+			//
+			// The line's own end is consumed here and NOT counted below, so the
+			// blank-line test keeps its meaning: one further end-of-line after the
+			// comment is an empty line, which TeX turns into \par (§347,
+			// new_line+car_ret).
+			if e.bpos < len(e.base) {
+				e.bpos++
+			}
 			newlines := 0
 			for e.bpos < len(e.base) {
 				rr, nx, ok := e.mouthChar(e.bpos)
@@ -532,7 +551,7 @@ func (e *Engine) scan() (tok, bool) {
 				}
 				break
 			}
-			if newlines >= 2 {
+			if newlines >= 1 {
 				return csTok("par"), true
 			}
 		case catSpace, catEOL:
