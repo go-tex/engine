@@ -96,6 +96,18 @@ const LaTeX2eClassKernel = `
 % Allocating them (the engine's own geometry handler fills them in — see
 % publishGeometry) is what puts beamer on its modern path; left undefined, it took
 % the compatibility branch and every frame lost its width.
+% \@colht and \@colroom are LaTeX's page-height registers: the output routine keeps
+% the height still free in the current column there, and a class that resizes the
+% text block assigns them alongside \vsize. Unallocated, they did more than go
+% missing — beamer's \beamer@calculateheadfoot ends
+%
+%	\@colht\textheight  \@colroom\textheight  \vsize\textheight
+%
+% and with \@colht undefined the skipped command left \textheight (which IS \vsize
+% here) standing in vertical mode, where it read the FOLLOWING token as its value
+% and set the page height to zero. Every beamer frame then went on one endless page.
+\newdimen\@colht
+\newdimen\@colroom
 \newdimen\Gm@lmargin
 \newdimen\Gm@rmargin
 \newdimen\Gm@tmargin
