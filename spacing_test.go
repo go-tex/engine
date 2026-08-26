@@ -61,10 +61,13 @@ func TestVspaceInBox(t *testing.T) {
 	if g.spec.width != 5*unity {
 		t.Errorf("\\vspace glue width %d want 5pt", g.spec.width)
 	}
-	// vbox height carries the running depth: a.height(7) + a.depth(2) + vspace(5)
-	// + b.height(7) = 21pt; depth = last b.depth(2).
-	if e.box[0].height != 21*unity {
-		t.Errorf("vbox height %d want 21pt", e.box[0].height)
+	// vbox height carries the running depth AND the interline glue an explicit
+	// \vskip does not suppress: a.height(7) + a.depth(2) + vspace(5) +
+	// interline(\baselineskip 12 − prevdepth 2 − height 7 = 3) + b.height(7) = 24pt;
+	// depth = last b.depth(2). Checked against real TeX with \baselineskip=12pt,
+	// which gives \ht = 24.0pt.
+	if e.box[0].height != 24*unity {
+		t.Errorf("vbox height %d want 24pt", e.box[0].height)
 	}
 }
 
