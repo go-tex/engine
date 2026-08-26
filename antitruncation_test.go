@@ -105,6 +105,81 @@ func topLevelHas(mvl []node, want, notWith string) bool {
 	return false
 }
 
+// A \tag whose argument nests braces — \tag{L~\ref{key}}, \tag{\Cref{eqn}} — is
+// read by readBraceName, which must match its own closing brace, not the first
+// inner one. When it stopped at the inner \ref{key}'s close, the outer } leaked
+// into the align body scanner and drove its brace depth negative; \end{align} was
+// then never recognised and the rest of the document was swallowed as cell content.
+// Regression for arXiv 2607.23415 (acmart), which truncated at 11 pages of 34.
+func TestTagNestedBracesDoNotSwallowBody(t *testing.T) {
+	const src = `\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+BEFOREMARK
+\begin{align*}
+a & \ge b \tag{L~\ref{lem:x}} \\
+& \ge c \tag{\Cref{eqn:y}}
+\end{align*}
+AFTERMARK
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "BEFOREMARK") {
+		t.Errorf("text before the align is missing; got %q", txt)
+	}
+	if !strings.Contains(txt, "AFTERMARK") {
+		t.Fatalf("a \\tag with nested braces swallowed the rest of the document; got %q", txt)
+	}
+}
+
+// readBraceName must consume a balanced group, keeping nested braces as literal
+// characters and stopping only at the matching close — leaving no stray } for the
+// caller. A flat "stop at the first }" under-reads \tag{L~\ref{key}} and leaks the
+// outer brace, the swallow mechanism above.
+func TestReadBraceNameBalancesNesting(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	// Feed "{outer\ref{inner}more}TAIL" with real catcodes: the group is the whole
+	// balanced {...}; the nested braces stay as literal characters; TAIL must remain
+	// unread on the input.
+	e.push([]tok{
+		chTok('{', catBegin),
+		chTok('o', catLetter), chTok('u', catLetter), chTok('t', catLetter), chTok('e', catLetter), chTok('r', catLetter),
+		csTok("ref"),
+		chTok('{', catBegin),
+		chTok('i', catLetter), chTok('n', catLetter), chTok('n', catLetter), chTok('e', catLetter), chTok('r', catLetter),
+		chTok('}', catEnd),
+		chTok('m', catLetter), chTok('o', catLetter), chTok('r', catLetter), chTok('e', catLetter),
+		chTok('}', catEnd),
+		chTok('T', catLetter), chTok('A', catLetter), chTok('I', catLetter), chTok('L', catLetter),
+	})
+	got := e.readBraceName()
+	if got != "outer{inner}more" {
+		t.Errorf("readBraceName = %q, want %q (nested braces kept, group balanced)", got, "outer{inner}more")
+	}
+	// The trailing TAIL letters must still be on the input (the group's close was
+	// the outer }, not the inner one). A second readBraceName sees no opening brace.
+	if rest := e.readBraceName(); rest != "" {
+		t.Errorf("input past the group was consumed; leftover read = %q", rest)
+	}
+	var b strings.Builder
+	for {
+		tk, ok := e.getNext()
+		if !ok {
+			break
+		}
+		if !tk.cs_ {
+			b.WriteRune(tk.ch)
+		}
+	}
+	if b.String() != "TAIL" {
+		t.Errorf("tail after the balanced group = %q, want %q", b.String(), "TAIL")
+	}
+}
+
 // A user macro standing in for \end is read raw by the align/gather body scanner
 // (collectAlignBody). Unless it is expanded there, the scanner never sees \end and
 // runs to EOF: the trailing prose is fed to the math renderer (or dropped) instead
