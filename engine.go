@@ -140,11 +140,12 @@ type Engine struct {
 	// accepted \bibliographystyle name, and the first-author label per key used by
 	// natbib's \citet — carried from the aux pass so a \citet before the
 	// \bibliography resolves, exactly like labels.
-	citedKeys map[string]bool
-	citeOrder []string
-	nociteAll bool
-	bibStyle  string
-	bibAuthor map[string]string
+	citedKeys  map[string]bool
+	citeOrder  []string
+	nociteAll  bool
+	bibStyle   string
+	bibAuthor  map[string]string
+	bibUnitSeq int // bibunits: how many \putbib have run, to name bu<N>.bbl
 
 	// table of contents (see toc.go): entries recorded as \section/\subsection and
 	// \caption run (via the \@tocentry prim), carried from the aux pass into the

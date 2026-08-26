@@ -45,6 +45,7 @@ package engine
 //     exactly like \input. Passing .bib content inline is out of scope.
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -582,6 +583,34 @@ func (e *Engine) doBibliography() {
 	}
 	b.WriteString(`\end{thebibliography}`)
 	e.spliceSource(b.String())
+}
+
+// doPutbib implements the bibunits package's \putbib: the low-level bibliography
+// typesetter. A document that splits its references into per-part bibliographies
+// wraps each in \begin{bibunit}…\putbib[db]…\end{bibunit}; bibtex writes one .bbl
+// per unit, named bu1.bbl, bu2.bbl, … in document order, and \putbib \input's the
+// one for the current unit. The [db] optional argument (the .bib database) is
+// already consumed by the \putbib macro (latex.go) — the pre-generated .bbl is
+// what carries the formatted entries. Each .bbl is an ordinary
+// \begin{thebibliography}…\bibitem…\end{thebibliography} block, so once spliced it
+// typesets through the same path as \bibliography's. Without this the whole
+// bibliography of a bibunits document was silently dropped (\putbib undefined).
+func (e *Engine) doPutbib() {
+	e.bibUnitSeq++
+	file := fmt.Sprintf("bu%d.bbl", e.bibUnitSeq)
+	data, err := e.readInput(file)
+	if err != nil {
+		if e.tolerant() {
+			if e.skippedCS == nil {
+				e.skippedCS = map[string]int{}
+			}
+			e.skippedCS["putbib"]++
+			return // best-effort: the unit's .bbl was not shipped (bibtex not run)
+		}
+		e.fail("bibliography unit file not found: " + file)
+		return
+	}
+	e.spliceInputFile(data)
 }
 
 // selectEntries returns the entries to print: all of them under \nocite{*},

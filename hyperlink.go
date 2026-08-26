@@ -54,6 +54,23 @@ func (e *Engine) doURL() {
 	e.placeInline(linkNode{url: url, inner: inner})
 }
 
+// doBigURL implements url.sty's low-level \Url. That package builds \url as
+// "\begingroup … \Url" and, in natbib's .bbl boilerplate, \doi as
+// "doi: \begingroup \urlstyle{rm}\Url"; the group is opened by whatever calls
+// \Url, and \Url is what closes it once the URL/DOI is set. So \Url typesets its
+// argument verbatim like \url, then closes that enclosing \begingroup. Without a
+// \Url of its own the engine still stubbed \urlstyle, which flipped natbib's
+// "\ifx\csname urlstyle\endcsname\relax" probe to the \begingroup-opening branch —
+// one unmatched \begingroup per \doi, a cascading group leak that swallowed the
+// tail of the bibliography (and lost every DOI). The close is guarded to a
+// \begingroup group so a stray \Url can never corrupt brace nesting.
+func (e *Engine) doBigURL() {
+	e.doURL()
+	if k, open := e.curGroupKind(); open && k == semiSimpleGroup {
+		e.closeSemiSimple()
+	}
+}
+
 // doNolinkurl implements \nolinkurl{URL}: like \url it typesets URL literally in
 // the verbatim font, but produces no clickable link (just the monospace rendering).
 func (e *Engine) doNolinkurl() {

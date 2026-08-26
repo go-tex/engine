@@ -573,3 +573,123 @@ Text citing \cite{lamport} and \cite{knuth}.
 		t.Errorf("two-pass numbers = %q/%q, want 1/2", e.labels["knuth"], e.labels["lamport"])
 	}
 }
+
+// natbib's .bbl boilerplate probes for the url package with
+// "\ifx\csname urlstyle\endcsname\relax" and, when it finds \urlstyle, defines
+// \doi as "doi: \begingroup \urlstyle{rm}\Url" — one \begingroup per \doi that
+// only \Url can close. The engine stubbed \urlstyle but not \Url, so the probe
+// took that branch and every \doi leaked a group, cascading until the tail of the
+// bibliography was swallowed (and every DOI lost). \bibitem here also carries the
+// natbib optional [author-year] label, which a one-argument \bibitem printed as
+// body text. This asserts the whole entry set survives, the keys number in order,
+// and no group is left open. (Regression for the 2606.18084 −17-page loss.)
+func TestBibliographyNatbibDoiGroupBalance(t *testing.T) {
+	src := []byte(`\documentclass{article}
+\begin{document}
+\begin{thebibliography}{56}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Garcia-Vidal et~al.(2021)Garcia-Vidal, Ciuti, and Ebbesen]{Garcia-Vidal2021}
+Francisco~J Garcia-Vidal, Cristiano Ciuti, and Thomas~W Ebbesen.
+\newblock Manipulating matter by strong coupling to vacuum fields.
+\newblock \doi{10.1126/science.abd0336}.
+\newblock URL \url{https://www.science.org/doi/10.1126/science.abd0336}.
+
+\bibitem[Schlawin et~al.(2022)Schlawin, Kennes, and Sentef]{Schlawin2022}
+Frank Schlawin, Dante~M. Kennes, and Michael~A. Sentef.
+\newblock Cavity quantum materials.
+\newblock \doi{10.1063/5.0083825}.
+
+\bibitem{PlainKey2023}
+An entry whose \bibitem carries no optional label at all.
+\newblock \doi{10.1000/plain}.
+\end{thebibliography}
+\end{document}
+`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if d := e.Diagnostics(); d.OpenGroups != 0 {
+		t.Errorf("OpenGroups = %d, want 0 (a leaked \\doi \\begingroup)", d.OpenGroups)
+	}
+	if d := e.Diagnostics(); d.Skipped["Url"] != 0 {
+		t.Errorf("\\Url skipped %d time(s); it must be defined so the \\doi branch balances", d.Skipped["Url"])
+	}
+	// Every entry — including the last, which the group leak used to swallow —
+	// is numbered in order, and the optional [label] never desynced the key.
+	for k, want := range map[string]string{
+		"Garcia-Vidal2021": "1", "Schlawin2022": "2", "PlainKey2023": "3",
+	} {
+		if got := e.labels[k]; got != want {
+			t.Errorf("label[%q] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+// bibunits splits a document's references into per-part bibliographies, each in a
+// \begin{bibunit}…\putbib…\end{bibunit} wrapping a pre-generated bu<N>.bbl. \putbib
+// was undefined, so the whole bibliography was dropped. This writes two unit .bbl
+// files next to a document, compiles it, and checks that \putbib \input's bu1.bbl
+// then bu2.bbl in order — each entry numbered and its key labelled. (Regression for
+// the 2606.18084 bibunits bibliography loss.)
+func TestPutbibReadsUnitFiles(t *testing.T) {
+	dir := t.TempDir()
+	bbl := func(name, key, marker string) {
+		body := `\begin{thebibliography}{9}
+\bibitem[` + marker + `]{` + key + `}
+An entry in ` + name + `.
+\end{thebibliography}
+`
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bbl("bu1.bbl", "Alpha2020", "Alpha")
+	bbl("bu2.bbl", "Beta2021", "Beta")
+	t.Setenv("TEXINPUTS", dir) // \putbib resolves bu<N>.bbl on the search path
+	src := []byte(`\documentclass{article}
+\begin{document}
+\begin{bibunit}\putbib[first]\end{bibunit}
+\begin{bibunit}\putbib[second]\end{bibunit}
+\end{document}
+`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if d := e.Diagnostics(); d.Skipped["putbib"] != 0 {
+		t.Errorf("\\putbib skipped %d time(s); the unit .bbl files were not read", d.Skipped["putbib"])
+	}
+	// Both units contributed their entry: Alpha from bu1.bbl, Beta from bu2.bbl —
+	// each \bibitem's \label recorded, which happens only if its .bbl was typeset.
+	for _, k := range []string{"Alpha2020", "Beta2021"} {
+		if e.labels[k] == "" {
+			t.Errorf("key %q has no label — its unit .bbl was not read by \\putbib", k)
+		}
+	}
+}
+
+// A \putbib whose unit .bbl is not on disk (bibtex was never run) is a skipped,
+// recorded no-op under a best-effort render, and a hard error under a strict one.
+func TestPutbibMissingUnitFile(t *testing.T) {
+	src := []byte(`\documentclass{article}\begin{document}\putbib[refs]\end{document}`)
+
+	// Lenient: the missing bu1.bbl is recorded and the render carries on.
+	e, err := compile(src, Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("lenient compile: %v", err)
+	}
+	if got := e.Diagnostics().Skipped["putbib"]; got != 1 {
+		t.Errorf("Skipped[putbib] = %d, want 1", got)
+	}
+
+	// Strict: the same missing file aborts, as a real TeX would on \input of it.
+	if _, err := compile(src, Options{}); err == nil {
+		t.Error("strict compile should fail on a missing bibliography unit file")
+	}
+}
