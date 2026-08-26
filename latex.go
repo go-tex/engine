@@ -444,7 +444,14 @@ const MiniLaTeXKernel = `
 \newcount\pdfminorversion
 \newdimen\voffset\newdimen\hoffset
 \newdimen\topmargin\newdimen\oddsidemargin\newdimen\evensidemargin
-\newdimen\headheight\newdimen\headsep\newdimen\footskip\newdimen\textheight
+\newdimen\headheight\newdimen\headsep\newdimen\footskip
+% \textheight is the page's text height, i.e. the page builder's \vsize — the
+% same identity \textwidth has with \hsize above. The standard classes size the
+% text block by assigning \textheight (\setlength\textheight{\@tempcnta
+% \baselineskip}\addtolength\textheight{\topskip}); aliasing it to \vsize makes
+% that assignment set the page-break budget, instead of leaving \vsize at the
+% plain-TeX 8.9in default and overfilling every page.
+\let\textheight\vsize
 \newdimen\marginparwidth\newdimen\marginparsep\newdimen\marginparpush
 \def\em{\it}
 \def\normalem{}

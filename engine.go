@@ -2038,6 +2038,20 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.vsize, 0
 			case m.kind == mPrim && m.name == "parindent":
 				return e.parindent, 0
+			// The glue engine-parameters coerce to their natural width when read as
+			// a rigid <dimen> — TeX's glue→dimen coercion. Without this a bare
+			// \baselineskip where a dimension is wanted (the divisor of
+			// \divide\@tempdima\baselineskip, or \setlength\x{\baselineskip}) reads
+			// as zero and is left in the input to run as a spurious assignment: the
+			// standard classes compute \textheight as a whole number of
+			// \baselineskip that way, so the miss both zeroed \baselineskip and
+			// broke the page-height arithmetic. Mirrors coerceInternalDimen.
+			case m.kind == mPrim && m.name == "baselineskip":
+				return e.baselineskip, 0
+			case m.kind == mPrim && m.name == "leftskip":
+				return e.leftskip.width, 0
+			case m.kind == mPrim && m.name == "rightskip":
+				return e.rightskip.width, 0
 			}
 			// An internal INTEGER here is the FACTOR of the dimension, not the
 			// dimension itself: TeX's <dimen> is <factor><unit of measure>, and the

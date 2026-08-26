@@ -371,3 +371,42 @@ func TestStretchAsGlue(t *testing.T) {
 		t.Errorf("stretch as glue: got %q want %q", got, "0.0pt plus 3.0fil")
 	}
 }
+
+// A glue engine-parameter used where a rigid <dimen> is wanted coerces to its
+// natural width — TeX's glue→dimen coercion. The standard classes rely on it to
+// size \textheight as a whole number of \baselineskip
+// (\divide\@tempdima\baselineskip, \setlength\textheight{\@tempcnta
+// \baselineskip}); before the coercion a bare \baselineskip read as zero and was
+// left in the input to run as a spurious \baselineskip=0 assignment, which both
+// zeroed the leading and broke the page-height arithmetic (the engine then
+// over-packed every page). \leftskip and \rightskip coerce the same way.
+func TestGlueParamCoercesToDimen(t *testing.T) {
+	for _, c := range []struct{ src, cs, want string }{
+		{`\baselineskip=12pt \dimen0=\baselineskip`, `\dimen0`, "12.0pt"},
+		{`\leftskip=5pt \dimen0=\leftskip`, `\dimen0`, "5.0pt"},
+		{`\rightskip=3pt \dimen0=\rightskip`, `\dimen0`, "3.0pt"},
+		// As the divisor of \divide the divisor coerces to its integer sp value, so
+		// dividing a height by \baselineskip counts the lines it holds: 120pt has
+		// ten 12pt lines. The quotient is 10 scaled points; scaling it back by one
+		// point makes the whole-line count readable as 10.0pt.
+		{`\baselineskip=12pt \dimen1=120pt \divide\dimen1\baselineskip \multiply\dimen1 65536`, `\dimen1`, "10.0pt"},
+	} {
+		if got := theLen(t, c.src, c.cs); got != c.want {
+			t.Errorf("%q: got %q want %q", c.src, got, c.want)
+		}
+	}
+}
+
+// \textheight is the page builder's \vsize, the vertical counterpart of the
+// \textwidth/\hsize identity: a class sizes the text block by assigning
+// \textheight, and that must set the page-break budget. Guards the wiring both
+// ways so a future edit cannot silently split them and reinstate the plain-TeX
+// \vsize default that over-packed every page.
+func TestTextHeightIsVsize(t *testing.T) {
+	if got := theLen(t, `\setlength\textheight{123pt}`, `\vsize`); got != "123.0pt" {
+		t.Errorf(`\textheight -> \vsize: got %q want %q`, got, "123.0pt")
+	}
+	if got := theLen(t, `\vsize=200pt`, `\textheight`); got != "200.0pt" {
+		t.Errorf(`\vsize -> \textheight: got %q want %q`, got, "200.0pt")
+	}
+}
