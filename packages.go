@@ -335,6 +335,12 @@ func (e *Engine) doDocumentClass() {
 		return
 	}
 	if emulatedClasses[name] || emulateOnly(name) {
+		if name == "amsart" {
+			// The emulation does not run amsart.cls's own \textwidth/\textheight
+			// assignments, so give the page builder amsart's real text block instead
+			// of the plain-TeX default (see applyAmsartGeometry).
+			e.applyAmsartGeometry(opts)
+		}
 		return // use the built-in emulation for a standard class
 	}
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok {

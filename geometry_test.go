@@ -268,3 +268,56 @@ func TestGeometryDimenUnitDefaultsToPoints(t *testing.T) {
 		t.Errorf("geomDimen(bad float) ok = true, want false")
 	}
 }
+
+// TestAmsartEmulatedGeometry locks amsart's real text block onto the emulated
+// class. amsart.cls sets \textwidth=30pc (360pt) and \textheight=50.5pc (606pt),
+// then \calclayout removes \headheight (8pt)+\headsep (14pt), leaving a 584pt text
+// height. The emulation does not run those assignments, so before the fix \hsize/
+// \vsize kept the plain-TeX defaults (6.5in × 8.9in) and amsart under-paginated;
+// these assertions match what tectonic reports for \documentclass{amsart}.
+func TestAmsartEmulatedGeometry(t *testing.T) {
+	for _, opt := range []string{"", "11pt", "12pt", "reqno,12pt"} {
+		e, err := compile([]byte(`\documentclass[`+opt+`]{amsart}\begin{document}x\end{document}`), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("amsart[%s]: %v", opt, err)
+		}
+		// The size options change only the leading, not the text block.
+		if want := ptToSP(360); e.hsize != want {
+			t.Errorf("amsart[%s] hsize = %d (%.2fpt), want %d (360pt)", opt, e.hsize, float64(e.hsize)/unity, want)
+		}
+		if want := ptToSP(584); e.vsize != want {
+			t.Errorf("amsart[%s] vsize = %d (%.2fpt), want %d (584pt)", opt, e.vsize, float64(e.vsize)/unity, want)
+		}
+	}
+}
+
+// TestAmsartA4paperGeometry: on a4paper amsart uses \textheight=54.5pc (654pt),
+// so the text height after \calclayout is 654-22 = 632pt; the width is unchanged.
+func TestAmsartA4paperGeometry(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[a4paper]{amsart}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("amsart a4paper: %v", err)
+	}
+	if want := ptToSP(360); e.hsize != want {
+		t.Errorf("hsize = %d, want %d (360pt)", e.hsize, want)
+	}
+	if want := ptToSP(632); e.vsize != want {
+		t.Errorf("vsize = %d (%.2fpt), want %d (632pt)", e.vsize, float64(e.vsize)/unity, want)
+	}
+}
+
+// TestAmsartGeometryPackageOverrides: a paper's own \usepackage{geometry} must win
+// over the amsart class defaults, since \documentclass runs before \usepackage.
+func TestAmsartGeometryPackageOverrides(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[12pt]{amsart}\usepackage[margin=1in]{geometry}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("amsart+geometry: %v", err)
+	}
+	// letterpaper (8.5in × 11in) minus 1in margins on every side.
+	if want := inToSP(8.5) - 2*inToSP(1); e.hsize != want {
+		t.Errorf("hsize = %d, want %d (geometry wins)", e.hsize, want)
+	}
+	if want := inToSP(11) - 2*inToSP(1); e.vsize != want {
+		t.Errorf("vsize = %d, want %d (geometry wins)", e.vsize, want)
+	}
+}
