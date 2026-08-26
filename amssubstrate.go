@@ -116,6 +116,34 @@ func (e *Engine) loadAMSPrims() {
 		e.define(name, &meaning{kind: mCharDef, code: e.allocRead}, false)
 		e.allocRead++
 	})
+	// \openout<n>=<filename> opens an output stream. The engine writes no auxiliary
+	// files, but the primitive still has to CONSUME its operand: undefined, the
+	// filename was left in the input and TYPESET. beamer opens three streams for its
+	// .nav/.toc/.snm files as the document begins, so every talk carried a page
+	// reading "texput.nav texput.toc texput.snm".
+	//
+	// The grammar is tex.web §1352 ("Implement \openout"):
+	//
+	//	new_write_whatsit(open_node_size);   { scan_four_bit_int for \openout }
+	//	scan_optional_equals; scan_file_name;
+	//
+	// and scan_file_name is §526: skip leading blanks, then take every CHARACTER
+	// token (get_x_token, so an expandable cs contributes the characters it expands
+	// to) until either a space — which is consumed — or a non-character token, which
+	// is pushed BACK (back_input). More precisely still, §516 more_name ends the name
+	// on a space and on nothing else. The engine's scanFileName already reads exactly
+	// that, so it is reused rather than re-derived.
+	//
+	// Two deliberate departures from the reference, both toward leniency:
+	//   - TeX scans the stream number with scan_four_bit_int and errors outside 0..15;
+	//     this takes any integer, as the neighbouring \closeout already does.
+	//   - TeX appends a whatsit to the current list and acts on it at \shipout unless
+	//     \immediate precedes; nothing is written here either way, so no node is made.
+	e.prim("openout", func(e *Engine) {
+		e.scanInt()
+		e.scanEquals()
+		e.scanFileName()
+	})
 	e.prim("closeout", func(e *Engine) { e.scanInt() })
 	e.prim("write", func(e *Engine) {
 		e.scanInt()
