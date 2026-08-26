@@ -60,3 +60,45 @@ func TestAmsartNewtheoremNoLongerLoops(t *testing.T) {
 		t.Errorf("amsart compiled but took %d expansion steps; the loop is not fully resolved", e.steps)
 	}
 }
+
+// The real amsart class numbers within-section theorems CORRECTLY, not merely
+// without looping. amsart's \@xthm freezes a within-numbered theorem's printed
+// number as \the<within>\@thmcountersep\@thmcounter{<thm>}; those two hooks come
+// from amsmath.sty, which the engine stubs, so before they were provided in the
+// AMS substrate \the<thm> kept them verbatim and \label captured the literal
+// "1\@thmcountersep\@thmcounter{thm}" instead of "1.1". This asserts the numbers
+// (via the label table, exactly like the emulation's TestTheoremWithin): first
+// section 1.1/1.2, a shared lemma continuing that counter to 1.3, and a reset to
+// 2.1 in section 2.
+func TestAmsartRealClassNumbersWithinSection(t *testing.T) {
+	delete(emulatedClasses, "amsart")
+	defer func() { emulatedClasses["amsart"] = true }()
+	src := []byte(`\documentclass{amsart}` +
+		`\newtheorem{thm}{Theorem}[section]` +
+		`\newtheorem{lem}[thm]{Lemma}` +
+		`\begin{document}` +
+		`\section{One}` +
+		`\begin{thm}\label{t:1}A.\end{thm}` +
+		`\begin{thm}\label{t:2}B.\end{thm}` +
+		`\begin{lem}\label{l:1}L.\end{lem}` +
+		`\section{Two}` +
+		`\begin{thm}\label{t:3}C.\end{thm}` +
+		`\end{document}`)
+	e, err := compile(src, Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("amsart real class errored: %v", err)
+	}
+	if e.runaway {
+		t.Fatalf("amsart real class runs away (steps=%d)", e.steps)
+	}
+	for _, tc := range []struct{ key, want string }{
+		{"t:1", "1.1"},
+		{"t:2", "1.2"},
+		{"l:1", "1.3"}, // shared counter, still within section 1
+		{"t:3", "2.1"}, // reset on \section
+	} {
+		if got := e.labels[tc.key]; got != tc.want {
+			t.Errorf("label %s = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}
