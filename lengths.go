@@ -129,14 +129,17 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 		}
 	case m.kind == mDimenRef:
 		e.setDimen(m.code, addOrSet(add, e.dimen[m.code], g.width), global)
+	// The engine's dimension parameters go through setEngineDimen so \setlength is
+	// scoped to its group exactly as \hsize=… is: \setlength\textwidth{…} inside a
+	// box must not resize every page that follows.
 	case m.kind == mPrim && m.name == "hsize":
-		e.hsize = addOrSet(add, e.hsize, g.width)
+		e.setEngineDimen(saveHsize, &e.hsize, addOrSet(add, e.hsize, g.width), global)
 	case m.kind == mPrim && m.name == "vsize":
-		e.vsize = addOrSet(add, e.vsize, g.width)
+		e.setEngineDimen(saveVsize, &e.vsize, addOrSet(add, e.vsize, g.width), global)
 	case m.kind == mPrim && m.name == "parindent":
-		e.parindent = addOrSet(add, e.parindent, g.width)
+		e.setEngineDimen(saveParindent, &e.parindent, addOrSet(add, e.parindent, g.width), global)
 	case m.kind == mPrim && m.name == "baselineskip":
-		e.baselineskip = addOrSet(add, e.baselineskip, g.width)
+		e.setEngineDimen(saveBaselineskip, &e.baselineskip, addOrSet(add, e.baselineskip, g.width), global)
 	case m.kind == mPrim && m.name == "leftskip":
 		if len(e.groups) > 0 {
 			e.save = append(e.save, saveItem{kind: 6, oldg: e.leftskip})

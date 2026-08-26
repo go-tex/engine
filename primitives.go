@@ -320,6 +320,17 @@ func (e *Engine) doGlobal() {
 		e.doSetbox(true)
 	case "catcode":
 		e.doCatcode(true)
+	case "hsize", "vsize", "parindent", "baselineskip":
+		// \global\hsize=… : the engine's own dimension parameters are scoped like
+		// registers now, so the global flag has to reach the assignment or the
+		// enclosing group would put the old value back.
+		_, set, _ := e.engineDimenParam(t, true)
+		e.scanEquals()
+		if m.name == "baselineskip" {
+			set(e.scanGlue().width)
+		} else {
+			set(e.scanDimen())
+		}
 	default:
 		e.back(t) // \global\setbox…, \global\toks…, etc.: run the assignment locally
 	}
@@ -524,7 +535,7 @@ func (e *Engine) doAdvance(global bool) {
 	if t, ok := e.getXToken(); ok {
 		// The engine's own dimension parameters (\hsize and friends) are
 		// primitives, not registers, so the register paths below never match them.
-		if get, set, isParam := e.engineDimenParam(t); isParam {
+		if get, set, isParam := e.engineDimenParam(t, global); isParam {
 			e.skipByKeyword()
 			set(get() + e.scanDimen())
 			return
@@ -577,7 +588,7 @@ func (e *Engine) doAdvance(global bool) {
 // other dimension: a class computes its page geometry that way (LaTeX's size
 // option files round every length with \divide…\multiply), and a parameter that
 // silently ignores the operation ends up holding nonsense.
-func (e *Engine) engineDimenParam(t tok) (get func() int, set func(int), ok bool) {
+func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(int), ok bool) {
 	if !t.cs_ {
 		return nil, nil, false
 	}
@@ -587,21 +598,51 @@ func (e *Engine) engineDimenParam(t tok) (get func() int, set func(int), ok bool
 	}
 	switch m.name {
 	case "hsize":
-		return func() int { return e.hsize }, func(v int) { e.hsize = v }, true
+		return func() int { return e.hsize }, func(v int) { e.setEngineDimen(saveHsize, &e.hsize, v, global) }, true
 	case "vsize":
-		return func() int { return e.vsize }, func(v int) { e.vsize = v }, true
+		return func() int { return e.vsize }, func(v int) { e.setEngineDimen(saveVsize, &e.vsize, v, global) }, true
 	case "parindent":
-		return func() int { return e.parindent }, func(v int) { e.parindent = v }, true
+		return func() int { return e.parindent }, func(v int) { e.setEngineDimen(saveParindent, &e.parindent, v, global) }, true
 	case "baselineskip":
-		return func() int { return e.baselineskip }, func(v int) { e.baselineskip = v }, true
+		return func() int { return e.baselineskip }, func(v int) { e.setEngineDimen(saveBaselineskip, &e.baselineskip, v, global) }, true
 	}
 	return nil, nil, false
 }
 
+// The save-stack kinds for the engine's own dimension parameters. They are
+// parameters rather than registers, so the register paths do not cover them and
+// each needs its own kind (see setEngineDimen).
+const (
+	saveHsize        = 11
+	saveVsize        = 12
+	saveParindent    = 13
+	saveBaselineskip = 14
+)
+
+// setEngineDimen assigns one of the engine's dimension parameters, recording the
+// value it displaces so the group that made the assignment undoes it.
+//
+// TeX restores \hsize, \vsize, \parindent and \baselineskip at the end of a group
+// exactly as it restores a register: only \global outlives the group. Assigning
+// them straight to the field made every such assignment permanent, so a package
+// that narrows the measure inside a box — \hbox to\@tempdima{\textwidth=\@tempdima
+// …}, which is how beamer's own headline and footline templates are written —
+// left that width in force for the rest of the document. A beamer talk came out
+// 78pt wide for exactly this reason: the template ran once with a scratch
+// dimension of zero and nothing put the real width back.
+func (e *Engine) setEngineDimen(kind int, field *int, v int, global bool) {
+	if global {
+		e.forgetSaved(kind, 0, "")
+	} else if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: kind, oldd: *field})
+	}
+	*field = v
+}
+
 // scaleEngineParam performs \multiply/\divide on such a parameter, reading the
 // integer operand after the optional "by".
-func (e *Engine) scaleEngineParam(t tok, divide bool) bool {
-	get, set, ok := e.engineDimenParam(t)
+func (e *Engine) scaleEngineParam(t tok, divide, global bool) bool {
+	get, set, ok := e.engineDimenParam(t, global)
 	if !ok {
 		return false
 	}
@@ -618,7 +659,7 @@ func (e *Engine) scaleEngineParam(t tok, divide bool) bool {
 
 func (e *Engine) doMultiply(global bool) {
 	if t, ok := e.getXToken(); ok {
-		if e.scaleEngineParam(t, false) {
+		if e.scaleEngineParam(t, false, global) {
 			return
 		}
 		e.back(t)
@@ -1639,9 +1680,12 @@ func (e *Engine) loadMore() {
 	e.prim("crcr", func(e *Engine) {}) //  "
 	e.prim("font", func(e *Engine) { e.doFont() })
 	e.prim("input", func(e *Engine) { e.doInput() })
-	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.hsize = e.scanDimen() })
-	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.vsize = e.scanDimen() })
-	e.prim("baselineskip", func(e *Engine) { e.scanEquals(); e.baselineskip = e.scanGlue().width })
+	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveHsize, &e.hsize, e.scanDimen(), false) })
+	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveVsize, &e.vsize, e.scanDimen(), false) })
+	e.prim("baselineskip", func(e *Engine) {
+		e.scanEquals()
+		e.setEngineDimen(saveBaselineskip, &e.baselineskip, e.scanGlue().width, false)
+	})
 	e.prim("leftskip", func(e *Engine) {
 		e.scanEquals()
 		g := e.scanGlue()
@@ -1658,7 +1702,7 @@ func (e *Engine) loadMore() {
 		}
 		e.rightskip = g
 	})
-	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.parindent = e.scanDimen() })
+	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveParindent, &e.parindent, e.scanDimen(), false) })
 	e.prim("indent", func(e *Engine) {
 		if !e.inPar {
 			e.beginParagraph(true)

@@ -331,16 +331,16 @@ func TestEngineParameterMatching(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"hsize", "vsize", "parindent", "baselineskip"} {
-		if _, _, ok := e.engineDimenParam(csTok(name)); !ok {
+		if _, _, ok := e.engineDimenParam(csTok(name), false); !ok {
 			t.Errorf("\\%s should be an engine dimension parameter", name)
 		}
 	}
 	for _, name := range []string{"relax", "count", "undefinedname", "leftskip"} {
-		if _, _, ok := e.engineDimenParam(csTok(name)); ok {
+		if _, _, ok := e.engineDimenParam(csTok(name), false); ok {
 			t.Errorf("\\%s should not be one", name)
 		}
 	}
-	if _, _, ok := e.engineDimenParam(chTok('x', catLetter)); ok {
+	if _, _, ok := e.engineDimenParam(chTok('x', catLetter), false); ok {
 		t.Error("a character is not a parameter")
 	}
 }
