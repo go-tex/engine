@@ -16,6 +16,10 @@ import "strings"
 // the Plain macros).
 const MiniLaTeXKernel = `
 \catcode64=11
+% \@currenvir (set by \gotex@checkenv, see doCheckEnv) names the environment being
+% opened. \begin stays fully EXPANDABLE — the engine relies on that, so the name is
+% recorded from the Go side rather than with a \def here.
+\def\@currenvir{}
 \def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
 \def\end#1{\csname end#1\endcsname}
 \def\document{\catcode64=12 }

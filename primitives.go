@@ -838,12 +838,34 @@ func (e *Engine) doCheckEnv() {
 	if name == "" {
 		return // no braced argument, or an empty one: nothing meaningful to probe
 	}
+	e.setCurrentEnv(name)
 	if e.envUndefined(name) {
 		if e.undefinedEnvs == nil {
 			e.undefinedEnvs = map[string]int{}
 		}
 		e.undefinedEnvs[name]++
 	}
+}
+
+// setCurrentEnv records the environment being opened in \@currenvir, as LaTeX's own
+// \begin does. A package reads it to tell which SYNTAX it was invoked with: beamer's
+// \frame serves both \begin{frame}…\end{frame} and the command form \frame{…}, and
+// picks between them with \ifx\@currenvir\beamer@frametext. Left undefined, that test
+// always failed and every \begin{frame} took the command path — which then looked for
+// a braced group that was not there and swallowed the frame's body.
+//
+// It is set HERE, from \begin's Go-side probe, rather than with a \def in \begin's
+// body, because the engine's \begin is fully EXPANDABLE and must stay so: a \def in
+// its expansion would print as literal text wherever \begin is only expanded.
+//
+// The body is built with the CURRENT catcodes so \ifx compares equal to the class's
+// own \def\beamer@frametext{frame}, whose letters are category 11.
+func (e *Engine) setCurrentEnv(name string) {
+	body := make([]tok, 0, len(name))
+	for _, r := range name {
+		body = append(body, chTok(r, e.catcode[r]))
+	}
+	e.define("@currenvir", &meaning{kind: mMacro, body: body}, false)
 }
 
 // envUndefined reports whether \name is not a real environment's opening control
