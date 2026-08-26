@@ -199,6 +199,11 @@ const LaTeX2eClassKernel = `
 % \setbox<n>=\box\voidb@x is how a package empties a box register. Without it
 % that idiom reads register 0 instead and steals whatever is in it.
 \newbox\voidb@x
+% \@labels holds a list's pending label box: \list/\trivlist \sbox it and the
+% \everypar item hook \unhbox\@labels it at the start of the first line, which is
+% how amsart's \deferred@thm@head emits a "Theorem 1.1." heading (see amsart.cls
+% \dth@everypar). Without the box register the head is silently dropped.
+\newbox\@labels
 % NFSS's maths versions (\mathversion{bold} and friends) and the font-shape
 % switches a class uses around its headings. This engine has one face per family,
 % so a version switch has nothing to select; the argument is consumed.
@@ -294,6 +299,10 @@ const LaTeX2eClassKernel = `
 \newif\if@noparitem
 \newif\if@noparlist
 \newif\if@inlabel
+% \if@endpe guards the paragraph-end-of-environment hook: \endtrivlist ends with
+% \@endpefalse (amsart's \@endtheorem is \endtrivlist\@endpefalse). Undefined, the
+% \@endpefalse token leaks into the page as text after every theorem/proof.
+\newif\if@endpe
 % Set the flags a class expects to have a definite state.
 \@compatibilityfalse
 \@twocolumnfalse

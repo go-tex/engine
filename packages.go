@@ -307,17 +307,31 @@ func (e *Engine) curFrame() *loadFrame {
 // source-line stability — is complete enough that they pass the conformance and
 // fidelity gates).
 //
-// amsart IS here (gated to emulation) even though amsart.cls is embedded and loads:
-// its own \newtheorem…[section] machinery loops on the engine (the runaway guard is
-// expansion-only and doesn't catch it), so a real math paper hangs. The class kernel
-// additions it drove — token registers, the ## parameter-char fix, the plain-TeX
-// substrate — are kept (they help every real class/package); routing
-// \documentclass{amsart} to the real class waits on the \newtheorem fix. The real
-// amsart.cls stays available to \LoadClass. letter/proc/slides/minimal are not
-// embedded, so they fall back to the emulation regardless.
+// amsart is NOT here any more: it joins article/report/book on the real embedded
+// class. It used to be gated to the emulation because its \newtheorem…[section]
+// machinery looped on the engine and its theorem numbers came out as raw macro
+// text; both are fixed (the runaway guard + delimited-arg brace-strip, and the
+// \@thmcountersep/\@thmcounter hooks in AMSClassSubstrate), so \documentclass{amsart}
+// now loads texmf/amsart.cls and typesets its own title/section/theorem heads.
+// GOTEX_AMSART=0 forces the old emulation back, for comparing the two paths.
+// letter/proc/slides/minimal are not embedded, so they fall back to the emulation
+// regardless.
 var emulatedClasses = map[string]bool{
-	"amsart": true,
 	"letter": true, "proc": true, "slides": true, "minimal": true,
+}
+
+// realAmsart reports whether \documentclass{amsart} loads the REAL embedded
+// amsart.cls rather than the built-in article-shaped emulation. Like realBeamer it
+// is decided by whether the class file can be resolved (the embedded set always
+// provides it); GOTEX_AMSART=0 forces the emulation, for A/B comparison. acmart
+// papers already reach the real amsart through their bundled acmart.cls's
+// \LoadClass{amsart} — this gate governs only the direct \documentclass{amsart}.
+func (e *Engine) realAmsart() bool {
+	if os.Getenv("GOTEX_AMSART") == "0" {
+		return false
+	}
+	_, _, ok := e.findTeXFile("amsart", []string{".cls"})
+	return ok
 }
 
 // doDocumentClass implements \documentclass[options]{class}: for a non-emulated
@@ -334,13 +348,22 @@ func (e *Engine) doDocumentClass() {
 		e.loadBeamer()
 		return
 	}
-	if emulatedClasses[name] || emulateOnly(name) {
-		if name == "amsart" {
-			// The emulation does not run amsart.cls's own \textwidth/\textheight
-			// assignments, so give the page builder amsart's real text block instead
-			// of the plain-TeX default (see applyAmsartGeometry).
-			e.applyAmsartGeometry(opts)
+	if name == "amsart" {
+		// Give the page builder amsart's real text block (360pt × 584pt, or 632pt
+		// high on a4paper) as a PERSISTENT floor, in both paths. The emulation never
+		// runs amsart.cls's \textwidth/\textheight and would keep the plain-TeX
+		// default (6.5in × 8.9in), under-paginating; the real class DOES set them,
+		// but through TeX assignments that the enclosing document group restores
+		// after the page builder has run, so e.hsize/e.vsize revert post-render.
+		// Setting the engine dimens here directly makes the budget stick either way
+		// (the class's own \hsize=30pc then saves and restores this same value); a
+		// later \usepackage{geometry} still overrides it, running after this.
+		e.applyAmsartGeometry(opts)
+		if !e.realAmsart() {
+			return // GOTEX_AMSART=0 forces the built-in emulation
 		}
+	}
+	if emulatedClasses[name] || emulateOnly(name) {
 		return // use the built-in emulation for a standard class
 	}
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok {

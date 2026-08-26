@@ -99,7 +99,7 @@ func (e *Engine) doNewsavebox() {
 // natural width) in \name's register. The {content} group is always consumed to
 // keep the input in sync, even when \name is not a valid save-box handle.
 func (e *Engine) doSbox() {
-	reg, ok := e.readBoxHandle()
+	reg, ok := e.readSetBoxHandle()
 	list, _ := e.grabHboxList()
 	if ok {
 		e.setBoxScoped(reg, hpackSP(list, packNatural, 0), false)
@@ -110,7 +110,7 @@ func (e *Engine) doSbox() {
 // \makebox[w][pos]{content} in \name's register. The \makebox arguments are always
 // consumed, even when \name is not a valid save-box handle.
 func (e *Engine) doSavebox() {
-	reg, ok := e.readBoxHandle()
+	reg, ok := e.readSetBoxHandle()
 	b := e.doMakebox()
 	if ok {
 		e.setBoxScoped(reg, b, false)
@@ -165,6 +165,28 @@ func (e *Engine) readBoxHandle() (int, bool) {
 		return m.code, true
 	}
 	return -1, false
+}
+
+// readSetBoxHandle reads the box-register operand of \sbox / \savebox, accepting
+// both the LaTeX2e save-box form (\sbox{\name}{…}, a braced \newsavebox handle)
+// and the low-level register form the real embedded classes use unbraced: a
+// \newsavebox handle (\sbox\@tempboxa{…}, in the \@makecaption of article/report/
+// book) and a numbered register (amsart's \sbox\z@{…} toc measure and
+// \sbox\@labels{…} theorem head). The unbraced forms used to fall through
+// readBoxHandle's "no braces → invalid handle" path, which dropped the register
+// and spilled the {content} — the section-number-following-a-heading artifact and
+// the lost theorem head on the real amsart path.
+func (e *Engine) readSetBoxHandle() (int, bool) {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return -1, false
+	}
+	e.back(t)
+	if t.cat == catBegin && !t.cs_ {
+		return e.readBoxHandle() // \sbox{\name}{…}
+	}
+	return e.boxRegIndex(), true // \sbox\@tempboxa{…} / \sbox\z@{…} / \sbox0{…}
 }
 
 // \unhbox<n> unpacks a box register onto the list being built, instead of
