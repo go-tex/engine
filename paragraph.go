@@ -159,7 +159,14 @@ func toItems(list []node) []Item {
 		case penaltyNode:
 			items[i] = Penalty(0, float64(c.penalty), false)
 		case discNode:
-			items[i] = Penalty(0, float64(c.penalty), true) // a flagged (hyphen) break
+			// A flagged (hyphen) break; consecutive flagged breaks are demerited. The
+			// width is 0: the hyphen glyph is real material only on the line that
+			// breaks here (layoutSegment appends it), and the linebreak library folds
+			// a penalty's width into the running line total even when the break is NOT
+			// taken there — so a non-zero width here would inflate every line holding
+			// an unbroken hyphenation point. A corpus A/B (see the PR) confirmed 0 is
+			// the faithful choice on the current library.
+			items[i] = Penalty(0, float64(c.penalty), true)
 
 		case ruleNode:
 			items[i] = Box(spToPt(c.width))

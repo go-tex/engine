@@ -109,7 +109,8 @@ type Engine struct {
 	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
 	suppressParskip  bool   // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
-	hyph          *hyphenator // loaded hyphenation patterns (nil = no hyphenation)
+	hyph          *hyphenator // a document's own \patterns, if any (nil = none loaded)
+	enHyph        *hyphenator // lazily built cache of the embedded US-English patterns
 	hyphenpenalty int         // penalty at a discretionary hyphen
 	leftskip      glueSpec    // glue at the left of every line
 	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
