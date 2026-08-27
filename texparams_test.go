@@ -83,7 +83,7 @@ func TestNullfont(t *testing.T) {
 	if b.width != 0 || b.height != 0 || b.depth != 0 {
 		t.Errorf("\\nullfont box measures %d/%d/%d, want 0/0/0", b.width, b.height, b.depth)
 	}
-	if svg := renderBoxSVG(b, 0, 0, nullFont{}, "white"); count(svg, "<path") != 0 {
+	if svg := renderBoxSVG(b, 0, 0, 0, 0, nullFont{}, "white"); count(svg, "<path") != 0 {
 		t.Errorf("\\nullfont drew glyphs: %s", svg)
 	}
 	// It is a font switch, so a group restores the previous font.

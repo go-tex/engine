@@ -524,7 +524,95 @@ func (e *Engine) renderMargin(fallback float64) float64 {
 	if e.geom != nil {
 		return spToPt(e.geom.left)
 	}
+	if d, ok := e.classLeftMargin(); ok {
+		return spToPt(d)
+	}
 	return fallback
+}
+
+// classLeftMargin and classTopMargin give the text block's position on the paper as
+// the CLASS states it, for a document that never loaded geometry.
+//
+// classes.dtx, "Page Layout": "All margin dimensions are measured from a point one
+// inch from the top and lefthand side of the page." So
+//
+//	left = 1in + \hoffset + \oddsidemargin
+//	top  = 1in + \voffset + \topmargin + \headheight + \headsep
+//
+// and the same file computes \oddsidemargin as .5(\paperwidth - \textwidth) - 1in,
+// which is the check: for article at 10pt on letterpaper that is 62pt, so the text
+// starts 134.3pt from the left edge of a 614.3pt page.
+//
+// This only matters now that a page IS the paper. While the page was derived from
+// the content, the block filled it by construction and its position could not be
+// wrong; on a real sheet, it can.
+func (e *Engine) classLeftMargin() (int, bool) {
+	if _, _, ok := e.paperSizePt(); !ok {
+		return 0, false
+	}
+	osm, ok := e.namedDimen("oddsidemargin")
+	if !ok {
+		return 0, false
+	}
+	off, _ := e.namedDimen("hoffset")
+	return parseDimenStr("1in") + off + osm, true
+}
+
+func (e *Engine) classTopMargin() (int, bool) {
+	if _, _, ok := e.paperSizePt(); !ok {
+		return 0, false
+	}
+	tm, ok := e.namedDimen("topmargin")
+	if !ok {
+		return 0, false
+	}
+	off, _ := e.namedDimen("voffset")
+	hh, _ := e.namedDimen("headheight")
+	hs, _ := e.namedDimen("headsep")
+	return parseDimenStr("1in") + off + tm + hh + hs, true
+}
+
+// paperSizePt returns the page the drivers should draw, in points, when the document
+// has STATED one — that is, when geometry ran and knows the paper.
+//
+// TeX's page is the PAPER; the text block sits inside it at the margins, and material
+// that overruns simply overfulls. Deriving the page from the content instead — content
+// plus a uniform margin — is right only when the two coincide, and for a class that
+// spends its vertical budget on running heads rather than on margins they do not.
+// beamer is that class: its text block is \paperheight minus a 4pt footline allowance,
+// so content-plus-margin made every slide 297.6pt tall where the paper is 273.147.
+//
+// The paper is read from \paperwidth / \paperheight, which is where LaTeX keeps it:
+// classes.dtx has article, report and book run \ExecuteOptions{letterpaper,10pt,…} so
+// the registers hold 8.5in x 11in unless an option says otherwise, [a4paper] sets
+// 210mm x 297mm, and geometry publishes its own paper into the same two registers
+// (see publishGeometry). One source of truth, whether or not geometry ran.
+//
+// The OFFSETS were already right (renderMargin, renderVMargin); only the extent was
+// being computed from the wrong thing.
+func (e *Engine) paperSizePt() (w, h float64, ok bool) {
+	pw, pwOK := e.namedDimen("paperwidth")
+	ph, phOK := e.namedDimen("paperheight")
+	if !pwOK || !phOK || pw <= 0 || ph <= 0 {
+		return 0, 0, false
+	}
+	return spToPt(pw), spToPt(ph), true
+}
+
+// namedDimen reads an allocated \newdimen / \newlength by name. It is the read
+// counterpart of setNamedDimen.
+func (e *Engine) namedDimen(name string) (int, bool) {
+	m := e.eq[name]
+	if m == nil {
+		return 0, false
+	}
+	switch m.kind {
+	case mDimenRef:
+		return e.dimen[m.code], true
+	case mSkipRef:
+		return e.skip[m.code].width, true
+	}
+	return 0, false
 }
 
 // renderVMargin returns the margin the drivers should leave above and below the
@@ -540,6 +628,9 @@ func (e *Engine) renderMargin(fallback float64) float64 {
 func (e *Engine) renderVMargin(fallback float64) float64 {
 	if e.geom != nil {
 		return spToPt(e.geom.top + e.geom.head + e.geom.headsep)
+	}
+	if d, ok := e.classTopMargin(); ok {
+		return spToPt(d)
 	}
 	return fallback
 }
