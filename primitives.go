@@ -1634,7 +1634,9 @@ func (e *Engine) loadMore() {
 	// expanding — at the next non-space token. When that token is a '[', the THEN
 	// tokens are pushed back (a delimited macro there can then read the optional
 	// [label]); otherwise the ELSE tokens are pushed. The peeked token is always
-	// put back, so no input is consumed.
+	// put back, so no input is consumed. The chosen branch is halved for the same
+	// reason \@ifnextchar's is (see halveParamHashes): this stands in for a
+	// \@ifnextchar whose real definition stores the branch with \def first.
 	e.prim("@ifnextbracket", func(e *Engine) {
 		thenToks := e.grabUndelimited()
 		elseToks := e.grabUndelimited()
@@ -1646,8 +1648,32 @@ func (e *Engine) loadMore() {
 			}
 			e.back(t)
 		}
-		e.push(chosen)
+		e.push(halveParamHashes(chosen))
 	})
+	// halveParamHashes applies TeX's ## → # halving to a token list that is about to
+	// be re-inserted as if it had been read as a macro BODY.
+	//
+	// LaTeX's \@ifnextchar does not insert the branch it picked: it stores it first,
+	// ltdefns.dtx —
+	//
+	//	\long\def\@ifnextchar#1#2#3{\let\reserved@d=#1
+	//	  \def\reserved@a{#2}\def\reserved@b{#3}\futurelet\@let@token\@ifnch}
+	//
+	// and \def\reserved@b{#3} SCANS the branch as a macro body, which halves ## a
+	// second time (tex.web §479: a # followed by a # stores one #). Inserting the
+	// branch verbatim, as this primitive did, skips that halving.
+	//
+	// It is not a nicety. keyval is built on it:
+	//
+	//	\def\define@key#1#2{\@ifnextchar[{\KV@def{#1}{#2}}{\long\@namedef{KV@#1@#2}####1}}
+	//
+	// The #### is halved once into \define@key's own body (two # tokens) and a second
+	// time by \@ifnextchar, leaving the one # that \def then reads as the parameter
+	// text #1. Without the second halving the generated macro's parameter text was
+	// ##1, so it bound nothing: \setkeys{fam}{k=VAL} produced <<>> instead of <<VAL>>
+	// and every key VALUE was lost. Checked against real LaTeX, which gives
+	// \long macro:#1-><<#1>> where this engine gave macro:##1-><<#1>>.
+
 	// \@ifnextchar<tok>{THEN}{ELSE}: the general LaTeX look-ahead, now that the
 	// engine has real \ifx-based token comparison. The target token is read
 	// unexpanded; the next non-space input token is peeked (never consumed) and,
@@ -1670,7 +1696,7 @@ func (e *Engine) loadMore() {
 			}
 			e.back(t)
 		}
-		e.push(chosen)
+		e.push(halveParamHashes(chosen))
 	})
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
@@ -1951,14 +1977,36 @@ func (e *Engine) scanOptStar() bool {
 // doIfstar implements LaTeX's \@ifstar#1#2: it grabs the two branch arguments,
 // then peeks the next token — if it is a '*' the star is swallowed and #1 is
 // pushed for execution, otherwise #2 is. This is what makes \section* work.
+// halveParamHashes applies TeX's ## → # halving to a token list re-inserted as a
+// macro body. See the note at \@ifnextchar.
+func halveParamHashes(ts []tok) []tok {
+	out := make([]tok, 0, len(ts))
+	for i := 0; i < len(ts); i++ {
+		t := ts[i]
+		if !t.cs_ && t.cat == catParam && t.ch == '#' && i+1 < len(ts) {
+			if n := ts[i+1]; !n.cs_ && n.cat == catParam && n.ch == '#' {
+				out = append(out, tok{ch: '#', cat: catParam})
+				i++
+				continue
+			}
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// doIfstar implements \@ifstar{STAR}{PLAIN}. ltdefns.dtx builds it ON \@ifnextchar —
+// \def\@ifstar#1{\@ifnextchar *{\@firstoftwo{#1}}} — so in real LaTeX the branch goes
+// through \def\reserved@a{#2} and is halved there. This primitive picks the branch
+// itself, so it has to halve for the same reason (see halveParamHashes).
 func (e *Engine) doIfstar() {
 	yes := e.grabUndelimited()
 	no := e.grabUndelimited()
 	if e.scanOptStar() {
-		e.push(yes)
+		e.push(halveParamHashes(yes))
 		return
 	}
-	e.push(no)
+	e.push(halveParamHashes(no))
 }
 
 // contribute adds top-level vertical material to the main vertical list. A
