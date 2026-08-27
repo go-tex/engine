@@ -765,7 +765,7 @@ func (e *Engine) meaningOf(t tok) *meaning {
 		return e.eq[t.cs]
 	}
 	if t.cat == catActive {
-		return e.eq["~active~"+string(t.ch)]
+		return e.eq[activeName(t.ch)]
 	}
 	return nil
 }
@@ -2496,13 +2496,28 @@ func lower(r rune) rune {
 }
 
 // scanCSName reads the next token and returns the name to define (\def\foo → foo).
+// An active character (catcode 13, e.g. ~) is a legal definition target in TeX —
+// \def~{…} and \let~=\cs both work — so it maps to the same eq key that meaningOf
+// looks it up under; without this an active char scanned here returned "", so the
+// LaTeX kernel's `\let~=\nobreakspace` (the interword tie) defined nothing and ~
+// produced no space at all.
 func (e *Engine) scanCSName() string {
 	t, ok := e.getNext()
-	if !ok || !t.cs_ {
+	if !ok {
 		return ""
 	}
-	return t.cs
+	if t.cs_ {
+		return t.cs
+	}
+	if t.cat == catActive {
+		return activeName(t.ch)
+	}
+	return ""
 }
+
+// activeName is the eq-table key under which an active character's meaning lives.
+// meaningOf reads it and scanCSName writes it, so they must agree.
+func activeName(ch rune) string { return "~active~" + string(ch) }
 
 // scanEquals consumes an optional '='.
 func (e *Engine) scanEquals() {
