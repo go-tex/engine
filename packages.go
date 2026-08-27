@@ -334,6 +334,35 @@ func (e *Engine) realAmsart() bool {
 	return ok
 }
 
+// setClassOptionList records \documentclass's options in \@classoptionslist, and the
+// same list in \@raw@classoptionslist, as ltclass.dtx does on the first class load:
+//
+//	\ifx\@classoptionslist\relax
+//	  \protected@xdef\@classoptionslist{\zap@space#2 \@empty}%
+//	  \gdef\@raw@classoptionslist{#2}%
+//
+// Both start out \relax (see the class kernel), so a second \documentclass — or a
+// \LoadClass from inside a class — leaves the first one's list alone, which is the
+// test the reference makes.
+//
+// A package reads the list back to pick up class options it recognises. Leaving it
+// undefined was not merely a blank: \@for over an undefined control sequence does not
+// iterate over nothing, it SWALLOWS what follows. beamer runs that loop unguarded in
+// \beamer@filterclassoptions and again in \ProcessOptionsBeamer, so any theme built on
+// \ProcessOptionsBeamer — beamerthemesplit, and the fifteen themes that share its shape
+// — took the rest of the document with it.
+//
+// The engine's option scanner has already trimmed each item, which is what \zap@space
+// is there for.
+func (e *Engine) setClassOptionList(opts []string) {
+	if m := e.eq["@classoptionslist"]; m != nil && !(m.kind == mPrim && m.name == "relax") {
+		return // a class list is already recorded: the first one wins
+	}
+	body := charToks(strings.Join(opts, ","))
+	e.define("@classoptionslist", &meaning{kind: mMacro, body: body}, true)
+	e.define("@raw@classoptionslist", &meaning{kind: mMacro, body: body}, true)
+}
+
 // doDocumentClass implements \documentclass[options]{class}: for a non-emulated
 // class it loads class.cls when it can be resolved; for a standard class (and when
 // the file cannot be found) it falls back to the built-in emulation.
@@ -343,7 +372,8 @@ func (e *Engine) doDocumentClass() {
 	if name == "" {
 		return
 	}
-	e.setPtsize(opts) // record 10pt/11pt/12pt for \@ptsize even without the .cls
+	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
+	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back
 	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
 		return

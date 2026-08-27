@@ -106,6 +106,18 @@ const LaTeX2eClassKernel = `
 % and with \@colht undefined the skipped command left \textheight (which IS \vsize
 % here) standing in vertical mode, where it read the FOLLOWING token as its value
 % and set the page height to zero. Every beamer frame then went on one endless page.
+% \@classoptionslist holds the options given to \documentclass, and \@raw@classoptionslist
+% the same list before spaces are stripped. ltclass.dtx initialises BOTH to \relax
+% (\let\@classoptionslist\relax) and \documentclass overwrites them on the first class
+% load; code then tests \ifx\@classoptionslist\relax before iterating.
+%
+% They matter because packages iterate over the list to pick up class options they
+% recognise, and \@for over an UNDEFINED control sequence does not iterate — it
+% swallows what follows. beamer does exactly that, unguarded, in both
+% \beamer@filterclassoptions and \ProcessOptionsBeamer, so a theme built on
+% \ProcessOptionsBeamer took the rest of the document with it.
+\let\@classoptionslist\relax
+\let\@raw@classoptionslist\relax
 \newdimen\@colht
 \newdimen\@colroom
 \newdimen\Gm@lmargin
