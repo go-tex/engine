@@ -320,6 +320,22 @@ func (e *Engine) doGlobal() {
 		e.doSetbox(true)
 	case "catcode":
 		e.doCatcode(true)
+	// \global in front of a LaTeX length command. In TeX a prefix applies to the
+	// assignment it finds after EXPANDING what follows (tex.web §1211 takes the next
+	// non-blank non-relax NON-CALL token), and \setlength is a macro there —
+	// ltlength.dtx: \def\setlength#1#2{#1 #2\relax} — so \global reaches the register
+	// assignment by itself. Here these are primitives, which getXToken does not
+	// expand, so the prefix has to be handed to them.
+	case "setlength":
+		e.doSetlength(false, true)
+	case "addtolength":
+		e.doSetlength(true, true)
+	case "settowidth":
+		e.doSettodim('w', true)
+	case "settoheight":
+		e.doSettodim('h', true)
+	case "settodepth":
+		e.doSettodim('d', true)
 	case "hsize", "vsize", "parindent", "baselineskip":
 		// \global\hsize=… : the engine's own dimension parameters are scoped like
 		// registers now, so the global flag has to reach the assignment or the
@@ -1778,11 +1794,11 @@ func (e *Engine) loadMore() {
 	// advance it (or a \newdimen register / engine parameter); \settoX measure
 	// content typeset as an hbox. See lengths.go.
 	e.prim("newlength", func(e *Engine) { e.doNewlength() })
-	e.prim("setlength", func(e *Engine) { e.doSetlength(false) })
-	e.prim("addtolength", func(e *Engine) { e.doSetlength(true) })
-	e.prim("settowidth", func(e *Engine) { e.doSettodim('w') })
-	e.prim("settoheight", func(e *Engine) { e.doSettodim('h') })
-	e.prim("settodepth", func(e *Engine) { e.doSettodim('d') })
+	e.prim("setlength", func(e *Engine) { e.doSetlength(false, false) })
+	e.prim("addtolength", func(e *Engine) { e.doSetlength(true, false) })
+	e.prim("settowidth", func(e *Engine) { e.doSettodim('w', false) })
+	e.prim("settoheight", func(e *Engine) { e.doSettodim('h', false) })
+	e.prim("settodepth", func(e *Engine) { e.doSettodim('d', false) })
 	// Typed cross-references (see typedrefs.go): hyperref \autoref/\nameref and
 	// cleveref \cref/\Cref, which print the reference type together with the number.
 	e.prim("autoref", func(e *Engine) { e.doAutoref() })
