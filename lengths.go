@@ -60,8 +60,8 @@ func (e *Engine) recordSkippedLength(name string) {
 
 // doSetlength implements \setlength (add=false) and \addtolength (add=true):
 // \setlength{\cmd}{glue}. The value is a full glue, so rubber lengths keep their
-// plus/minus components. Both are group-local (a plain assignment).
-func (e *Engine) doSetlength(add bool) {
+// plus/minus components. Group-local unless \global preceded (see doGlobal).
+func (e *Engine) doSetlength(add, global bool) {
 	target, ok := e.readLengthCS()
 	g := e.readBraceGlue() // read the value regardless, to stay token-synchronised
 	if !ok {
@@ -75,14 +75,14 @@ func (e *Engine) doSetlength(add bool) {
 		e.fail("Missing length register for \\setlength")
 		return
 	}
-	e.assignLength(target, g, add, false)
+	e.assignLength(target, g, add, global)
 }
 
 // doSettodim implements \settowidth/\settoheight/\settodepth: it typesets the
 // {content} argument into an hbox (in its own group, so nothing leaks to the
 // page) and assigns the requested natural dimension to \cmd. which is one of
 // 'w', 'h' or 'd'.
-func (e *Engine) doSettodim(which byte) {
+func (e *Engine) doSettodim(which byte, global bool) {
 	target, ok := e.readLengthCS()
 	list, _ := e.grabHboxList() // sandboxed group; consumed even on a bad target
 	b := hpackSP(list, packNatural, 0)
@@ -103,7 +103,7 @@ func (e *Engine) doSettodim(which byte) {
 	default: // 'w'
 		d = b.width
 	}
-	e.assignLength(target, glueSpec{width: d}, false, false)
+	e.assignLength(target, glueSpec{width: d}, false, global)
 }
 
 // assignLength writes glue g to the length identified by control sequence target
