@@ -285,6 +285,7 @@ type Engine struct {
 	// signal even while a heavy .cls is loading.
 	afterToken       *tok // token saved by \afterassignment, inserted after the next one
 	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
+	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
 	pendingProtected bool // a \protected prefix waiting for the \def it applies to
 	progBpos         int  // e.bpos at the last observed forward progress
 	noProgSteps      int  // expansion steps since e.bpos last advanced
@@ -1078,6 +1079,13 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		if t.noexp {
 			t.noexp = false
+			return t, true
+		}
+		if e.literalActive && t.cat == catActive && !t.cs_ {
+			// Reading a file name: an active character is part of the name, not a
+			// command. Windows 8.3 short paths embed one — "C:/Users/RUNNER~1/…" —
+			// and expanding the active ~ (\nobreakspace) there would truncate the
+			// name at the tilde. Return it raw so scanFileName keeps its character.
 			return t, true
 		}
 		m := e.meaningOf(t)
