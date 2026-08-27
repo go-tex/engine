@@ -361,6 +361,124 @@ func (e *Engine) applyAmsartGeometry(opts []string) {
 	e.vsize = ptToSP(textHeightPc*pica - headAllowance)
 }
 
+// classGeometry is the single-column-equivalent text block and base leading a
+// class format lays its body out with. inkedW is the width of the actual inked
+// text — for a two-column format the two columns' widths summed, WITHOUT the
+// gutter, since that is the width the same amount of body text would occupy in
+// one column and so drives the per-page character budget. textH is the text
+// height and leading the baseline-to-baseline body skip. All three are in points.
+type classGeometry struct{ inkedW, textH, leading float64 }
+
+// applyClassGeometry installs a single-column-equivalent text block and base
+// leading as a persistent floor on the engine, the way applyAmsartGeometry does
+// for amsart. It is the shared tail of applyAcmartGeometry and
+// applyIEEEtranGeometry: both classes are served by the article-shaped emulation
+// (they are neither embedded nor, for the papers that need this, bundled), so
+// nothing else sizes their page. Setting \hsize/\vsize gives the page builder the
+// class's real text block, and setting \baselineskip (and the setspace 1.0
+// reference \baseBaselineskip with it) gives it the class's real body leading —
+// which the emulation would otherwise leave at the size-option default, packing
+// the wrong number of lines onto every page. A later \usepackage{geometry} still
+// wins, because \documentclass runs before it.
+func (e *Engine) applyClassGeometry(g classGeometry) {
+	e.hsize = ptToSP(g.inkedW)
+	e.vsize = ptToSP(g.textH)
+	e.baselineskip = ptToSP(g.leading)
+	e.baseBaselineskip = e.baselineskip
+}
+
+// acmartFormats maps each acmart format option to its single-column-equivalent
+// geometry. The values are the real class's, read from acmart.cls's per-format
+// \geometry{...} block (\RequirePackage{geometry}) and its base size:
+//
+//   - The paper is US letter (612×792pt) except acmsmall/acmcp, which acmart sets
+//     to 6.75in×10in (486×720pt), and acmlarge, still letter.
+//   - inkedW = \textwidth for a single-column format, or \textwidth−\columnsep
+//     (the two columns' combined text width) for a two-column one.
+//   - textH and leading are measured from the reference PDFs the class produces,
+//     which fold in geometry's includeheadfoot/heightrounded rounding and
+//     setspace's \onehalfspacing (manuscript) that a bare arithmetic would miss.
+//
+// acmart's body size is 9pt for manuscript/acmtog/sigconf/siggraph/sigchi/acmcp
+// and 10pt for acmsmall/acmlarge/sigplan/acmengage (acmart.cls's \ACM@fontsize
+// table); the leading below already reflects that. The default format, when the
+// document names none, is manuscript — acmart.cls's own default.
+var acmartFormats = map[string]classGeometry{
+	// manuscript: single column, letterpaper, 9pt body under \onehalfspacing —
+	// a wide-spaced review layout. \textwidth≈465pt, \textheight≈585pt.
+	"manuscript": {inkedW: 465, textH: 585, leading: 13.5},
+	// Single-column journal formats. acmsmall/acmcp: 6.75in×10in paper,
+	// \textwidth=486−2·46=394pt. acmlarge: letter, \textwidth=612−2·81=450pt. 10pt.
+	"acmsmall": {inkedW: 394, textH: 588, leading: 12},
+	"acmcp":    {inkedW: 394, textH: 588, leading: 12},
+	"acmlarge": {inkedW: 450, textH: 600, leading: 12},
+	// Two-column formats: inkedW = \textwidth−\columnsep. sigconf/siggraph/sigchi/
+	// acmtog set a 9pt body (11pt leading); sigplan/acmengage a 10pt body (12pt).
+	"acmtog":    {inkedW: 484, textH: 645, leading: 11}, // 508−24
+	"sigconf":   {inkedW: 480, textH: 644, leading: 11}, // 504−24
+	"siggraph":  {inkedW: 480, textH: 644, leading: 11},
+	"sigchi":    {inkedW: 480, textH: 635, leading: 11},
+	"sigplan":   {inkedW: 480, textH: 648, leading: 12},
+	"acmengage": {inkedW: 480, textH: 644, leading: 12},
+	// sigchi-a is a landscape, wide-left-margin single-text-column oddity; the
+	// two-column budget is the closest bounded approximation.
+	"sigchi-a": {inkedW: 480, textH: 644, leading: 11},
+}
+
+// applyAcmartGeometry gives the emulated acmart class its real text block and
+// base leading. acmart is neither embedded nor (for the papers that need this)
+// bundled, so \documentclass{acmart} falls to the article-shaped emulation, which
+// keeps the plain-TeX 6.5in×8.9in block and the 12pt size-default leading — the
+// wrong geometry for every acmart format, and the measured driver of acmart's
+// page-count divergence. The format is selected by a bare option keyword
+// (manuscript, sigconf, …); acmart's own default when none is given is manuscript.
+// Two-column formats are still rendered single-column (columns are separately
+// scoped), but the single-column-equivalent block above makes the page count
+// right regardless.
+func (e *Engine) applyAcmartGeometry(opts []string) {
+	g := acmartFormats["manuscript"] // acmart.cls's default format
+	for _, o := range opts {
+		if f, ok := acmartFormats[strings.TrimSpace(o)]; ok {
+			g = f
+		}
+	}
+	e.applyClassGeometry(g)
+}
+
+// applyIEEEtranGeometry gives the emulated IEEEtran class its real text block and
+// base leading. Like acmart, IEEEtran is served by the article emulation when the
+// paper does not bundle IEEEtran.cls, so its compact two-column block is otherwise
+// lost to the 6.5in×8.9in default and it over-paginates.
+//
+// The default mode is journal: \textwidth=43pc with \columnsep=1pc, so the two
+// columns' combined inked width is 42pc=504pt; \textheight is 58 lines × 12pt =
+// 696pt (IEEEtran.cls quantises the height to a whole number of lines per column);
+// \normalsize at 10pt is 10pt/12pt. The conference mode uses a 9.25in (668pt) text
+// height; technote is a 9pt-bodied journal, so its leading is tighter. The paper
+// size (a4paper/letterpaper) does not change \textwidth, which IEEEtran fixes at
+// 43pc, so it is not read here.
+func (e *Engine) applyIEEEtranGeometry(opts []string) {
+	g := classGeometry{inkedW: 504, textH: 696, leading: 12} // journal, the default
+	for _, o := range opts {
+		switch strings.TrimSpace(o) {
+		case "conference":
+			g.textH = 668 // 9.25in conference text height
+		case "technote":
+			g.leading = 11 // 9pt body
+		}
+	}
+	e.applyClassGeometry(g)
+}
+
+// classFileResolvable reports whether name's .cls can be found on the search path
+// (embedded set or a file the paper bundles). It gates the emulation-geometry
+// floors for acmart/IEEEtran: when the real class IS resolvable it is loaded and
+// sizes its own page, so the floor must not pre-empt it.
+func (e *Engine) classFileResolvable(name string) bool {
+	_, _, ok := e.findTeXFile(name, []string{".cls"})
+	return ok
+}
+
 // publish writes the layout back into the LaTeX length registers a class reads.
 //
 // \hsize and \vsize are engine parameters (\textwidth and \textheight are \let to
