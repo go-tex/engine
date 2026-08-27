@@ -238,3 +238,48 @@ func TestTabularConditionalInsideBraces(t *testing.T) {
 		t.Errorf("tabular text %q kept a false branch", got)
 	}
 }
+
+// A tabular's optional [pos] vertical-placement group (\begin{tabular}[t]{c}) must
+// be consumed before the column spec. Regression: scanColSpec met the '[' where it
+// expected '{', returned a zero-column spec, and collectTabularBody then dropped the
+// whole body — silently erasing, among other things, the \maketitle author block
+// (LaTeX's \@maketitle wraps \@author in \begin{tabular}[t]{c}…\end{tabular}). Every
+// placement letter must render its cells.
+func TestTabularOptionalPlacement(t *testing.T) {
+	for _, pos := range []string{"[t]", "[b]", "[c]", "[ t ]"} {
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		e.hsize = 500 * unity
+		if _, err := e.Run(
+			`\begin{tabular}` + pos + `{cc}` +
+				`CELLA & CELLB\\ ROWA & ROWB\end{tabular}AFTER\par`); err != nil {
+			t.Fatalf("pos %q: %v", pos, err)
+		}
+		got := mvlText(e.mvl)
+		for _, want := range []string{"CELLA", "CELLB", "ROWA", "ROWB", "AFTER"} {
+			if !contains(got, want) {
+				t.Errorf("tabular%s text %q missing %q (placement arg dropped the body)", pos, got, want)
+			}
+		}
+	}
+}
+
+// tabularx accepts the same optional [pos] before its {width}: \begin{tabularx}[t]{W}{spec}.
+func TestTabularxOptionalPlacement(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.hsize = 500 * unity
+	if _, err := e.Run(
+		`\begin{tabularx}[t]{200pt}{X}` +
+			`CELLX\end{tabularx}AFTER\par`); err != nil {
+		t.Fatal(err)
+	}
+	got := mvlText(e.mvl)
+	for _, want := range []string{"CELLX", "AFTER"} {
+		if !contains(got, want) {
+			t.Errorf("tabularx[t] text %q missing %q", got, want)
+		}
+	}
+}

@@ -90,8 +90,17 @@ type tabBuilt struct {
 // booktabs \toprule/\midrule/\bottomrule/\cmidrule) rather than a data row.
 func (b tabBuilt) isRule() bool { return b.hline || b.cline || b.brule || b.bcmid }
 
-// doTabular typesets a tabular environment onto the current list.
+// doTabular typesets a tabular environment onto the current list. The syntax is
+// \begin{tabular}[pos]{cols}: the optional [t]/[b]/[c] vertical-placement group
+// precedes the column spec and MUST be consumed first. Without this, scanColSpec
+// would meet the '[' where it expects the spec's opening '{', return an empty
+// (zero-column) spec, and hand the '[pos]{cols}' preamble to collectTabularBody —
+// which, with no columns, drops the entire table body (LaTeX's \maketitle wraps
+// the author block in \begin{tabular}[t]{c}…\end{tabular}, so every affiliation
+// line silently vanished). Placement is a whole-box vertical alignment the engine
+// does not model, so the group is scanned and discarded.
 func (e *Engine) doTabular() {
+	e.scanOptBracketToks() // optional [t]/[b]/[c] placement, before the column spec
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("tabular")
 	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
@@ -104,6 +113,7 @@ func (e *Engine) doTabular() {
 // have been rewritten into ordinary p{} columns the rest of the tabular machinery
 // (rules, \\, &, \multicolumn, \multirow) is reused unchanged.
 func (e *Engine) doTabularx() {
+	e.scanOptBracketToks() // optional [t]/[b]/[c] placement, before the {width}
 	width := e.readBraceDimen()
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("tabularx")
