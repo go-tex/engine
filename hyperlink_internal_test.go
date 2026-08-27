@@ -321,7 +321,7 @@ func TestInternalLinkVerticalPaths(t *testing.T) {
 	}
 
 	// paintVListSP: rendering the vbox emits both anchors.
-	svg := renderBoxSVG(vb, 2, 2, spMock{}, "white")
+	svg := renderBoxSVG(vb, 2, 2, 0, 0, spMock{}, "white")
 	if !contains(svg, `<a href="#v">`) || !contains(svg, `<g id="v">`) {
 		t.Errorf("vlist SVG missing anchors: %s", svg)
 	}

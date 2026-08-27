@@ -35,9 +35,13 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 	size := float64(ef.sizePt())
 	doc := pdfkit.New(pdfkit.Options{})
 	vmargin := e.renderVMargin(margin)
+	paperW, paperH, _ := e.paperSizePt()
 	for _, page := range e.Pages() {
 		pw := spToPt(page.width) + 2*margin
 		ph := spToPt(page.height+page.depth) + 2*vmargin
+		if paperW > 0 && paperH > 0 {
+			pw, ph = paperW, paperH
+		}
 		p := doc.AddPage(pdfkit.NewPageSize(pw, ph))
 		p.SetFont(face, size)
 		d := &pdfDraw{p: p, face: face, size: size, cur: size, pageH: ph}

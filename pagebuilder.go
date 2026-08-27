@@ -246,9 +246,10 @@ func (e *Engine) doVsplit() *boxNode {
 func (e *Engine) RenderPages(margin float64) []string {
 	pages := e.Pages()
 	vmargin := e.renderVMargin(margin)
+	paperW, paperH, _ := e.paperSizePt()
 	out := make([]string, len(pages))
 	for i, p := range pages {
-		out[i] = renderBoxSVG(p, margin, vmargin, e.renderFont(), e.pageFill())
+		out[i] = renderBoxSVG(p, margin, vmargin, paperW, paperH, e.renderFont(), e.pageFill())
 	}
 	return out
 }

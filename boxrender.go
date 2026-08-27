@@ -30,7 +30,7 @@ func f(v float64) string {
 // RenderBox renders box register i to an SVG string with a uniform margin (pt).
 // Empty if the register is void.
 func (e *Engine) RenderBox(i int, margin float64) string {
-	return renderBoxSVG(e.getBox(i), margin, margin, e.renderFont(), e.pageFill())
+	return renderBoxSVG(e.getBox(i), margin, margin, 0, 0, e.renderFont(), e.pageFill())
 }
 
 // pageFill returns the SVG/CSS background colour for a page: the \pagecolor when
@@ -53,7 +53,8 @@ func (e *Engine) Page() *boxNode {
 
 // RenderPage renders the main vertical list to an SVG page with the given margin.
 func (e *Engine) RenderPage(margin float64) string {
-	return renderBoxSVG(e.Page(), margin, e.renderVMargin(margin), e.renderFont(), e.pageFill())
+	pw, ph, _ := e.paperSizePt()
+	return renderBoxSVG(e.Page(), margin, e.renderVMargin(margin), pw, ph, e.renderFont(), e.pageFill())
 }
 
 // renderBoxSVG paints a packed box onto an SVG sized to the box plus its margins
@@ -62,12 +63,18 @@ func (e *Engine) RenderPage(margin float64) string {
 // are equal unless a class asks for a page whose side and top margins differ.
 // font (may be nil) draws character glyphs; bg is the page-background colour
 // ("white" unless \pagecolor set one).
-func renderBoxSVG(b *boxNode, margin, vmargin float64, font fontFace, bg string) string {
+func renderBoxSVG(b *boxNode, margin, vmargin, paperW, paperH float64, font fontFace, bg string) string {
 	if b == nil {
 		return ""
 	}
+	// A stated paper size wins: the page is the paper, not the text block plus a
+	// margin (see paperSizePt). Zero means the document never said, and the page is
+	// derived from the content as before.
 	pageW := spToPt(b.width) + 2*margin
 	pageH := spToPt(b.height+b.depth) + 2*vmargin
+	if paperW > 0 && paperH > 0 {
+		pageW, pageH = paperW, paperH
+	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%spt" height="%spt" viewBox="0 0 %s %s">`,
 		f(pageW), f(pageH), f(pageW), f(pageH))
