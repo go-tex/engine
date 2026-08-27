@@ -3,7 +3,11 @@
 
 package engine
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // runGeom builds a LaTeX engine, runs src in the preamble and returns the engine
 // so a test can inspect the resulting \hsize / \vsize / geometry state.
@@ -467,5 +471,137 @@ func TestGeometryPublishesPageLengths(t *testing.T) {
 		if got := e.dimen[m.code]; got != c.want {
 			t.Errorf(`\%s = %d, want %d`, c.name, got, c.want)
 		}
+	}
+}
+
+// ── acmart / IEEEtran emulation geometry ─────────────────────────────────────
+//
+// acmart and IEEEtran are not embedded, and the papers that need this do not
+// bundle the .cls, so they fall to the article emulation. applyAcmartGeometry /
+// applyIEEEtranGeometry give the page builder the real class's single-column-
+// equivalent text block and base leading; these tests pin the resulting
+// \hsize / \vsize / \baselineskip, source them against acmartFormats, and check
+// the class file, when resolvable, is loaded instead of the floor being applied.
+
+func TestAcmartManuscriptGeometry(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[manuscript,screen,review]{acmart}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("acmart manuscript: %v", err)
+	}
+	g := acmartFormats["manuscript"]
+	if e.hsize != ptToSP(g.inkedW) || e.vsize != ptToSP(g.textH) || e.baselineskip != ptToSP(g.leading) {
+		t.Errorf("manuscript block = %d×%d bls %d, want %d×%d bls %d",
+			e.hsize, e.vsize, e.baselineskip, ptToSP(g.inkedW), ptToSP(g.textH), ptToSP(g.leading))
+	}
+	if e.baseBaselineskip != e.baselineskip {
+		t.Errorf("baseBaselineskip = %d, want %d (the setspace 1.0 reference)", e.baseBaselineskip, e.baselineskip)
+	}
+}
+
+func TestAcmartDefaultFormatIsManuscript(t *testing.T) {
+	// With no format option acmart defaults to manuscript, so the geometry must
+	// match the manuscript entry exactly.
+	e, err := compile([]byte(`\documentclass{acmart}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("acmart default: %v", err)
+	}
+	g := acmartFormats["manuscript"]
+	if e.hsize != ptToSP(g.inkedW) || e.vsize != ptToSP(g.textH) || e.baselineskip != ptToSP(g.leading) {
+		t.Errorf("default block = %d×%d bls %d, want manuscript %d×%d bls %d",
+			e.hsize, e.vsize, e.baselineskip, ptToSP(g.inkedW), ptToSP(g.textH), ptToSP(g.leading))
+	}
+}
+
+func TestAcmartSigconfGeometry(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[sigconf,screen]{acmart}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("acmart sigconf: %v", err)
+	}
+	g := acmartFormats["sigconf"]
+	if e.hsize != ptToSP(g.inkedW) || e.vsize != ptToSP(g.textH) || e.baselineskip != ptToSP(g.leading) {
+		t.Errorf("sigconf block = %d×%d bls %d, want %d×%d bls %d",
+			e.hsize, e.vsize, e.baselineskip, ptToSP(g.inkedW), ptToSP(g.textH), ptToSP(g.leading))
+	}
+}
+
+func TestAcmartGeometryPackageOverrides(t *testing.T) {
+	// A paper's own \usepackage{geometry} must win over the acmart floor, since
+	// \documentclass runs before \usepackage.
+	e, err := compile([]byte(`\documentclass[sigconf]{acmart}\usepackage[margin=1in]{geometry}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("acmart+geometry: %v", err)
+	}
+	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.hsize != want {
+		t.Errorf("hsize = %d, want %d (geometry wins)", e.hsize, want)
+	}
+	if want := texSP(t, "11in") - 2*texSP(t, "1in"); e.vsize != want {
+		t.Errorf("vsize = %d, want %d (geometry wins)", e.vsize, want)
+	}
+}
+
+func TestIEEEtranJournalGeometry(t *testing.T) {
+	// The real paper writes "10 pt" with a space, which is not a size keyword; the
+	// journal default geometry must still apply.
+	e, err := compile([]byte(`\documentclass[letterpaper, 10 pt]{IEEEtran}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("IEEEtran journal: %v", err)
+	}
+	if e.hsize != ptToSP(504) || e.vsize != ptToSP(696) || e.baselineskip != ptToSP(12) {
+		t.Errorf("journal block = %d×%d bls %d, want %d×%d bls %d",
+			e.hsize, e.vsize, e.baselineskip, ptToSP(504), ptToSP(696), ptToSP(12))
+	}
+}
+
+func TestIEEEtranConferenceGeometry(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[conference]{IEEEtran}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("IEEEtran conference: %v", err)
+	}
+	if e.vsize != ptToSP(668) {
+		t.Errorf("conference vsize = %d, want %d (9.25in)", e.vsize, ptToSP(668))
+	}
+	if e.hsize != ptToSP(504) {
+		t.Errorf("conference hsize = %d, want %d", e.hsize, ptToSP(504))
+	}
+}
+
+func TestIEEEtranTechnoteGeometry(t *testing.T) {
+	e, err := compile([]byte(`\documentclass[technote]{IEEEtran}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("IEEEtran technote: %v", err)
+	}
+	if e.baselineskip != ptToSP(11) {
+		t.Errorf("technote leading = %d, want %d (9pt body)", e.baselineskip, ptToSP(11))
+	}
+}
+
+func TestClassFileResolvable(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatalf("buildEngine: %v", err)
+	}
+	if !e.classFileResolvable("amsart") {
+		t.Error("amsart should be resolvable (it is embedded)")
+	}
+	if e.classFileResolvable("acmart") {
+		t.Error("acmart should not be resolvable (it is not embedded)")
+	}
+}
+
+func TestAcmartRealClassNotOverriddenByFloor(t *testing.T) {
+	// When the paper bundles acmart.cls the real class is loaded and sizes its own
+	// page; the emulation floor must NOT be applied. A minimal stand-in on the
+	// search path is enough to exercise that branch.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "acmart.cls"), []byte(`\LoadClass{article}\endinput`), 0o644); err != nil {
+		t.Fatalf("write acmart.cls: %v", err)
+	}
+	t.Setenv("GOTEX_TEXMF", dir)
+	e, err := compile([]byte(`\documentclass[manuscript]{acmart}\begin{document}x\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("acmart with bundled cls: %v", err)
+	}
+	if e.hsize == ptToSP(acmartFormats["manuscript"].inkedW) {
+		t.Error("emulation floor was applied even though acmart.cls was resolvable")
 	}
 }

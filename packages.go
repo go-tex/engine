@@ -393,6 +393,21 @@ func (e *Engine) doDocumentClass() {
 			return // GOTEX_AMSART=0 forces the built-in emulation
 		}
 	}
+	if (name == "acmart" || name == "IEEEtran") && !e.classFileResolvable(name) {
+		// acmart and IEEEtran are not embedded, and when the paper does not bundle
+		// the .cls they fall to the article-shaped emulation, which sizes their page
+		// wrong (the plain-TeX text block and the size-default leading). Give the page
+		// builder the real class's single-column-equivalent text block and base
+		// leading as a persistent floor, the way the amsart branch above does, so the
+		// page count is right even though the two-column formats render single-column.
+		// When the class IS resolvable it is loaded below and sizes its own page.
+		if name == "acmart" {
+			e.applyAcmartGeometry(opts)
+		} else {
+			e.applyIEEEtranGeometry(opts)
+		}
+		return
+	}
 	if emulatedClasses[name] || emulateOnly(name) {
 		return // use the built-in emulation for a standard class
 	}
