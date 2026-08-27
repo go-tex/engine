@@ -368,7 +368,7 @@ func (e *Engine) setClassOptionList(opts []string) {
 // the file cannot be found) it falls back to the built-in emulation.
 func (e *Engine) doDocumentClass() {
 	opts := e.scanBracketList()
-	name := e.readBraceName()
+	name := e.readBraceNameX()
 	if name == "" {
 		return
 	}
@@ -421,7 +421,7 @@ func (e *Engine) doDocumentClass() {
 // exists (and is not on the never-load list), else left to the stubs.
 func (e *Engine) doUsepackageLoad() {
 	opts := e.scanBracketList()
-	names := e.readBraceName()
+	names := e.readBraceNameX()
 	for _, raw := range strings.Split(names, ",") {
 		name := strings.TrimSpace(raw)
 		if name == "" {
@@ -449,7 +449,7 @@ func (e *Engine) doLoadClass(withOptions bool) {
 			opts = append(opts, fr.passed...)
 		}
 	}
-	name := e.readBraceName()
+	name := e.readBraceNameX()
 	if name == "" {
 		return
 	}
