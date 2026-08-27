@@ -53,6 +53,30 @@ func TestEndinputStopsFile(t *testing.T) {
 	}
 }
 
+// A file name may contain a literal ~ — Windows 8.3 short paths embed one
+// ("C:/Users/RUNNER~1/AppData/Local/Temp/…"), which is how t.TempDir() reports
+// itself on the CI runners. The active ~ is LaTeX's \nobreakspace tie, but inside
+// a file name it is a character, not a command: the scanner must read it literally
+// rather than expanding it and truncating the name at the tilde. This exercises
+// the same path on every OS by putting a ~ in a directory name.
+func TestInputTildeInFileName(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "runner~1")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	inc := filepath.ToSlash(filepath.Join(dir, "inc.tex"))
+	os.WriteFile(inc, []byte(`\count5=42 `), 0644)
+	e := New()
+	e.LoadLaTeX() // LaTeX makes ~ active; the bug only bites when ~ has a meaning
+	got, err := e.Run(`\input ` + inc + ` \message{\the\count5}`)
+	if err != nil {
+		t.Fatalf("err: %v (the ~ in the path must be read literally, not expanded)", err)
+	}
+	if trimNL(got) != "42" {
+		t.Errorf("got %q want 42", trimNL(got))
+	}
+}
+
 func TestFontPrimitiveSelectsFont(t *testing.T) {
 	font := "/System/Library/Fonts/Supplemental/Georgia.ttf"
 	if _, err := os.Stat(font); err != nil {

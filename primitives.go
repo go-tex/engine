@@ -1462,6 +1462,27 @@ func (e *Engine) loadMore() {
 	// \empty and \space are ordinary macros, defined as in plain TeX.
 	e.eq["empty"] = &meaning{kind: mMacro}
 	e.eq["space"] = &meaning{kind: mMacro, body: []tok{chTok(' ', catSpace)}}
+	// The active ~ is TeX's interword tie: an UNBREAKABLE interword space, and one
+	// of the most common tokens in real documents ("Section~\ref", "Figure~2",
+	// "et~al.", "Theorem~1"). Plain TeX defines it \def~{\penalty\@M\ } — an
+	// infinite (\@M = 10000) break penalty followed by a control space, i.e. an
+	// interword glue that no line break may fall on. LaTeX \let~=\nobreakspace to
+	// the same effect. Its meaning lives in the active-char slot that meaningOf
+	// already consults, so getXToken expands it like any macro; a document may
+	// still redefine ~ (scanCSName now names it). Without this the active ~ had no
+	// meaning at all: it resolved to nothing and was dropped by the main-loop
+	// dispatch, so "Section~1" typeset as "Section1" with the words jammed.
+	// LaTeX declares \nobreakspace robust (\DeclareRobustCommand), so ~ is a
+	// PROTECTED macro: it acts in the stomach but does NOT expand inside \message /
+	// \edef / \write, where an unexpanded active ~ prints as the character "~"
+	// (what real TeX shows for \message{~}). Without the flag the tie would expand
+	// its \penalty… body into every moving argument that contains a ~.
+	e.eq[activeName('~')] = &meaning{kind: mMacro, protected: true, body: []tok{
+		csTok("penalty"),
+		chTok('1', catOther), chTok('0', catOther), chTok('0', catOther),
+		chTok('0', catOther), chTok('0', catOther),
+		csTok(" "), // control space: the interword glue
+	}}
 	e.prim("par", func(e *Engine) { e.suppressParskip = false; e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })

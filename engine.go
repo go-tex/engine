@@ -285,6 +285,7 @@ type Engine struct {
 	// signal even while a heavy .cls is loading.
 	afterToken       *tok // token saved by \afterassignment, inserted after the next one
 	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
+	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
 	pendingProtected bool // a \protected prefix waiting for the \def it applies to
 	progBpos         int  // e.bpos at the last observed forward progress
 	noProgSteps      int  // expansion steps since e.bpos last advanced
@@ -765,7 +766,7 @@ func (e *Engine) meaningOf(t tok) *meaning {
 		return e.eq[t.cs]
 	}
 	if t.cat == catActive {
-		return e.eq["~active~"+string(t.ch)]
+		return e.eq[activeName(t.ch)]
 	}
 	return nil
 }
@@ -1078,6 +1079,13 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		if t.noexp {
 			t.noexp = false
+			return t, true
+		}
+		if e.literalActive && t.cat == catActive && !t.cs_ {
+			// Reading a file name: an active character is part of the name, not a
+			// command. Windows 8.3 short paths embed one — "C:/Users/RUNNER~1/…" —
+			// and expanding the active ~ (\nobreakspace) there would truncate the
+			// name at the tilde. Return it raw so scanFileName keeps its character.
 			return t, true
 		}
 		m := e.meaningOf(t)
@@ -2496,13 +2504,28 @@ func lower(r rune) rune {
 }
 
 // scanCSName reads the next token and returns the name to define (\def\foo → foo).
+// An active character (catcode 13, e.g. ~) is a legal definition target in TeX —
+// \def~{…} and \let~=\cs both work — so it maps to the same eq key that meaningOf
+// looks it up under; without this an active char scanned here returned "", so the
+// LaTeX kernel's `\let~=\nobreakspace` (the interword tie) defined nothing and ~
+// produced no space at all.
 func (e *Engine) scanCSName() string {
 	t, ok := e.getNext()
-	if !ok || !t.cs_ {
+	if !ok {
 		return ""
 	}
-	return t.cs
+	if t.cs_ {
+		return t.cs
+	}
+	if t.cat == catActive {
+		return activeName(t.ch)
+	}
+	return ""
 }
+
+// activeName is the eq-table key under which an active character's meaning lives.
+// meaningOf reads it and scanCSName writes it, so they must agree.
+func activeName(ch rune) string { return "~active~" + string(ch) }
 
 // scanEquals consumes an optional '='.
 func (e *Engine) scanEquals() {

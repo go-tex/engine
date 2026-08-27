@@ -136,6 +136,12 @@ func (e *Engine) endInput() {
 // its modules with \input{pgfmodule\pgf@temp.code.tex}, so reading the name
 // literally finds no file at all and the module silently never loads.
 func (e *Engine) scanFileName() string {
+	// A file name is read with expansion (so \input{pgfmodule\pgf@temp.code.tex}
+	// works), but an active character in the name is part of the name, not the
+	// \nobreakspace tie: Windows 8.3 short paths embed a ~ ("C:/Users/RUNNER~1/…").
+	// Suppress active-char expansion for the length of the scan.
+	defer func(prev bool) { e.literalActive = prev }(e.literalActive)
+	e.literalActive = true
 	e.skipOptSpace()
 	t, ok := e.getXToken()
 	if !ok {
