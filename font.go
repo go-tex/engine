@@ -51,7 +51,11 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	if !ok {
 		return 0, 0, 0
 	}
-	w := float64(o.fc.AdvanceIndex(gid))
+	// Unrounded advance: AdvanceIndexUnits returns the font-unit advance, which we
+	// scale to points ourselves. AdvanceIndex would round to a whole pixel first,
+	// which at a 10pt design size zeroes sub-pixel fractions and inflates text width
+	// (~+1.7% on kern-rich runs), throwing off the first line-breaks of a paragraph.
+	w := o.fc.AdvanceIndexUnits(gid) * o.fc.Scale()
 	segs, _ := o.fc.GlyphOutline(gid)
 	scale := float64(o.px) / o.upem
 	var minY, maxY float64
@@ -120,7 +124,13 @@ func (o *OpenTypeFont) spaceSP() glueSpec {
 
 func (o *OpenTypeFont) glyphPathAt(r rune) string { return o.glyphPath(r) }
 
-func (o *OpenTypeFont) kernSP(prev, cur rune) int { return ptToSP(float64(o.fc.Kern(prev, cur))) }
+// kernSP returns the inter-character kern in scaled points. It uses KernUnits (the
+// unrounded font-unit kern) scaled to points rather than Kern, which rounds to a
+// whole pixel first — at a 10pt design size that whole-pixel round drops sub-pixel
+// kerns to zero, widening kern-rich text and diverging from real LaTeX line-breaks.
+func (o *OpenTypeFont) kernSP(prev, cur rune) int {
+	return ptToSP(o.fc.KernUnits(prev, cur) * o.fc.Scale())
+}
 
 func (o *OpenTypeFont) sizePt() int { return o.px }
 
