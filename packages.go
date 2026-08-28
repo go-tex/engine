@@ -59,7 +59,8 @@ func (e *Engine) texInputDirs() []string {
 }
 
 // findTeXFile resolves name (with one of exts appended when it has no extension)
-// against the search path and the embedded base set. It returns the file bytes and
+// against the files the document has written, the search path, and the embedded base
+// set, in that order. It returns the file bytes and
 // a display path.
 func (e *Engine) findTeXFile(name string, exts []string) ([]byte, string, bool) {
 	var candidates []string
@@ -71,6 +72,12 @@ func (e *Engine) findTeXFile(name string, exts []string) ([]byte, string, bool) 
 		}
 	}
 	for _, c := range candidates {
+		// A file the document wrote itself wins over anything on disk: beamer reads
+		// back \jobname.vrb, and a stale copy left by an earlier run would render
+		// the previous document's frame (see writestreams.go).
+		if data, ok := e.writtenTeXFile(c); ok {
+			return data, c, true
+		}
 		for _, d := range e.texInputDirs() {
 			if data, err := os.ReadFile(filepath.Join(d, c)); err == nil {
 				return data, filepath.Join(d, c), true

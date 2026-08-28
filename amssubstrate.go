@@ -139,23 +139,9 @@ func (e *Engine) loadAMSPrims() {
 	//     this takes any integer, as the neighbouring \closeout already does.
 	//   - TeX appends a whatsit to the current list and acts on it at \shipout unless
 	//     \immediate precedes; nothing is written here either way, so no node is made.
-	e.prim("openout", func(e *Engine) {
-		e.scanInt()
-		e.scanEquals()
-		e.scanFileName()
-	})
-	e.prim("closeout", func(e *Engine) { e.scanInt() })
-	e.prim("write", func(e *Engine) {
-		e.scanInt()
-		e.skipOptSpace()
-		if t, ok := e.getNext(); ok {
-			if t.cat == catBegin && !t.cs_ {
-				e.grabGroup()
-			} else {
-				e.back(t)
-			}
-		}
-	})
+	e.prim("openout", func(e *Engine) { e.doOpenout() })
+	e.prim("closeout", func(e *Engine) { e.doCloseout() })
+	e.prim("write", func(e *Engine) { e.doWrite() })
 	// mode conditionals. During class load and normal vertical/horizontal text the
 	// engine is never in math mode; \ifhmode/\ifvmode track whether a paragraph is
 	// open, \ifinner is always outer, and \ifvoid/\ifhbox/\ifvbox query a box
