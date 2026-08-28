@@ -288,6 +288,8 @@ type Engine struct {
 	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
 	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
 	pendingProtected bool // a \protected prefix waiting for the \def it applies to
+	pendingLong      bool // a \long prefix is waiting for the \def it applies to
+	scanningNonLong  bool // arguments being read for a macro that is NOT \long (§392)
 	progBpos         int  // e.bpos at the last observed forward progress
 	noProgSteps      int  // expansion steps since e.bpos last advanced
 	tightLimit       int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
@@ -364,6 +366,12 @@ type meaning struct {
 	// \special), which is how a macro survives being written into a token list
 	// and runs later instead. See doProtected.
 	protected bool
+	// long marks a \long macro: one whose arguments may contain \par. tex.web keeps
+	// it in the macro's own command code (§4209-4212: call / long_call), reads it back
+	// at every call (§391: long_state := eq_type(cur_cs)) and refuses a \par in an
+	// argument when it is absent (§392). It is part of the meaning, so \ifx separates
+	// \long\def\a{} from \def\a{} and \meaning prints it.
+	long bool
 	// mathChar marks a \mathchardef constant (as against \chardef): the two read as
 	// the same integer but are different meanings to \ifx and \meaning.
 	mathChar bool
@@ -1125,6 +1133,13 @@ func (e *Engine) getXToken() (tok, bool) {
 // expandMacro matches the macro's parameters against the input and pushes the
 // substituted body.
 func (e *Engine) expandMacro(m *meaning) {
+	// tex.web §391 reads the macro's own long-ness back at every call
+	// (long_state := eq_type(cur_cs)) and §392 refuses a \par in an argument when it
+	// is absent. The flag is set around the argument scan only.
+	savedNonLong := e.scanningNonLong
+	e.scanningNonLong = !m.long
+	defer func() { e.scanningNonLong = savedNonLong }()
+
 	var args [][]tok
 	if m.optArg && len(m.params) > 0 {
 		// #1 is optional: read a bracketed [..] argument if present, else the
@@ -1258,6 +1273,9 @@ func (e *Engine) grabUndelimited() []tok {
 	if !ok {
 		return nil
 	}
+	if e.parEndsArgument(t) {
+		return nil
+	}
 	// An UNDELIMITED argument takes exactly one token and cannot run away, so the
 	// file-end sentinels are NOT special here — they are ordinary control sequences
 	// that LaTeX passes around by name. Refusing them broke the kernel's own
@@ -1275,6 +1293,29 @@ func (e *Engine) grabUndelimited() []tok {
 		return e.grabGroup()
 	}
 	return []tok{t}
+}
+
+// parEndsArgument implements tex.web §392: a \par token inside the argument of a
+// macro that is not \long is a RUNAWAY. §396 reports "Paragraph ended before \x was
+// complete", puts the \par back (back_error) and abandons the call.
+//
+// This is not pedantry about an error message: the check is TeX's own runaway
+// DETECTOR. Without it an argument that has lost its closing brace is scanned on and
+// on until some generic limit stops it, and everything in between is swallowed. TeX
+// stops at the end of the paragraph, where the mistake actually is.
+//
+// The call is abandoned through the same argRunaway path a delimited runaway uses.
+func (e *Engine) parEndsArgument(t tok) bool {
+	if !e.scanningNonLong || !t.cs_ || t.cs != "par" {
+		return false
+	}
+	e.back(t) // back_error: the \par is put back, not consumed
+	e.argRunaway = true
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS["Paragraph ended before argument was complete"]++
+	return true
 }
 
 // isFileEndSentinel reports whether t is one of the control sequences the splicer
@@ -1424,6 +1465,12 @@ func (e *Engine) grabGroup() []tok {
 	for {
 		t, ok := e.getNext()
 		if !ok {
+			return g
+		}
+		// tex.web §392 tests every token of the parameter, and it tests it BEFORE
+		// deciding whether the token opens a group — so a \par buried inside braces
+		// is caught too, not just one at the top level of the argument.
+		if e.parEndsArgument(t) {
 			return g
 		}
 		if t.cat == catBegin && !t.cs_ {

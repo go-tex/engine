@@ -195,9 +195,10 @@ func (e *Engine) doDef(global, expandBody bool) {
 		body = e.expandList(body)
 	}
 	protected := e.pendingProtected
-	e.pendingProtected = false
+	long := e.pendingLong
+	e.pendingProtected, e.pendingLong = false, false
 	if name != "" {
-		e.define(name, &meaning{kind: mMacro, params: params, body: body, protected: protected}, global)
+		e.define(name, &meaning{kind: mMacro, params: params, body: body, protected: protected, long: long}, global)
 	}
 }
 
@@ -1267,9 +1268,12 @@ func meaningEq(a, b *meaning) bool {
 	case mLetChar:
 		return a.ch == b.ch && a.cat == b.cat
 	case mMacro:
-		// The prefix is part of the meaning, so \protected\def\p{P} and
-		// \def\q{P} are NOT \ifx-equal. Measured against a real TeX.
-		return a.protected == b.protected && sameToks(a.params, b.params) && sameToks(a.body, b.body)
+		// The prefixes are part of the meaning — tex.web keeps them in the macro's
+		// own command code (§4209-4212: call / long_call) — so \protected\def\p{P}
+		// and \def\q{P} are NOT \ifx-equal, and neither are \long\def\a{A} and
+		// \def\b{A}. Measured against real TeX, which answers DIFF to both.
+		return a.protected == b.protected && a.long == b.long &&
+			sameToks(a.params, b.params) && sameToks(a.body, b.body)
 	}
 	return true
 }
@@ -2113,9 +2117,19 @@ func (e *Engine) meaningString(t tok) string {
 	switch m.kind {
 	case mMacro:
 		// TeX names the prefix as part of the meaning: \protected macro:->…
+		// TeX names the prefixes as part of the meaning, \protected before \long
+		// whatever order they were written in (checked against real LaTeX:
+		// \long\protected\def and \protected\long\def both print
+		// "\protected\long macro:").
 		pfx := ""
 		if m.protected {
-			pfx = e.escapeStr() + "protected "
+			pfx = e.escapeStr() + "protected"
+		}
+		if m.long {
+			pfx += e.escapeStr() + "long"
+		}
+		if pfx != "" {
+			pfx += " "
 		}
 		return pfx + "macro:" + e.toksToString(m.params) + "->" + e.toksToString(m.body)
 	case mPrim:

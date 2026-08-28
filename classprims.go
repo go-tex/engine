@@ -52,7 +52,10 @@ func (e *Engine) loadClassPrims() {
 	})
 	// \long: a \def prefix for macros whose arguments may contain \par. The engine
 	// does not distinguish long/short macros, so \long is an accepted no-op prefix.
-	e.prim("long", func(e *Engine) {})
+	// \long is a PREFIX: tex.web §1211 accumulates it and §1218 stores it in the
+	// macro's command code. It was a no-op here, so \long\def produced an ordinary
+	// macro and the \par check of §392 could never fire.
+	e.prim("long", func(e *Engine) { e.pendingLong = true })
 	// \outer: like \long, an accepted no-op prefix.
 	e.prim("outer", func(e *Engine) {})
 	// \endinput: stop reading the current file. The splicer appends an end
