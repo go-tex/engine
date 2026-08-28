@@ -117,6 +117,29 @@ func (e *Engine) placeInline(n node) {
 // #, _ and & keep their literal value. ok is false when no '{' follows (the cursor
 // is left unchanged in that case). An unterminated argument consumes to end of input.
 func (e *Engine) readRawBracedArg() (string, bool) {
+	// Only the SOURCE can be read raw. When something is already pending on the
+	// input stack the argument is coming from an expansion, and the base text at
+	// the mouth's position is whatever follows the macro that produced it: reading
+	// there skips the argument and eats the next braced group in the document.
+	//
+	// beamer does exactly that. Its navigation lays a \hypertarget per frame whose
+	// name it BUILDS (\hypertarget{Navigation\the\c@page}{}), and with an outer
+	// theme that draws a head or foot line the target is emitted while a [fragile]
+	// frame's body is being copied out verbatim — so the {…} eaten was the frame's
+	// own. Measured: \textbf{gras} reached \jobname.vrb as \textbf, and the frame
+	// lost everything after its first control sequence.
+	if len(e.lists) > 0 {
+		e.skipOptSpace()
+		t, ok := e.getNext()
+		if !ok {
+			return "", false
+		}
+		if !(t.cat == catBegin && !t.cs_) {
+			e.back(t)
+			return "", false
+		}
+		return e.toksToString(e.grabGroup()), true
+	}
 	p := e.bpos
 	for p < len(e.base) {
 		if cc := e.catOf(e.base[p]); cc != catSpace && cc != catEOL {
