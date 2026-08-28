@@ -42,16 +42,16 @@ func (e *Engine) doNewcounter() {
 		code = m.code // already allocated (\newcounter of an existing counter): reuse
 	} else if e.allocCnt < 256 {
 		code = e.allocCnt
-		e.define(ctr, &meaning{kind: mCountRef, code: code}, false)
+		e.define(ctr, &meaning{kind: mCountRef, code: code}, true)
 		e.allocCnt++
 	}
 	// \the<name> := \arabic{name}, the LaTeX default representation.
 	body := append([]tok{csTok("arabic"), chTok('{', catBegin)}, stringToToks(name)...)
 	body = append(body, chTok('}', catEnd))
-	e.define("the"+name, &meaning{kind: mMacro, body: body}, false)
+	e.define("the"+name, &meaning{kind: mMacro, body: body}, true)
 	// An empty reset list, so \stepcounter{name} always has one to run.
 	if e.eq["cl@"+name] == nil {
-		e.define("cl@"+name, &meaning{kind: mMacro}, false)
+		e.define("cl@"+name, &meaning{kind: mMacro}, true)
 	}
 	if hasWithin && code >= 0 {
 		if within := strings.TrimSpace(e.toksToString(withinToks)); within != "" {

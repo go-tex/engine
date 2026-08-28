@@ -131,7 +131,15 @@ func (e *Engine) buildCellHList(toks []tok) []node {
 	seq = append(seq, toks...)
 	seq = append(seq, chTok('}', catEnd)) // sentinel to terminate buildBoxList
 	e.push(seq)
+	// The sentinel closes a real group, as the cell's own braces would: TeX makes
+	// every alignment entry a group (tex.web §791 — the u-part and v-part of a
+	// template are inserted inside braces), so a font or colour switch in a cell
+	// stops at the cell. Without the group the sentinel was a STRAY brace, which
+	// the stomach reports the moment any \begingroup is open — and \begin{env} now
+	// opens one.
+	e.beginGroupKind(boxGroup)
 	list := e.buildBoxList()
+	e.endGroup()
 	e.noBase = saved
 	return list
 }

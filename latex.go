@@ -16,12 +16,33 @@ import "strings"
 // the Plain macros).
 const MiniLaTeXKernel = `
 \catcode64=11
-% \@currenvir (set by \gotex@checkenv, see doCheckEnv) names the environment being
-% opened. \begin stays fully EXPANDABLE — the engine relies on that, so the name is
-% recorded from the Go side rather than with a \def here.
+% \begin{env} … \end{env} is a GROUP. ltmiscen.dtx:
+%
+%   \protected\def\begin#1{… \begingroup\@endpefalse\reserved@a}
+%   where \reserved@a is \def\@currenvir{#1}… \csname #1\endcsname
+%   \def\end#1{\csname end#1\endcsname\@checkend{#1}\expandafter\endgroup …}
+%
+% so \begingroup comes FIRST and \@currenvir is defined INSIDE it. Without the
+% group, \@currenvir was never restored, and a class that leaves an environment
+% early by closing its group could not: beamer's fragile frame does exactly that —
+%
+%   \def\beamer@checkforfragile#1fragile#2\relax{… \endgroup% end environment
+%     \expandafter\beamer@framecommand\beamer@frameoptions\bgroup}
+%
+% and then calls \frame, which picks its syntax with \ifx\@currenvir\beamer@frametext.
+% With \@currenvir still "frame" the command form took the ENVIRONMENT path a second
+% time, and \beamer@doseveralframes was handed the bare \bgroup instead of the
+% frame's body — the frame went on the page empty and its body was typeset after it,
+% into a box nothing places.
+%
+% The group is opened and closed by the Go-side probes \gotex@checkenv and
+% \gotex@endenv rather than by \begingroup/\endgroup tokens, because \begin and
+% \end must stay fully EXPANDABLE here: written as tokens, they would print as
+% literal text wherever \begin is only expanded (inside \message or \edef).
+% \@currenvir is defined inside that group (see doCheckEnv), as LaTeX's own \def is.
 \def\@currenvir{}
 \def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
-\def\end#1{\csname end#1\endcsname}
+\def\end#1{\csname end#1\endcsname\gotex@endenv{#1}}
 \def\document{\catcode64=12 }
 \def\enddocument{\par\vfill\penalty-10000 }
 \def\rm{}
@@ -1044,6 +1065,9 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 					if placeholder {
 						e.emitPicturePlaceholder(name)
 					}
+					// This \end was swallowed here, so \end — and the \gotex@endenv
+					// that closes the group \begin opened — never runs.
+					e.endEnvGroup()
 					return
 				}
 			}

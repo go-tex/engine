@@ -101,32 +101,79 @@ func (e *Engine) doInput() {
 	e.spliceInputFile(data)
 }
 
-// spliceInputFile puts a file's text into the input at the mouth's position,
-// followed by a marker that ends it. EVERY way of reading a file in must use
-// this: the marker is where \endinput stops (it means "stop reading THIS file",
-// so a file spliced without one lets an \endinput inside it run on to the
-// enclosing file's marker and swallow the rest of that file), and it is what
-// discounts the file's lines from the document's own numbering, so an error or
-// an editor's source map still points at the right line. The marker's name has
-// no @ in it, since a file may be read in wherever the catcode of @ happens to
-// be.
-func (e *Engine) spliceInputFile(data []byte) {
-	body := normalizeEOL(string(data))
-	e.inputNL = append(e.inputNL, strings.Count(body, "\n"))
-	insert := []rune(body + " \\gotexendinput ") // TeX appends a space at end of file
-	tail := append(insert, e.base[e.bpos:]...)
-	e.base = append(e.base[:e.bpos:e.bpos], tail...)
-	e.buildLineStarts() // the splice shifted every offset; rebuild the line table
+// mouthLevel is one level of TeX's input stack. tex.web §537 start_input does
+// begin_file_reading — "set up cur_file and new level of input" — and the file is
+// read to its end before the level underneath resumes; §329 end_file_reading pops
+// back. A level holds the character buffer being read, where the mouth stands in
+// it, and the state of the level it interrupted.
+type mouthLevel struct {
+	base       []rune
+	bpos       int
+	lineStarts []int
+	lists      [][]tok
+	progBpos   int
+	srcPos     int
+	srcLine    int
+	srcCol     int
 }
 
-// endInput discounts the lines of the \input file whose end the mouth has just
-// reached, so the document's own source lines keep their numbers.
-func (e *Engine) endInput() {
-	if n := len(e.inputNL); n > 0 {
-		e.loadedNL += e.inputNL[n-1]
-		e.inputNL = e.inputNL[:n-1]
-	}
+// pushInputLevel makes text the current input, to be read to its end before
+// anything that was pending resumes.
+//
+// The pending token lists go WITH the interrupted level: this mouth reads lists
+// before the character buffer, so a file merged into the buffer while a macro was
+// still expanding would arrive after the rest of that macro's body. That is not a
+// corner case — it is how beamer renders a [fragile] frame:
+//
+//	\frame<*>[…][{…,fragile=false}]{\begingroup\input{\jobname.vrb}\endgroup}
+//
+// The frame's body is written out verbatim and read back here; arriving late, it
+// was typeset AFTER the frame had been contributed to the page, into a box nothing
+// ever placed. Measured, the frame lost its body and its page.
+//
+// The no-progress guard watches e.bpos, which starts again at 0 in the new buffer,
+// so its baseline is saved and reset with the level — otherwise every level below
+// the first would look like an expansion loop making no headway.
+func (e *Engine) pushInputLevel(text string) {
+	e.levels = append(e.levels, mouthLevel{
+		base: e.base, bpos: e.bpos, lineStarts: e.lineStarts, lists: e.lists,
+		progBpos: e.progBpos, srcPos: e.srcPos, srcLine: e.curSrcLine, srcCol: e.curSrcCol,
+	})
+	e.base, e.bpos, e.lists = []rune(text), 0, nil
+	e.lineStarts, e.progBpos, e.noProgSteps = nil, 0, 0
+	e.buildLineStarts()
 }
+
+// popInputLevel returns to the level under the current one, and reports whether
+// there was one. Anything the finished level left pending stays on top of what the
+// level underneath had pending, so an unbalanced file cannot strand it.
+func (e *Engine) popInputLevel() bool {
+	n := len(e.levels)
+	if n == 0 {
+		return false
+	}
+	l := e.levels[n-1]
+	e.levels = e.levels[:n-1]
+	e.base, e.bpos, e.lineStarts = l.base, l.bpos, l.lineStarts
+	e.lists = append(l.lists, e.lists...)
+	e.progBpos, e.noProgSteps = l.progBpos, 0
+	e.srcPos, e.curSrcLine, e.curSrcCol = l.srcPos, l.srcLine, l.srcCol
+	return true
+}
+
+// spliceInputFile reads a file in as a new input level, followed by a marker that
+// ends it. EVERY way of reading a file in must use this: the marker is where
+// \endinput stops (it means "stop reading THIS file"), and TeX appends a space at
+// the end of a file. The marker's name has no @ in it, since a file may be read in
+// wherever the catcode of @ happens to be.
+func (e *Engine) spliceInputFile(data []byte) {
+	e.pushInputLevel(normalizeEOL(string(data)) + " \\gotexendinput ")
+}
+
+// endInput is what the marker at the end of an \input file runs. The level pops on
+// its own when the buffer is exhausted, one token later, so there is nothing left
+// to do here — it stays a primitive because \endinput jumps to it.
+func (e *Engine) endInput() {}
 
 // scanFileName reads a filename: optional spaces, then either a {braced} name
 // (spaces allowed) or characters up to the next space / control sequence.

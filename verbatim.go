@@ -28,6 +28,7 @@ func (e *Engine) doVerbatim() {
 		content = rest[:idx]
 		e.bpos += len([]rune(rest[:idx])) + len([]rune(end))
 	}
+	e.endEnvGroup() // this environment reads its own \end, so it closes \begin's group
 	// Verbatim ignores the newline right after \begin{verbatim} and the one just
 	// before \end{verbatim}.
 	leadingNL := strings.HasPrefix(content, "\n")

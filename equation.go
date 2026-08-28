@@ -52,6 +52,11 @@ func (e *Engine) doEquationBody() {
 		row = append(row, box)
 	}
 	e.placeDisplay([]*boxNode{hpackSP(row, packTo, e.hsize)})
+	// collectMathUntilEnd read this environment's own \end, so \end — and the
+	// \gotex@endenv that closes the group \begin opened — never runs. Close it here,
+	// AFTER the labels are recorded: \end closes the group only once \endequation
+	// has finished, and the reference metadata is part of that.
+	e.endEnvGroup()
 }
 
 // doEquationStar handles \begin{equation*} (an unnumbered single-line display): the
@@ -77,6 +82,7 @@ func (e *Engine) doEquationStar(name string) {
 		row = append(row, box)
 	}
 	e.placeDisplay([]*boxNode{hpackSP(row, packTo, e.hsize)})
+	e.endEnvGroup() // see doEquationBody
 }
 
 // eqNumberBox builds the number box for a display line: the \tag (parenthesised

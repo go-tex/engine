@@ -36,14 +36,13 @@ func (e *Engine) buildLineStarts() {
 // input, updating the cached (line, column). Line is 1-based, column 0-based.
 func (e *Engine) setSrcPos(pos int) {
 	e.srcPos = pos
-	line, col := e.lineColAt(pos)
-	// Discount the lines of already-loaded class/package files (spliced into the
-	// base ahead of this position) so the reported line is the user's own document
-	// line — loading article.cls must not shift where a glyph says it came from.
-	if line -= e.loadedNL; line < 1 {
-		line = 1
-	}
-	e.curSrcLine, e.curSrcCol = line, col
+	// A loaded file is an input LEVEL of its own (see pushInputLevel), not text
+	// merged into the document's buffer, so its lines never shift the document's:
+	// the position is read straight off the level being read. Inside a class or
+	// package that means the line in THAT file, which is where a diagnostic about
+	// it belongs; the document's own position is saved with the level and comes
+	// back when the file ends.
+	e.curSrcLine, e.curSrcCol = e.lineColAt(pos)
 }
 
 // lineColAt converts a base-input rune offset into a 1-based line and 0-based

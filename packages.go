@@ -25,7 +25,6 @@ import (
 type loadFrame struct {
 	atcat    cat              // catcode of @ to restore when the file ends
 	name     string           // package/class base name (for the loaded registry + \CurrentOption)
-	nlCount  int              // newlines in the spliced file (added to loadedNL when it ends)
 	endHook  string           // \@endofpackagehook / \@endofclasshook to reset after the file
 	passed   []string         // options requested for this file
 	declared map[string][]tok // \DeclareOption{name}{code}
@@ -225,7 +224,6 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// the engine treats only \n as end-of-line, so a CRLF file (e.g. a .cls checked
 	// out on Windows) would otherwise typeset stray \r characters.
 	body := normalizeEOL(string(data))
-	e.loadStack[len(e.loadStack)-1].nlCount = strings.Count(body, "\n")
 	// The 2020 format lets a package register code to run around ANOTHER file's
 	// loading: \AddToHook{package/amsmath/after} (beamer's overlay layer does exactly
 	// this) and \AddToHook{file/<name>.sty/before}. Fire those four hooks around the
@@ -245,10 +243,7 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// input: reading it BEFORE splicing the file would put the token that is not a
 	// "[" back on the token stack, ahead of the file about to be spliced into the
 	// character buffer — which silently swallowed everything after the \usepackage.
-	insert := []rune(pre + body + "\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
-	tail := append(insert, e.base[e.bpos:]...)
-	e.base = append(e.base[:e.bpos:e.bpos], tail...)
-	e.buildLineStarts()
+	e.pushInputLevel(pre + body + "\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
 }
 
 // normalizeEOL converts CRLF and lone CR line endings to LF. The engine's mouth
@@ -271,10 +266,6 @@ func (e *Engine) endLoad() {
 	fr := e.loadStack[len(e.loadStack)-1]
 	e.loadStack = e.loadStack[:len(e.loadStack)-1]
 	e.catcode['@'] = fr.atcat
-	// The file's lines are now behind the mouth: exclude them from the document's
-	// source-line numbering (see setSrcPos), so loading a class does not shift the
-	// lines the editor/error reporter attributes to the user's own document.
-	e.loadedNL += fr.nlCount
 	if fr.endHook != "" {
 		e.define(fr.endHook, &meaning{kind: mMacro}, true) // \let\@endof…hook\@empty
 	}
@@ -733,8 +724,18 @@ func (e *Engine) readBraceNameX() string {
 }
 
 // doInputIfFileExists implements \InputIfFileExists{name}{then}{else}: when name
-// resolves it splices the file (with the then-code queued to run after it), else it
-// runs the else-code.
+// resolves it runs the then-code and then reads the file, else it runs the
+// else-code.
+//
+// The order is LaTeX's, and it is that way round. ltfiles.dtx:
+//
+//	\long\def\InputIfFileExists#1#2{%
+//	  \IfFileExists{#1}%
+//	   {#2\@addtofilelist{#1}\@@input \@filef@und}}
+//
+// so #2 runs BEFORE the file is read — a package announces itself, or sets what the
+// file it is about to read expects to find. The then-code is pushed onto the file's
+// own level, where it is read before the file's text and cannot outlive it.
 func (e *Engine) doInputIfFileExists() {
 	name := e.readBraceNameX()
 	then := e.readBraceToksRaw()
@@ -744,8 +745,6 @@ func (e *Engine) doInputIfFileExists() {
 		e.push(els)
 		return
 	}
-	if len(then) > 0 {
-		e.push(then)
-	}
 	e.spliceInputFile(data)
+	e.push(then)
 }
