@@ -56,22 +56,22 @@ const MiniLaTeXKernel = `
 \newcount\c@section
 \newcount\c@subsection
 \newcount\c@equation
-\def\theequation{\the\c@equation}
+\long\def\theequation{\the\c@equation}
 \def\equation{\global\advance\c@equation by1\relax\edef\@currentlabel{\theequation}\@equationbody}
 \def\endequation{}
 \def\@currentlabel{}
-\def\thesection{\the\c@section}
-\def\thesubsection{\the\c@section.\the\c@subsection}
-\def\section{\@ifstar\@ssection\@nsection}
+\long\def\thesection{\the\c@section}
+\long\def\thesubsection{\the\c@section.\the\c@subsection}
+\long\def\section{\@ifstar\@ssection\@nsection}
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@ssection#1{\par\medskip\noindent{\Large\bf#1}\par\nobreak\smallskip}
-\def\subsection{\@ifstar\@ssubsection\@nsubsection}
+\long\def\subsection{\@ifstar\@ssubsection\@nsubsection}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
 \def\@ssubsection#1{\par\smallskip\noindent{\large\bf#1}\par\nobreak}
-\def\subsubsection{\@ifstar\@ssubsubsection\@nsubsubsection}
+\long\def\subsubsection{\@ifstar\@ssubsubsection\@nsubsubsection}
 \def\@nsubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
 \def\@ssubsubsection#1{\par\smallskip\noindent#1\par\nobreak}
-\def\paragraph#1{\par\noindent#1\quad}
+\long\def\paragraph#1{\par\noindent#1\quad}
 % \title and \author accept an OPTIONAL short form — \title[short]{full} — in the
 % amsart family (used for the running head). The short argument is only STORED
 % (in \@shorttitle / \@shortauthor); executing it would run any font or spacing
@@ -91,7 +91,7 @@ const MiniLaTeXKernel = `
 \def\@date{}
 \def\@shorttitle{}
 \def\@shortauthor{}
-\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
+\long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}
 % Per-level counters and depth trackers for nested itemize/enumerate. Because
@@ -106,14 +106,14 @@ const MiniLaTeXKernel = `
 \newcount\c@itemdepth
 \def\@alph#1{\ifcase#1\or a\or b\or c\or d\or e\or f\or g\or h\or i\or j\or k\or l\or m\or n\or o\or p\or q\or r\or s\or t\or u\or v\or w\or x\or y\or z\fi}
 \def\@Alph#1{\ifcase#1\or A\or B\or C\or D\or E\or F\or G\or H\or I\or J\or K\or L\or M\or N\or O\or P\or Q\or R\or S\or T\or U\or V\or W\or X\or Y\or Z\fi}
-\def\theenumi{\the\c@enumi.}
-\def\theenumii{(\@alph\c@enumii)}
-\def\theenumiii{\romannumeral\c@enumiii.}
-\def\theenumiv{\@Alph\c@enumiv.}
-\def\labelitemi{\bullet}
-\def\labelitemii{--}
-\def\labelitemiii{*}
-\def\labelitemiv{\cdot}
+\long\def\theenumi{\the\c@enumi.}
+\long\def\theenumii{(\@alph\c@enumii)}
+\long\def\theenumiii{\romannumeral\c@enumiii.}
+\long\def\theenumiv{\@Alph\c@enumiv.}
+\long\def\labelitemi{\bullet}
+\long\def\labelitemii{--}
+\long\def\labelitemiii{*}
+\long\def\labelitemiv{\cdot}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
 \def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
 % \@itemopt reads the optional [label] of an \item in itemize/enumerate and uses
@@ -130,12 +130,12 @@ const MiniLaTeXKernel = `
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
-\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
-\def\enddescription{\par\endgroup\smallskip}
+\long\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
+\long\def\enddescription{\par\endgroup\smallskip}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
-\def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
-\def\endthebibliography{\par\endgroup\smallskip}
+\long\def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
+\long\def\endthebibliography{\par\endgroup\smallskip}
 % \bibitem[⟨label⟩]{⟨key⟩}: a one-argument \bibitem read the "[" as its mandatory
 % key and printed the rest of the [label] and the {key} as body text, desyncing the
 % entry. The optional argument is the entry's citation label — an author-year string
@@ -151,7 +151,7 @@ const MiniLaTeXKernel = `
 % \newblock separates the logical blocks of a bibliography entry (author / title /
 % publication); in a .bbl it appears hundreds of times. It is an interword space
 % here — left undefined it was skipped, which merely lost the space between blocks.
-\def\newblock{\space}
+\long\def\newblock{\space}
 % bibunits: a document with per-part bibliographies wraps each in
 % \begin{bibunit}…\putbib[db]…\end{bibunit}. \putbib \input's the current unit's
 % pre-generated bu<N>.bbl (see doPutbib); the [db] database name is consumed. The
@@ -164,21 +164,21 @@ const MiniLaTeXKernel = `
 \def\defaultbibliographystyle#1{}
 \newcount\c@figure
 \newcount\c@table
-\def\thefigure{\the\c@figure}
-\def\thetable{\the\c@table}
+\long\def\thefigure{\the\c@figure}
+\long\def\thetable{\the\c@table}
 \def\fnum@figure{Figure \thefigure}
 \def\fnum@table{Table \thetable}
-\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
-\def\endfigure{\par\endgroup\bigskip}
-\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
-\def\endtable{\par\endgroup\bigskip}
+\long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
+\long\def\endfigure{\par\endgroup\bigskip}
+\long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
+\long\def\endtable{\par\endgroup\bigskip}
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
-\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
-\def\endquote{\par\endgroup\smallskip}
-\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
-\def\endquotation{\par\endgroup\smallskip}
-\def\verse{\par\begingroup\leftskip=20pt\smallskip}
-\def\endverse{\par\endgroup\smallskip}
+\long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
+\long\def\endquote{\par\endgroup\smallskip}
+\long\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
+\long\def\endquotation{\par\endgroup\smallskip}
+\long\def\verse{\par\begingroup\leftskip=20pt\smallskip}
+\long\def\endverse{\par\endgroup\smallskip}
 \def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\relax}
 \def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\relax}
 \def\center{\par\begingroup\centering}
@@ -301,8 +301,8 @@ const MiniLaTeXKernel = `
 % \c@equation to the parent number (so the next equation is N+1) and \theequation.
 % Because \c@equation stays the active counter, \label/\eqref and \tag work inside.
 \newcount\@saveeq
-\def\subequations{\global\advance\c@equation by1\relax\edef\@parentequation{\the\c@equation}\@saveeq=\c@equation\relax\c@equation=0\relax\def\theequation{\@parentequation\@alph\c@equation}}
-\def\endsubequations{\c@equation=\@saveeq\relax\def\theequation{\the\c@equation}}
+\def\subequations{\global\advance\c@equation by1\relax\edef\@parentequation{\the\c@equation}\@saveeq=\c@equation\relax\c@equation=0\relax\long\def\theequation{\@parentequation\@alph\c@equation}}
+\def\endsubequations{\c@equation=\@saveeq\relax\long\def\theequation{\the\c@equation}}
 % ─── sectioning extensions (feat/sectioning) ─────────────────────────────────
 % \part, \appendix and the abstract/titlepage environments. All are new \def
 % lines (later definition wins), so the \section/\@nsection/\thesection lines
@@ -312,15 +312,15 @@ const MiniLaTeXKernel = `
 % heading and the contents line pick up "A"/"A.1" unchanged. \part numbers with
 % \c@part (Roman) and freezes \@currentlabel so \label/\ref resolve to "I".
 \newcount\c@part
-\def\thepart{\@Roman\c@part}
-\def\part{\@ifstar\@spart\@npart}
+\long\def\thepart{\@Roman\c@part}
+\long\def\part{\@ifstar\@spart\@npart}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@spart#1{\par\bigskip\centerline{\Large\bf#1}\par\bigskip}
-\def\appendix{\par\c@section=0 \c@subsection=0 \def\thesection{\@Alph\c@section}\def\thesubsection{\thesection.\the\c@subsection}}
-\def\abstract{\par\bigskip\begingroup\centerline{\small\bf Abstract}\smallskip\leftskip=20pt\rightskip=20pt\small}
-\def\endabstract{\par\endgroup\bigskip}
-\def\titlepage{\par\penalty-10000 \begingroup}
-\def\endtitlepage{\par\endgroup\penalty-10000 }
+\long\def\appendix{\par\c@section=0 \c@subsection=0 \long\def\thesection{\@Alph\c@section}\long\def\thesubsection{\thesection.\the\c@subsection}}
+\long\def\abstract{\par\bigskip\begingroup\centerline{\small\bf Abstract}\smallskip\leftskip=20pt\rightskip=20pt\small}
+\long\def\endabstract{\par\endgroup\bigskip}
+\long\def\titlepage{\par\penalty-10000 \begingroup}
+\long\def\endtitlepage{\par\endgroup\penalty-10000 }
 % ─── booktabs rules (feat/booktabs) ──────────────────────────────────────────
 % \toprule/\midrule/\bottomrule/\cmidrule are consumed raw inside the tabular
 % body (collectTabularBody matches them by name and draws the rules directly), so
@@ -468,8 +468,8 @@ const MiniLaTeXKernel = `
 \def\subfloat{\@ifnextbracket{\@subfloatopt}{\@subfloatnoopt}}
 \def\@subfloatopt[#1]#2{\subcaptionbox{#1}{#2}}
 \def\@subfloatnoopt#1{\subcaptionbox{}{#1}}
-\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
-\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+\long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+\long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 % ─── end sub-captions / \captionof / \captionsetup ───────────────────────────
 % ─── real-world preamble robustness ──────────────────────────────────────────
 % Real papers configure many packages in the preamble with commands that do not
@@ -689,7 +689,15 @@ func (e *Engine) doNewcommand() { e.doNewcommandMode(false) }
 func (e *Engine) doProvidecommand() { e.doNewcommandMode(true) }
 
 func (e *Engine) doNewcommandMode(provide bool) {
-	e.peekStar() // \newcommand* / \renewcommand* / \providecommand* (short form): consume the *
+	// ltdefns.dtx: \newcommand and friends go through \@star@or@long, which sets
+	//
+	//	\@ifstar{\let\l@ngrel@x\relax …}{\let\l@ngrel@x\long …}
+	//
+	// so the PLAIN form defines a \long macro and only the STARRED form defines a
+	// short one. Getting this wrong is not academic: with every \newcommand macro
+	// short, the \par check of tex.web §392 fires on ordinary documents — measured,
+	// 10 of 12 real talks tripped it.
+	star := e.peekStar() // \newcommand* / \renewcommand* / \providecommand*: short form
 	name := e.scanCmdName()
 	nargs := e.scanOptBracketInt()
 	optDefault, optArg := e.scanOptBracketToks() // optional [default]: 1st arg optional
@@ -713,6 +721,7 @@ func (e *Engine) doNewcommandMode(provide bool) {
 		m := &meaning{
 			kind: mMacro, params: params, body: body,
 			optArg: optArg && nargs >= 1, optDefault: optDefault,
+			long: !star,
 		}
 		e.define(name, m, false)
 		// A command WITH an optional argument is a "robust" LaTeX command: latex.ltx
@@ -735,6 +744,9 @@ func (e *Engine) doNewcommandMode(provide bool) {
 // \end{name} run them via \csname. When a [default] bracket follows [nargs], the
 // environment's first argument is optional (as for \newcommand).
 func (e *Engine) doNewenvironment() {
+	// ltdefns.dtx: \newenvironment goes through \@star@or@long too, so the plain form
+	// is \long and only \newenvironment* is short.
+	star := e.peekStar()
 	name := e.readBraceName()
 	nargs := e.scanOptBracketInt()
 	optDefault, optArg := e.scanOptBracketToks()
@@ -750,8 +762,9 @@ func (e *Engine) doNewenvironment() {
 	e.define(name, &meaning{
 		kind: mMacro, params: params, body: begin,
 		optArg: optArg && nargs >= 1, optDefault: optDefault,
+		long: !star,
 	}, false)
-	e.define("end"+name, &meaning{kind: mMacro, body: end}, false)
+	e.define("end"+name, &meaning{kind: mMacro, body: end, long: !star}, false)
 }
 
 // doRuleNode builds a node for LaTeX's \rule[lift]{width}{height}: a filled

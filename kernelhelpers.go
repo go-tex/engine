@@ -66,14 +66,14 @@ const LaTeX2eKernelHelpers = `
 \catcode64=11
 % ── expansion primitives / gobblers / selectors ─────────────────────────────
 \def\@empty{}
-\def\@iden#1{#1}
-\def\@firstofone#1{#1}
-\def\@gobble#1{}
-\def\@gobbletwo#1#2{}
-\def\@gobblethree#1#2#3{}
-\def\@gobblefour#1#2#3#4{}
-\def\@firstoftwo#1#2{#1}
-\def\@secondoftwo#1#2{#2}
+\long\def\@iden#1{#1}
+\long\def\@firstofone#1{#1}
+\long\def\@gobble#1{}
+\long\def\@gobbletwo#1#2{}
+\long\def\@gobblethree#1#2#3{}
+\long\def\@gobblefour#1#2#3#4{}
+\long\def\@firstoftwo#1#2{#1}
+\long\def\@secondoftwo#1#2{#2}
 % LaTeX kernel while-loops. \@whilenum <test> \do {<body>} repeats <body> while
 % the \ifnum test holds; \@whiledim is the \ifdim analogue; \@whilesw <switch>\fi
 % {<body>} loops on a boolean switch. Classes drive frontmatter box splitting and
@@ -136,7 +136,7 @@ const LaTeX2eKernelHelpers = `
 % \relax/undefined); otherwise a no-op (LIMITATION: real LaTeX raises an error and
 % also rejects a handful of reserved names — the engine's \newcommand path is a Go
 % primitive and does its own checking, so this is only a best-effort fallback).
-\def\@ifdefinable#1#2{%
+\long\def\@ifdefinable#1#2{%
   \expandafter\ifx\csname\expandafter\@gobble\string#1\endcsname\relax
     #2%
   \fi}
@@ -173,27 +173,27 @@ const LaTeX2eKernelHelpers = `
 % registers): \expandafter…\def\expandafter#1\expandafter{#1#2} redefines #1 to be
 % its old body followed by #2.
 \def\@addto@macro#1#2{\expandafter\def\expandafter#1\expandafter{#1#2}}
-\def\g@addto@macro#1#2{\expandafter\gdef\expandafter#1\expandafter{#1#2}}
+\long\def\g@addto@macro#1#2{\expandafter\gdef\expandafter#1\expandafter{#1#2}}
 % ── list iteration (\@for over a comma list, \@tfor over tokens) ─────────────
 % Authentic latex.ltx definitions (they need only \ifx, \def, \expandafter, the
 % \@nil/\@nnil/\@empty sentinels and delimited parameters — all available).
-\def\@fornoop#1\@@#2#3{}
-\def\@for#1:=#2\do#3{%
+\long\def\@fornoop#1\@@#2#3{}
+\long\def\@for#1:=#2\do#3{%
   \expandafter\def\expandafter\@fortmp\expandafter{#2}%
   \ifx\@fortmp\@empty \else
     \expandafter\@forloop#2,\@nil,\@nil\@@#1{#3}\fi}
-\def\@forloop#1,#2,#3\@@#4#5{\def#4{#1}\ifx #4\@nnil \else
+\long\def\@forloop#1,#2,#3\@@#4#5{\def#4{#1}\ifx #4\@nnil \else
        #5\def#4{#2}\ifx #4\@nnil \else#5\@iforloop #3\@@#4{#5}\fi\fi}
-\def\@iforloop#1,#2\@@#3#4{\def#3{#1}\ifx #3\@nnil
+\long\def\@iforloop#1,#2\@@#3#4{\def#3{#1}\ifx #3\@nnil
        \expandafter\@fornoop \else
     #4\relax\expandafter\@iforloop\fi#2\@@#3{#4}}
 \def\@tfor#1:=#2\do#3{%
   \def\@fortmp{#2}\ifx\@fortmp\@empty \else
     \expandafter\@tforloop#2\@nil\@nil\@@#1{#3}\fi}
-\def\@tforloop#1#2\@@#3#4{\def#3{#1}\ifx #3\@nnil
+\long\def\@tforloop#1#2\@@#3#4{\def#3{#1}\ifx #3\@nnil
        \expandafter\@fornoop \else
     #4\relax\expandafter\@tforloop\fi#2\@@#3{#4}}
-\def\@break@tfor#1\@@#2#3{\fi\fi}
+\long\def\@break@tfor#1\@@#2#3{\fi\fi}
 % ── star/long dispatch ──────────────────────────────────────────────────────
 % \@star@or@long\cmd peeks for a '*' (via \@ifstar) and runs \cmd either way, and
 % sets \l@ngrel@x to the prefix the definition should carry — \relax after a star,
@@ -210,7 +210,7 @@ const LaTeX2eKernelHelpers = `
 % [<default>] when there is none — the kernel's optional-argument dispatcher, which
 % every \newcommand-with-a-default and etoolbox's \newrobustcmd are built on. The
 % default is BRACED so a multi-token default arrives as one argument.
-\def\@testopt#1#2{\@ifnextchar[{#1}{#1[{#2}]}}
+\long\def\@testopt#1#2{\@ifnextchar[{#1}{#1[{#2}]}}
 % \@protected@testopt\cmd is the same dispatcher guarded by \protect: in the real
 % kernel the guard chooses between typesetting and writing the command to a file.
 % This engine has one \protect meaning (typesetting — nothing is written to .aux
@@ -293,7 +293,7 @@ const LaTeX2eKernelHelpers = `
 \def\@ehc{}
 \def\@ehd{}
 \def\wlog#1{\message{#1}}
-\def\typeout#1{\message{#1}}
+\long\def\typeout#1{\message{#1}}
 \def\PackageWarning#1#2{\message{Package #1 Warning: #2}}
 \def\PackageWarningNoLine#1#2{\message{Package #1 Warning: #2}}
 \def\PackageInfo#1#2{\message{Package #1 Info: #2}}
@@ -317,10 +317,16 @@ const LaTeX2eKernelHelpers = `
 \def\@enddocumenthook{}
 \def\@endofpackagehook{}
 \def\@endofclasshook{}
-\def\AtBeginDocument#1{\g@addto@macro\@begindocumenthook{#1}}
-\def\AtEndDocument#1{\g@addto@macro\@enddocumenthook{#1}}
-\def\AtEndOfPackage#1{\g@addto@macro\@endofpackagehook{#1}}
-\def\AtEndOfClass#1{\g@addto@macro\@endofclasshook{#1}}
+% These take NO argument of their own, exactly as latex.ltx writes them:
+% \def\AtBeginDocument{\g@addto@macro\@begindocumenthook}. The braced code is
+% grabbed by \g@addto@macro, which is \long (checked against real LaTeX:
+% "\long macro:#1#2->\begingroup\toks@\expandafter{#1#2}\xdef#1{\the\toks@}…").
+% Taking the argument here instead made a NON-long macro read it, so a hook whose
+% code spans a blank line tripped the \par check of tex.web §392.
+\def\AtBeginDocument{\g@addto@macro\@begindocumenthook}
+\def\AtEndDocument{\g@addto@macro\@enddocumenthook}
+\def\AtEndOfPackage{\g@addto@macro\@endofpackagehook}
+\def\AtEndOfClass{\g@addto@macro\@endofclasshook}
 % \document / \enddocument run BOTH the classic \AtBeginDocument / \AtEndDocument
 % accumulators and the named hooks of the 2020 format (see hooks.go), in the order
 % the real format uses: begindocument/before, the \AtBeginDocument code, then

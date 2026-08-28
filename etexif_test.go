@@ -145,7 +145,10 @@ func TestProtectedPrefix(t *testing.T) {
 		{"\\ifx distingue les deux", `\protected\def\a{A}\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `DIFF`},
 		{"\\ifx de deux protégés identiques", `\protected\def\a{A}\protected\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `SAME`},
 		{"\\protected\\edef", `\protected\edef\a{A}\message{\meaning\a}`, `\protected macro:->A`},
-		{"\\protected\\long\\def", `\protected\long\def\a{A}\message{\meaning\a}`, `\protected macro:->A`},
+		// \long is part of the meaning too, and TeX prints \protected BEFORE it whatever
+		// order they were written in. Checked against real LaTeX: \long\protected\def and
+		// \protected\long\def both give "\protected\long macro:#1->[#1]".
+		{"\\protected\\long\\def", `\protected\long\def\a{A}\message{\meaning\a}`, `\protected\long macro:->A`},
 		{"\\protected\\gdef", `{\protected\gdef\a{A}}\message{\meaning\a}`, `\protected macro:->A`},
 		{"le préfixe ne déborde pas sur la définition suivante", `\protected\def\a{A}\def\b{B}\message{\meaning\b}`, `macro:->B`},
 	} {
@@ -275,8 +278,8 @@ func TestProtectedPrefixDoesNotLeak(t *testing.T) {
 		{"suivi de \\relax", `\protected\relax\def\b{B}\message{\meaning\b}`, `macro:->B`},
 		{"suivi d'une affectation", `\protected\count0=1 \def\b{B}\message{\meaning\b}`, `macro:->B`},
 		{"suivi d'un \\message", `\protected\message{}\def\b{B}\message{\meaning\b}`, `macro:->B`},
-		{"les préfixes se cumulent quand même", `\protected\global\long\def\b{B}\message{\meaning\b}`, `\protected macro:->B`},
-		{"ordre inverse des préfixes", `\long\protected\def\b{B}\message{\meaning\b}`, `\protected macro:->B`},
+		{"les préfixes se cumulent quand même", `\protected\global\long\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
+		{"ordre inverse des préfixes", `\long\protected\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := runExpr(t, c.src); got != c.want {

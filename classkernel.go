@@ -212,7 +212,7 @@ const LaTeX2eClassKernel = `
 % as \loop\ifnum…\repeat inside a skipped branch stays balanced. Without \repeat
 % defined, a skipped \ifnum…\repeat never closes and the skip overruns the
 % matching \else/\fi, swallowing everything after it — the acl.sty 0-page bug.
-\def\loop#1\repeat{\def\iterate{#1\relax\expandafter\iterate\fi}\iterate\let\iterate\relax}
+\long\def\loop#1\repeat{\def\iterate{#1\relax\expandafter\iterate\fi}\iterate\let\iterate\relax}
 \let\repeat\fi
 % ── \if@ boolean flags (\newif comes from the kernel-helper layer) ───────────
 % \@settopoint rounds a length down to a whole point, which the size option
@@ -252,7 +252,7 @@ const LaTeX2eClassKernel = `
 % This engine keeps its cross-reference and table-of-contents information in
 % memory rather than in .aux files, so the write itself has nothing to do — but
 % a class calls it directly, and an undefined one stops the document.
-\def\protected@write#1#2#3{}
+\long\def\protected@write#1#2#3{}
 \def\protected@edef#1#2{\edef#1{#2}}
 \def\protected@xdef#1#2{\xdef#1{#2}}
 % NFSS's font declarations. This engine has one face per family rather than
@@ -439,12 +439,12 @@ const LaTeX2eClassKernel = `
 % ── running heads / marks (no page-head machinery here: accept and drop) ─────
 \def\markboth#1#2{}
 \def\markright#1{}
-\def\@mkboth#1#2{}
+\long\def\@mkboth#1#2{}
 \def\leftmark{}
 \def\rightmark{}
 % ── contents recording (the engine owns its own TOC; accept and drop) ────────
 \def\addcontentsline#1#2#3{}
-\def\addtocontents#1#2{}
+\long\def\addtocontents#1#2{}
 \def\addvspace#1{\vskip#1}
 \def\addpenalty#1{}
 \def\nobreakspace{\space}
