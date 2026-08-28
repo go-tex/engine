@@ -205,6 +205,12 @@ func inputCandidates(file string) []string {
 func (e *Engine) readInput(file string) ([]byte, error) {
 	var err error = fs.ErrNotExist
 	for _, c := range inputCandidates(file) {
+		// A file the document wrote itself comes first: \input of \jobname.vrb must
+		// read what this run wrote, not a copy an earlier run left on disk. This is
+		// the path a beamer [fragile] frame takes (see writestreams.go).
+		if data, ok := e.writtenTeXFile(c); ok {
+			return data, nil
+		}
 		if filepath.IsAbs(c) {
 			data, e2 := os.ReadFile(c)
 			if e2 == nil {

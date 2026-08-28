@@ -288,11 +288,19 @@ type Engine struct {
 	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
 	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
 	pendingProtected bool // a \protected prefix waiting for the \def it applies to
-	pendingLong      bool // a \long prefix is waiting for the \def it applies to
-	scanningNonLong  bool // arguments being read for a macro that is NOT \long (§392)
-	progBpos         int  // e.bpos at the last observed forward progress
-	noProgSteps      int  // expansion steps since e.bpos last advanced
-	tightLimit       int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
+	// outStream holds the text \write has sent to each open \openout stream, and
+	// outName the file name that stream was opened with. On \closeout the text
+	// becomes an entry in writtenFile, which findTeXFile consults before the disk —
+	// so a file the document WROTE can be \input back, which is how beamer renders a
+	// [fragile] frame (see doOpenout).
+	outStream       map[int]*strings.Builder
+	outName         map[int]string
+	writtenFile     map[string]string
+	pendingLong     bool // a \long prefix is waiting for the \def it applies to
+	scanningNonLong bool // arguments being read for a macro that is NOT \long (§392)
+	progBpos        int  // e.bpos at the last observed forward progress
+	noProgSteps     int  // expansion steps since e.bpos last advanced
+	tightLimit      int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
