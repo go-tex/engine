@@ -471,6 +471,19 @@ const LaTeX2eClassKernel = `
 % \IEEEPARstart{T}{his} is IEEEtran's drop cap; with no drop-cap renderer, keep
 % the text — the initial and the rest — so the first sentence survives.
 \def\IEEEPARstart#1#2{#1#2}
+% titlesec: \titleformat / \titlespacing reconfigure sectioning, which the engine
+% renders with its own format — so gobble their arguments (both optionals and the
+% * forms) rather than strict-failing or typesetting the format code as body text.
+% \titleformat*{cmd}{fmt}; \titleformat{cmd}[shape]{fmt}{label}{sep}{before}[after].
+\def\titleformat{\@ifstar\@tsecfmtS\@tsecfmtM}
+\def\@tsecfmtS#1#2{}
+\def\@tsecfmtM#1{\@ifnextchar[{\@tsecfmtMo{#1}}{\@tsecfmtMn{#1}}}
+\def\@tsecfmtMo#1[#2]#3#4#5#6{\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsecfmtMn#1#2#3#4#5{\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsecgobopt[#1]{}
+% \titlespacing[*]{cmd}{left}{before}{after}[right].
+\def\titlespacing{\@ifstar\@tsecspace\@tsecspace}
+\def\@tsecspace#1#2#3#4{\@ifnextchar[\@tsecgobopt\relax}
 % LaTeX makes the three escaped characters that stand for nothing but themselves
 % into \chardef tokens rather than macros: under a real LaTeX, \meaning\# is
 % \char"23. The difference that matters is that a \chardef token is
