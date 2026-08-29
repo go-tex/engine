@@ -50,6 +50,10 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			break // premature end of input: return whatever we gathered
 		}
 		switch {
+		case e.runsCsname(t):
+			// \csname builds a control sequence that may be the \end this scanner hunts
+			// (see runsCsname): run it so the sequence surfaces on the next iteration.
+			e.runCsname(t)
 		case t.cs_ && t.cs != "end" && t.cs != "begin" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\emp{\end{minipage}}):
 			// read raw here it hides the \end, so the body scanner would run to EOF and

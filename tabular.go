@@ -621,6 +621,8 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			// would. Only at brace depth 0: a conditional nested inside a cell's {…}
 			// stays raw and is evaluated when that cell is typeset.
 			e.eq[t.cs].prim(e)
+		case depth == 0 && e.runsCsname(t):
+			e.runCsname(t) // see runsCsname: \csname may build this environment's \end
 		case depth == 0 && t.cs_ && t.cs != "end" && e.hidesTabularEnd(t):
 			// A macro that hides this environment's \end: read raw it never surfaces, so
 			// the body scanner runs to EOF and swallows the rest of the document. Expand
