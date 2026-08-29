@@ -58,19 +58,24 @@ const AcmartMetadata = `
 % acmart author block: like revtex, acmart uses \author + \affiliation + \email
 % (each optionally bracketed), and \affiliation wraps \institution / \city /
 % \country / … sub-fields. The article emulation's \author overwrites and knows
-% none of these, so accumulate them into one centred block \maketitle emits, and
-% make the sub-fields identity wrappers so the affiliation text survives.
-\def\@acmauthblock{}
+% none of these, so accumulate them into a centred block \maketitle emits, and
+% make the sub-fields identity wrappers so the affiliation text survives. Kept
+% COMPACT — authors comma-joined on one wrapped paragraph, affiliations/emails
+% semicolon-joined on one wrapped italic paragraph — rather than one line per
+% command: a tall per-command block pushes the body down and breaks the word-
+% position match against the reference (see revtex.go for the measured effect).
+\def\@acmauthors{}
+\def\@acmaffils{}
 \def\author{\@ifnextchar[\@acmauthopt\@acmauthmand}
-\def\@acmauthopt[#1]#2{\g@addto@macro\@acmauthblock{{#2}\par}}
-\def\@acmauthmand#1{\g@addto@macro\@acmauthblock{{#1}\par}}
+\def\@acmauthopt[#1]#2{\g@addto@macro\@acmauthors{#2, }}
+\def\@acmauthmand#1{\g@addto@macro\@acmauthors{#1, }}
 \def\affiliation{\@ifnextchar[\@acmaffopt\@acmaffmand}
-\def\@acmaffopt[#1]#2{\g@addto@macro\@acmauthblock{{\itshape #2}\par}}
-\def\@acmaffmand#1{\g@addto@macro\@acmauthblock{{\itshape #1}\par}}
-\def\additionalaffiliation#1{\g@addto@macro\@acmauthblock{{\itshape #1}\par}}
+\def\@acmaffopt[#1]#2{\g@addto@macro\@acmaffils{#2; }}
+\def\@acmaffmand#1{\g@addto@macro\@acmaffils{#1; }}
+\def\additionalaffiliation#1{\g@addto@macro\@acmaffils{#1; }}
 \def\email{\@ifnextchar[\@acmemailopt\@acmemailmand}
-\def\@acmemailopt[#1]#2{\g@addto@macro\@acmauthblock{{#2}\par}}
-\def\@acmemailmand#1{\g@addto@macro\@acmauthblock{{#1}\par}}
+\def\@acmemailopt[#1]#2{\g@addto@macro\@acmaffils{#2; }}
+\def\@acmemailmand#1{\g@addto@macro\@acmaffils{#1; }}
 \def\institution#1{#1 }
 \def\department#1{#1 }
 \def\city#1{#1 }
@@ -80,7 +85,7 @@ const AcmartMetadata = `
 \def\streetaddress#1{#1 }
 \def\postcode#1{#1 }
 \def\position#1{#1 }
-\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip\@acmauthblock\end{center}\par\bigskip}
+\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@acmauthors\par}\smallskip{\itshape\@acmaffils\par}\end{center}\par\bigskip}
 \makeatother
 `
 
