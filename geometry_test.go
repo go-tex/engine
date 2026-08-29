@@ -55,6 +55,22 @@ func TestGeometryA4Margin1in(t *testing.T) {
 	}
 }
 
+// TestNewGeometry: \newgeometry re-applies geometry like \geometry; the
+// bracketing/save commands are safe no-ops that leave the geometry put.
+func TestNewGeometry(t *testing.T) {
+	// \newgeometry applies its options exactly like \geometry.
+	e := runGeom(t, `\usepackage[a4paper]{geometry}\newgeometry{margin=2in}`)
+	if want := texSP(t, "210mm") - 2*texSP(t, "2in"); e.hsize != want {
+		t.Errorf("hsize after \\newgeometry = %d, want %d", e.hsize, want)
+	}
+	// \savegeometry / \loadgeometry gobble their name and \restoregeometry is a
+	// no-op: none errors, and the geometry set before them stays put.
+	e2 := runGeom(t, `\usepackage[a4paper,margin=1in]{geometry}\savegeometry{s}\loadgeometry{s}\restoregeometry`)
+	if want := texSP(t, "210mm") - 2*texSP(t, "1in"); e2.hsize != want {
+		t.Errorf("hsize after save/load/restore = %d, want %d (unchanged)", e2.hsize, want)
+	}
+}
+
 func TestGeometryLetterDefault(t *testing.T) {
 	// geometry's default paper is letterpaper; loading it with just a margin uses
 	// 8.5in × 11in.
