@@ -360,6 +360,12 @@ const LaTeX2eClassKernel = `
 \def\mathtt#1{#1}
 \def\mathcal#1{#1}
 \def\mathnormal#1{#1}
+% \mathfrak (eufrak) and \mathscr (mathrsfs/euscript) name Fraktur and script
+% alphabets the maths layer has no font for; like \mathcal they pass their letter
+% through as ordinary math text rather than tripping "undefined \mathfrak" and
+% dropping the rest of the formula.
+\def\mathfrak#1{#1}
+\def\mathscr#1{#1}
 % \mathds (dsfont) is double-struck — the same blackboard-bold role as \mathbb,
 % which the math layer knows. dsfont.sty's \DeclareMathAlphabet machinery can't run
 % here, so alias it: in math the retry path expands \mathds{X} -> \mathbb{X}.

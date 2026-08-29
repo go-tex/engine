@@ -117,7 +117,7 @@ func TestClassKernelExpandable(t *testing.T) {
 		// text symbols
 		{"symbols", `\message{[\textbullet\textendash\textemdash\textasteriskcentered\textperiodcentered]}`, "[•–—*·]"},
 		// math alphabet aliases are identity text wrappers
-		{"mathalias", `\message{[\mathrm{x}\mathbf{y}\mathit{z}\mathsf{s}\mathtt{t}\mathcal{c}\mathnormal{n}]}`, "[xyzstcn]"},
+		{"mathalias", `\message{[\mathrm{x}\mathbf{y}\mathit{z}\mathsf{s}\mathtt{t}\mathcal{c}\mathnormal{n}\mathfrak{f}\mathscr{r}]}`, "[xyzstcnfr]"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
