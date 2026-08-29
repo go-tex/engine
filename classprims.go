@@ -224,8 +224,9 @@ const LaTeX2eClassLead = `
 \def\@dblfloat#1{\@float{#1}}
 \def\end@dblfloat{\end@float}
 \def\usecounter#1{}
-\def\twocolumn{\@ifnextchar[{\@gobbleopt}{}}
-\def\onecolumn{}
+% \twocolumn / \onecolumn are Go primitives (see twocolumn.go / primitives.go): under
+% the two-column opt-in they switch the page column mode, otherwise they gobble the
+% optional [span] and do nothing (the historical stub behaviour).
 \def\@gobbleopt[#1]{}
 % ── \[ \] as robust commands (space-suffixed internal names) ─────────────────
 % In real LaTeX \[ and \] are robust: \[ expands to \protect\[<space>, and the
