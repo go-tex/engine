@@ -621,16 +621,27 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			// would. Only at brace depth 0: a conditional nested inside a cell's {…}
 			// stays raw and is evaluated when that cell is typeset.
 			e.eq[t.cs].prim(e)
-		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
-			// A user macro standing in for \end{...} (e.g. \newcommand\etab{\end{tabular}}):
-			// read raw here it hides the \end, so the body scanner would run to EOF and
-			// swallow the rest of the document. Expand it in place so the real \end token
-			// surfaces next iteration. Narrow: only a parameterless macro whose body
-			// begins with \end (see expandsToEnd), so verbatim cell content is untouched.
+		case depth == 0 && t.cs_ && t.cs != "end" && e.hidesTabularEnd(t):
+			// A macro that hides this environment's \end: read raw it never surfaces, so
+			// the body scanner runs to EOF and swallows the rest of the document. Expand
+			// it in place and the \end shows up on the next iteration.
+			//
+			// TeX's own alignment scanner EXPANDS as it looks for & and \cr, which is why
+			// a class may split a table from inside it. NeurIPS's style does:
+			//
+			//	\def\And{\end{tabular}\hfil\linebreak[0]\hfil\begin{tabular}[t]{c}…}
+			//
+			// used inside \begin{tabular}…\@author\end{tabular}, so \author{A \And B}
+			// carries an \end{tabular} two levels down — inside \@author, inside \And.
+			// Read raw, it only surfaced while the CELL was being typeset, in the middle
+			// of a box (issue #106).
 			e.expandMacro(e.meaningOf(t))
 		case depth == 0 && t.cs_ && t.cs == "end":
 			if name := e.readBraceName(); name == env {
 				endRow()
+				// The scanner read this environment's own \end, so \end — and the
+				// \gotex@endenv that closes \begin's group — never runs: close it here.
+				e.endEnvGroup()
 				return items
 			}
 		case depth == 0 && t.cs_ && t.cs == "hline":
@@ -673,6 +684,28 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 		}
 	}
 	return items
+}
+
+// hidesTabularEnd reports whether the control sequence t is a parameterless macro
+// that leads to this environment's \end, directly or through ONE more parameterless
+// macro. Two levels is what the reference case needs (\@author → \And → \end) and it
+// keeps the check as narrow as expandsToEnd's: no parameters anywhere on the path, and
+// the \end must be the first token of the macro that carries it — so an ordinary
+// content macro, or a verbatim cell that merely mentions \end, is never expanded.
+func (e *Engine) hidesTabularEnd(t tok) bool {
+	if e.expandsToEnd(t) {
+		return true
+	}
+	m := e.meaningOf(t)
+	if m == nil || m.kind != mMacro || len(m.params) != 0 {
+		return false
+	}
+	for _, b := range m.body {
+		if b.cs_ && e.expandsToEnd(b) {
+			return true
+		}
+	}
+	return false
 }
 
 // readBraceName reads a {name} group and returns its text (used for \end{name}).

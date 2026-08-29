@@ -51,6 +51,7 @@ var expandableSet = map[string]bool{
 	// \gotex@checkenv acts in the gullet exactly like \csname (into which \begin
 	// feeds), so \begin keeps expanding cleanly wherever it did before.
 	"gotex@checkenv": true,
+	"gotex@endenv":   true,
 }
 
 func isExpandable(name string) bool { return expandableSet[name] }
@@ -386,7 +387,9 @@ func (e *Engine) doNewcount() {
 	if name == "" || e.allocCnt >= 256 {
 		return
 	}
-	e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
+	// Allocation is GLOBAL: ltplain.dtx's \e@alloc ends with `\global#2#6\allocationnumber`,
+	// so \newcount\x inside a group leaves \x a register afterwards.
+	e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, true)
 	e.allocCnt++
 }
 
@@ -459,7 +462,7 @@ func (e *Engine) doNewdimen() {
 	if name == "" || e.allocDim >= 256 {
 		return
 	}
-	e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, false)
+	e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, true) // global, see doNewcount
 	e.allocDim++
 }
 
@@ -513,7 +516,7 @@ func (e *Engine) doNewskip() {
 	if name == "" || e.allocSkp >= 256 {
 		return
 	}
-	e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, false)
+	e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true) // global, see doNewcount
 	e.allocSkp++
 }
 
@@ -855,6 +858,7 @@ func (e *Engine) doCheckEnv() {
 	if name == "" {
 		return // no braced argument, or an empty one: nothing meaningful to probe
 	}
+	e.beginGroupKind(semiSimpleGroup) // \begin{env} … \end{env} is a group
 	e.setCurrentEnv(name)
 	if e.envUndefined(name) {
 		if e.undefinedEnvs == nil {
@@ -884,6 +888,29 @@ func (e *Engine) setCurrentEnv(name string) {
 	}
 	e.define("@currenvir", &meaning{kind: mMacro, body: body}, false)
 }
+
+// doEndEnv implements \gotex@endenv{env}, the probe \end runs after \end<env>: it
+// closes the group \begin opened (ltmiscen.dtx ends \end with \endgroup). Like
+// \gotex@checkenv it produces no tokens and runs in the gullet, so \end stays
+// expandable.
+func (e *Engine) doEndEnv() {
+	if e.readBraceName() == "" {
+		return
+	}
+	e.endEnvGroup()
+}
+
+// endEnvGroup closes the group \begin{env} opened, for an environment the engine
+// implements in Go and which therefore swallows its own \end{env} instead of letting
+// \end run (see ltmiscen.dtx: \begin ends with \begingroup, \end with \endgroup).
+// Without it such an environment leaves a group open for the rest of the document.
+//
+// It closes whatever the innermost group is, as \endgroup does — including, through
+// closeSemiSimple's "Missing } inserted" recovery, a box. beamer DEPENDS on that: its
+// frame is \global\setbox\beamer@framebox=\vbox\bgroup …, and the \end that ends the
+// frame meets that box. Guarding this to refuse a box, or to close only the group its
+// own \begin opened, costs 140 pages over 200 talks — both were measured.
+func (e *Engine) endEnvGroup() { e.closeSemiSimple() }
 
 // envUndefined reports whether \name is not a real environment's opening control
 // sequence. It is true when \name has no meaning at all AND when it is \relax:
@@ -1537,11 +1564,12 @@ func (e *Engine) loadMore() {
 		e.grabUndelimited()
 		e.grabUndelimited()
 	})
-	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })   // \[ … \] display math
-	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) })  // \( … \) inline math
-	e.prim("]", func(e *Engine) {})                                 // consumed by \[
-	e.prim(")", func(e *Engine) {})                                 // consumed by \(
-	e.prim("gotex@checkenv", func(e *Engine) { e.doCheckEnv() })    // \begin's undefined-environment probe (see doCheckEnv)
+	e.prim("[", func(e *Engine) { e.doDelimitedMath("]", true) })  // \[ … \] display math
+	e.prim("(", func(e *Engine) { e.doDelimitedMath(")", false) }) // \( … \) inline math
+	e.prim("]", func(e *Engine) {})                                // consumed by \[
+	e.prim(")", func(e *Engine) {})                                // consumed by \(
+	e.prim("gotex@checkenv", func(e *Engine) { e.doCheckEnv() })
+	e.prim("gotex@endenv", func(e *Engine) { e.doEndEnv() })        // \begin's undefined-environment probe (see doCheckEnv)
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
 	e.prim("equation*", func(e *Engine) { e.doEquationStar("equation*") })
 	e.prim("endequation*", func(e *Engine) {})

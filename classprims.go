@@ -243,8 +243,15 @@ const LaTeX2eClassLead = `
 \expandafter\def\csname[ \endcsname{\relax\ifmmode\@badmath\else$$\fi}
 \expandafter\def\csname] \endcsname{\relax\ifmmode$$\else\@badmath\fi}
 % ── generic list (best-effort: each item on its own line with its label) ─────
-\def\list#1#2{\par}
-\def\endlist{\par}
+\def\list#1#2{\@trivlist}
+% \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
+% \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
+% class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
+% overlay wrappers (\begin{actionenv}\begin{uncoverenv}\begin{altenv}) that its LAST
+% \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
+% \par those three stayed open past \end{itemize}, and every \end after them closed one
+% group too high.
+\def\endlist{\endtrivlist}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of

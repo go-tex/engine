@@ -62,7 +62,8 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			n := e.readBraceName()
 			switch {
 			case n == name && depth == 0:
-				return body // the matching \end{name}: consume it and stop
+				e.endEnvGroup() // this \end was read here, so \end's \endgroup will not run
+				return body     // the matching \end{name}: consume it and stop
 			case n == name:
 				depth-- // a nested instance closes; re-emit for the nested typeset
 				body = append(body, csTok("end"))

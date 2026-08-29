@@ -291,6 +291,7 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 		case depth == 0 && t.cs_ && t.cs == "end":
 			if e.readBraceName() == name {
 				endRow()
+				e.endEnvGroup() // this \end was read here, so \end's \endgroup will not run
 				return rows
 			}
 		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator

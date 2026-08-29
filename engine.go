@@ -168,12 +168,13 @@ type Engine struct {
 	footnoteCounter  int
 	pendingFootnotes []*boxNode
 	buildingFootnote bool
-	noBase           bool // when true, getNext does not fall through to the base string
-	negateNextIf     int  // pending \unless prefixes (e-TeX): reverse the next conditional
-	allocCnt         int  // next free \count register handed out by \newcount
-	allocDim         int  // next free \dimen register handed out by \newdimen
-	allocSkp         int  // next free \skip register handed out by \newskip
-	allocBox         int  // next free \box register handed out by \newsavebox
+	levels           []mouthLevel // the input levels below this one (see pushInputLevel)
+	noBase           bool         // when true, getNext does not fall through to the base string
+	negateNextIf     int          // pending \unless prefixes (e-TeX): reverse the next conditional
+	allocCnt         int          // next free \count register handed out by \newcount
+	allocDim         int          // next free \dimen register handed out by \newdimen
+	allocSkp         int          // next free \skip register handed out by \newskip
+	allocBox         int          // next free \box register handed out by \newsavebox
 
 	// token registers (see toks.go): \toks<n> / \newtoks-allocated registers store
 	// a token list each. A class's title/mark machinery (amsart's \andify, \toks@,
@@ -239,8 +240,6 @@ type Engine struct {
 	uccode         map[rune]int // \uccode: what \uppercase maps a character to
 	afterGroup     [][]tok      // \aftergroup tokens, one list per open group
 	xpEnvArgs      [][][]tok    // xparse \NewDocumentEnvironment arguments, one frame per open such environment
-	inputNL        []int        // newlines of each \input file still being read (see endInput)
-	loadedNL       int          // newlines in fully-loaded class/package files, subtracted from the document's source lines (see setSrcPos)
 
 	// runaway guard: a bound on macro expansion so a pathological input (an
 	// infinite \def loop, or a tolerantly-skipped arg-consuming command that
@@ -462,8 +461,7 @@ func (e *Engine) Run(src string) (string, error) {
 	e.bpos = 0
 	e.progBpos = 0    // fresh document: reset the no-progress guard
 	e.noProgSteps = 0 // (e.bpos is monotonic within a Run, so this is a clean baseline)
-	e.loadedNL = 0    // fresh document: no loaded-file lines discounted yet
-	e.inputNL = nil
+	e.levels = nil    // fresh document: no file is open
 	e.afterGroup = nil
 	e.buildLineStarts()
 	e.mainLoop()
@@ -481,25 +479,37 @@ func (e *Engine) push(ts []tok) {
 }
 
 // getNext returns the next raw token (no expansion), or ok=false at end.
+//
+// It reads the pending token lists first, then the current input LEVEL's character
+// buffer, and when that runs out it pops back to the level underneath (tex.web §537
+// end_file_reading). The pop is what makes a file a level of its own: the file is
+// finished before whatever was being read when it was opened resumes.
 func (e *Engine) getNext() (tok, bool) {
-	for len(e.lists) > 0 {
-		top := e.lists[len(e.lists)-1]
-		if len(top) == 0 {
-			e.lists = e.lists[:len(e.lists)-1]
-			continue
+	for {
+		for len(e.lists) > 0 {
+			top := e.lists[len(e.lists)-1]
+			if len(top) == 0 {
+				e.lists = e.lists[:len(e.lists)-1]
+				continue
+			}
+			t := top[0]
+			if rest := top[1:]; len(rest) == 0 {
+				e.lists = e.lists[:len(e.lists)-1] // drop the drained list eagerly so
+			} else { //                              len(e.lists) reflects real nesting
+				e.lists[len(e.lists)-1] = rest
+			}
+			return t, true
 		}
-		t := top[0]
-		if rest := top[1:]; len(rest) == 0 {
-			e.lists = e.lists[:len(e.lists)-1] // drop the drained list eagerly so
-		} else { //                              len(e.lists) reflects real nesting
-			e.lists[len(e.lists)-1] = rest
+		if e.noBase {
+			return tok{}, false
 		}
-		return t, true
+		if t, ok := e.scan(); ok {
+			return t, true
+		}
+		if !e.popInputLevel() {
+			return tok{}, false
+		}
 	}
-	if e.noBase {
-		return tok{}, false
-	}
-	return e.scan()
 }
 
 // back pushes a single token back onto the input.

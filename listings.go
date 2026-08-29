@@ -105,6 +105,7 @@ func (e *Engine) doLstlisting() {
 		content = rest[:idx]
 		e.bpos += len([]rune(rest[:idx])) + len([]rune(end))
 	}
+	e.endEnvGroup() // this environment reads its own \end, so it closes \begin's group
 	leadingNL := strings.HasPrefix(content, "\n")
 	content = strings.TrimPrefix(content, "\n")
 	content = strings.TrimSuffix(content, "\n")

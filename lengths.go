@@ -45,7 +45,7 @@ func (e *Engine) doNewlength() {
 		e.fail("No room for a new \\skip (\\newlength)")
 		return
 	}
-	e.define(target.cs, &meaning{kind: mSkipRef, code: e.allocSkp}, false)
+	e.define(target.cs, &meaning{kind: mSkipRef, code: e.allocSkp}, true) // global, see doNewcount
 	e.allocSkp++
 }
 

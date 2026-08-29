@@ -51,7 +51,7 @@ func (e *Engine) doNewtheorem() {
 		// Allocate a fresh \count register, exactly as \newcount would.
 		if e.allocCnt < 256 {
 			ctrCode = e.allocCnt
-			e.define(ctr, &meaning{kind: mCountRef, code: ctrCode}, false)
+			e.define(ctr, &meaning{kind: mCountRef, code: ctrCode}, true)
 			e.allocCnt++
 		}
 	}
@@ -66,7 +66,7 @@ func (e *Engine) doNewtheorem() {
 	} else {
 		numBody = []tok{csTok("the"), csTok(ctr)}
 	}
-	e.define("the"+env, &meaning{kind: mMacro, body: numBody}, false)
+	e.define("the"+env, &meaning{kind: mMacro, body: numBody}, true)
 
 	// A within-numbered environment resets on its parent counter's step.
 	if hasWithin && !hasShared && ctrCode >= 0 {
@@ -87,10 +87,10 @@ func (e *Engine) doNewtheorem() {
 	}
 	body = append(body, head...)
 	body = append(body, chTok('}', catEnd), chTok('{', catBegin), csTok("the"+env), chTok('}', catEnd))
-	e.define(env, &meaning{kind: mMacro, body: body}, false)
+	e.define(env, &meaning{kind: mMacro, body: body}, true)
 
 	// \end<env>: the fixed closing macro (end paragraph, close group, vertical space).
-	e.define("end"+env, &meaning{kind: mMacro, body: []tok{csTok("@endtheorem")}}, false)
+	e.define("end"+env, &meaning{kind: mMacro, body: []tok{csTok("@endtheorem")}}, true)
 }
 
 // addToReset arranges for the count register ctrCode to be zeroed whenever the
