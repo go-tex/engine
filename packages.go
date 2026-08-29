@@ -415,6 +415,16 @@ func (e *Engine) doDocumentClass() {
 		}
 		return
 	}
+	if isRevtexClass(name) && !e.classFileResolvable(name) {
+		// revtex is not embedded; the article-shaped fallback leaves \affiliation
+		// and the author-list commands undefined — the corpus's single most common
+		// undefined control sequence, which drops the whole author block. Load a
+		// title-block emulation that keeps that content (revtex.go), then use the
+		// article-shaped page (its geometry is already close). A bundled revtex .cls
+		// resolves above and defines these itself.
+		e.loadRevtexEmulation()
+		return
+	}
 	if emulatedClasses[name] || emulateOnly(name) {
 		return // use the built-in emulation for a standard class
 	}
