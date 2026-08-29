@@ -62,20 +62,28 @@ func vContribution(n node) int {
 const maxPages = 5000
 
 func (e *Engine) Pages() []*boxNode {
-	if e.twoColumn {
-		return e.pagesTwoColumn()
+	// \onecolumn / \twocolumn split the document into page-aligned regions (both
+	// commands \clearpage first — verified against the reference), each paginated in
+	// its own column mode; see twocolumn.go.
+	if len(e.colRegions) > 0 {
+		return e.pagesByRegion()
 	}
+	return e.paginateSingleList(e.mvl, 0)
+}
+
+// paginateSingleList splits one vertical list into single-column pages using the
+// cost-based breaker, numbering them from pageOffset+1.
+func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 	var pages []*boxNode
-	list := e.mvl
 	for start := 0; start < len(list); {
 		end := e.findPageBreak(list, start)
 		if page := trimTrailingGlue(list[start:end]); len(page) > 0 {
-			pages = append(pages, e.assemblePage(page, len(pages)+1))
+			pages = append(pages, e.assemblePage(page, pageOffset+len(pages)+1))
 		}
 		if end == len(list) {
 			break
 		}
-		if len(pages) >= maxPages {
+		if pageOffset+len(pages) >= maxPages {
 			if e.skippedCS == nil {
 				e.skippedCS = map[string]int{}
 			}

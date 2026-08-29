@@ -118,6 +118,8 @@ type Engine struct {
 	columnseprule int         // \columnseprule: rule thickness between columns (sp, 0 = none)
 	twoColumn     bool        // class/\twocolumn two-column page layout (see twocolumn.go)
 	twoColApplied bool        // guard: the column measure has been applied to e.hsize once
+	oneColHsize   int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
+	colRegions    []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
 	geom          *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.

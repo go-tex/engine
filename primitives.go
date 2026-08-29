@@ -1959,6 +1959,21 @@ func (e *Engine) loadStomach() {
 	e.prim("endmulticols", func(e *Engine) {}) // consumed by doMulticols; defined for safety
 	e.prim("columnsep", func(e *Engine) { e.scanEquals(); e.columnsep = e.scanDimen() })
 	e.prim("columnseprule", func(e *Engine) { e.scanEquals(); e.columnseprule = e.scanDimen() })
+	// \twocolumn[span] / \onecolumn switch the page column mode (twocolumn.go). Under the
+	// two-column opt-in they start a fresh region; otherwise they keep the historical
+	// no-op (gobble the optional [span] and do nothing), so the default corpus is untouched.
+	e.prim("twocolumn", func(e *Engine) {
+		if twoColumnOptIn() {
+			e.startTwoColumn()
+			return
+		}
+		e.scanOptBracketToks()
+	})
+	e.prim("onecolumn", func(e *Engine) {
+		if twoColumnOptIn() {
+			e.startOneColumn()
+		}
+	})
 	e.loadBoxCmds()
 }
 

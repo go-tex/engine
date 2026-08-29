@@ -89,6 +89,62 @@ func TestTwoColumnPagination(t *testing.T) {
 	}
 }
 
+// Mid-document \onecolumn/\twocolumn/\onecolumn splits the document into page-aligned
+// regions: the one-column material, then the two-column body on a fresh page, then a
+// one-column tail on another fresh page. Each command \clearpage's (verified against the
+// reference), so no page mixes two regions.
+func TestTwoColumnRegionSwitch(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	var b strings.Builder
+	b.WriteString(`\documentclass{article}\usepackage[textheight=8in,textwidth=6in]{geometry}\begin{document}`)
+	para := func(tag string, n int) {
+		for i := 0; i < n; i++ {
+			b.WriteString(`\noindent ` + tag + ` word word word word word word word word word word word word.
+
+`)
+		}
+	}
+	para("AAA", 10)
+	b.WriteString(`\twocolumn `)
+	para("BBB", 30)
+	b.WriteString(`\onecolumn `)
+	para("CCC", 6)
+	b.WriteString(`\end{document}`)
+
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(b.String()); err != nil {
+		t.Fatal(err)
+	}
+	// Regions: an implicit/explicit one-column head, a two-column region, a one-column tail.
+	if len(e.colRegions) < 2 {
+		t.Fatalf("expected ≥2 column regions, got %d: %+v", len(e.colRegions), e.colRegions)
+	}
+	sawTwo := false
+	for _, r := range e.colRegions {
+		if r.cols >= 2 {
+			sawTwo = true
+		}
+	}
+	if !sawTwo {
+		t.Fatalf("no two-column region recorded: %+v", e.colRegions)
+	}
+	// At least one page must be a genuine two-column hbox (the BBB body).
+	pages := e.Pages()
+	twoColPages := 0
+	for _, p := range pages {
+		if hasTwoColumns(p) {
+			twoColPages++
+		}
+	}
+	if twoColPages == 0 {
+		t.Errorf("no two-column page produced across %d pages", len(pages))
+	}
+}
+
 // hasTwoColumns reports whether the page box contains a horizontal box holding at
 // least two vertical sub-boxes (the left and right columns).
 func hasTwoColumns(page *boxNode) bool {

@@ -39,19 +39,92 @@ func (e *Engine) applyTwoColumnMeasure() {
 	if !e.twoColumn || e.twoColApplied {
 		return
 	}
+	e.enterTwoColumnMeasure()
+	// A class-option two-column document has no explicit \twocolumn, so seed the whole
+	// document as one two-column region here (the commands add further regions).
+	if len(e.colRegions) == 0 {
+		e.colRegions = []colRegion{{at: 0, cols: 2}}
+	}
+}
+
+// colRegion is one \onecolumn/\twocolumn span of the main vertical list: from index at
+// (into e.mvl) until the next region's at, typeset in cols columns.
+type colRegion struct {
+	at   int
+	cols int
+}
+
+// enterTwoColumnMeasure halves e.hsize to the column width, saving the full width for a
+// later \onecolumn to restore. The guard fires it once; \twocolumn after \onecolumn
+// re-enters through startTwoColumn, which halves the (restored) full width again.
+func (e *Engine) enterTwoColumnMeasure() {
+	e.oneColHsize = e.hsize
 	if cw := (e.hsize - e.columnsep) / 2; cw > 0 {
 		e.hsize = cw
 	}
 	e.twoColApplied = true
 }
 
-// pagesTwoColumn builds the pages of a two-column document: the main vertical list
-// (already broken to the column measure) is sliced into \vsize-tall columns, two to a
-// physical page, filling left then right. It reuses the single-column page breaker for
-// each column and assemblePage for the page furniture.
-func (e *Engine) pagesTwoColumn() []*boxNode {
+// startTwoColumn implements the \twocolumn command: like real LaTeX it \clearpage's
+// (here, a region boundary starts a fresh page) and switches to two columns. The
+// optional [span] full-width material (\@topnewpage) is not yet reproduced.
+func (e *Engine) startTwoColumn() {
+	e.scanOptBracketToks() // gobble the optional [span] for now
+	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
+		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 1}) // material so far was one-column
+	}
+	if !e.twoColumn || !e.twoColApplied || e.hsize == e.oneColHsize {
+		e.enterTwoColumnMeasure()
+	}
+	e.twoColumn = true
+	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2})
+}
+
+// startOneColumn implements the \onecolumn command: \clearpage (region boundary) and
+// switch back to a single full-width column, restoring the measure two-column saved.
+func (e *Engine) startOneColumn() {
+	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
+		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2})
+	}
+	if e.oneColHsize > 0 {
+		e.hsize = e.oneColHsize
+	}
+	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 1})
+}
+
+// pagesByRegion paginates each \onecolumn/\twocolumn region of the main vertical list in
+// its own column mode and concatenates the pages (continuous numbering). Regions are
+// page-aligned because both commands \clearpage.
+func (e *Engine) pagesByRegion() []*boxNode {
+	regs := e.colRegions
+	if regs[0].at > 0 { // material before the first switch is one-column
+		regs = append([]colRegion{{at: 0, cols: 1}}, regs...)
+	}
 	var pages []*boxNode
-	list := e.mvl
+	for i, r := range regs {
+		end := len(e.mvl)
+		if i+1 < len(regs) {
+			end = regs[i+1].at
+		}
+		if r.at >= end {
+			continue
+		}
+		slice := e.mvl[r.at:end]
+		if r.cols >= 2 {
+			pages = append(pages, e.paginateTwoColList(slice, len(pages))...)
+		} else {
+			pages = append(pages, e.paginateSingleList(slice, len(pages))...)
+		}
+	}
+	return pages
+}
+
+// paginateTwoColList slices one vertical list (already broken to the column measure)
+// into \vsize-tall columns, two to a physical page, filling left then right, numbering
+// from pageOffset+1. It reuses the single-column page breaker for each column and
+// assemblePage for the page furniture.
+func (e *Engine) paginateTwoColList(list []node, pageOffset int) []*boxNode {
+	var pages []*boxNode
 	colW := e.hsize
 	fullW := 2*colW + e.columnsep
 
@@ -72,12 +145,12 @@ func (e *Engine) pagesTwoColumn() []*boxNode {
 			right, next = takeColumn(next)
 		}
 		if len(left) > 0 || len(right) > 0 {
-			pages = append(pages, e.assembleTwoColumnPage(left, right, colW, fullW, len(pages)+1))
+			pages = append(pages, e.assembleTwoColumnPage(left, right, colW, fullW, pageOffset+len(pages)+1))
 		}
 		if next >= len(list) {
 			break
 		}
-		if len(pages) >= maxPages {
+		if pageOffset+len(pages) >= maxPages {
 			if e.skippedCS == nil {
 				e.skippedCS = map[string]int{}
 			}
