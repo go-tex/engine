@@ -410,6 +410,7 @@ func (e *Engine) doDocumentClass() {
 		// When the class IS resolvable it is loaded below and sizes its own page.
 		if name == "acmart" {
 			e.applyAcmartGeometry(opts)
+			e.loadAcmartMetadata() // gobble acmart's top-matter metadata + CCSXML block
 		} else {
 			e.applyIEEEtranGeometry(opts)
 		}
