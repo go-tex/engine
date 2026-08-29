@@ -29,6 +29,21 @@ func TestGeneralCommandStubs(t *testing.T) {
 	}
 }
 
+// TestTitlesecStubs: every titlesec \titleformat / \titlespacing form — star and
+// non-star, with and without the shape / after / right optionals — is gobbled
+// (completes without error, emits nothing), so the following \message fires.
+func TestTitlesecStubs(t *testing.T) {
+	src := `\titleformat{\section}{\large}{\thesection}{1em}{}` +
+		`\titleformat{\subsection}[block]{\normalsize}{\thesubsection}{1em}{}[after]` +
+		`\titleformat*{\paragraph}{\bfseries}` +
+		`\titlespacing{\section}{0pt}{2ex}{1ex}[right]` +
+		`\titlespacing*{\subsection}{0pt}{1ex}{1ex}` +
+		`\message{OK}`
+	if out := ckRun(t, src); out != "OK" {
+		t.Errorf("titlesec gobbles: message=%q, want OK", out)
+	}
+}
+
 // ckRun loads Plain+LaTeX (which now includes the LaTeX2eClassKernel substrate)
 // into a fresh engine and returns the trimmed \message output of src.
 func ckRun(t *testing.T, src string) string {
