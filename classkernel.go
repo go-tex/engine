@@ -458,6 +458,19 @@ const LaTeX2eClassKernel = `
 \def\@font@warning#1{\message{Font Warning: #1}}
 % ── misc structural no-ops ──────────────────────────────────────────────────
 \def\null{\hbox{}}
+% Package config / style commands the engine has no formatter for: gobble their
+% arguments so a preamble that configures mathtools / listings / keyval neither
+% strict-fails nor, lenient, typesets the option list as body text.
+\def\mathtoolsset#1{}
+\def\setkeys#1#2{}
+\def\lstset#1{}
+\def\lstdefinestyle#1#2{}
+% \enlargethispage[*]{<len>} adjusts the current page height; the page builder has
+% no such knob, so gobble the length (star form too).
+\def\enlargethispage{\@ifstar\@gobble\@gobble}
+% \IEEEPARstart{T}{his} is IEEEtran's drop cap; with no drop-cap renderer, keep
+% the text — the initial and the rest — so the first sentence survives.
+\def\IEEEPARstart#1#2{#1#2}
 % LaTeX makes the three escaped characters that stand for nothing but themselves
 % into \chardef tokens rather than macros: under a real LaTeX, \meaning\# is
 % \char"23. The difference that matters is that a \chardef token is

@@ -3,7 +3,31 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestGeneralCommandStubs: the package-config gobbles (\mathtoolsset, \setkeys,
+// \lstset, \lstdefinestyle, \enlargethispage) complete without error and emit
+// nothing, while \IEEEPARstart keeps its drop-cap letter and the rest of the word.
+func TestGeneralCommandStubs(t *testing.T) {
+	if out := ckRun(t, `\mathtoolsset{x}\setkeys{a}{b}\lstset{c}\lstdefinestyle{d}{e}`+
+		`\enlargethispage{1cm}\enlargethispage*{1cm}\message{OK}`); out != "OK" {
+		t.Errorf("config gobbles: message=%q, want OK", out)
+	}
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\hsize=300pt \IEEEPARstart{T}{his} sentence.`); err != nil {
+		t.Fatal(err)
+	}
+	if txt := treeText(e); !strings.Contains(txt, "This") {
+		t.Errorf("\\IEEEPARstart dropped its text; got %q", txt)
+	}
+}
 
 // ckRun loads Plain+LaTeX (which now includes the LaTeX2eClassKernel substrate)
 // into a fresh engine and returns the trimmed \message output of src.
