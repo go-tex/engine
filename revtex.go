@@ -14,31 +14,40 @@ package engine
 // names, affiliations and contact lines vanish, because each undefined command
 // swallows nothing while its braced argument lands in a discarded preamble area.
 //
-// This accumulates those commands into one centred block that \maketitle emits,
-// so the content survives. It does NOT reproduce revtex's superscript-address
-// layout (authors grouped under shared, numbered affiliations); the goal is
-// faithful CONTENT, not that geometry. \author accumulates here — revtex allows
-// several, each followed by its own \affiliation — rather than overwriting as the
-// base article \author does. It runs at document time (from \documentclass), where
-// @ is an "other" character, so it opens with \makeatletter for its @-commands.
+// This accumulates those commands into a centred block that \maketitle emits, so
+// the content survives. It does NOT reproduce revtex's superscript-address layout
+// (authors grouped under shared, numbered affiliations); the goal is faithful
+// CONTENT, not that geometry. But the block is kept COMPACT — all authors on one
+// wrapped paragraph (comma-joined), all affiliations/contacts on one wrapped
+// italic paragraph (semicolon-joined) — rather than one line per command. A
+// one-line-per-command block is far TALLER than real revtex's grouped format for a
+// many-author paper, which pushes the whole body down and wrecks the word-POSITION
+// match against the reference even though every word is present (measured: 2605.12538,
+// 7 authors, went to 5.8 layout-divergence at 94.5% recall). Comma/semicolon joining
+// keeps the block height near revtex's, recovering that layout without losing content.
+// \author accumulates here — revtex allows several, each followed by its own
+// \affiliation — rather than overwriting as the base article \author does. It runs at
+// document time (from \documentclass), where @ is an "other" character, so it opens
+// with \makeatletter for its @-commands.
 const RevtexAuthorBlock = `
 \makeatletter
-\def\@revtexauthblock{}
-\def\author#1{\g@addto@macro\@revtexauthblock{{#1}\par}}
-\def\affiliation#1{\g@addto@macro\@revtexauthblock{{\itshape #1}\par}}
-\def\collaboration#1{\g@addto@macro\@revtexauthblock{{\bfseries #1}\par}}
+\def\@revtexauthors{}
+\def\@revtexaffils{}
+\def\author#1{\g@addto@macro\@revtexauthors{#1, }}
+\def\affiliation#1{\g@addto@macro\@revtexaffils{#1; }}
+\def\collaboration#1{\g@addto@macro\@revtexauthors{#1, }}
 \def\noaffiliation{}
 \def\altaffiliation{\@ifnextchar[\@revtexaltopt\@revtexaltmand}
-\def\@revtexaltopt[#1]#2{\g@addto@macro\@revtexauthblock{{\itshape #1#2}\par}}
-\def\@revtexaltmand#1{\g@addto@macro\@revtexauthblock{{\itshape #1}\par}}
+\def\@revtexaltopt[#1]#2{\g@addto@macro\@revtexaffils{#1#2; }}
+\def\@revtexaltmand#1{\g@addto@macro\@revtexaffils{#1; }}
 \def\email{\@ifnextchar[\@revtexcontopt\@revtexcontmand}
 \def\homepage{\@ifnextchar[\@revtexcontopt\@revtexcontmand}
-\def\@revtexcontopt[#1]#2{\g@addto@macro\@revtexauthblock{{#1#2}\par}}
-\def\@revtexcontmand#1{\g@addto@macro\@revtexauthblock{{#1}\par}}
+\def\@revtexcontopt[#1]#2{\g@addto@macro\@revtexaffils{#1#2; }}
+\def\@revtexcontmand#1{\g@addto@macro\@revtexaffils{#1; }}
 \def\preprint#1{}
 \def\pacs#1{}
 \def\keywords#1{}
-\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip\@revtexauthblock\end{center}\par\bigskip}
+\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@revtexauthors\par}\smallskip{\itshape\@revtexaffils\par}\end{center}\par\bigskip}
 \makeatother
 `
 
