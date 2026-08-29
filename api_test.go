@@ -5,6 +5,28 @@ import (
 	"testing"
 )
 
+// TestIsLaTeXDetection: a document is LaTeX if it carries \documentclass OR
+// \begin{document} — the latter catches the arXiv shape where main.tex is
+// `\input{preamble}` … `\begin{document}` … so the class sits in an included
+// file. Plain TeX (neither marker) is not LaTeX.
+func TestIsLaTeXDetection(t *testing.T) {
+	cases := []struct {
+		src  string
+		want bool
+	}{
+		{`\documentclass{article}\begin{document}Hi\end{document}`, true},
+		{"\\input{preamble}\n\\begin{document}\nHi\n\\end{document}\n", true}, // class is \input'ed
+		{`\documentclass{article}`, true},
+		{`\hsize=300pt Plain TeX, no markers.\par\bye`, false},
+		{`\input mymacros \message{plain}`, false},
+	}
+	for _, c := range cases {
+		if got := isLaTeX([]byte(c.src)); got != c.want {
+			t.Errorf("isLaTeX(%q) = %v, want %v", c.src, got, c.want)
+		}
+	}
+}
+
 // The library API compiles source to a valid PDF in one call (the loom seam).
 func TestCompileToPDF(t *testing.T) {
 	var buf bytes.Buffer

@@ -293,9 +293,17 @@ func compile(src []byte, opt Options) (*Engine, error) {
 	return e, nil
 }
 
-// isLaTeX reports whether the source looks like a LaTeX document.
+// isLaTeX reports whether the source looks like a LaTeX document. Both
+// \documentclass and \begin{document} are markers plain TeX never uses, and a
+// LaTeX document always carries at least one of them in the MAIN file — even when
+// \documentclass sits in an \input'ed preamble (a common arXiv layout where
+// main.tex is `\input{preamble}` … `\begin{document}` …). Detecting only
+// \documentclass missed that shape, so the LaTeX kernel never loaded and the
+// document ran in degraded plain mode: strict mode died on the first kernel-only
+// helper, and lenient mode silently dropped every undefined LaTeX command.
 func isLaTeX(src []byte) bool {
-	return bytes.Contains(src, []byte(`\documentclass`))
+	return bytes.Contains(src, []byte(`\documentclass`)) ||
+		bytes.Contains(src, []byte(`\begin{document}`))
 }
 
 // NoProgressLimitHeavy is the ceiling a program that renders whole documents
