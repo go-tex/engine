@@ -1845,6 +1845,17 @@ func (e *Engine) loadMore() {
 	// margin (see geometry.go). \usepackage[..]{geometry} is intercepted in
 	// doUsepackage; \geometry{..} re-applies at any point.
 	e.prim("geometry", func(e *Engine) { e.doGeometry() })
+	// \newgeometry{opts} re-applies geometry mid-document (the geometry package's
+	// bracketing command). Apply it like \geometry — far more faithful than letting
+	// it stay undefined, which strict-fails and, lenient, typesets the option list
+	// as body text. \restoregeometry restores the preamble geometry; without a
+	// saved-state stack it is a no-op (the applied change persists), which is right
+	// for the common whole-document re-application. \savegeometry / \loadgeometry
+	// gobble their name argument.
+	e.prim("newgeometry", func(e *Engine) { e.doGeometry() })
+	e.prim("restoregeometry", func(e *Engine) {})
+	e.prim("savegeometry", func(e *Engine) { e.readBraceGroupString() })
+	e.prim("loadgeometry", func(e *Engine) { e.readBraceGroupString() })
 	// enumitem subset (see enumitem.go): \@enumitemopt{<kind>} reads the optional
 	// [key=value] argument of a list environment and reconfigures the current list
 	// group; \@enumitemrec records an enumerate's final counter value for [resume].
