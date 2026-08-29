@@ -122,6 +122,16 @@ var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
 // realPGF reports whether the real pgf/TikZ sources may be loaded.
 func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 
+// twoColumnOptIn reports whether the \documentclass[twocolumn] option activates the
+// two-column output routine (twocolumn.go). It is opt-in through GOTEX_TWOCOLUMN while
+// the routine's page-fill is paired with each class's real \textheight: the routine
+// places words in the right COLUMN positions (proven on revtex 2605.12538, where the
+// median displacement fell from 5.4 to 0.6), but two \vsize-tall columns on the current
+// article-shaped page height hold ~2x the text, so the page count drifts (a document
+// loses or gains pages) until the paired geometry lands. Off by default, the corpus is
+// untouched; the mechanism and its tests ship ready for that next step.
+func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
+
 // realBeamer reports whether \documentclass{beamer} loads the REAL beamer.cls
 // rather than the built-in emulation in beamer.go.
 //
@@ -381,6 +391,9 @@ func (e *Engine) doDocumentClass() {
 	}
 	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back
+	if twoColumnOptIn() && hasOption(opts, "twocolumn") {
+		e.twoColumn = true // \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go)
+	}
 	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
 		return
@@ -423,6 +436,14 @@ func (e *Engine) doDocumentClass() {
 		// title-block emulation that keeps that content (revtex.go), then use the
 		// article-shaped page (its geometry is already close). A bundled revtex .cls
 		// resolves above and defines these itself.
+		//
+		// NOTE: revtex's journal styles (aps/prl) set the body in two columns, and the
+		// two-column output routine (twocolumn.go) renders them correctly in position —
+		// but only once paired with revtex's real (smaller) text height. Left on the
+		// article-shaped page height, two full-height columns hold ~2x the text and the
+		// document loses pages. So two-column stays OFF for revtex until that geometry is
+		// wired; the measure proved the mechanism (2605.12538 medDisp 5.4->0.6) but the
+		// page count regressed without the paired \textheight.
 		e.loadRevtexEmulation()
 		return
 	}
@@ -639,6 +660,17 @@ func (e *Engine) setPtsize(opts []string) {
 	// 100% default, so both are no-ops and 10pt documents stay byte-identical.
 	e.baselineskip, e.baseBaselineskip = leading, leading
 	e.scaleClassFontsToBase(permille)
+}
+
+// hasOption reports whether the trimmed option list contains want (used to read
+// class options such as twocolumn / onecolumn back from \documentclass).
+func hasOption(opts []string, want string) bool {
+	for _, o := range opts {
+		if strings.TrimSpace(o) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ── scanning helpers ─────────────────────────────────────────────────────────

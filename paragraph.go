@@ -55,6 +55,7 @@ func splitAtForcedBreaks(list []node) [][]node {
 // layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
 // contributes the lines of one paragraph fragment to the main vertical list.
 func (e *Engine) layoutSegment(hlist []node) {
+	e.applyTwoColumnMeasure()      // halve e.hsize to the column width on the first paragraph (two-column mode)
 	list := e.hyphenateList(hlist) // insert discretionary hyphens (if patterns loaded)
 
 	// \parfillskip (0pt plus 1fil) fills the last line; a forced break ends it.
