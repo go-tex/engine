@@ -62,6 +62,9 @@ func vContribution(n node) int {
 const maxPages = 5000
 
 func (e *Engine) Pages() []*boxNode {
+	if e.twoColumn {
+		return e.pagesTwoColumn()
+	}
 	var pages []*boxNode
 	list := e.mvl
 	for start := 0; start < len(list); {

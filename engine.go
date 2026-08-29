@@ -114,8 +114,10 @@ type Engine struct {
 	hyphenpenalty int         // penalty at a discretionary hyphen
 	leftskip      glueSpec    // glue at the left of every line
 	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
-	columnsep     int         // \columnsep: gap between multicols columns (sp)
+	columnsep     int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
 	columnseprule int         // \columnseprule: rule thickness between columns (sp, 0 = none)
+	twoColumn     bool        // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColApplied bool        // guard: the column measure has been applied to e.hsize once
 	geom          *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
