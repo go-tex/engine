@@ -112,6 +112,8 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 			break
 		}
 		switch {
+		case e.runsCsname(t):
+			e.runCsname(t) // see runsCsname: \csname may build this environment's \end
 		case t.cs_ && t.cs != "end" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\enq{\end{equation}}):
 			// its tokens are read raw here, so without expanding it the loop would never
@@ -180,6 +182,33 @@ func (e *Engine) expandsToCloseCS(t tok, close string) bool {
 		return false
 	}
 	return m.body[0].cs_ && m.body[0].cs == close
+}
+
+// runsCsname reports whether t is the \csname primitive, which a body scanner that
+// reads RAW must run rather than store.
+//
+// \csname can only produce a control sequence, and that sequence may be the \end the
+// scanner is hunting. beamer reaches every one of its templates that way —
+// \usebeamertemplate{X} is \csname beamer@@tmpl@X\endcsname — and the rounded block's
+// closing template is \end{beamerboxesrounded}, whose own first move is
+// \end{minipage}. Stored raw, that \end never surfaced: the minipage scanner ran to
+// the end of the document and took the talk with it. Measured, \usetheme{Warsaw},
+// Madrid, Copenhagen and Frankfurt — every theme whose inner theme is `rounded` —
+// rendered ZERO pages.
+func (e *Engine) runsCsname(t tok) bool {
+	if !t.cs_ {
+		return false
+	}
+	m := e.meaningOf(t)
+	return m != nil && m.kind == mPrim && m.name == "csname"
+}
+
+// runCsname executes \csname…\endcsname so the control sequence it builds is the next
+// token the scanner sees.
+func (e *Engine) runCsname(t tok) {
+	if m := e.meaningOf(t); m != nil && m.prim != nil {
+		m.prim(e)
+	}
 }
 
 // readTag reads a \tag argument: an optional leading * (bare, no parentheses) then a

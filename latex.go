@@ -1053,6 +1053,11 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 		if !t.cs_ {
 			continue
 		}
+		if e.runsCsname(t) {
+			// \csname may build this environment's \end (see runsCsname).
+			e.runCsname(t)
+			continue
+		}
 		switch t.cs {
 		case "begin":
 			if e.gobbleEnvName() == name {

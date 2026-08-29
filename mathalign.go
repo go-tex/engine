@@ -281,6 +281,8 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 			break
 		}
 		switch {
+		case depth == 0 && e.runsCsname(t):
+			e.runCsname(t) // see runsCsname: \csname may build this environment's \end
 		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\enq{\end{align}}):
 			// read raw here it would never be recognised and the align body would run
