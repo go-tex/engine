@@ -8,7 +8,7 @@ jobs:
       matrix: { os: [ubuntu-latest, macos-latest, windows-latest] }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       - run: go vet ./...
@@ -30,7 +30,7 @@ jobs:
         # (the engine still cross-compiles for loong64; only the qemu run is dropped).
         goarch: [riscv64, ppc64le, s390x]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       # Bounded on purpose. On 2026-08-19 this step sat on an unreachable Ubuntu
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy: { matrix: { goos: [js, wasip1] } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       - run: GOOS=${{ matrix.goos }} GOARCH=wasm go build ./...
@@ -66,7 +66,7 @@ jobs:
     name: fidelity vs real LaTeX (tectonic)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       - name: install poppler
