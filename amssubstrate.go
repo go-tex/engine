@@ -352,5 +352,26 @@ const AMSClassSubstrate = `
 % \providecommand so a real amsmath, if ever supplied, still wins.
 \providecommand{\@thmcountersep}{.}
 \providecommand{\@thmcounter}[1]{\noexpand\arabic{#1}}
+% figure* and table* are the two-column forms. A real class defines them through
+% \@dblfloat; a class this engine emulates itself (revtex, IEEEtran, acmart,
+% elsarticle …) had no starred form at all, so \begin{figure*}[t] resolved to \relax
+% and typeset its own placement key — every such float in the arXiv corpus carried a
+% stray "[t]" or "[h]" on the page, in 23 papers for figure* and 11 for table*.
+% They are set in one column here, like their unstarred forms, and they CALL them so
+% a class or package that redefines \figure later is followed.
+% They are installed at \begin{document} and ONLY if nothing else has: a class that
+% defines its own figure* must keep it, and one that declares it with
+% \newenvironment would fail outright against a name already taken (acmart does,
+% and defining these too early cost that paper 14 of its 18 pages).
+\AtBeginDocument{%
+  \@ifundefined{figure*}{%
+    \expandafter\long\expandafter\def\csname figure*\endcsname{\figure}%
+    \expandafter\long\expandafter\def\csname endfigure*\endcsname{\endfigure}%
+  }{}%
+  \@ifundefined{table*}{%
+    \expandafter\long\expandafter\def\csname table*\endcsname{\table}%
+    \expandafter\long\expandafter\def\csname endtable*\endcsname{\endtable}%
+  }{}%
+}
 \catcode64=11
 `
