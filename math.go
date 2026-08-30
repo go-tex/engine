@@ -84,6 +84,26 @@ func (e *Engine) scanMathSource() (string, bool) {
 			e.back(t)
 			break
 		}
+		// \csname can only build a control sequence, and this scanner reads raw
+		// tokens: left unexecuted it reaches the maths layer as the literal word
+		// "csname". \end{env} goes the same way — and a class that builds its
+		// display out of $$ closes it INSIDE \end<env>, so running it is the only
+		// way the closing $$ ever arrives (iopart.cls: \def\endequation{$$}).
+		// \end{array} and \end{cases}, whose \end<env> holds no math shift, stay
+		// literal for the maths layer to read.
+		if e.runsCsname(t) {
+			e.runCsname(t)
+			continue
+		}
+		if t.cs_ && t.cs == "end" {
+			if name, ok := e.peekBracedName(); ok {
+				if m := e.eq["end"+name]; m != nil && m.kind == mMacro && bodyHasMathShift(m.body) {
+					e.expandMacro(m)
+					continue
+				}
+				e.push(braceNameToks(name))
+			}
+		}
 		// A $ inside a \mbox{…$…$…}/\text{…} group (depth > 0) is that group's own
 		// nested inline math, NOT the closing shift — treating it as the close used
 		// to truncate the math here and desynchronise every $ in the rest of the
@@ -115,6 +135,44 @@ func (e *Engine) scanMathSource() (string, bool) {
 		}
 	}
 	return b.String(), display
+}
+
+// peekBracedName reads a {name} that follows, returning the name; when the next
+// token is not a brace the input is left exactly as it was. The caller pushes the
+// name back with braceNameToks when it decides not to act on it.
+func (e *Engine) peekBracedName() (string, bool) {
+	t, ok := e.getNext()
+	if !ok {
+		return "", false
+	}
+	if !(t.cat == catBegin && !t.cs_) {
+		e.back(t)
+		return "", false
+	}
+	var b strings.Builder
+	for {
+		u, ok := e.getNext()
+		if !ok {
+			return b.String(), true
+		}
+		if !u.cs_ && u.cat == catEnd {
+			return b.String(), true
+		}
+		if !u.cs_ {
+			b.WriteRune(u.ch)
+		}
+	}
+}
+
+// bodyHasMathShift reports whether a macro body carries a math shift ($), which is
+// what makes \end<env> the thing that closes a $$ display.
+func bodyHasMathShift(body []tok) bool {
+	for _, t := range body {
+		if !t.cs_ && t.cat == catMath {
+			return true
+		}
+	}
+	return false
 }
 
 // makeMath renders a math source string to a math box.
@@ -215,6 +273,12 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			// rest is removed, then retry.
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
+				continue
+			}
+			// Glue primitives (\hskip\mathindent and friends) carry a <glue>, not a
+			// {group}: they and the glue they take are removed.
+			if glued, gok := stripMathGlue(src, name); gok {
+				src = glued
 				continue
 			}
 			return svg, m, err
@@ -387,6 +451,118 @@ var mathNoise = map[string]struct {
 	"hspace": {1, `\; `}, "mspace": {1, `\; `}, "vspace": {1, ``},
 	"label": {1, ``}, "nonumber": {0, ``}, "notag": {0, ``},
 	"qedhere": {0, ``}, "noalign": {1, ``},
+}
+
+// mathGlue are the glue primitives a class writes INTO a display: iopart.cls opens
+// every equation with \displaystyle\hskip\mathindent to indent it instead of
+// centring it. Their argument is a <glue>, not a {group}, so they cannot go in
+// mathNoise — and left in place they cost the whole equation, since go-tex/math
+// renders no glue.
+var mathGlue = map[string]bool{
+	"hskip": true, "vskip": true, "kern": true, "mskip": true, "mkern": true,
+}
+
+// stripMathGlue removes every occurrence of a glue primitive and the <glue> that
+// follows it from a math source string, reporting whether it changed anything. The
+// glue is either a register or macro (\mathindent, \parindent) or a dimen with its
+// unit and optional plus/minus parts (10pt plus 2pt minus 1pt).
+func stripMathGlue(src, name string) (string, bool) {
+	if !mathGlue[name] {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := src[i+len(needle):]
+		n, ok := scanMathGlue(rest)
+		if !ok {
+			// Not a glue after all: leave the command alone rather than eat what
+			// follows it, and let the renderer say what it makes of it.
+			out.WriteString(needle)
+			src = rest
+			continue
+		}
+		src = rest[n:]
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
+}
+
+// scanMathGlue returns how many bytes at the start of s a <glue> occupies, and
+// whether one is there at all. scanMathSource writes every control sequence as a
+// backslash, its name and one trailing space, which is how a register spelling is
+// recognised here.
+func scanMathGlue(s string) (int, bool) {
+	p := 0
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	if p < len(s) && s[p] == '\\' { // \mathindent, \parindent, \baselineskip…
+		p++
+		for p < len(s) && isMathLetter(s[p]) {
+			p++
+		}
+		if p < len(s) && s[p] == ' ' {
+			p++
+		}
+		return p, true
+	}
+	q, ok := scanMathDimen(s, p)
+	if !ok {
+		return 0, false
+	}
+	p = q
+	for _, word := range []string{"plus", "minus"} {
+		r := p
+		for r < len(s) && s[r] == ' ' {
+			r++
+		}
+		if strings.HasPrefix(s[r:], word) {
+			if q, ok := scanMathDimen(s, r+len(word)); ok {
+				p = q
+			}
+		}
+	}
+	return p, true
+}
+
+// isMathLetter reports whether c is an ASCII letter, which is all a TeX control
+// word or a unit is made of.
+func isMathLetter(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// scanMathDimen returns the end of a <dimen> (a signed number and its two-letter
+// unit) starting at i, and whether one is there.
+func scanMathDimen(s string, i int) (int, bool) {
+	p := i
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	for p < len(s) && (s[p] == '-' || s[p] == '+') {
+		p++
+	}
+	digits := p
+	for p < len(s) && (s[p] >= '0' && s[p] <= '9' || s[p] == '.') {
+		p++
+	}
+	if p == digits {
+		return 0, false
+	}
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	if p+2 > len(s) || !isMathLetter(s[p]) || !isMathLetter(s[p+1]) {
+		return 0, false
+	}
+	return p + 2, true
 }
 
 // stripMathNoise rewrites every occurrence of a non-rendering command \name in a
