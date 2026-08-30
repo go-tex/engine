@@ -245,6 +245,19 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	}
 	pre := "\\UseHook{file/" + name + ext + "/before}\\UseHook{" + kind + "/" + name + "/before}"
 	post := "\\UseHook{" + kind + "/" + name + "/after}\\UseHook{file/" + name + ext + "/after}"
+	if name == "beamer" && ext == ".cls" {
+		// This engine renders no speaker notes, and beamer's note machinery emits
+		// PAGES. \setbeameroption{show notes on second screen} sets \beamer@notes and
+		// makes every frame produce a note page beside the slide, which LaTeX hands to
+		// pgfpages to merge onto ONE physical page. With no merging each frame came out
+		// three pages instead of one: two frames became six where LaTeX makes two, and
+		// the worst talk in the reference set rendered 21 pages against tectonic's 7.
+		//
+		// Switched off at \begin{document}, after the preamble's \setbeameroption has
+		// had its say. Appended HERE, inside the class load, because that is where @ is
+		// a letter.
+		post += "\\AtBeginDocument{\\beamer@notesfalse}"
+	}
 	// \gotexeatdate consumes the OPTIONAL DATE a caller may write after the file
 	// name — \RequirePackage{keyval}[1997/11/10] states the oldest acceptable
 	// release. The engine loads whatever it finds, but an unread date is typeset,
