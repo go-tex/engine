@@ -382,7 +382,7 @@ func (e *Engine) doDocumentClass() {
 	}
 	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back
-	if twoColumnOptIn() && hasOption(opts, "twocolumn") {
+	if twoColumnOptIn() && hasOption(opts, "twocolumn") && !classManagesOwnColumns(name) {
 		e.twoColumn = true // \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go)
 	}
 	if name == "beamer" && !e.realBeamer() {
@@ -651,6 +651,24 @@ func (e *Engine) setPtsize(opts []string) {
 	// 100% default, so both are no-ops and 10pt documents stay byte-identical.
 	e.baselineskip, e.baseBaselineskip = leading, leading
 	e.scaleClassFontsToBase(permille)
+}
+
+// classManagesOwnColumns reports whether a class runs its own multi-column output
+// routine rather than LaTeX's standard \twocolumn one, so the engine's two-column page
+// builder (twocolumn.go) must NOT be switched on for it by a bare twocolumn option.
+// revtex is the clearest case — it \let\twocolumn\@undefined and lays its columns
+// through the ltxgrid grid engine — and the two-column journal classes (acmart,
+// IEEEtran) size and fill their columns their own way; driving them through the generic
+// routine mis-paginates (measured: revtex 2601.22272 loses a third of its pages).
+func classManagesOwnColumns(name string) bool {
+	if isRevtexClass(name) {
+		return true
+	}
+	switch name {
+	case "acmart", "IEEEtran", "IEEEconf", "aastex", "aastex6", "aastex61", "aastex62", "aastex631", "elsarticle":
+		return true
+	}
+	return false
 }
 
 // hasOption reports whether the trimmed option list contains want (used to read

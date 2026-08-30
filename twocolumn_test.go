@@ -186,6 +186,38 @@ func TestTwoColumnSpan(t *testing.T) {
 	}
 }
 
+// A bare twocolumn class option switches on the generic two-column routine only for
+// classes that use LaTeX's standard \twocolumn. Classes that run their own column engine
+// (revtex via ltxgrid, the acmart/IEEEtran journal layouts) are excluded, so the option
+// does not mis-drive them.
+func TestTwoColumnClassExclusion(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	for _, tc := range []struct {
+		cls  string
+		want bool
+	}{
+		{"article", true},
+		{"report", true},
+		{"revtex4-2", false},
+		{"acmart", false},
+		{"IEEEtran", false},
+	} {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\documentclass[twocolumn]{` + tc.cls + `}\begin{document}x
+
+y\end{document}`); err != nil {
+			t.Fatalf("%s: %v", tc.cls, err)
+		}
+		if e.twoColumn != tc.want {
+			t.Errorf("%s[twocolumn]: twoColumn=%v, want %v", tc.cls, e.twoColumn, tc.want)
+		}
+	}
+}
+
 // hasTwoColumns reports whether the page box contains a horizontal box holding at
 // least two vertical sub-boxes (the left and right columns).
 func hasTwoColumns(page *boxNode) bool {
