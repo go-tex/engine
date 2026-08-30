@@ -92,12 +92,27 @@ type geomState struct {
 	head, headsep, foot int
 }
 
-// newGeomState returns the geometry defaults: letterpaper (the geometry package's
-// default when the class does not pick one) with 1in margins on every side.
+// newGeomState returns the geometry defaults: the class's paper size (a4paper/…), or
+// letterpaper when the class named none, with 1in margins on every side. geometry
+// inherits the class paper size, so \documentclass[a4paper]+\usepackage[margin]{geometry}
+// lays out on A4, not US letter.
 func (e *Engine) newGeomState() *geomState {
-	w, h, _ := e.paper("letterpaper")
+	size := "letterpaper"
+	if e.classPaperSize != "" {
+		size = e.classPaperSize
+	}
+	w, h, _ := e.paper(size)
 	m, _ := e.geomEval("1in")
 	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m}
+}
+
+// parseGeomFloat reads a bare decimal factor (the geometry `scale` value, e.g. 0.775).
+func parseGeomFloat(s string) (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
 }
 
 // geomLooksDimen reports whether a geometry option value could be a dimension at
@@ -245,6 +260,24 @@ func (e *Engine) applyGeometry(opts string) {
 					g.paperW, g.paperH = w, h
 				}
 				// Any other bare flag is silently ignored.
+			}
+			continue
+		}
+
+		if key == "scale" {
+			// scale=<f> or scale={<fw>,<fh>}: the text body is that fraction of the paper
+			// (the margins are auto-centred). scale=0.7 is a common one-liner layout.
+			parts := splitOptsTopLevel(unbrace(val))
+			fw, wok := parseGeomFloat(parts[0])
+			fh, hok := fw, wok
+			if len(parts) > 1 {
+				fh, hok = parseGeomFloat(parts[1])
+			}
+			if wok && fw > 0 {
+				g.textW, g.hasTextW = int(float64(g.paperW)*fw), true
+			}
+			if hok && fh > 0 {
+				g.textH, g.hasTextH = int(float64(g.paperH)*fh), true
 			}
 			continue
 		}
