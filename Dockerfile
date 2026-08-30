@@ -10,7 +10,7 @@
 #     -pdf -outdir=/workspace/.build /workspace/main.tex
 #   → /workspace/.build/main.pdf
 
-FROM golang:1.26 AS build
+FROM golang:1.27 AS build
 WORKDIR /src
 COPY . .
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
