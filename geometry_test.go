@@ -102,6 +102,22 @@ func TestGeometryScale(t *testing.T) {
 	}
 }
 
+// TestGeometryTextBodyTotalWidthHeight: the text={w,h} / body={w,h} / total={w,h} block
+// options and the width= / height= aliases all set the text block directly, matching the
+// reference (they were ignored, falling back to default 1in margins).
+func TestGeometryTextBodyTotalWidthHeight(t *testing.T) {
+	for _, opt := range []string{"text={16cm,24cm}", "body={16cm,24cm}", "total={16cm,24cm}"} {
+		e := runGeom(t, `\documentclass[a4paper]{article}\usepackage[`+opt+`]{geometry}`)
+		if e.hsize != texSP(t, "16cm") || e.vsize != texSP(t, "24cm") {
+			t.Errorf("%s: hsize=%d vsize=%d, want %d %d", opt, e.hsize, e.vsize, texSP(t, "16cm"), texSP(t, "24cm"))
+		}
+	}
+	e := runGeom(t, `\documentclass[a4paper]{article}\usepackage[width=15cm,height=22cm]{geometry}`)
+	if e.hsize != texSP(t, "15cm") || e.vsize != texSP(t, "22cm") {
+		t.Errorf("width/height: hsize=%d vsize=%d, want %d %d", e.hsize, e.vsize, texSP(t, "15cm"), texSP(t, "22cm"))
+	}
+}
+
 func TestGeometryLetterDefault(t *testing.T) {
 	// geometry's default paper is letterpaper; loading it with just a margin uses
 	// 8.5in × 11in.

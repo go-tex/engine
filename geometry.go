@@ -264,6 +264,23 @@ func (e *Engine) applyGeometry(opts string) {
 			continue
 		}
 
+		if key == "text" || key == "body" || key == "total" {
+			// text={<w>,<h>} (body is its alias) sets the text block directly; total is
+			// the same block including head/foot, which default to zero here — so treat
+			// all three as textwidth/textheight={w,h}.
+			parts := splitOptsTopLevel(unbrace(val))
+			w, wok := e.geomEval(parts[0])
+			if wok && w > 0 {
+				g.textW, g.hasTextW = w, true
+			}
+			if len(parts) > 1 {
+				if h, hok := e.geomEval(parts[1]); hok && h > 0 {
+					g.textH, g.hasTextH = h, true
+				}
+			}
+			continue
+		}
+
 		if key == "scale" {
 			// scale=<f> or scale={<fw>,<fh>}: the text body is that fraction of the paper
 			// (the margins are auto-centred). scale=0.7 is a common one-liner layout.
@@ -322,9 +339,9 @@ func (e *Engine) applyGeometry(opts string) {
 		case "bottom", "bmargin":
 			g.bottom = d
 			g.hasTextH = false
-		case "textwidth":
+		case "textwidth", "width":
 			g.textW, g.hasTextW = d, true
-		case "textheight":
+		case "textheight", "height":
 			g.textH, g.hasTextH = d, true
 		case "paperwidth":
 			g.paperW = d
