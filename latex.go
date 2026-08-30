@@ -550,6 +550,13 @@ const MiniLaTeXKernel = `
 \newdimen\subcaptionwidth
 \def\thesubfigure{\@alph\c@subfigure}
 \def\p@subfigure{\the\@subparent}
+% \caption inside a subfigure/subtable environment (see doSubfigure) prints the
+% lettered sub-caption "(a)" via these \fnum@ hooks, reusing the kernel \caption.
+\def\fnum@subfigure{(\thesubfigure)}
+\newcount\c@subtable
+\def\thesubtable{\@alph\c@subtable}
+\def\p@subtable{\the\@subparent}
+\def\fnum@subtable{(\thesubtable)}
 \def\captionof#1#2{\def\@captype{#1}\caption{#2}}
 \def\captionsetup{\@ifnextbracket{\@captionsetupopt}{\@captionsetupnoopt}}
 \def\@captionsetupopt[#1]#2{}
