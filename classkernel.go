@@ -420,6 +420,15 @@ const LaTeX2eClassKernel = `
 % which the math layer knows. dsfont.sty's \DeclareMathAlphabet machinery can't run
 % here, so alias it: in math the retry path expands \mathds{X} -> \mathbb{X}.
 \def\mathds#1{\mathbb{#1}}
+% \pmb is amsbsy's "poor man's bold": it does not switch font at all, it typesets
+% its argument THREE times, offset by a fraction of an ex, so the ink looks heavier
+% (amsbsy.sty:40-57 — \setboxz@h{#3}, \kern-.5\ex@\copy\z@, \raise.4\ex@\copy\z@).
+% It is the fallback the package offers when no bold math version exists. One does
+% here: the maths layer renders \boldsymbol, which is amsbsy's own real bold
+% (\mathversion{bold}, amsbsy.sty:28) — so the retry path expands \pmb{x} to the
+% thing \pmb was imitating rather than dropping the formula. 348 of the 4172
+% formulas the arXiv corpus drops are \pmb.
+\def\pmb#1{\boldsymbol{#1}}
 % amsmath's stackable accents (\Tilde \Bar \Hat …) render as the ordinary accents
 % the math layer knows; the retry path expands e.g. \Bar{x} -> \bar{x}.
 \def\Tilde{\tilde}
