@@ -649,6 +649,13 @@ const MiniLaTeXKernel = `
 % preamble regular in beamer talks, and undefined it spills its whole body,
 % \def and all, onto the page.
 \long\def\pdfstringdefDisableCommands#1{}
+% translator (which beamer requires) looks a word up in a dictionary for the
+% reader's language: \translate{Theorem} is "Theorem", "Théorème" or "Satz". The
+% real package is fetched with beamer and redefines both of these — this is what
+% answers when it is not there, so a theorem still says what it is instead of
+% losing its own word. \usedictionary names a dictionary file to load.
+\newcommand\translate[2][]{#2}
+\def\usedictionary#1{}
 \def\xspace{}
 % algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
 % pseudocode reads as lines with keywords instead of being dropped command-by-

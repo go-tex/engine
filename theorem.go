@@ -33,7 +33,13 @@ import "strings"
 func (e *Engine) doNewtheorem() {
 	env := e.readBraceName()
 	sharedToks, hasShared := e.scanOptBracketToks() // [shared] BEFORE the heading
-	heading := e.readBraceName()                    // {Heading}
+	// The heading is read as the TOKENS it is made of, never as a name: beamer
+	// writes \newtheorem{theorem}{\translate{Theorem}} so the word comes from the
+	// reader's language, and a paper writes \newtheorem{thm}{\bfseries Th\'eor\`eme}.
+	// readBraceName drops every control sequence and keeps the braces around them
+	// as characters, which is how every beamer talk came to be headed
+	// "{Theorem} 2." instead of "Theorem 2." or "Théorème 2.".
+	head := e.readBraceToks()
 	withinToks, hasWithin := e.scanOptBracketToks() // [within] AFTER the heading
 	if env == "" {
 		return
@@ -77,7 +83,6 @@ func (e *Engine) doNewtheorem() {
 	// \<env>: \begin{env}. Open a group (so \it reverts at \end), globally step the
 	// counter (global to survive the group), freeze the number as \@currentlabel,
 	// then hand {Heading}{number} to \@begintheorem (which reads the optional note).
-	head := stringToToks(heading)
 	body := []tok{
 		csTok("par"), csTok("medskip"), csTok("begingroup"),
 		csTok("global"), csTok("advance"), csTok(ctr), chTok(' ', catSpace),
