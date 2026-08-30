@@ -638,6 +638,13 @@ const MiniLaTeXKernel = `
 % (hyperref bookmarks); \xspace is a smart space that here is a harmless no-op.
 \def\ensuremath#1{\ifmmode#1\else$#1$\fi}
 \def\texorpdfstring#1#2{#1}
+% \pdfstringdefDisableCommands{<code>} appends <code> to hyperref's
+% \pdfstringdefPreHook, run only while a title is being flattened into the STRING
+% a bookmark carries — never while typesetting. Its whole purpose is to silence
+% commands in that string, so a document's code is read and dropped. It is a
+% preamble regular in beamer talks, and undefined it spills its whole body,
+% \def and all, onto the page.
+\long\def\pdfstringdefDisableCommands#1{}
 \def\xspace{}
 % algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
 % pseudocode reads as lines with keywords instead of being dropped command-by-

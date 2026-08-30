@@ -276,6 +276,56 @@ const LaTeX2eClassKernel = `
 \def\DeclareSymbolFont#1#2#3#4#5{}
 \def\SetSymbolFont#1#2#3#4#5#6{}
 \def\DeclareSymbolFontAlphabet#1#2{}
+% \DeclareMathSymbol{<symbol>}{<type>}{<symbol font>}{<slot>} (ltfssdcl.dtx) makes
+% a character or a command fetch its glyph from a math family, by \mathcode or by
+% \mathchardef. There are no math families here — maths is handed to the maths
+% layer as source and it chooses its own glyphs — so the declaration is accepted
+% and its four arguments consumed. beamer runs 62 of them at \begin{document}
+% (beamerbasefont.sty, one per digit and letter) and an undefined one does worse
+% than stop the document: skipped, it spills its arguments onto the page as the
+% text 0, numbers and "30.
+\def\DeclareMathSymbol#1#2#3#4{}
+% \@input reads a file if it is there and says so if it is not (latex.ltx):
+%
+%	\def\@input#1{\IfFileExists{#1}{\@@input\@filef@und}{\typeout{No file #1.}}}
+%
+% \InputIfFileExists is the engine's own (packages.go) and does both halves, so
+% both kernel spellings go through it. A document reaches these through the .aux,
+% .toc and .nav files it writes and reads back.
+\def\@input#1{\InputIfFileExists{#1}{}{}}
+\def\@input@#1{\InputIfFileExists{#1}{}{}}
+% Kernel and plain-TeX macros a class calls without ever declaring them. Each is
+% the definition its own source gives, reduced to what this engine has:
+%
+%	\def\offinterlineskip{\baselineskip-\@m\p@ \lineskip\z@ \lineskiplimit\maxdimen}
+%	\let\reset@font\normalfont                                  (latex.ltx)
+%	\let\color@begingroup\begingroup                            (color.sty)
+%	\def\color@endgroup{\endgraf\endgroup}
+%
+% \@arrayparboxrestore restores the paragraph parameters inside an array cell;
+% \@parboxrestore, which this engine already accepts and drops, is that plus a
+% \\ it must NOT restore in a cell, where \\ ends the row.
+\def\offinterlineskip{\baselineskip-\@m\p@ \lineskip\z@ \lineskiplimit\maxdimen}
+\let\reset@font\normalfont
+\let\endgraf\par
+\let\@@par\par
+\let\color@begingroup\begingroup
+\def\color@endgroup{\endgraf\endgroup}
+\def\@arrayparboxrestore{}
+% \if@filesw is true in LaTeX and guards every \write; this engine writes its
+% streams to memory (writestreams.go), which is what a .toc or .nav read back in
+% the same run needs.
+\newif\if@filesw \@fileswtrue
+% \@checkend{env} is LaTeX's diagnostic that \end names the environment \begin
+% opened (latex.ltx):
+%
+%	\def\@checkend#1{\def\reserved@a{#1}\ifx\reserved@a\@currenvir\else\@badend{#1}\fi}
+%
+% Its only outcome is an error message, and this engine recovers from a mismatched
+% \end in its own way rather than stopping, so the name is read and dropped.
+% beamer's fragile-frame collector calls it on every frame it collects
+% (beamerbaseframe.sty).
+\def\@checkend#1{}
 \def\DeclareFontFamily#1#2#3{}
 \def\DeclareFontShape#1#2#3#4#5#6{}
 \def\DeclareFontEncoding#1#2#3{}
