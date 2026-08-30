@@ -536,6 +536,20 @@ func (e *Engine) doCitet() {
 	e.pushString(joinComma(parts))
 }
 
+// readJobBBL reads \jobname.bbl, the formatted bibliography BibTeX writes and
+// LaTeX inputs. It answers false when the job has no name (a source compiled from
+// memory) or no .bbl sits beside it, which is when the .bib path takes over.
+func (e *Engine) readJobBBL() ([]byte, bool) {
+	if e.jobName == "" {
+		return nil, false
+	}
+	data, err := os.ReadFile(e.jobName + ".bbl")
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
 // doBibliography implements \bibliography{base}: it reads base.bib, parses it,
 // keeps the cited (or all, for \nocite{*}) entries, sorts them plain-style, and
 // splices a \begin{thebibliography}…\end{thebibliography} block into the input so
@@ -545,6 +559,16 @@ func (e *Engine) doCitet() {
 func (e *Engine) doBibliography() {
 	base := e.readBraceName()
 	if base == "" {
+		return
+	}
+	// LaTeX's own \bibliography does not read the .bib at all: BibTeX has already
+	// turned it into \jobname.bbl, a ready \begin{thebibliography} block, and
+	// \bibliography inputs THAT. An arXiv submission always carries its .bbl —
+	// arXiv runs no BibTeX — and 165 of the 200 papers in the reference corpus
+	// ship one while 131 ship a .bib. Reading it is both the faithful path and the
+	// only one for a paper whose .bib was never submitted.
+	if data, ok := e.readJobBBL(); ok {
+		e.pushInputLevel(normalizeEOL(string(data)) + "\\gotexendinput ")
 		return
 	}
 	file := base
