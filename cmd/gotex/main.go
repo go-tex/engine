@@ -105,7 +105,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		// gotex renders whole documents, where a package that legitimately
 		// expands for millions of steps without reading further — pgfplots does
 		// — must not be mistaken for a loop.
-		NoProgressLimit: engine.NoProgressLimitHeavy}
+		NoProgressLimit: engine.NoProgressLimitHeavy,
+		// \jobname is the input file's own name: a document reads back what it (or
+		// BibTeX) wrote beside it — \jobname.bbl above all.
+		JobName: strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))}
 	// A document may name a class this machine does not have. Fetch it before
 	// compiling — see texmf.go; nothing is fetched unless the source asks for it.
 	attachTeXMF(&opt, src, *offline, stderr)

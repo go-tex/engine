@@ -70,6 +70,12 @@ type Options struct {
 	//
 	// nil (the default) means no host resolver: disk and the embedded set only.
 	Resolve func(name string) ([]byte, bool)
+
+	// JobName is TeX's \jobname: the main input file's name without its
+	// extension. A document reads and writes files named after it — \jobname.bbl
+	// is where LaTeX's own \bibliography looks first, and .aux/.toc/.nav are the
+	// same family. Empty keeps TeX's own default for a nameless job, "texput".
+	JobName string
 }
 
 func (o Options) size() int {
@@ -99,6 +105,7 @@ func NewDocument(opt Options) (*Engine, error) {
 func buildEngine(opt Options, latex bool) (*Engine, error) {
 	e := New()
 	e.resolve = opt.Resolve
+	e.jobName = opt.JobName
 	if opt.NoProgressLimit > 0 {
 		e.tightLimit = opt.NoProgressLimit
 	}
@@ -111,6 +118,13 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		if err := e.LoadLaTeX(); err != nil {
 			return nil, fmt.Errorf("texengine: loading LaTeX: %w", err)
 		}
+	}
+	// \jobname names the main input file, and a document reads files named after
+	// it: \jobname.bbl (the bibliography LaTeX itself inputs), .aux, .toc, .nav.
+	// It is defined AFTER the macro layers, which carry the "texput" default a
+	// nameless job keeps.
+	if opt.JobName != "" {
+		e.define("jobname", &meaning{kind: mMacro, body: stringToToks(opt.JobName)}, true)
 	}
 	fontBytes := opt.Font
 	if fontBytes == nil {

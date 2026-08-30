@@ -132,6 +132,7 @@ type Engine struct {
 	// resolve is Options.Resolve: a host-supplied source of texmf files, tried
 	// after the search path and before the embedded set (see hostTeXFile).
 	resolve func(name string) ([]byte, bool)
+	jobName  string // \jobname: the main input file's base name ("" ⇒ texput)
 
 	out    strings.Builder   // \message output
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
