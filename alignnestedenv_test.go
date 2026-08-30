@@ -42,3 +42,55 @@ func TestAlignStillSeparatesItsOwnRows(t *testing.T) {
 		t.Errorf("les numéros d'équation sont %q, want %q (deux lignes numérotées)", got, "(1)(2)")
 	}
 }
+
+// TeX counts IMPLICIT braces in align_state as well (tex.web §7492-7493): \bgroup
+// opens a group as surely as {. The cell scanner is that counter, so a & inside
+// \bgroup…\egroup belongs to the group, not to the alignment — the same protection
+// a nested matrix gets from the \bgroup that \@array opens (latex.ltx:12101).
+func TestAlignCountsImplicitBraces(t *testing.T) {
+	e, err := NewDocument(Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.push(alignToks(`a &= \bgroup x & y\egroup \\ c &= d\end{align}`))
+	rows := e.collectAlignBody("align")
+	if len(rows) != 2 {
+		t.Fatalf("%d ligne(s), want 2", len(rows))
+	}
+	if n := len(rows[0].cells); n != 2 {
+		t.Errorf("la première ligne a %d cellules, want 2: le & protégé par \\bgroup en a coupé une de trop", n)
+	}
+}
+
+// alignToks tokenises a cell scanner's input, with & as the alignment tab (category
+// 4) that a real document's \begin{align} gives it — tokenizeTeX makes it an
+// ordinary character, which no alignment would ever split on.
+func alignToks(src string) []tok {
+	var out []tok
+	rs := []rune(src)
+	for i := 0; i < len(rs); i++ {
+		switch c := rs[i]; {
+		case c == '\\':
+			j := i + 1
+			for j < len(rs) && (rs[j] >= 'a' && rs[j] <= 'z' || rs[j] >= 'A' && rs[j] <= 'Z') {
+				j++
+			}
+			if j == i+1 { // a control symbol, \\ among them
+				j++
+			}
+			out = append(out, csTok(string(rs[i+1:j])))
+			i = j - 1
+		case c == '&':
+			out = append(out, chTok('&', catAlign))
+		case c == '{':
+			out = append(out, chTok('{', catBegin))
+		case c == '}':
+			out = append(out, chTok('}', catEnd))
+		case c == ' ':
+			out = append(out, chTok(' ', catSpace))
+		default:
+			out = append(out, chTok(c, catOther))
+		}
+	}
+	return out
+}
