@@ -255,6 +255,18 @@ func (e *Engine) applyGeometry(opts string) {
 				landscape = true
 			case "portrait":
 				landscape = false
+			case "includehead", "includefoot", "includeheadfoot":
+				// By default (includehead=false) the header/footer sit in the margins and
+				// the text height is paperH−top−bottom (the engine's head/headsep/foot are
+				// zero, so its vsize formula already gives that). These flags fold the head
+				// and/or foot INTO the body, so the text height loses headheight+headsep
+				// (12pt+25pt) and/or footskip (30pt) — the standard 10–12pt class values.
+				if key == "includehead" || key == "includeheadfoot" {
+					g.head, g.headsep = ptToSP(12), ptToSP(25)
+				}
+				if key == "includefoot" || key == "includeheadfoot" {
+					g.foot = ptToSP(30)
+				}
 			default:
 				if w, h, ok := e.paper(key); ok {
 					g.paperW, g.paperH = w, h
