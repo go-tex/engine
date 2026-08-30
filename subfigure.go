@@ -19,6 +19,20 @@ package engine
 // (2) points \linewidth/\columnwidth at the panel width so \includegraphics
 // [width=\linewidth] fills the panel rather than the outer text block.
 func (e *Engine) doSubfigure(captype string) {
+	// The name serves TWO packages. subcaption/subfig spell it as an ENVIRONMENT,
+	// \begin{subfigure}[pos]{width}…\end{subfigure}; the older subfigure package
+	// spells it as a COMMAND, \subfigure[caption]{content}, and 5 of the 200 papers
+	// in the arXiv reference corpus still do (44 use the environment). Reading the
+	// command form as an environment sends collectEnvBody looking for an
+	// \end{subfigure} that is not there, and it swallows the rest of the document:
+	// one paper fell from 18 pages to 4.
+	//
+	// \@currenvir is what tells them apart — \begin sets it (see setCurrentEnv), and
+	// beamer's \frame is served the same way for the same reason.
+	if !e.inEnvironment(captype) {
+		e.doSubfigureCommand(captype)
+		return
+	}
 	pos := e.scanOptBracketPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	body := e.collectEnvBody(captype)
@@ -55,4 +69,49 @@ func (e *Engine) doSubfigure(captype string) {
 		e.beginParagraph(false)
 	}
 	e.place(alignParbox(vbox, pos))
+}
+
+// inEnvironment reports whether \@currenvir names env, i.e. whether the macro now
+// running was reached through \begin{env} rather than called as a command.
+func (e *Engine) inEnvironment(env string) bool {
+	m := e.eq["@currenvir"]
+	if m == nil || m.kind != mMacro {
+		return false
+	}
+	var b []rune
+	for _, t := range m.body {
+		if t.cs_ {
+			return false
+		}
+		b = append(b, t.ch)
+	}
+	return string(b) == env
+}
+
+// doSubfigureCommand implements the subfigure package's command form,
+// \subfigure[caption]{content}: the panel is set where it stands, followed by its
+// lettered caption. It is not boxed to a width the way the environment form is —
+// the command states none — so consecutive panels flow as the figure's own
+// \centering arranges them.
+func (e *Engine) doSubfigureCommand(captype string) {
+	capToks, hasCap := e.scanOptBracketToks()
+	body := e.readBraceToks()
+	if len(body) == 0 && !hasCap {
+		return
+	}
+	ctr := "c@" + captype
+	out := []tok{csTok("begingroup"),
+		csTok("global"), csTok("advance"), csTok(ctr), chTok(' ', catSpace),
+		chTok('b', catLetter), chTok('y', catLetter), chTok('1', catOther), csTok("relax"),
+		csTok("edef"), csTok("@currentlabel"), chTok('{', catBegin),
+		csTok("p@" + captype), csTok("the" + captype), chTok('}', catEnd),
+	}
+	out = append(out, body...)
+	if hasCap {
+		out = append(out, csTok("space"), chTok('(', catOther), csTok("the"+captype),
+			chTok(')', catOther), csTok("space"))
+		out = append(out, capToks...)
+	}
+	out = append(out, csTok("endgroup"))
+	e.push(out)
 }
