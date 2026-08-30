@@ -92,10 +92,16 @@ type geomState struct {
 	head, headsep, foot int
 }
 
-// newGeomState returns the geometry defaults: letterpaper (the geometry package's
-// default when the class does not pick one) with 1in margins on every side.
+// newGeomState returns the geometry defaults: the class's paper size (a4paper/…), or
+// letterpaper when the class named none, with 1in margins on every side. geometry
+// inherits the class paper size, so \documentclass[a4paper]+\usepackage[margin]{geometry}
+// lays out on A4, not US letter.
 func (e *Engine) newGeomState() *geomState {
-	w, h, _ := e.paper("letterpaper")
+	size := "letterpaper"
+	if e.classPaperSize != "" {
+		size = e.classPaperSize
+	}
+	w, h, _ := e.paper(size)
 	m, _ := e.geomEval("1in")
 	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m}
 }

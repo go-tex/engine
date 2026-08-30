@@ -382,6 +382,15 @@ func (e *Engine) doDocumentClass() {
 	}
 	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back
+	// Record a paper-size class option (a4paper/letterpaper/…). The geometry package
+	// inherits the class's paper size when its own options name none — without this,
+	// a European \documentclass[a4paper] + \usepackage[margin]{geometry} document was
+	// laid out on US letter, shrinking the text height and overflowing pages.
+	for _, o := range opts {
+		if _, ok := paperSizes[strings.TrimSpace(o)]; ok {
+			e.classPaperSize = strings.TrimSpace(o)
+		}
+	}
 	if twoColumnOptIn() && hasOption(opts, "twocolumn") && !classManagesOwnColumns(name) {
 		e.twoColumn = true // \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go)
 	}

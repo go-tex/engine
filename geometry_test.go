@@ -71,6 +71,25 @@ func TestNewGeometry(t *testing.T) {
 	}
 }
 
+// TestGeometryInheritsClassPaper: geometry with no paper size of its own inherits the
+// \documentclass paper option, so \documentclass[a4paper] + \usepackage[margin]{geometry}
+// lays out on A4 (297mm tall), not US letter — the previous default, which shrank the
+// text height and overflowed European papers onto extra pages.
+func TestGeometryInheritsClassPaper(t *testing.T) {
+	e := runGeom(t, `\documentclass[11pt,a4paper]{article}\usepackage[margin=2cm]{geometry}`)
+	if want := texSP(t, "297mm") - 2*texSP(t, "2cm"); e.vsize != want {
+		t.Errorf("vsize = %d, want %d (A4 height − 2×2cm, inherited from the class)", e.vsize, want)
+	}
+	if want := texSP(t, "210mm") - 2*texSP(t, "2cm"); e.hsize != want {
+		t.Errorf("hsize = %d, want %d (A4 width − 2×2cm)", e.hsize, want)
+	}
+	// A class with no paper option still defaults to letter.
+	e2 := runGeom(t, `\documentclass[11pt]{article}\usepackage[margin=1in]{geometry}`)
+	if want := texSP(t, "11in") - 2*texSP(t, "1in"); e2.vsize != want {
+		t.Errorf("no class paper option: vsize = %d, want %d (letter)", e2.vsize, want)
+	}
+}
+
 func TestGeometryLetterDefault(t *testing.T) {
 	// geometry's default paper is letterpaper; loading it with just a margin uses
 	// 8.5in × 11in.
