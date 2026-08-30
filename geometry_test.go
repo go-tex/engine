@@ -118,6 +118,25 @@ func TestGeometryTextBodyTotalWidthHeight(t *testing.T) {
 	}
 }
 
+// TestGeometryIncludeHeadFoot: includehead / includefoot fold the header / footer into
+// the text body, so the text height loses headheight+headsep (37pt) and/or footskip
+// (30pt) — matching the reference; without them the header/footer sit in the margins.
+func TestGeometryIncludeHeadFoot(t *testing.T) {
+	base := texSP(t, "297mm") - 2*texSP(t, "1in") // A4 height − 2×1in (default: head/foot in margins)
+	e := runGeom(t, `\documentclass[11pt,a4paper]{article}\usepackage[margin=1in]{geometry}`)
+	if e.vsize != base {
+		t.Errorf("plain: vsize=%d, want %d", e.vsize, base)
+	}
+	eh := runGeom(t, `\documentclass[11pt,a4paper]{article}\usepackage[margin=1in,includehead]{geometry}`)
+	if want := base - ptToSP(12) - ptToSP(25); eh.vsize != want {
+		t.Errorf("includehead: vsize=%d, want %d (−headheight−headsep)", eh.vsize, want)
+	}
+	ef := runGeom(t, `\documentclass[11pt,a4paper]{article}\usepackage[margin=1in,includefoot]{geometry}`)
+	if want := base - ptToSP(30); ef.vsize != want {
+		t.Errorf("includefoot: vsize=%d, want %d (−footskip)", ef.vsize, want)
+	}
+}
+
 func TestGeometryLetterDefault(t *testing.T) {
 	// geometry's default paper is letterpaper; loading it with just a margin uses
 	// 8.5in × 11in.
@@ -247,7 +266,7 @@ func TestGeometryOtherPaperSizes(t *testing.T) {
 
 func TestGeometryUnknownKeysIgnored(t *testing.T) {
 	// Unknown keys and bare flags leave the layout at defaults (letterpaper, 1in).
-	e := runGeom(t, `\usepackage[foo=3cm,bar,twoside,includehead]{geometry}`)
+	e := runGeom(t, `\usepackage[foo=3cm,bar,twoside,nosuchflag]{geometry}`)
 	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.hsize != want {
 		t.Errorf("hsize = %d, want %d (defaults preserved)", e.hsize, want)
 	}
