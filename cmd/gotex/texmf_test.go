@@ -40,10 +40,10 @@ func TestBundlesForRecognisesTheClass(t *testing.T) {
 		name, src string
 		want      []string
 	}{
-		{"nu", `\documentclass{beamer}`, []string{"beamer"}},
-		{"avec options", `\documentclass[handout,11pt]{beamer}`, []string{"beamer"}},
-		{"espaces", "\\documentclass  [t] \t{beamer}", []string{"beamer"}},
-		{"indenté", "  \\documentclass{beamer}", []string{"beamer"}},
+		{"nu", `\documentclass{beamer}`, []string{"translator", "beamer"}},
+		{"avec options", `\documentclass[handout,11pt]{beamer}`, []string{"translator", "beamer"}},
+		{"espaces", "\\documentclass  [t] \t{beamer}", []string{"translator", "beamer"}},
+		{"indenté", "  \\documentclass{beamer}", []string{"translator", "beamer"}},
 		{"autre classe", `\documentclass{article}`, nil},
 		{"aucune classe", `\input{quelquechose}`, nil},
 		{"commenté", "% \\documentclass{beamer}\n", nil},
@@ -71,7 +71,7 @@ func TestBundlesForRecognisesPackages(t *testing.T) {
 		{"avec options", `\usepackage[compat=1.18]{pgfplots}`, []string{"pgf", "pgfplots"}},
 		{"liste séparée par des virgules", `\usepackage{amsmath, pgf ,xcolor}`, []string{"pgf"}},
 		{"les deux, sans répétition", `\documentclass{beamer}\usepackage{pgfplots}\usepackage{pgf}`,
-			[]string{"beamer", "pgf", "pgfplots"}},
+			[]string{"translator", "beamer", "pgf", "pgfplots"}},
 		{"commenté", "% \\usepackage{pgfplots}\n", nil},
 		{"paquet inconnu", `\usepackage{fancyhdr}`, nil},
 	} {
@@ -177,7 +177,7 @@ func TestSeveralPackagesOnOneLine(t *testing.T) {
 		name, src string
 		want      []string
 	}{
-		{"deux sur une ligne", `\usepackage{pgf}\usepackage{beamer}`, []string{"pgf", "beamer"}},
+		{"deux sur une ligne", `\usepackage{pgf}\usepackage{beamer}`, []string{"pgf", "translator", "beamer"}},
 		{"trois, dont un inconnu", `\usepackage{amsmath}\usepackage{pgfplots}\usepackage{pgf}`,
 			[]string{"pgf", "pgfplots"}},
 		{"un commenté au milieu", `\usepackage{pgf}% \usepackage{beamer}`, []string{"pgf"}},
