@@ -1573,6 +1573,11 @@ func (e *Engine) loadMore() {
 	e.prim("@equationbody", func(e *Engine) { e.doEquationBody() }) // \begin{equation} body + number
 	e.prim("equation*", func(e *Engine) { e.doEquationStar("equation*") })
 	e.prim("endequation*", func(e *Engine) {})
+	// \begin{displaymath} is the kernel's unnumbered display — the environment form of
+	// \[ … \], identical to equation* minus the amsmath \tag. Without it the whole body
+	// is skipped and every \frac/\sum/\left inside dropped as an unknown text command.
+	e.prim("displaymath", func(e *Engine) { e.doEquationStar("displaymath") })
+	e.prim("enddisplaymath", func(e *Engine) {})
 	// amsmath multi-line displays: align/eqnarray/gather/multline and starred forms.
 	e.prim("align", func(e *Engine) { e.doAlignEnv("align", true, alignPairs) })
 	e.prim("align*", func(e *Engine) { e.doAlignEnv("align*", false, alignPairs) })
@@ -1582,6 +1587,11 @@ func (e *Engine) loadMore() {
 	e.prim("gather*", func(e *Engine) { e.doAlignEnv("gather*", false, nil) })
 	e.prim("multline", func(e *Engine) { e.doMultline("multline", true) })
 	e.prim("multline*", func(e *Engine) { e.doMultline("multline*", false) })
+	// flalign(*) is amsmath's full-width align: the same &-separated column structure
+	// as align, spread to fill \textwidth. We reuse align's column model (the content
+	// and numbering are identical); without it the whole display is dropped.
+	e.prim("flalign", func(e *Engine) { e.doAlignEnv("flalign", true, alignPairs) })
+	e.prim("flalign*", func(e *Engine) { e.doAlignEnv("flalign*", false, alignPairs) })
 	for _, n := range []string{"endalign", "endalign*", "endeqnarray", "endeqnarray*",
 		"endgather", "endgather*", "endmultline", "endmultline*"} {
 		e.prim(n, func(e *Engine) {})

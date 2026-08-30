@@ -2,6 +2,30 @@ package engine
 
 import "testing"
 
+// The displaymath environment (the kernel's unnumbered \[ … \]) and amsmath's
+// full-width flalign(*) must render as display math, not be skipped as undefined
+// environments (which drops every \frac/\sum/\left inside as an unknown command).
+// Corpus census: displaymath dropped in 10 papers, flalign* in 14.
+func TestDisplayMathEnvironments(t *testing.T) {
+	for _, body := range []string{
+		`\begin{displaymath} x=\frac{1}{2} \end{displaymath}`,
+		`\begin{flalign*} a &= b & c &= d \end{flalign*}`,
+		`\begin{flalign} a &= b \end{flalign}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			e := New()
+			e.LoadLaTeX()
+			e.SetFont(spMock{})
+			if _, err := e.Run(`\hsize=300pt` + "\n" + body); err != nil {
+				t.Fatal(err)
+			}
+			if !hasMathNode(e.mvl) {
+				t.Errorf("no math box placed — environment was dropped, not rendered")
+			}
+		})
+	}
+}
+
 // Display math $$…$$ ends the paragraph and is centred on its own line (an hbox
 // to \hsize with a math node between two fils).
 func TestDisplayMathCentered(t *testing.T) {
