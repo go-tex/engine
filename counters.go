@@ -55,8 +55,52 @@ func (e *Engine) doNewcounter() {
 	}
 	if hasWithin && code >= 0 {
 		if within := strings.TrimSpace(e.toksToString(withinToks)); within != "" {
-			e.addToReset(code, within)
+			e.addToReset(name, within)
 		}
+	}
+}
+
+// doAddtoreset implements LaTeX's \@addtoreset{foo}{bar}: it registers counter
+// foo in \cl@bar, so foo is zeroed whenever bar is stepped.
+//
+// \newcounter{foo}[bar] already does this through its optional argument, and
+// that covers most of a class file. What it does not cover is a counter that
+// ALREADY EXISTS and is only later tied to a parent — which is exactly how
+// report.cls and book.cls treat \c@equation:
+//
+//	\@addtoreset {equation}{chapter}
+//	\renewcommand\theequation
+//	  {\ifnum \c@chapter>\z@ \thechapter.\fi \@arabic\c@equation}
+//
+// Without this primitive that line did nothing, so the chapter part of an
+// equation number advanced while the equation part kept counting across the
+// whole document: the second chapter's first equation printed (2.2).
+func (e *Engine) doAddtoreset() {
+	name := e.readBraceName()
+	within := e.readBraceName()
+	if name == "" || within == "" {
+		return
+	}
+	if m := e.eq["c@"+name]; m == nil || m.kind != mCountRef {
+		return // no such counter: nothing to reset, and nothing to complain about
+	}
+	e.addToReset(name, within)
+}
+
+// doStpelt implements LaTeX's \@stpelt{name}: zero the counter AND run its own
+// reset list, so a reset cascades down the whole chain rather than stopping at
+// one level. The kernel writes it as "set to −1, then \stepcounter", which nets
+// out to the same thing: the value ends at 0 and \cl@<name> has run.
+func (e *Engine) doStpelt() {
+	name := e.readBraceName()
+	if name == "" {
+		return
+	}
+	if m := e.eq["c@"+name]; m != nil && m.kind == mCountRef {
+		e.setCount(m.code, 0, true)
+	}
+	if cl := e.eq["cl@"+name]; cl != nil && cl.kind == mMacro {
+		e.push([]tok{csTok("cl@" + name)})
 	}
 }
 

@@ -1844,6 +1844,8 @@ func (e *Engine) loadMore() {
 	e.prim("setcounter", func(e *Engine) { e.doSetcounter() })
 	e.prim("addtocounter", func(e *Engine) { e.doAddtocounter() })
 	e.prim("stepcounter", func(e *Engine) { e.doStepcounter() })
+	e.prim("@addtoreset", func(e *Engine) { e.doAddtoreset() })
+	e.prim("@stpelt", func(e *Engine) { e.doStpelt() })
 	e.prim("refstepcounter", func(e *Engine) { e.doRefstepcounter() })
 	e.prim("@Roman", func(e *Engine) { e.pushString(strings.ToUpper(roman(e.scanInt()))) })
 	expandableSet["@Roman"] = true

@@ -71,7 +71,7 @@ func (e *Engine) doNewtheorem() {
 	// A within-numbered environment resets on its parent counter's step.
 	if hasWithin && !hasShared && ctrCode >= 0 {
 		within := strings.TrimSpace(e.toksToString(withinToks))
-		e.addToReset(ctrCode, within)
+		e.addToReset(env, within)
 	}
 
 	// \<env>: \begin{env}. Open a group (so \it reverts at \end), globally step the
@@ -93,21 +93,32 @@ func (e *Engine) doNewtheorem() {
 	e.define("end"+env, &meaning{kind: mMacro, body: []tok{csTok("@endtheorem")}}, true)
 }
 
-// addToReset arranges for the count register ctrCode to be zeroed whenever the
-// parent counter `within` is stepped. It appends "\global\count<code>=0" to the
-// reset-list macro \cl@<within>, and hooks the corresponding sectioning macro
-// (\@nsection / \@nsubsection) once so that it runs the reset list after stepping
-// — mirroring LaTeX's \@addtoreset / \cl@… mechanism.
-func (e *Engine) addToReset(ctrCode int, within string) {
+// addToReset arranges for counter `name` to be zeroed whenever the parent
+// counter `within` is stepped. It appends \@stpelt{name} to the reset-list macro
+// \cl@<within>, and hooks the corresponding sectioning macro (\@nsection /
+// \@nsubsection) once so that it runs the reset list after stepping — mirroring
+// LaTeX's \@addtoreset / \cl@… mechanism.
+//
+// It appends \@stpelt{name} rather than a bare "\global\count<code>=0" because
+// a reset CASCADES. LaTeX's kernel resets a counter by stepping it out of −1:
+//
+//	\def\@stpelt#1{\global\csname c@#1\endcsname \m@ne\stepcounter{#1}}
+//
+// so zeroing a counter also runs THAT counter's own reset list. A flat
+// assignment stops at the first level, and the difference shows: with section
+// registered within chapter and subsection within section, a \chapter used to
+// leave the subsection counter untouched, so \thesubsection after the second
+// chapter read 2.0.2 where LaTeX gives 2.0.0.
+func (e *Engine) addToReset(name, within string) {
 	e.hookReset(within)
 	clname := "cl@" + within
 	var body []tok
 	if m := e.eq[clname]; m != nil && m.kind == mMacro {
 		body = append(body, m.body...)
 	}
-	body = append(body, csTok("global"), csTok("count"))
-	body = append(body, digitToks(ctrCode)...)
-	body = append(body, chTok('=', catOther), chTok('0', catOther), csTok("relax"))
+	body = append(body, csTok("@stpelt"), chTok('{', catBegin))
+	body = append(body, stringToToks(name)...)
+	body = append(body, chTok('}', catEnd))
 	e.define(clname, &meaning{kind: mMacro, body: body}, false)
 }
 
