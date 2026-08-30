@@ -135,6 +135,10 @@ const MiniLaTeXKernel = `
 \long\def\labelitemii{--}
 \long\def\labelitemiii{*}
 \long\def\labelitemiv{\cdot}
+\let\if@listfirst\iffalse
+\def\@listfirsttrue{\let\if@listfirst\iftrue}
+\def\@listfirstfalse{\let\if@listfirst\iffalse}
+\def\@iteminterspace{\if@listfirst\@listfirstfalse\else\vskip\itemsep\fi}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
 \def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
 % \@itemopt reads the optional [label] of an \item in itemize/enumerate and uses
@@ -143,16 +147,16 @@ const MiniLaTeXKernel = `
 % the bracket that \@ifnextbracket has already confirmed is present.
 \def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
-\def\itemize{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
-\def\enditemize{\par\endgroup\smallskip}
-\def\enumerate{\par\smallskip\begingroup\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
-\def\endenumerate{\par\@enumitemrec\endgroup\smallskip}
+\def\itemize{\par\addvspace\topsep\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
+\def\enditemize{\par\addvspace\topsep\endgroup}
+\def\enumerate{\par\addvspace\topsep\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
+\def\endenumerate{\par\@enumitemrec\addvspace\topsep\endgroup}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
-\long\def\description{\par\smallskip\begingroup\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
-\long\def\enddescription{\par\endgroup\smallskip}
+\long\def\description{\par\addvspace\topsep\begingroup\@listfirsttrue\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
+\long\def\enddescription{\par\addvspace\topsep\endgroup}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
 \long\def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}

@@ -130,38 +130,75 @@ func TestEnumitemNoResume(t *testing.T) {
 // nosep yields strictly smaller inter-item glue than an explicit itemsep, and
 // cancels the list's leading \smallskip. All widths are compared against a plain
 // list rendered with the same content, so the fixed interline glue cancels out.
+// TestListInterItemSpacing: itemize AND enumerate put \itemsep of glue between items
+// (per body size). Enumerate is covered explicitly because its item macro reaches the
+// item body through a different \@ifnextbracket branch than itemize's, and an earlier
+// interspace placement silently dropped enumerate's inter-item skip.
+func TestListInterItemSpacing(t *testing.T) {
+	// 11pt article → \itemsep = 4.5pt; the second item's leading glue is that plus the
+	// interline. noitemsep (\itemsep=0) gives the interline alone, so their difference
+	// is exactly \itemsep.
+	lead := func(env, opt string) int {
+		g := itemLeadGlue(runEI(t, `\documentclass[11pt]{article}\begin{document}\begin{`+env+`}`+opt+`\item a\item b\end{`+env+`}`).mvl)
+		if len(g) != 2 {
+			t.Fatalf("%s%s: expected 2 lines, got %+v", env, opt, g)
+		}
+		return g[1].glue
+	}
+	for _, env := range []string{"itemize", "enumerate"} {
+		if got := lead(env, "") - lead(env, "[noitemsep]"); got != texSPt(t, "4.5pt") {
+			t.Errorf("%s inter-item \\itemsep = %d, want %d (4.5pt at 11pt)", env, got, texSPt(t, "4.5pt"))
+		}
+	}
+}
+
+// texSPt converts a dimension string to scaled points via the engine's scanner.
+func texSPt(t *testing.T, s string) int {
+	t.Helper()
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	d, ok := e.geomEval(s)
+	if !ok {
+		t.Fatalf("texSPt(%q): not a dimension", s)
+	}
+	return d
+}
+
 func TestEnumitemSpacing(t *testing.T) {
 	const pt = unity
-
-	// Baseline: a plain list. Its leading (smallskip) and inter-item (interline)
-	// glue are the reference the option keys move away from.
-	gp := itemLeadGlue(runEI(t, `\begin{enumerate}\item a\item b\end{enumerate}`).mvl)
-	if len(gp) != 2 {
-		t.Fatalf("plain: expected 2 lines, got %+v", gp)
+	// Under an article class \topsep/\itemsep are set (list machinery in latex.go); the
+	// enumitem keys SET \itemsep (not add to it), so noitemsep — \itemsep=0 — is the pure
+	// interline baseline the other keys move from.
+	lead := func(opt string) []struct {
+		glue int
+		text string
+	} {
+		return itemLeadGlue(runEI(t, `\documentclass{article}\begin{document}\begin{enumerate}`+opt+`\item a\item b\end{enumerate}`).mvl)
 	}
 
-	// itemsep=12pt adds exactly 12pt of glue before each item.
-	g1 := itemLeadGlue(runEI(t, `\begin{enumerate}[itemsep=12pt]\item a\item b\end{enumerate}`).mvl)
-	if len(g1) != 2 {
-		t.Fatalf("itemsep: expected 2 lines, got %+v", g1)
+	base := lead(`[noitemsep]`) // inter-item glue = interline only
+	if len(base) != 2 {
+		t.Fatalf("noitemsep: expected 2 lines, got %+v", base)
 	}
-	if got, want := g1[1].glue, gp[1].glue+12*pt; got != want {
-		t.Errorf("itemsep=12pt: inter-item glue = %d, want %d (plain %d + 12pt)", got, want, gp[1].glue)
+	// itemsep=12pt sets \itemsep=12pt: exactly 12pt over the interline baseline.
+	g1 := lead(`[itemsep=12pt]`)
+	if got, want := g1[1].glue, base[1].glue+12*pt; got != want {
+		t.Errorf("itemsep=12pt: inter-item glue = %d, want %d (baseline %d + 12pt)", got, want, base[1].glue)
 	}
-
-	// nosep adds no inter-item glue and cancels the leading smallskip.
-	g2 := itemLeadGlue(runEI(t, `\begin{enumerate}[nosep]\item a\item b\end{enumerate}`).mvl)
-	if len(g2) != 2 {
-		t.Fatalf("nosep: expected 2 lines, got %+v", g2)
-	}
-	if g2[1].glue >= g1[1].glue {
-		t.Errorf("nosep inter-item glue %d not smaller than itemsep %d", g2[1].glue, g1[1].glue)
+	// nosep: inter-item glue back to the baseline, and the top \topsep removed.
+	g2 := lead(`[nosep]`)
+	if g2[1].glue != base[1].glue {
+		t.Errorf("nosep inter-item glue = %d, want %d (baseline, no extra)", g2[1].glue, base[1].glue)
 	}
 	if g2[0].glue != 0 {
-		t.Errorf("nosep: leading glue before first item = %d, want 0 (smallskip cancelled)", g2[0].glue)
+		t.Errorf("nosep: leading glue before first item = %d, want 0 (topsep removed)", g2[0].glue)
 	}
-	if g2[0].glue >= gp[0].glue {
-		t.Errorf("nosep leading glue %d not smaller than plain leading %d", g2[0].glue, gp[0].glue)
+	// A plain list keeps a positive \topsep leading (which nosep removes).
+	gp := lead(``)
+	if gp[0].glue <= 0 {
+		t.Errorf("plain leading glue = %d, want > 0 (topsep)", gp[0].glue)
 	}
 }
 

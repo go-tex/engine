@@ -673,6 +673,16 @@ func (e *Engine) setPtsize(opts []string) {
 	// 100% default, so both are no-ops and 10pt documents stay byte-identical.
 	e.baselineskip, e.baseBaselineskip = leading, leading
 	e.scaleClassFontsToBase(permille)
+	topsep, itemsep := 8.0, 4.0
+	switch pt {
+	case "1":
+		topsep, itemsep = 9.0, 4.5
+	case "2":
+		topsep, itemsep = 10.0, 5.0
+	}
+	e.setNamedDimen("topsep", ptToSP(topsep))
+	e.setNamedDimen("itemsep", ptToSP(itemsep))
+	e.setNamedDimen("parsep", ptToSP(itemsep))
 }
 
 // classManagesOwnColumns reports whether a class runs its own multi-column output
