@@ -8,6 +8,18 @@ import (
 	"testing"
 )
 
+// TestPackageConfigStubsRound2: the second batch of package-config gobbles
+// (\DeclareGraphicsExtensions, \sisetup, \setuptodonotes, \selectlanguage, \tikzstyle
+// with its =[…] value, \addbibresource with and without an optional argument, and the
+// deprecated \sc font switch) all complete without error and emit nothing.
+func TestPackageConfigStubsRound2(t *testing.T) {
+	if out := ckRun(t, `\DeclareGraphicsExtensions{.pdf}\sisetup{a}\setuptodonotes{b}`+
+		`\selectlanguage{english}\tikzstyle{n}=[draw,fill]\addbibresource{r.bib}`+
+		`\addbibresource[l=x]{m.bib}{\sc small}\message{OK}`); out != "OK" {
+		t.Errorf("round-2 config gobbles: message=%q, want OK", out)
+	}
+}
+
 // TestGeneralCommandStubs: the package-config gobbles (\mathtoolsset, \setkeys,
 // \lstset, \lstdefinestyle, \enlargethispage) complete without error and emit
 // nothing, while \IEEEPARstart keeps its drop-cap letter and the rest of the word.
