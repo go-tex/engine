@@ -42,12 +42,31 @@ func (e *Engine) doMinipage() {
 // list, say) are copied verbatim into the body so they are processed normally when
 // the body is later typeset. The pattern mirrors collectTabularBody.
 func (e *Engine) collectEnvBody(name string) []tok {
+	// Where the input stood before the scan, so nothing is lost if the \end never
+	// comes. A body collected up front assumes the environment's \end is IN the input;
+	// it need not be. beamer's rounded block opens \begin{minipage} inside
+	// \beamerboxesrounded and only produces the matching \end later, from
+	// \endbeamerboxesrounded — so the scanner drains what is pending, carries on into
+	// the document text and swallows the rest of it. Measured, a talk with one rounded
+	// block rendered ZERO pages (issue #115).
+	mark, level := e.markInput(), len(e.levels)
 	var body []tok
 	depth := 0
 	for {
 		t, ok := e.getNext()
 		if !ok {
-			break // premature end of input: return whatever we gathered
+			// The \end never came. Put back everything the scan read, so the material
+			// flows as ordinary text — a locally wrong box, not a lost document.
+			//
+			// Only when the scan stayed on ONE input level: a mark records where the
+			// mouth stood in the buffer it was reading, and a file opened or finished
+			// mid-scan makes that position meaningless. Restoring across one cost two
+			// arXiv papers, one of them everything it had.
+			if len(e.levels) == level {
+				e.restoreInput(mark)
+				return nil
+			}
+			return body
 		}
 		switch {
 		case e.runsCsname(t):
@@ -98,7 +117,6 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			body = append(body, t)
 		}
 	}
-	return body
 }
 
 // braceNameToks rebuilds the token sequence for a {name} group: an explicit-begin
