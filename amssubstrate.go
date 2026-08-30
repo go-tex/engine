@@ -262,6 +262,22 @@ const AMSClassSubstrate = `
 \def\usefont#1#2#3#4{}
 \def\try@load@fontshape{}
 \def\check@mathfonts{}
+% amsgen.sty's two shorthands (amsgen.sty:39-40), which every AMS-derived class
+% uses everywhere:
+%
+%	\let\@xp=\expandafter
+%	\let\@nx=\noexpand
+%
+% Undefined, \@xp is skipped and the \expandafter it stands for never happens, so
+% the assignment it was steering hits the wrong token: an AMS class's own
+%
+%	\@xp\gdef\csname r@tocindent\@tempa\endcsname{0pt}
+%
+% then defines nothing and spills "0pt" and the name that followed it onto the
+% page. In the arXiv reference set that cost one paper its whole body — one page
+% of engine internals against tectonic's 29.
+\let\@xp\expandafter
+\let\@nx\noexpand
 \def\@parboxrestore{}
 \def\displaystyle{}
 \def\textstyle{}
