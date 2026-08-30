@@ -106,6 +106,15 @@ func (e *Engine) newGeomState() *geomState {
 	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m}
 }
 
+// parseGeomFloat reads a bare decimal factor (the geometry `scale` value, e.g. 0.775).
+func parseGeomFloat(s string) (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
+}
+
 // geomLooksDimen reports whether a geometry option value could be a dimension at
 // all: a signed decimal, or something naming a control sequence. It is the guard
 // that lets a malformed value be ignored instead of stored as a bogus zero.
@@ -251,6 +260,24 @@ func (e *Engine) applyGeometry(opts string) {
 					g.paperW, g.paperH = w, h
 				}
 				// Any other bare flag is silently ignored.
+			}
+			continue
+		}
+
+		if key == "scale" {
+			// scale=<f> or scale={<fw>,<fh>}: the text body is that fraction of the paper
+			// (the margins are auto-centred). scale=0.7 is a common one-liner layout.
+			parts := splitOptsTopLevel(unbrace(val))
+			fw, wok := parseGeomFloat(parts[0])
+			fh, hok := fw, wok
+			if len(parts) > 1 {
+				fh, hok = parseGeomFloat(parts[1])
+			}
+			if wok && fw > 0 {
+				g.textW, g.hasTextW = int(float64(g.paperW)*fw), true
+			}
+			if hok && fh > 0 {
+				g.textH, g.hasTextH = int(float64(g.paperH)*fh), true
 			}
 			continue
 		}

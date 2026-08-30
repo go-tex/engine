@@ -90,6 +90,18 @@ func TestGeometryInheritsClassPaper(t *testing.T) {
 	}
 }
 
+// TestGeometryScale: geometry's scale=<f> option sizes the text body to that fraction
+// of the paper (on the inherited A4 here), matching the reference exactly.
+func TestGeometryScale(t *testing.T) {
+	e := runGeom(t, `\documentclass[11pt,a4paper]{article}\usepackage[scale=0.775]{geometry}`)
+	if want := int(0.775 * float64(texSP(t, "297mm"))); e.vsize != want {
+		t.Errorf("scale vsize = %d, want %d (0.775 × A4 height)", e.vsize, want)
+	}
+	if want := int(0.775 * float64(texSP(t, "210mm"))); e.hsize != want {
+		t.Errorf("scale hsize = %d, want %d (0.775 × A4 width)", e.hsize, want)
+	}
+}
+
 func TestGeometryLetterDefault(t *testing.T) {
 	// geometry's default paper is letterpaper; loading it with just a margin uses
 	// 8.5in × 11in.
