@@ -12,6 +12,8 @@ github.com/go-opentype/shape v0.5.0 h1:jHNaOMHNBdDj5EixOevlrrsi92svMxvVMKN7GYaPf
 github.com/go-opentype/shape v0.5.0/go.mod h1:3ImRYNIj6zpwWQ/DV3BWhgMFfmzDITH6XpZw2auQHTo=
 github.com/go-pdfkit/pdfkit v0.5.0 h1:G6Bk9Q7p3e8ZQ9JEhvcLldVfDZCEAWVsautpjE19qVw=
 github.com/go-pdfkit/pdfkit v0.5.0/go.mod h1:Sn8fhz2CjcZgTIXXDBV6r741fsZF/MZafKw9cHD6Qj0=
+github.com/go-pdfkit/pdfkit v0.5.1 h1:6hKuGMBu8rIcVQfCIeY2T1Res7efiPSijn5bRmjUFDQ=
+github.com/go-pdfkit/pdfkit v0.5.1/go.mod h1:Sn8fhz2CjcZgTIXXDBV6r741fsZF/MZafKw9cHD6Qj0=
 github.com/go-tex/math v0.18.0 h1:rzFBFVvS5zKylsecY0fRkY3KWqVxiJQhFX6qXd7aEXQ=
 github.com/go-tex/math v0.18.0/go.mod h1:eNq1Js988sqQRsxNR08JFQ5dQfyqfd8CYf5fE3iWbhU=
 github.com/go-tex/texmf v0.4.0 h1:jgiOpywfMPVcwGvSYiDLjOKXrQJxec1Ea3mPZn3Rh+U=
