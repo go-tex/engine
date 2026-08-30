@@ -165,6 +165,33 @@ func (e *Engine) endMacroExpandsToEnd(name string) bool {
 		len(m.body) > 0 && m.body[0].cs_ && m.body[0].cs == "end"
 }
 
+// endMacroLeadsToEnd reports whether \end<name> reaches an \end through ONE more
+// parameterless macro. beamer's columns are built that way:
+//
+//	\newcommand<>\beamer@columncom[2][\beamer@colmode]{%
+//	  \beamer@colclose
+//	  \def\beamer@colclose{\end{minipage}\hfill\end{actionenv}\ignorespaces}%
+//	  \begin{actionenv}#3\begin{minipage}…}
+//
+// so \column opens a minipage and STORES its \end{minipage} in \beamer@colclose, run at
+// the next \column or at \end{columns}: \endcolumns begins with \beamer@colclose, not
+// with \end.
+//
+// It is a LAST RESORT, never a first rule. Applying it from the start runs an
+// environment's terminator too early — measured, that cost 28 pages over 200 talks and
+// took one from 17 pages to 1. collectEnvBody consults it only where the scan is about
+// to run off the end of the file it began in.
+func (e *Engine) endMacroLeadsToEnd(name string) bool {
+	m := e.eq["end"+name]
+	if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
+		return false
+	}
+	if b := m.body[0]; b.cs_ {
+		return b.cs == "end" || e.expandsToCloseCS(b, "end")
+	}
+	return false
+}
+
 // expandsToCloseCS reports whether the control sequence t is a parameterless
 // macro whose replacement text begins with the control sequence named close —
 // i.e. a user shorthand that stands in for a raw-token scanner's terminator

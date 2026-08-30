@@ -52,8 +52,35 @@ func (e *Engine) collectEnvBody(name string) []tok {
 	mark, level := e.markInput(), len(e.levels)
 	var body []tok
 	depth := 0
+	// Where the last \end{other} was stored, and for which environment. A scan that is
+	// about to leave the file it began in gets ONE chance to reconsider it: see the
+	// rewind below.
+	lastEnd, lastEndName, rewound := -1, "", false
 	for {
 		t, ok := e.getNext()
+		if ok && !rewound && len(e.levels) < level && lastEnd >= 0 && e.endMacroLeadsToEnd(lastEndName) {
+			// The scan has run off the end of the file it began in, and the last
+			// \end{other} it stored leads to an \end after all — through one more macro,
+			// which the narrow rule cannot see (endMacroLeadsToEnd). beamer's \column
+			// opens \begin{minipage} and stores its \end{minipage} in \beamer@colclose,
+			// run at \end{columns}: read raw, that \end{columns} was stored and the scan
+			// went on into the document behind the file.
+			//
+			// Rewind to it and put the stored tail back. Nothing is re-EXECUTED: what is
+			// pushed back was gathered, never run — which is what makes this sound where
+			// re-running the whole scan is not.
+			rewound = true
+			tail := append([]tok(nil), body[lastEnd:]...)
+			body = body[:lastEnd]
+			hdr := 1 + len(braceNameToks(lastEndName))
+			e.back(t)
+			if len(tail) > hdr {
+				e.push(append([]tok(nil), tail[hdr:]...))
+			}
+			e.push(append([]tok(nil), e.eq["end"+lastEndName].body...))
+			lastEnd = -1
+			continue
+		}
 		if !ok {
 			// The \end never came. Put back everything the scan read, so the material
 			// flows as ordinary text — a locally wrong box, not a lost document.
@@ -100,7 +127,11 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				// otherwise the raw scan runs past it to EOF, swallowing the body.
 				e.push(e.eq["end"+n].body)
 			default:
-				// re-emit \end{n} into the body (an ordinary non-matching \end).
+				// re-emit \end{n} into the body (an ordinary non-matching \end), and
+				// remember where, in case the scan later runs out of file (see above).
+				if depth == 0 {
+					lastEnd, lastEndName = len(body), n
+				}
 				body = append(body, csTok("end"))
 				body = append(body, braceNameToks(n)...)
 			}
