@@ -145,6 +145,47 @@ func TestTwoColumnRegionSwitch(t *testing.T) {
 	}
 }
 
+// \twocolumn[span] typesets the optional argument full-width and places it across the
+// top of the two-column region's first page (\@topnewpage): the span box is wider than a
+// single column, and the first page is a genuine two-column page.
+func TestTwoColumnSpan(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	var b strings.Builder
+	b.WriteString(`\documentclass{article}\usepackage[textheight=8in,textwidth=6in]{geometry}\begin{document}`)
+	b.WriteString(`\twocolumn[\noindent SPANWIDE full width top material across the whole page]`)
+	for i := 0; i < 30; i++ {
+		b.WriteString(`\noindent body word word word word word word word word.
+
+`)
+	}
+	b.WriteString(`\end{document}`)
+
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(b.String()); err != nil {
+		t.Fatal(err)
+	}
+	var spanBox *boxNode
+	for _, r := range e.colRegions {
+		if r.span != nil {
+			spanBox = r.span
+		}
+	}
+	if spanBox == nil {
+		t.Fatalf("no \\twocolumn[...] span recorded: %+v", e.colRegions)
+	}
+	// The span is full-width — wider than a single (halved) column measure.
+	if spanBox.width <= e.hsize {
+		t.Errorf("span width %d not wider than the column measure %d", spanBox.width, e.hsize)
+	}
+	if pages := e.Pages(); len(pages) == 0 || !hasTwoColumns(pages[0]) {
+		t.Errorf("first page is not a two-column page carrying the span")
+	}
+}
+
 // hasTwoColumns reports whether the page box contains a horizontal box holding at
 // least two vertical sub-boxes (the left and right columns).
 func hasTwoColumns(page *boxNode) bool {

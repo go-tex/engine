@@ -48,10 +48,22 @@ func (e *Engine) applyTwoColumnMeasure() {
 }
 
 // colRegion is one \onecolumn/\twocolumn span of the main vertical list: from index at
-// (into e.mvl) until the next region's at, typeset in cols columns.
+// (into e.mvl) until the next region's at, typeset in cols columns. span, when non-nil,
+// is the \twocolumn[...] full-width material placed across the top of the region's first
+// page (\@topnewpage), which shortens that page's columns.
 type colRegion struct {
 	at   int
 	cols int
+	span *boxNode
+}
+
+// dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the columns
+// below it: the \dbltextfloatsep register when the class set it, else LaTeX's 20pt default.
+func (e *Engine) dblTextFloatSep() int {
+	if s := e.namedSkip("dbltextfloatsep"); s.width > 0 {
+		return s.width
+	}
+	return 20 * unity
 }
 
 // enterTwoColumnMeasure halves e.hsize to the column width, saving the full width for a
@@ -66,18 +78,28 @@ func (e *Engine) enterTwoColumnMeasure() {
 }
 
 // startTwoColumn implements the \twocolumn command: like real LaTeX it \clearpage's
-// (here, a region boundary starts a fresh page) and switches to two columns. The
-// optional [span] full-width material (\@topnewpage) is not yet reproduced.
+// (here, a region boundary starts a fresh page) and switches to two columns. An optional
+// [span] is typeset full-width and placed across the top of the region's first page
+// (\@topnewpage), shortening that page's columns.
 func (e *Engine) startTwoColumn() {
-	e.scanOptBracketToks() // gobble the optional [span] for now
+	spanToks, hasSpan := e.scanOptBracketToks()
 	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
 		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 1}) // material so far was one-column
+	}
+	// Typeset the span at the CURRENT (full) measure, before the switch halves e.hsize.
+	var span *boxNode
+	if hasSpan && len(spanToks) > 0 {
+		span = e.typesetGroupToVbox(spanToks)
+		span.width = e.hsize
+		if v := e.effectiveVsize(); span.height+span.depth > v { // \@topnewpage caps at \textheight
+			span.height = v - span.depth
+		}
 	}
 	if !e.twoColumn || !e.twoColApplied || e.hsize == e.oneColHsize {
 		e.enterTwoColumnMeasure()
 	}
 	e.twoColumn = true
-	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2})
+	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2, span: span})
 }
 
 // startOneColumn implements the \onecolumn command: \clearpage (region boundary) and
@@ -111,7 +133,7 @@ func (e *Engine) pagesByRegion() []*boxNode {
 		}
 		slice := e.mvl[r.at:end]
 		if r.cols >= 2 {
-			pages = append(pages, e.paginateTwoColList(slice, len(pages))...)
+			pages = append(pages, e.paginateTwoColList(slice, r.span, len(pages))...)
 		} else {
 			pages = append(pages, e.paginateSingleList(slice, len(pages))...)
 		}
@@ -123,7 +145,7 @@ func (e *Engine) pagesByRegion() []*boxNode {
 // into \vsize-tall columns, two to a physical page, filling left then right, numbering
 // from pageOffset+1. It reuses the single-column page breaker for each column and
 // assemblePage for the page furniture.
-func (e *Engine) paginateTwoColList(list []node, pageOffset int) []*boxNode {
+func (e *Engine) paginateTwoColList(list []node, span *boxNode, pageOffset int) []*boxNode {
 	var pages []*boxNode
 	colW := e.hsize
 	fullW := 2*colW + e.columnsep
@@ -139,13 +161,26 @@ func (e *Engine) paginateTwoColList(list []node, pageOffset int) []*boxNode {
 	}
 
 	for start := 0; start < len(list); {
+		// A \twocolumn[...] span sits full-width atop the region's FIRST page and
+		// shortens that page's columns by its height + \dbltextfloatsep. Real LaTeX
+		// sets \vsize\@colht for the page; here we temporarily reduce e.vsize so the
+		// shared page breaker fills the columns to the reduced height.
+		var pageSpan *boxNode
+		savedVsize := e.vsize
+		if len(pages) == 0 && span != nil {
+			pageSpan = span
+			if reduced := e.effectiveVsize() - (span.height + span.depth) - e.dblTextFloatSep(); reduced > 0 {
+				e.vsize = reduced
+			}
+		}
 		left, next := takeColumn(start)
 		var right []node
 		if next < len(list) {
 			right, next = takeColumn(next)
 		}
-		if len(left) > 0 || len(right) > 0 {
-			pages = append(pages, e.assembleTwoColumnPage(left, right, colW, fullW, pageOffset+len(pages)+1))
+		e.vsize = savedVsize
+		if len(left) > 0 || len(right) > 0 || pageSpan != nil {
+			pages = append(pages, e.assembleTwoColumnPage(pageSpan, left, right, colW, fullW, pageOffset+len(pages)+1))
 		}
 		if next >= len(list) {
 			break
@@ -166,8 +201,13 @@ func (e *Engine) paginateTwoColList(list []node, pageOffset int) []*boxNode {
 // measure, lays them side by side with a \columnsep gap (and a \columnseprule when set),
 // and hands the full-width result to assemblePage for headers/footers/margins — with
 // e.hsize temporarily the full width so that furniture spans the page.
-func (e *Engine) assembleTwoColumnPage(left, right []node, colW, fullW, pageNum int) *boxNode {
+func (e *Engine) assembleTwoColumnPage(span *boxNode, left, right []node, colW, fullW, pageNum int) *boxNode {
 	vsize := e.effectiveVsize()
+	if span != nil { // the columns share the height left below the span
+		if r := vsize - (span.height + span.depth) - e.dblTextFloatSep(); r > 0 {
+			vsize = r
+		}
+	}
 	mk := func(slice []node) *boxNode {
 		b := vpackSP(slice, packNatural, 0)
 		b.width = colW
@@ -191,9 +231,16 @@ func (e *Engine) assembleTwoColumnPage(left, right []node, colW, fullW, pageNum 
 	row = append(row, rb)
 	cols := hpackSP(row, packNatural, 0)
 
+	// A \twocolumn[...] span sits full-width above the two columns, separated by
+	// \dbltextfloatsep.
+	content := []node{cols}
+	if span != nil {
+		content = []node{span, glueNode{spec: glueSpec{width: e.dblTextFloatSep()}}, cols}
+	}
+
 	saved := e.hsize
 	e.hsize = fullW
-	page := e.assemblePage([]node{cols}, pageNum)
+	page := e.assemblePage(content, pageNum)
 	e.hsize = saved
 	return page
 }
