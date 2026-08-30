@@ -261,12 +261,16 @@ func (e *Engine) doEnumitemOpt() {
 
 	if spacingSet {
 		if nosep {
-			// Cancel the leading \smallskip (\vskip3pt) the environment emitted.
-			out = append(out, csTok("vskip"), chTok('-', catOther))
-			out = append(out, stringToToks("3pt")...)
-			out = append(out, csTok("relax"))
+			// nosep drops the list's top space: cancel the \addvspace\topsep the opener
+			// emitted (using \topsep's current value), then zero \topsep for the closer.
+			out = append(out, csTok("vskip"), chTok('-', catOther), csTok("topsep"), csTok("relax"))
 		}
-		out = append(out, e.itemSepWrapper(sepToks)...)
+		// Set the \itemsep register the list machinery's \@iteminterspace reads, rather
+		// than wrapping \item (which would double the inter-item glue).
+		out = append(out, assignToks("itemsep", sepToks)...)
+		if nosep {
+			out = append(out, assignToks("topsep", stringToToks("0pt"))...)
+		}
 	}
 
 	e.push(out)
