@@ -264,6 +264,11 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 	var row alignRow
 	var cell strings.Builder
 	depth := 0
+	// A nested math environment carries its OWN & and \\: \begin{bmatrix}…&…\\…
+	// \end{bmatrix} inside a cell is one matrix, not four cells over two rows. Brace
+	// depth does not see it — a matrix is not braced — so environments are counted
+	// too, and while one is open the separators belong to it.
+	envDepth := 0
 	endCell := func() {
 		row.cells = append(row.cells, cell.String())
 		cell.Reset()
@@ -281,9 +286,17 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 			break
 		}
 		switch {
-		case depth == 0 && e.runsCsname(t):
+		case t.cs_ && t.cs == "begin":
+			// Written back with the space scanMathSource puts after a control word, so
+			// the maths layer reads the environment exactly as it would have.
+			cell.WriteString("\\begin {" + e.readBraceName() + "}")
+			envDepth++
+		case t.cs_ && t.cs == "end" && envDepth > 0:
+			cell.WriteString("\\end {" + e.readBraceName() + "}")
+			envDepth--
+		case depth == 0 && envDepth == 0 && e.runsCsname(t):
 			e.runCsname(t) // see runsCsname: \csname may build this environment's \end
-		case depth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs != "end" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\enq{\end{align}}):
 			// read raw here it would never be recognised and the align body would run
 			// to EOF, swallowing the rest of the document. Expand it in place so the
@@ -291,20 +304,24 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 			// parameterless macro whose body begins with \end (see expandsToEnd).
 			e.expandMacro(e.meaningOf(t))
 		case depth == 0 && t.cs_ && t.cs == "end":
-			if e.readBraceName() == name {
+			if n := e.readBraceName(); n == name {
 				endRow()
 				e.endEnvGroup() // this \end was read here, so \end's \endgroup will not run
 				return rows
+			} else {
+				// Somebody else's \end. Consumed and dropped, as it used to be, it left
+				// the environment it closes open and the maths layer refused the row.
+				cell.WriteString("\\end {" + n + "}")
 			}
-		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
 			endRow()
-		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
+		case depth == 0 && envDepth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
 			endCell()
-		case depth == 0 && t.cs_ && (t.cs == "nonumber" || t.cs == "notag"):
+		case depth == 0 && envDepth == 0 && t.cs_ && (t.cs == "nonumber" || t.cs == "notag"):
 			row.nonumber = true
-		case depth == 0 && t.cs_ && t.cs == "tag":
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "tag":
 			row.tag, row.tagStar = e.readTag()
-		case depth == 0 && t.cs_ && t.cs == "label":
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "label":
 			row.labels = append(row.labels, e.readBraceName())
 		default:
 			if !t.cs_ && t.cat == catBegin {
