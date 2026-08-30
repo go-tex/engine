@@ -197,6 +197,71 @@ const MiniLaTeXKernel = `
 \long\def\endfigure{\par\endgroup\bigskip}
 \long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
 \long\def\endtable{\par\endgroup\bigskip}
+% ─── algorithm float + algorithmic/algpseudocode body ───────────────────────────
+% The algorithms / algorithmicx (algpseudocode) packages. \begin{algorithm} is a
+% float exactly like figure/table (caption "Algorithm N"). \begin{algorithmic}
+% typesets pseudocode: each \STATE/\State starts a line at the current indent, and
+% the block keywords (\IF…\ENDIF, \FOR…\ENDFOR, …) bracket an indented body — the
+% keywords bolded, the indent stepped with \leftskip (the same idiom as the list
+% environments). Both the UPPERCASE (algorithmic) and MixedCase (algorithmicx)
+% spellings are installed. Without this the whole block is an undefined environment,
+% dropped — an algorithm is a tall block, so its loss shifts every following page.
+\newcount\c@algorithm
+\long\def\thealgorithm{\the\c@algorithm}
+\def\fnum@algorithm{Algorithm \thealgorithm}
+\long\def\algorithm{\par\bigskip\begingroup\def\@captype{algorithm}\@discardopt}
+\long\def\endalgorithm{\par\endgroup\bigskip}
+\expandafter\let\csname algorithm*\endcsname\algorithm
+\expandafter\let\csname endalgorithm*\endcsname\endalgorithm
+\def\@algkw#1{\textbf{#1}}
+\newcount\@alglevel
+% \leftskip for the CURRENT nesting level, set right AFTER a line's \par so it
+% governs the line just started (not the one just ended — \leftskip is applied
+% paragraph-wide at \par). Nesting is tracked in the count \@alglevel; openers bump
+% it after emitting their line, closers drop it before.
+\def\@algsetleft{\ifcase\@alglevel\leftskip0pt\or\leftskip12pt\or\leftskip24pt\or\leftskip36pt\or\leftskip48pt\or\leftskip60pt\or\leftskip72pt\else\leftskip84pt\fi}
+\long\def\@algline{\par\@algsetleft\noindent}
+\long\def\@algif#1{\par\@algsetleft\noindent\@algkw{if} #1 \@algkw{then}\advance\@alglevel by1}
+\long\def\@algelsif#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{else if} #1 \@algkw{then}\advance\@alglevel by1}
+\def\@algelse{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{else}\advance\@alglevel by1}
+\def\@algendif{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end if}}
+\long\def\@algfor#1{\par\@algsetleft\noindent\@algkw{for} #1 \@algkw{do}\advance\@alglevel by1}
+\long\def\@algforall#1{\par\@algsetleft\noindent\@algkw{for all} #1 \@algkw{do}\advance\@alglevel by1}
+\def\@algendfor{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end for}}
+\long\def\@algwhile#1{\par\@algsetleft\noindent\@algkw{while} #1 \@algkw{do}\advance\@alglevel by1}
+\def\@algendwhile{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end while}}
+\def\@algrepeat{\par\@algsetleft\noindent\@algkw{repeat}\advance\@alglevel by1}
+\long\def\@alguntil#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{until} #1}
+\def\@algloop{\par\@algsetleft\noindent\@algkw{loop}\advance\@alglevel by1}
+\def\@algendloop{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end loop}}
+\long\def\@algreq{\par\@algsetleft\noindent\@algkw{Require:} }
+\long\def\@algens{\par\@algsetleft\noindent\@algkw{Ensure:} }
+\long\def\@alginput{\par\@algsetleft\noindent\@algkw{Input:} }
+\long\def\@algoutput{\par\@algsetleft\noindent\@algkw{Output:} }
+\long\def\@algreturn{\par\@algsetleft\noindent\@algkw{return} }
+\long\def\@algfunction#1#2{\par\@algsetleft\noindent\@algkw{function} #1(#2)\advance\@alglevel by1}
+\def\@algendfunction{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end function}}
+\long\def\@algprocedure#1#2{\par\@algsetleft\noindent\@algkw{procedure} #1(#2)\advance\@alglevel by1}
+\def\@algendprocedure{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end procedure}}
+\long\def\@algcomment#1{\quad{\small #1}}
+\long\def\@algcall#1#2{\@algkw{call} #1(#2)}
+\long\def\algorithmic{\par\begingroup\parindent0pt\@alglevel0\relax\@algsetup\@discardopt}
+\def\@algsetup{%
+\let\STATE\@algline\let\State\@algline\let\STATEx\@algline\let\Statex\@algline
+\let\IF\@algif\let\If\@algif\let\ELSIF\@algelsif\let\ElsIf\@algelsif\let\ELSE\@algelse\let\Else\@algelse\let\ENDIF\@algendif\let\EndIf\@algendif
+\let\FOR\@algfor\let\For\@algfor\let\FORALL\@algforall\let\ForAll\@algforall\let\ENDFOR\@algendfor\let\EndFor\@algendfor
+\let\WHILE\@algwhile\let\While\@algwhile\let\ENDWHILE\@algendwhile\let\EndWhile\@algendwhile
+\let\REPEAT\@algrepeat\let\Repeat\@algrepeat\let\UNTIL\@alguntil\let\Until\@alguntil
+\let\LOOP\@algloop\let\Loop\@algloop\let\ENDLOOP\@algendloop\let\EndLoop\@algendloop
+\let\REQUIRE\@algreq\let\Require\@algreq\let\ENSURE\@algens\let\Ensure\@algens
+\let\INPUT\@alginput\let\Input\@alginput\let\OUTPUT\@algoutput\let\Output\@algoutput
+\let\RETURN\@algreturn\let\Return\@algreturn
+\let\FUNCTION\@algfunction\let\Function\@algfunction\let\ENDFUNCTION\@algendfunction\let\EndFunction\@algendfunction
+\let\PROCEDURE\@algprocedure\let\Procedure\@algprocedure\let\ENDPROCEDURE\@algendprocedure\let\EndProcedure\@algendprocedure
+\let\COMMENT\@algcomment\let\Comment\@algcomment\let\CALL\@algcall\let\Call\@algcall}
+\long\def\endalgorithmic{\par\endgroup}
+\expandafter\let\csname algpseudocode\endcsname\algorithmic
+\expandafter\let\csname endalgpseudocode\endcsname\endalgorithmic
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 \long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \long\def\endquote{\par\endgroup\smallskip}
