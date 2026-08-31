@@ -12,8 +12,6 @@ github.com/go-crdt/collab v0.25.0 h1:xO/cZq41GvsCyPOw+sdldCu2r3lDbMK1N0GgN6D9+Ss
 github.com/go-crdt/collab v0.25.0/go.mod h1:eYhMwHjmRyN5zMk/IBwBsTe3ZxqHuSCvNx3TdVTpYHg=
 github.com/go-crdt/crdt v0.31.0 h1:CTi+lo0bjsJv3F09CR/AdILQtWEWmzbDQ+S/6HNBOMU=
 github.com/go-crdt/crdt v0.31.0/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
-github.com/go-gfx/gfx v0.11.0 h1:IwdTO1i7veITSvEFBSjYAqiwzNm7CryDlkQgTt/NsKI=
-github.com/go-gfx/gfx v0.11.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
 github.com/go-gfx/gfx v0.18.0 h1:wWpOHvJ/FEthx7RHUIt3ZKn/xDZ+Eb7KncZCJU/P/L8=
 github.com/go-gfx/gfx v0.18.0/go.mod h1:VAK6hgCgkhT3j3ek2K7G8zDfkCPD3RCF45UbcRlCV8Q=
 github.com/go-icons/iconoir v0.2.0 h1:I5AnDEIPgYfawTmwzemDRJjlYCUbFHuS8GJXrjADhXc=
@@ -34,8 +32,8 @@ github.com/go-pdfkit/pdfkit v0.6.0 h1:88siogDfC3jLmObL5aR58PwUpJvz+pIyTiqJFkOo38
 github.com/go-pdfkit/pdfkit v0.6.0/go.mod h1:QjSRgTiJgf5kYuHho5zhqkcYg2p1/PpfYyUNqpeREBs=
 github.com/go-richdoc/richdoc v0.2.0 h1:z9cLox9MoInZL6fIlweMzgDT/VqgnB2ZucSIEaRFglY=
 github.com/go-richdoc/richdoc v0.2.0/go.mod h1:aCX8ulqg5CoKqSWgWeEWul1Oj0d2VxQeaQNI0+jsm7c=
-github.com/go-tex/math v0.21.0 h1:HxY9Yhcyh86er23oI3+CJY3mGe0Bl9E3eTEj1VGoxoU=
-github.com/go-tex/math v0.21.0/go.mod h1:SaB8XOWZXooetm1elSfY0UHwPbyhbditTZxbGoCzjXE=
+github.com/go-tex/math v0.22.0 h1:qKHeZrGhBEvxjKFF+FvvrI5uT/ROyJ8DZG1z7qWxueA=
+github.com/go-tex/math v0.22.0/go.mod h1:SaB8XOWZXooetm1elSfY0UHwPbyhbditTZxbGoCzjXE=
 github.com/go-tex/texmf v0.5.0 h1:O3r0WxAIGYLZAMuYBZzfprOf+2V8s4RqXyUoHJ/wcfA=
 github.com/go-tex/texmf v0.5.0/go.mod h1:nZtEGwpAGkhH6U1hRGG9ilccZbJhMSK2Xk2omIWdq+k=
 github.com/go-typeset/bidi v0.3.0 h1:4fjGjejvjE2LzLNzY4si8PkVO321NcsKIiANhWT3jF4=
