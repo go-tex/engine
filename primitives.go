@@ -1799,6 +1799,17 @@ func (e *Engine) loadMore() {
 	e.prim("endsubfigure", func(e *Engine) {})                          // consumed by doSubfigure
 	e.prim("subtable", func(e *Engine) { e.doSubfigure("subtable") })
 	e.prim("endsubtable", func(e *Engine) {})
+	// sidecap: SCfigure/SCtable (and the *-spanning forms) are ordinary figure/table
+	// floats here — no side caption — with their [relwidth][pos] optionals consumed
+	// (see sidecap.go).
+	e.prim("SCfigure", func(e *Engine) { e.doSCfloat("figure") })
+	e.prim("endSCfigure", func(e *Engine) { e.push([]tok{csTok("endfigure")}) })
+	e.prim("SCfigure*", func(e *Engine) { e.doSCfloat("figure") })
+	e.prim("endSCfigure*", func(e *Engine) { e.push([]tok{csTok("endfigure")}) })
+	e.prim("SCtable", func(e *Engine) { e.doSCfloat("table") })
+	e.prim("endSCtable", func(e *Engine) { e.push([]tok{csTok("endtable")}) })
+	e.prim("SCtable*", func(e *Engine) { e.doSCfloat("table") })
+	e.prim("endSCtable*", func(e *Engine) { e.push([]tok{csTok("endtable")}) })
 	e.prim("overpic", func(e *Engine) { e.doOverpic("overpic") })   // graphic with a picture overlay
 	e.prim("endoverpic", func(e *Engine) {})                        // consumed by doOverpic
 	e.prim("overpic*", func(e *Engine) { e.doOverpic("overpic*") }) // starred: overlays a grid
