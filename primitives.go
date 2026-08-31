@@ -1898,6 +1898,16 @@ func (e *Engine) loadMore() {
 	e.prim("mintinline", func(e *Engine) { e.doMintinline() })
 	e.prim("mint", func(e *Engine) { e.doMintinline() })
 	e.prim("inputminted", func(e *Engine) { e.doInputminted() })
+	// jss.cls (Journal of Statistical Software / Sweave / knitr): Code, CodeInput and
+	// CodeOutput are fancyvrb verbatim environments; CodeChunk is a transparent
+	// wrapper grouping an input/output pair (see jsscode.go).
+	for _, n := range []string{"Code", "CodeInput", "CodeOutput"} {
+		name := n
+		e.prim(name, func(e *Engine) { e.doNamedVerbatimEnv(name) })
+		e.prim("end"+name, func(e *Engine) {}) // consumed literally by readRawEnvBody
+	}
+	e.prim("CodeChunk", func(e *Engine) {})    // \newenvironment{CodeChunk}{}{}: no-op wrapper
+	e.prim("endCodeChunk", func(e *Engine) {}) // body (CodeInput/CodeOutput) flows through
 	// geometry package: page size and margins driving \hsize/\vsize and the render
 	// margin (see geometry.go). \usepackage[..]{geometry} is intercepted in
 	// doUsepackage; \geometry{..} re-applies at any point.
