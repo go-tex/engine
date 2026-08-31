@@ -18,6 +18,11 @@ func vContribution(n node) int {
 	switch c := n.(type) {
 	case *boxNode:
 		return c.height + c.depth
+	case spanNode: // a stray full-width band (normally lifted out by the two-column pager)
+		if c.box != nil {
+			return c.box.height + c.box.depth
+		}
+		return 0
 	case ruleNode:
 		return c.height + c.depth
 	case kernNode:

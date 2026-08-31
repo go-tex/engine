@@ -218,10 +218,16 @@ const LaTeX2eClassLead = `
 % ── float environments (figure/table via the class's \@float) ────────────────
 % \@float{type}[placement] starts a centred float block and records \@captype so
 % \caption numbers it; \end@float closes it. \@dblfloat is the two-column (figure*/
-% table*) form, handled the same way (single column).
+% table*) form: it routes to \gotex@dblfloat (twocolumn.go), which in two-column mode
+% typesets the float at the FULL text width and places it as a band spanning BOTH columns
+% (\@dblfloat / \@topnewpage), and in one column falls back to the ordinary one-column
+% float \@float. This is the hook the embedded article.cls's figure*/table* reach; the
+% emulated classes (revtex, IEEEtran …) that lack a starred form reach the same
+% \gotex@dblfloat through the substrate alias (amssubstrate.go). A real bundled class
+% that defines its own \@dblfloat overrides this default and keeps its own.
 \def\@float#1{\par\medskip\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
 \def\end@float{\par\endgroup\medskip}
-\def\@dblfloat#1{\@float{#1}}
+\def\@dblfloat#1{\gotex@dblfloat{#1}}
 \def\end@dblfloat{\end@float}
 \def\usecounter#1{}
 % \twocolumn / \onecolumn are Go primitives (see twocolumn.go / primitives.go): under

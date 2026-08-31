@@ -64,6 +64,25 @@ type colRegion struct {
 	colW int // per-column measure (full width for a one-column region, halved for two)
 }
 
+// spanNode is a full-width band (a figure* / table* double-column float) sitting in the
+// main vertical list. In two-column mode it interrupts the two-column flow and is placed
+// across the top of a page, spanning BOTH columns — the same shape as a \twocolumn[span]
+// or the revtex frontmatter span, but arising mid-flow rather than at a region boundary.
+// The two-column pager (paginateTwoColList) lifts every spanNode out of the galley and
+// places its box atop the page whose flow position it reaches; ordinary column material
+// never contains one, so the packers treat it defensively as its inner box.
+type spanNode struct{ box *boxNode }
+
+func (spanNode) isNode() {}
+
+// pendingBand is a full-width band awaiting placement, tagged with the number of flowing
+// (non-span) nodes that precede it: the band is placed across the top of the page whose
+// flow position first reaches flowIndex.
+type pendingBand struct {
+	flowIndex int
+	box       *boxNode
+}
+
 // fullWidth is the one-column measure: the width the frontmatter and any \onecolumn or
 // \twocolumn[span] material is set at. Once two-column has entered, e.oneColHsize holds
 // the full width even while e.hsize carries the halved column measure.
@@ -149,6 +168,49 @@ func (e *Engine) switchToTwoColumn(span *boxNode) {
 	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2, span: span, colW: e.hsize})
 }
 
+// doDblFloat implements \begin{figure*}/\begin{table*} — the \@dblfloat double-column
+// float — via the internal hook \gotex@dblfloat{figure|table}. Under the two-column
+// opt-in (twoColumnOptIn) the float body is typeset at the FULL text width and contributed
+// as a spanNode, so the pager places it across the top of a page spanning both columns (a
+// full-width band). Otherwise — one column, or a live standard-class two-column document
+// with the band still gated — it degrades to the unstarred one-column float.
+//
+// captype is "figure" or "table"; the environment name is captype+"*".
+func (e *Engine) doDblFloat(captype string) {
+	if !e.twoColumn || !twoColumnOptIn() {
+		// Not spanning here: either one-column, or a LIVE standard-class two-column
+		// document (article/report/book [twocolumn]) with the band still gated. Set the
+		// unstarred float via \@float — \@dblfloat's historical behaviour — opening the
+		// float group here; the environment's \end (\end@dblfloat = \end@float, or
+		// \endfigure/\endtable) closes it.
+		//
+		// The full-width band is correct rendering (a figure*/table* DOES span both
+		// columns), but it floats to a page top whose position does not yet track the
+		// reference's float placement: on a live [twocolumn] article (2601.20606) it shifts
+		// the layout enough to regress the position proxy (+2.2) even while rendering the
+		// wide table more faithfully. So the band is part of the gated two-column bring-up
+		// (GOTEX_TWOCOLUMN / revtex reprint), and the live standard two-column path keeps
+		// the historical inline float until a fuller float-placement pass lands.
+		e.push(append([]tok{csTok("@float")}, braceNameToks(captype)...))
+		return
+	}
+	e.applyTwoColumnMeasure() // ensure the column measure and the seed region exist
+	// Collect the float body (consuming its \end{figure*}/\end{table*} and closing the
+	// environment group), then typeset \figure … \endfigure at the full text width so the
+	// float's own centering, caption and counters run exactly as in one column, but across
+	// the whole page. typesetSpanFullWidth caps it at \textheight and sets its width.
+	body := e.collectEnvBody(captype + "*")
+	toks := make([]tok, 0, len(body)+2)
+	toks = append(toks, csTok(captype))
+	toks = append(toks, body...)
+	toks = append(toks, csTok("end"+captype))
+	band := e.typesetSpanFullWidth(toks)
+	if band == nil || band.height+band.depth == 0 {
+		return // an empty float band reserves nothing
+	}
+	e.contribute(spanNode{box: band})
+}
+
 // startTwoColumn implements the \twocolumn command: like real LaTeX it \clearpage's
 // (here, a region boundary starts a fresh page) and switches to two columns. An optional
 // [span] is typeset full-width and placed across the top of the region's first page
@@ -218,44 +280,113 @@ func (e *Engine) pagesByRegion() []*boxNode {
 // from pageOffset+1. It reuses the single-column page breaker for each column and
 // assemblePage for the page furniture. colW is the region's column measure (captured
 // when the region was typeset), not e.hsize, which a later \onecolumn may have changed.
+//
+// The list may carry full-width bands (spanNode — a figure*/table* double-column float,
+// or the region's own \twocolumn[span]/frontmatter span passed in span). Those are lifted
+// out of the flowing column material and placed across the top of the page whose flow
+// position they reach, spanning both columns; the remaining material flows in two columns
+// below and around them.
 func (e *Engine) paginateTwoColList(list []node, colW int, span *boxNode, pageOffset int) []*boxNode {
+	var flow []node
+	var bands []pendingBand
+	if span != nil { // the region span heads the first page
+		bands = append(bands, pendingBand{flowIndex: 0, box: span})
+	}
+	for _, n := range list {
+		if sn, ok := n.(spanNode); ok {
+			if sn.box != nil {
+				bands = append(bands, pendingBand{flowIndex: len(flow), box: sn.box})
+			}
+			continue
+		}
+		flow = append(flow, n)
+	}
+	return e.paginateTwoColFlow(flow, bands, colW, pageOffset)
+}
+
+// paginateTwoColFlow paginates the flowing (span-free) column material into two-column
+// pages, placing each pending band full-width across the top of the page whose flow
+// position first reaches its flowIndex. Bands are ordered; a band met mid-page rides to
+// the top of the next page (top-float placement), so pages stay full while every band
+// lands on the page and spans both columns.
+func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, pageOffset int) []*boxNode {
 	var pages []*boxNode
 	fullW := 2*colW + e.columnsep
+	bi := 0
+	var pending []*boxNode // bands deferred from an earlier page (did not fit its top)
 
-	takeColumn := func(start int) ([]node, int) {
-		end := e.findPageBreak(list, start)
-		col := trimTrailingGlue(list[start:end])
-		next := skipDiscardable(list, end)
-		if next <= start {
-			next = start + 1 // always make progress
+	// takeCols fills the two columns from start with the height the bands (reserve) leave;
+	// it returns the two slices and the flow index the page ends at. A band-heavy page
+	// (reserve leaving under a tenth of the height) carries no column text.
+	takeCols := func(start, reserve int) (left, right []node, next int) {
+		next = start
+		colVsize := e.effectiveVsize() - reserve
+		if start >= len(list) || colVsize <= e.effectiveVsize()/10 {
+			return nil, nil, start
 		}
-		return col, next
-	}
-
-	for start := 0; start < len(list); {
-		// A \twocolumn[...] span sits full-width atop the region's FIRST page and
-		// shortens that page's columns by its height + \dbltextfloatsep. Real LaTeX
-		// sets \vsize\@colht for the page; here we temporarily reduce e.vsize so the
-		// shared page breaker fills the columns to the reduced height.
-		var pageSpan *boxNode
 		savedVsize := e.vsize
-		if len(pages) == 0 && span != nil {
-			pageSpan = span
-			if reduced := e.effectiveVsize() - (span.height + span.depth) - e.dblTextFloatSep(); reduced > 0 {
-				e.vsize = reduced
+		e.vsize = colVsize
+		take := func(from int) ([]node, int) {
+			end := e.findPageBreak(list, from)
+			col := trimTrailingGlue(list[from:end])
+			to := skipDiscardable(list, end)
+			if to <= from {
+				to = from + 1 // always make progress
 			}
+			return col, to
 		}
-		left, next := takeColumn(start)
-		var right []node
+		left, next = take(start)
 		if next < len(list) {
-			right, next = takeColumn(next)
+			right, next = take(next)
 		}
 		e.vsize = savedVsize
-		if len(left) > 0 || len(right) > 0 || pageSpan != nil {
-			pages = append(pages, e.assembleTwoColumnPage(pageSpan, left, right, colW, fullW, pageOffset+len(pages)+1))
+		return left, right, next
+	}
+	for start := 0; ; {
+		// Bands whose anchor lies at or before this page top were reached on an earlier
+		// page (deferred because its top was full); they wait in pending.
+		for bi < len(bands) && bands[bi].flowIndex <= start {
+			pending = append(pending, bands[bi].box)
+			bi++
 		}
-		if next >= len(list) {
-			break
+		if start >= len(list) && len(pending) == 0 && bi >= len(bands) {
+			break // nothing left to place
+		}
+
+		fullVsize := e.effectiveVsize()
+		// Place as many deferred bands atop this page as fit (always at least one), so a
+		// run of figure*/table* floats spreads down successive pages rather than piling
+		// onto one overfull page.
+		var pageBands []*boxNode
+		for len(pending) > 0 {
+			need := pending[0].height + pending[0].depth + e.dblTextFloatSep()
+			if len(pageBands) > 0 && e.bandsReserve(pageBands)+need > fullVsize {
+				break
+			}
+			pageBands = append(pageBands, pending[0])
+			pending = pending[1:]
+		}
+
+		// Tentatively fill the columns to learn this page's flow extent, then float up any
+		// band whose anchor falls WITHIN this page (a [t] top float rides to the top of the
+		// page its anchor sits on). Re-fill once with the added bands' reduced height.
+		left, right, next := takeCols(start, e.bandsReserve(pageBands))
+		grew := false
+		for bi < len(bands) && bands[bi].flowIndex < next {
+			need := bands[bi].box.height + bands[bi].box.depth + e.dblTextFloatSep()
+			if len(pageBands) > 0 && e.bandsReserve(pageBands)+need > fullVsize {
+				break // no room atop this page; a later page's top takes it
+			}
+			pageBands = append(pageBands, bands[bi].box)
+			bi++
+			grew = true
+		}
+		if grew {
+			left, right, next = takeCols(start, e.bandsReserve(pageBands))
+		}
+
+		if len(left) > 0 || len(right) > 0 || len(pageBands) > 0 {
+			pages = append(pages, e.assembleTwoColumnPage(pageBands, left, right, colW, fullW, pageOffset+len(pages)+1))
 		}
 		if pageOffset+len(pages) >= maxPages {
 			if e.skippedCS == nil {
@@ -264,21 +395,33 @@ func (e *Engine) paginateTwoColList(list []node, colW int, span *boxNode, pageOf
 			e.skippedCS["gotex@pagelimit"]++
 			break
 		}
+		if next == start && len(pending) == 0 && bi >= len(bands) {
+			break // no column progress and no bands left to place
+		}
 		start = next
 	}
 	return pages
 }
 
+// bandsReserve is the vertical space a stack of full-width bands takes atop a page: each
+// band's height + depth plus a \dbltextfloatsep gap to the material below it.
+func (e *Engine) bandsReserve(bands []*boxNode) int {
+	total := 0
+	for _, b := range bands {
+		total += b.height + b.depth + e.dblTextFloatSep()
+	}
+	return total
+}
+
 // assembleTwoColumnPage packs the two column slices as top-anchored vboxes of the column
 // measure, lays them side by side with a \columnsep gap (and a \columnseprule when set),
-// and hands the full-width result to assemblePage for headers/footers/margins — with
-// e.hsize temporarily the full width so that furniture spans the page.
-func (e *Engine) assembleTwoColumnPage(span *boxNode, left, right []node, colW, fullW, pageNum int) *boxNode {
+// stacks any full-width bands above them (each separated by \dbltextfloatsep), and hands
+// the full-width result to assemblePage for headers/footers/margins — with e.hsize
+// temporarily the full width so that furniture spans the page.
+func (e *Engine) assembleTwoColumnPage(bands []*boxNode, left, right []node, colW, fullW, pageNum int) *boxNode {
 	vsize := e.effectiveVsize()
-	if span != nil { // the columns share the height left below the span
-		if r := vsize - (span.height + span.depth) - e.dblTextFloatSep(); r > 0 {
-			vsize = r
-		}
+	if r := vsize - e.bandsReserve(bands); r > 0 { // the columns share the height left below the bands
+		vsize = r
 	}
 	mk := func(slice []node) *boxNode {
 		b := vpackSP(slice, packNatural, 0)
@@ -303,12 +446,13 @@ func (e *Engine) assembleTwoColumnPage(span *boxNode, left, right []node, colW, 
 	row = append(row, rb)
 	cols := hpackSP(row, packNatural, 0)
 
-	// A \twocolumn[...] span sits full-width above the two columns, separated by
-	// \dbltextfloatsep.
-	content := []node{cols}
-	if span != nil {
-		content = []node{span, glueNode{spec: glueSpec{width: e.dblTextFloatSep()}}, cols}
+	// Full-width bands (a \twocolumn[...] span, or figure*/table* floats) sit stacked
+	// above the two columns, each separated from the next by \dbltextfloatsep.
+	var content []node
+	for _, b := range bands {
+		content = append(content, b, glueNode{spec: glueSpec{width: e.dblTextFloatSep()}})
 	}
+	content = append(content, cols)
 
 	saved := e.hsize
 	e.hsize = fullW

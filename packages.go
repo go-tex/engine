@@ -127,13 +127,13 @@ func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 // without this var — they render two columns with a full-width frontmatter and the
 // densification improves the page count (validated by rendering: 2601.20606 28→26pp vs
 // tectonic 25). Revtex reprint renders two-column with a spanning frontmatter too and
-// its figure-heavy PAGE COUNT now CONVERGES — the earlier under-pagination (2601.22272:
-// 51pp vs tectonic 62) was relative-width floats collapsing to ~zero in the graphics
-// parser; with that fixed the reprint reaches 60–62pp under this var. It stays gated only
-// because a `figure*` spanning float is still set inline in one column and paints past
-// the column edge (see the revtex branch below). This var also opts in the remaining
-// classes (acmart sigconf, IEEEtran conference, any other twocolumn option) while their
-// column engines are brought up.
+// its figure* / table* floats now render as real full-width bands spanning both columns
+// (\@dblfloat → \gotex@dblfloat, twocolumn.go) rather than painting past the column edge.
+// It stays gated only because the PAGE COUNT overshoots — a both-columns band blocks the
+// whole page height where the old inline float blocked one column, so 2601.22272 rises to
+// 69pp against tectonic's denser-packed 62 (see the revtex branch below). This var also
+// opts in the remaining classes (acmart sigconf, IEEEtran conference, any other twocolumn
+// option) while their column engines are brought up.
 func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
 
 // pdfAspectOptIn reports whether an un-rasterisable PDF figure's placeholder is
@@ -501,15 +501,24 @@ func (e *Engine) doDocumentClass() {
 		// two-column mode, \textwidth spans both columns, and the placeholder takes the
 		// figure's true aspect) 2601.22272 reaches 62pp — exactly tectonic.
 		//
-		// It nonetheless STAYS behind GOTEX_TWOCOLUMN, because a `figure*` (a
-		// both-columns-spanning float — 21 of them in 2601.22272) is still set INLINE in
-		// one column at its full \textwidth, so it paints past the column into the gutter
-		// and off the page edge (≈half of them). Reproducing it as a real full-width band
-		// (the \@topnewpage/\twocolumn[span] machinery already built for the frontmatter,
-		// but placed mid-flow) is the remaining work; until it lands revtex reprint is not
-		// "correct two-column" and opts in through the env var, leaving the corpus default
-		// (one-column, its tuned geometry matching the reference closely — 2601.22272:
-		// 61 vs 62) untouched.
+		// A `figure*` / `table*` (a both-columns-spanning float — 25 of them in 2601.22272)
+		// now RENDERS correctly: \@dblfloat routes to \gotex@dblfloat (twocolumn.go), which
+		// typesets the float at the full \textwidth and places it as a band spanning BOTH
+		// columns across the top of the page its anchor sits on, the columns resuming below.
+		// The floats are on the page and no longer paint past the column edge.
+		//
+		// It nonetheless STAYS behind GOTEX_TWOCOLUMN, and so does the band itself (it forms
+		// only under twoColumnOptIn — see doDblFloat), for two reasons that share a cause,
+		// imperfect float PLACEMENT. First the page count overshoots: a full-width band
+		// blocks both columns for its height (text cannot flow beside it) where the old
+		// inline one-column float blocked one, so 2601.22272 rises to 69pp against tectonic's
+		// 62 — tectonic packs its floats denser than this top-band model. Second, on a LIVE
+		// standard [twocolumn] article (2601.20606) the band floats to a page top whose
+		// position does not track the reference, regressing the layout proxy (+2.2) even
+		// while rendering a wide table* more faithfully. Both need a fuller float-placement
+		// pass; until it lands the corpus default stays one-column (its tuned geometry
+		// matching the reference closely — 2601.22272: 61 vs 62), and the live standard
+		// two-column path keeps the historical inline float.
 		e.revtexReprint = twoColumnOptIn() && revtexReprintMode(opts)
 		e.loadRevtexEmulation()
 		return

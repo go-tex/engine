@@ -357,20 +357,23 @@ const AMSClassSubstrate = `
 % elsarticle …) had no starred form at all, so \begin{figure*}[t] resolved to \relax
 % and typeset its own placement key — every such float in the arXiv corpus carried a
 % stray "[t]" or "[h]" on the page, in 23 papers for figure* and 11 for table*.
-% They are set in one column here, like their unstarred forms, and they CALL them so
-% a class or package that redefines \figure later is followed.
+% They route through \@dblfloat (classprims.go), the same hook the embedded article.cls
+% uses for its own figure*/table*: in two-column mode \@dblfloat → \gotex@dblfloat
+% typesets the float at the FULL text width and places it as a band spanning BOTH columns
+% across the top of a page (\@dblfloat / \@topnewpage), and in one column it sets the
+% ordinary one-column float (\@float). \endfigure*/\endtable* are \end@dblfloat to pair.
 % They are installed at \begin{document} and ONLY if nothing else has: a class that
 % defines its own figure* must keep it, and one that declares it with
 % \newenvironment would fail outright against a name already taken (acmart does,
 % and defining these too early cost that paper 14 of its 18 pages).
 \AtBeginDocument{%
   \@ifundefined{figure*}{%
-    \expandafter\long\expandafter\def\csname figure*\endcsname{\figure}%
-    \expandafter\long\expandafter\def\csname endfigure*\endcsname{\endfigure}%
+    \expandafter\long\expandafter\def\csname figure*\endcsname{\@dblfloat{figure}}%
+    \expandafter\long\expandafter\def\csname endfigure*\endcsname{\end@dblfloat}%
   }{}%
   \@ifundefined{table*}{%
-    \expandafter\long\expandafter\def\csname table*\endcsname{\table}%
-    \expandafter\long\expandafter\def\csname endtable*\endcsname{\endtable}%
+    \expandafter\long\expandafter\def\csname table*\endcsname{\@dblfloat{table}}%
+    \expandafter\long\expandafter\def\csname endtable*\endcsname{\end@dblfloat}%
   }{}%
 }
 \catcode64=11
