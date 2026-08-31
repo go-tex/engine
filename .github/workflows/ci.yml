@@ -16,7 +16,14 @@ jobs:
       - name: test + conformance ratchet
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./...
+          # -timeout, because the default is 10 minutes and windows-latest needs more
+          # than that: the suite runs in ~40s locally with -race and over 600s on that
+          # runner, which failed PRs at random with "panic: test timed out after 10m0s"
+          # in whatever test happened to be running. No single test dominates (the
+          # slowest is 7s, an expansion-limit guard) — the lane is simply that slow, so
+          # the bound is raised rather than the suite trimmed. A real deadlock still
+          # fails, three times later.
+          go test -timeout 30m -race -coverprofile=cover.out ./...
           pct=$(go tool cover -func=cover.out | tail -1 | grep -oE '[0-9.]+' | tail -1)
           echo "coverage ${pct}% (in-progress engine; primary gate is the conformance ratchet in TestConformance)"
           awk "BEGIN{exit !(${pct} >= 80.0)}" || { echo "coverage ${pct}% below 80% floor"; exit 1; }
