@@ -131,6 +131,24 @@ func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 // untouched; the mechanism and its tests ship ready for that next step.
 func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
 
+// pdfAspectOptIn reports whether an un-rasterisable PDF figure's placeholder is
+// sized to the figure's TRUE aspect ratio (read from its page box, see pdfbox.go)
+// instead of a blind square. It is opt-in through GOTEX_PDFASPECT.
+//
+// The aspect is objectively more correct — a 3:1 landscape figure is not a square —
+// and it improves a figure-heavy paper measured against tectonic (2606.18084:
+// layout divergence 16.2→14.2, a page recovered). But as the corpus DEFAULT it is
+// net-negative on the n=50 layout sample (mean 4.316→4.659): the engine places
+// figures INLINE while the reference FLOATS them, so a placeholder's height only
+// shifts the following inline text — which already over-paginates on the two-column
+// / float-heavy papers (2601.20606, 2608.10430) where the old square happened to
+// compensate. The accurate height compounds that pre-existing over-pagination. Like
+// the two-column routine, the correct behaviour therefore waits on real float
+// placement; off by default the corpus is untouched, and the browser preview (whose
+// square placeholders are a visible infidelity) or a future float-aware path can
+// opt in. See [[gotex-completion-plan]] for the float-placement finding.
+func pdfAspectOptIn() bool { return os.Getenv("GOTEX_PDFASPECT") != "" }
+
 // realBeamer reports whether \documentclass{beamer} loads the REAL beamer.cls
 // rather than the built-in emulation in beamer.go.
 //

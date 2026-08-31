@@ -99,7 +99,9 @@ func (e *Engine) doIncludegraphics() {
 			// with its .tex (or use a format we can't decode). Reserve the box with
 			// a framed placeholder sized from the requested dimensions so the
 			// surrounding text still flows, instead of aborting the whole compile.
-			e.placeholderImage(wReq, hReq, scale, name)
+			// For a PDF figure loadImage still recovers the page box (iw/ih), so the
+			// placeholder keeps the figure's real aspect instead of a blind square.
+			e.placeholderImage(wReq, hReq, iw, ih, scale, dpiX, dpiY, name)
 			return
 		}
 		e.fail("includegraphics " + name + ": " + err.Error())
@@ -116,8 +118,12 @@ func (e *Engine) doIncludegraphics() {
 // not be loaded (lenient mode). It sizes the box from the requested width/height
 // (or scale), falling back to a default figure size when none was given, so the
 // page keeps a sensibly-sized gap where the graphic would sit.
-func (e *Engine) placeholderImage(wReq, hReq int, scale float64, name string) {
-	w, h := graphicsSize(0, 0, wReq, hReq, scale, 0, 0)
+func (e *Engine) placeholderImage(wReq, hReq, iw, ih int, scale, dpiX, dpiY float64, name string) {
+	// iw/ih carry the figure's intrinsic size when it was recoverable (a PDF page
+	// box); with them, a width-only \includegraphics keeps the figure's true aspect
+	// instead of collapsing to a square. When absent (iw==ih==0) the box falls back
+	// to the requested dimensions, then to a default figure size.
+	w, h := graphicsSize(iw, ih, wReq, hReq, scale, dpiX, dpiY)
 	if w <= 0 {
 		w = 120 * unity // a default figure width when the source gave none
 	}
@@ -214,11 +220,27 @@ func loadImage(name string) (data []byte, format imgFormat, iw, ih int, dpiX, dp
 	// at pdfFigureDPI, so that is its resolution — without it the figure would be
 	// pdfFigureDPI/72.27 times oversize.
 	if bytes.HasPrefix(data, []byte("%PDF-")) {
+		// The figure's natural size, read from its page box, lets a placeholder keep
+		// the right aspect (and reserve the right vertical space) when no renderer is
+		// wired or rasterisation fails — treated as pixels at 72dpi (1 PDF point = 1
+		// bp = 1/72 inch), so natSP converts them straight back to the box's points.
+		boxIW, boxIH, haveBox := 0, 0, false
+		if pdfAspectOptIn() {
+			if w, h, ok := pdfIntrinsicPoints(data); ok {
+				boxIW, boxIH, haveBox = int(w+0.5), int(h+0.5), true
+			}
+		}
 		if RasterizePDF == nil {
+			if haveBox {
+				return nil, imgPNG, boxIW, boxIH, 72, 72, errNoPDFRasterizer
+			}
 			return nil, 0, 0, 0, 0, 0, errNoPDFRasterizer
 		}
 		img, err := RasterizePDF(data, pdfFigureDPI)
 		if err != nil {
+			if haveBox {
+				return nil, imgPNG, boxIW, boxIH, 72, 72, err
+			}
 			return nil, 0, 0, 0, 0, 0, err
 		}
 		var buf bytes.Buffer
