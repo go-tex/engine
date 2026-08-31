@@ -91,13 +91,21 @@ func (e *Engine) scanRawOptBracket() (string, bool) {
 // right before \end).
 func (e *Engine) doLstlisting() {
 	opts, _ := e.scanRawOptBracket()
-	o := parseLstOptions(opts)
+	content, line := e.readRawEnvBody(`\end{lstlisting}`)
+	e.renderVerbatimBlock(content, line, parseLstOptions(opts))
+}
 
-	const end = `\end{lstlisting}`
+// readRawEnvBody copies the raw source from the cursor up to the literal end marker
+// (e.g. "\end{lstlisting}") — no expansion, no category codes — closes the group
+// \begin opened (the marker is consumed here, so the matching \end prim never
+// runs), and trims the newline right after \begin and right before \end the way
+// doVerbatim does. It returns the body text and the source line its first content
+// character lives on (for glyph stamping). It is shared by every verbatim-body
+// environment: lstlisting and minted read their bodies identically.
+func (e *Engine) readRawEnvBody(end string) (content string, firstLine int) {
 	startOff := e.bpos
 	rest := string(e.base[e.bpos:])
 	idx := strings.Index(rest, end)
-	var content string
 	if idx < 0 {
 		content = rest
 		e.bpos = len(e.base)
@@ -110,12 +118,19 @@ func (e *Engine) doLstlisting() {
 	content = strings.TrimPrefix(content, "\n")
 	content = strings.TrimSuffix(content, "\n")
 
-	// The source line the first content character lives on (for glyph stamping).
-	line, _ := e.lineColAt(startOff)
+	firstLine, _ = e.lineColAt(startOff)
 	if leadingNL {
-		line++
+		firstLine++
 	}
+	return content, firstLine
+}
 
+// renderVerbatimBlock sets content as a code block: each line verbatim in the tt
+// font (see verbFont), starting at source line firstLine, with a little vertical
+// gap above and below. When o.numbers is set each line gets a right-aligned number
+// in a fixed-width gutter; when o.frame is set the whole block is wrapped in a
+// frame. Shared by lstlisting and minted.
+func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions) {
 	e.endParagraph() // flush any open paragraph before the block
 	font := e.verbFont()
 	if font == nil {
@@ -134,7 +149,7 @@ func (e *Engine) doLstlisting() {
 		var vlist []node
 		prevDepth := ignoreDepth
 		for i, ln := range lines {
-			b := e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, line+i)
+			b := e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, firstLine+i)
 			if prevDepth > ignoreDepth {
 				gap := e.baselineskip - prevDepth - b.height
 				if gap < e.lineskip {
@@ -152,7 +167,7 @@ func (e *Engine) doLstlisting() {
 		e.appendToPage(hpackSP([]node{fr}, packNatural, 0))
 	} else {
 		for i, ln := range lines {
-			e.appendToPage(e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, line+i))
+			e.appendToPage(e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, firstLine+i))
 		}
 	}
 	e.mvlAppendGap()
@@ -178,6 +193,14 @@ func (e *Engine) lstText(line string, n, digits int, numbers bool) string {
 // font.
 func (e *Engine) doLstinline() {
 	e.scanRawOptBracket() // optional [opts]; ignored for inline rendering
+	e.setInlineVerbatim()
+}
+
+// setInlineVerbatim reads a \verb-style delimited code span straight from the raw
+// input at the cursor and sets it inline in the tt font. The delimiter is the next
+// character, matched by its twin (\lstinline|code|), except '{' which is matched by
+// '}' (\lstinline{code}). Shared by \lstinline and \mintinline.
+func (e *Engine) setInlineVerbatim() {
 	if e.bpos >= len(e.base) {
 		return
 	}
