@@ -13,6 +13,11 @@ func TestMathAliases(t *testing.T) {
 	for _, src := range []string{
 		`\documentclass{article}\begin{document}$\mathds{R}\subset\mathds{C}$\end{document}`,
 		`\documentclass{article}\begin{document}$\Tilde{x}+\Tilde{y}$\end{document}`,
+		// \pmb is amsbsy's poor man's bold — three overprinted copies, the fallback
+		// for when no bold math version exists (amsbsy.sty:40-57). One exists here,
+		// so it becomes \boldsymbol, the thing it was imitating. 348 of the formulas
+		// the arXiv corpus drops are this one command.
+		`\documentclass{article}\begin{document}$\pmb{\alpha}+\pmb{x}$\end{document}`,
 	} {
 		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
 		if err != nil {
@@ -22,7 +27,7 @@ func TestMathAliases(t *testing.T) {
 		// math-layer key (\mathds) may appear. A benign class-load "input" tally is
 		// always present and unrelated.
 		sk := e.SkippedCommands()
-		for _, k := range []string{"mathds", "\\mathds", "Tilde", "\\Tilde"} {
+		for _, k := range []string{"mathds", "\\mathds", "Tilde", "\\Tilde", "pmb", "\\pmb"} {
 			if sk[k] != 0 {
 				t.Errorf("%q still dropped %q (%d): %v", src, k, sk[k], sk)
 			}
