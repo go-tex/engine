@@ -118,6 +118,8 @@ type Engine struct {
 	columnsep      int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
 	columnseprule  int         // \columnseprule: rule thickness between columns (sp, 0 = none)
 	twoColumn      bool        // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColLive     bool        // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
+	revtexReprint  bool        // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
 	twoColApplied  bool        // guard: the column measure has been applied to e.hsize once
 	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
 	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)

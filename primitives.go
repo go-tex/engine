@@ -2063,15 +2063,24 @@ func (e *Engine) loadStomach() {
 	// two-column opt-in they start a fresh region; otherwise they keep the historical
 	// no-op (gobble the optional [span] and do nothing), so the default corpus is untouched.
 	e.prim("twocolumn", func(e *Engine) {
-		if twoColumnOptIn() {
+		if e.twoColLive || twoColumnOptIn() {
 			e.startTwoColumn()
 			return
 		}
 		e.scanOptBracketToks()
 	})
 	e.prim("onecolumn", func(e *Engine) {
-		if twoColumnOptIn() {
+		if e.twoColLive || twoColumnOptIn() {
 			e.startOneColumn()
+		}
+	})
+	// \gotex@revtexbodytwocol is the internal hook the revtex emulation's \maketitle
+	// runs at its end in reprint / journal (two-column) mode: the frontmatter typeset
+	// so far (title, authors, affiliations, abstract) stays a full-width one-column
+	// region and the body below switches to two columns (see twocolumn.go, revtex.go).
+	e.prim("gotex@revtexbodytwocol", func(e *Engine) {
+		if e.revtexReprint {
+			e.switchToTwoColumn(nil)
 		}
 	})
 	e.loadBoxCmds()

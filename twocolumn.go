@@ -28,9 +28,12 @@ package engine
 //   - The OUTPUT routine. pagesTwoColumn slices the main vertical list into \vsize-tall
 //     columns with the single-column page breaker (findPageBreak) and lays two per page.
 //
-// Not yet reproduced: full-width spanning of \twocolumn[...] material and \maketitle /
-// abstract across both columns (they set at the column measure for now), per-column
-// footnote areas, and last-page column balancing.
+// Full-width frontmatter IS reproduced: a \twocolumn[...] span, and the revtex reprint
+// frontmatter (title/authors/abstract, switched at \maketitle), are set across the whole
+// page above the two columns; the material before the switch is a one-column region.
+// Not yet reproduced: per-column footnote areas, last-page column balancing, and the real
+// ltxgrid \twocolumngrid/\onecolumngrid engine for a bundled revtex .cls (the emulation
+// path — the common case, since revtex is not embedded — is handled here).
 
 // applyTwoColumnMeasure halves the paragraph measure to the column width the first time
 // a paragraph is set in two-column mode. Deferred to first use (not to class time) so it
@@ -43,18 +46,32 @@ func (e *Engine) applyTwoColumnMeasure() {
 	// A class-option two-column document has no explicit \twocolumn, so seed the whole
 	// document as one two-column region here (the commands add further regions).
 	if len(e.colRegions) == 0 {
-		e.colRegions = []colRegion{{at: 0, cols: 2}}
+		e.colRegions = []colRegion{{at: 0, cols: 2, colW: e.hsize}}
 	}
 }
 
 // colRegion is one \onecolumn/\twocolumn span of the main vertical list: from index at
 // (into e.mvl) until the next region's at, typeset in cols columns. span, when non-nil,
 // is the \twocolumn[...] full-width material placed across the top of the region's first
-// page (\@topnewpage), which shortens that page's columns.
+// page (\@topnewpage), which shortens that page's columns. colW is the single-column
+// measure this region's material was line-broken at — captured at creation because
+// e.hsize is mutable state (a later \onecolumn restores it to full width), and reading
+// it back at pagination time would use the wrong width for an earlier region.
 type colRegion struct {
 	at   int
 	cols int
 	span *boxNode
+	colW int // per-column measure (full width for a one-column region, halved for two)
+}
+
+// fullWidth is the one-column measure: the width the frontmatter and any \onecolumn or
+// \twocolumn[span] material is set at. Once two-column has entered, e.oneColHsize holds
+// the full width even while e.hsize carries the halved column measure.
+func (e *Engine) fullWidth() int {
+	if e.oneColHsize > 0 {
+		return e.oneColHsize
+	}
+	return e.hsize
 }
 
 // dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the columns
@@ -66,15 +83,54 @@ func (e *Engine) dblTextFloatSep() int {
 	return 20 * unity
 }
 
-// enterTwoColumnMeasure halves e.hsize to the column width, saving the full width for a
-// later \onecolumn to restore. The guard fires it once; \twocolumn after \onecolumn
-// re-enters through startTwoColumn, which halves the (restored) full width again.
+// enterTwoColumnMeasure sets e.hsize to the column width, remembering the full width
+// (e.oneColHsize) for a later \onecolumn to restore. It is idempotent: the column
+// measure is always derived from the stored full width, so calling it again after a
+// \onecolumn restored e.hsize re-halves consistently rather than halving the halved.
 func (e *Engine) enterTwoColumnMeasure() {
-	e.oneColHsize = e.hsize
-	if cw := (e.hsize - e.columnsep) / 2; cw > 0 {
+	if e.oneColHsize == 0 {
+		e.oneColHsize = e.hsize
+	}
+	if cw := (e.oneColHsize - e.columnsep) / 2; cw > 0 {
 		e.hsize = cw
 	}
 	e.twoColApplied = true
+}
+
+// typesetSpanFullWidth typesets \twocolumn[...] material at the FULL one-column width,
+// regardless of whether the column measure has already been entered. It forces e.hsize
+// to the full width and suppresses the deferred halving (applyTwoColumnMeasure) for the
+// duration, so the span is line-broken across the whole page — \@topnewpage — not at a
+// single column. The result box is capped at \textheight.
+func (e *Engine) typesetSpanFullWidth(toks []tok) *boxNode {
+	fullW := e.fullWidth()
+	savedH, savedApplied := e.hsize, e.twoColApplied
+	e.hsize = fullW
+	e.twoColApplied = true // don't let applyTwoColumnMeasure halve mid-span
+	span := e.typesetGroupToVbox(toks)
+	e.hsize, e.twoColApplied = savedH, savedApplied
+	span.width = fullW
+	if v := e.effectiveVsize(); span.height+span.depth > v { // \@topnewpage caps at \textheight
+		span.height = v - span.depth
+	}
+	return span
+}
+
+// switchToTwoColumn records the boundary at which the body switches to two columns:
+// the material typeset so far (frontmatter) stays a full-width one-column region, and a
+// new two-column region begins at the current position. span, when non-nil, is the
+// \twocolumn[...] full-width block placed across the top of the region's first page.
+// It captures the halved column measure in the region so pagination uses the right
+// width even after a later \onecolumn restores e.hsize.
+func (e *Engine) switchToTwoColumn(span *boxNode) {
+	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
+		// The material so far (revtex frontmatter, a \maketitle block) is one-column
+		// at the full width.
+		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 1, colW: e.fullWidth()})
+	}
+	e.enterTwoColumnMeasure()
+	e.twoColumn = true
+	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2, span: span, colW: e.hsize})
 }
 
 // startTwoColumn implements the \twocolumn command: like real LaTeX it \clearpage's
@@ -83,35 +139,23 @@ func (e *Engine) enterTwoColumnMeasure() {
 // (\@topnewpage), shortening that page's columns.
 func (e *Engine) startTwoColumn() {
 	spanToks, hasSpan := e.scanOptBracketToks()
-	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
-		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 1}) // material so far was one-column
-	}
-	// Typeset the span at the CURRENT (full) measure, before the switch halves e.hsize.
 	var span *boxNode
 	if hasSpan && len(spanToks) > 0 {
-		span = e.typesetGroupToVbox(spanToks)
-		span.width = e.hsize
-		if v := e.effectiveVsize(); span.height+span.depth > v { // \@topnewpage caps at \textheight
-			span.height = v - span.depth
-		}
+		span = e.typesetSpanFullWidth(spanToks)
 	}
-	if !e.twoColumn || !e.twoColApplied || e.hsize == e.oneColHsize {
-		e.enterTwoColumnMeasure()
-	}
-	e.twoColumn = true
-	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2, span: span})
+	e.switchToTwoColumn(span)
 }
 
 // startOneColumn implements the \onecolumn command: \clearpage (region boundary) and
 // switch back to a single full-width column, restoring the measure two-column saved.
 func (e *Engine) startOneColumn() {
 	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
-		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2})
+		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2, colW: e.hsize})
 	}
 	if e.oneColHsize > 0 {
 		e.hsize = e.oneColHsize
 	}
-	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 1})
+	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 1, colW: e.fullWidth()})
 }
 
 // pagesByRegion paginates each \onecolumn/\twocolumn region of the main vertical list in
@@ -120,8 +164,9 @@ func (e *Engine) startOneColumn() {
 func (e *Engine) pagesByRegion() []*boxNode {
 	regs := e.colRegions
 	if regs[0].at > 0 { // material before the first switch is one-column
-		regs = append([]colRegion{{at: 0, cols: 1}}, regs...)
+		regs = append([]colRegion{{at: 0, cols: 1, colW: e.fullWidth()}}, regs...)
 	}
+	savedH := e.hsize
 	var pages []*boxNode
 	for i, r := range regs {
 		end := len(e.mvl)
@@ -132,22 +177,33 @@ func (e *Engine) pagesByRegion() []*boxNode {
 			continue
 		}
 		slice := e.mvl[r.at:end]
+		// Restore the measure this region was set at, so its page furniture (header,
+		// footnote rule) spans the right width — e.hsize itself carries whatever the
+		// last column switch left it at, which is not this region's width.
+		if r.colW > 0 {
+			e.hsize = r.colW
+		}
 		if r.cols >= 2 {
-			pages = append(pages, e.paginateTwoColList(slice, r.span, len(pages))...)
+			colW := r.colW
+			if colW <= 0 {
+				colW = (e.fullWidth() - e.columnsep) / 2
+			}
+			pages = append(pages, e.paginateTwoColList(slice, colW, r.span, len(pages))...)
 		} else {
 			pages = append(pages, e.paginateSingleList(slice, len(pages))...)
 		}
 	}
+	e.hsize = savedH
 	return pages
 }
 
 // paginateTwoColList slices one vertical list (already broken to the column measure)
 // into \vsize-tall columns, two to a physical page, filling left then right, numbering
 // from pageOffset+1. It reuses the single-column page breaker for each column and
-// assemblePage for the page furniture.
-func (e *Engine) paginateTwoColList(list []node, span *boxNode, pageOffset int) []*boxNode {
+// assemblePage for the page furniture. colW is the region's column measure (captured
+// when the region was typeset), not e.hsize, which a later \onecolumn may have changed.
+func (e *Engine) paginateTwoColList(list []node, colW int, span *boxNode, pageOffset int) []*boxNode {
 	var pages []*boxNode
-	colW := e.hsize
 	fullW := 2*colW + e.columnsep
 
 	takeColumn := func(start int) ([]node, int) {

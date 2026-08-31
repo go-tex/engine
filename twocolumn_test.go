@@ -218,6 +218,175 @@ y\end{document}`); err != nil {
 	}
 }
 
+// A standard class's [twocolumn] option drives the two-column page builder LIVE — no
+// GOTEX_TWOCOLUMN needed — and lets the document's own \twocolumn / \onecolumn fire.
+func TestTwoColumnStandardClassLive(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\documentclass[twocolumn]{article}\begin{document}x
+
+y\end{document}`); err != nil {
+		t.Fatal(err)
+	}
+	if !e.twoColumn || !e.twoColLive {
+		t.Errorf("article[twocolumn] not live: twoColumn=%v twoColLive=%v", e.twoColumn, e.twoColLive)
+	}
+}
+
+// After a mid-document \onecolumn restores e.hsize to the full width, the two-column
+// region must still paginate at the HALVED column measure it was typeset with: the
+// measure is captured in the region, not read back from the mutated e.hsize. This is a
+// regression guard for the bug where a trailing \onecolumn made the two columns twice
+// as wide as the page (their combined width overflowed the paper).
+func TestTwoColumnMeasureSurvivesOneColumn(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	var b strings.Builder
+	b.WriteString(`\documentclass{article}\usepackage[textheight=8in,textwidth=6in]{geometry}\begin{document}`)
+	b.WriteString(`\twocolumn[\noindent SPAN top material]`)
+	for i := 0; i < 30; i++ {
+		b.WriteString(`\noindent body word word word word word word word word.
+
+`)
+	}
+	b.WriteString(`\onecolumn `) // restores e.hsize to full width
+	b.WriteString(`tail\end{document}`)
+
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(b.String()); err != nil {
+		t.Fatal(err)
+	}
+	// The two-column region's captured colW must be about half the full width, and
+	// 2*colW + columnsep must not exceed the full width (no overflow).
+	var twoCol *colRegion
+	for i := range e.colRegions {
+		if e.colRegions[i].cols >= 2 {
+			twoCol = &e.colRegions[i]
+		}
+	}
+	if twoCol == nil {
+		t.Fatalf("no two-column region: %+v", e.colRegions)
+	}
+	full := e.fullWidth()
+	if twoCol.colW <= 0 || twoCol.colW >= full {
+		t.Fatalf("two-column colW=%d not a halved measure (full=%d)", twoCol.colW, full)
+	}
+	if fullW := 2*twoCol.colW + e.columnsep; fullW > full {
+		t.Errorf("two columns overflow: 2*%d+%d = %d > full width %d", twoCol.colW, e.columnsep, fullW, full)
+	}
+	// And every page fits the paper width.
+	pages := e.Pages()
+	paperW, _, _ := e.paperSizePt()
+	limit := ptToSP(paperW) // page content must fit within the paper
+	for i, p := range pages {
+		if p.width > limit {
+			t.Errorf("page %d width %d exceeds paper %d", i, p.width, limit)
+		}
+	}
+}
+
+// A revtex reprint / journal document (emulated, no bundled .cls) sets the body in two
+// columns with a FULL-WIDTH frontmatter: \maketitle keeps everything typeset so far
+// (title/authors/abstract) one-column, then switches the body to two columns. A revtex
+// PREPRINT document stays one-column throughout. Revtex two-column is gated behind
+// GOTEX_TWOCOLUMN (it renders correctly but under-paginates long reprints pending
+// column-leading / float work), so the test opts in.
+func TestRevtexReprintTwoColumn(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	doc := func(opt string) string {
+		var b strings.Builder
+		b.WriteString(`\documentclass[` + opt + `]{revtex4-2}\begin{document}`)
+		b.WriteString(`\title{A Title}\author{An Author}\affiliation{Somewhere}`)
+		b.WriteString(`\begin{abstract}` + strings.Repeat(`abstract word word word. `, 20) + `\end{abstract}`)
+		b.WriteString(`\maketitle `)
+		for i := 0; i < 40; i++ {
+			b.WriteString(`\noindent body sentence word word word word word word word word.
+
+`)
+		}
+		b.WriteString(`\end{document}`)
+		return b.String()
+	}
+	run := func(src string) *Engine {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(src); err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+
+	rep := run(doc("reprint,aps,prl"))
+	if !rep.revtexReprint {
+		t.Fatal("revtex reprint mode not detected")
+	}
+	if !rep.twoColumn {
+		t.Fatal("revtex reprint did not switch the body to two-column")
+	}
+	// A one-column frontmatter region precedes a two-column body region.
+	sawFront, sawBody := false, false
+	for _, r := range rep.colRegions {
+		if r.cols == 1 {
+			sawFront = true
+		}
+		if r.cols >= 2 {
+			sawBody = true
+		}
+	}
+	if !sawFront || !sawBody {
+		t.Fatalf("expected a one-column frontmatter and a two-column body: %+v", rep.colRegions)
+	}
+	repPages := rep.Pages()
+	twoColPages := 0
+	for _, p := range repPages {
+		if hasTwoColumns(p) {
+			twoColPages++
+		}
+	}
+	if twoColPages == 0 {
+		t.Errorf("revtex reprint produced no two-column page across %d pages", len(repPages))
+	}
+
+	// Preprint stays one-column and denser papers than reprint (reprint two-columns).
+	pre := run(doc("preprint,aps,prl"))
+	if pre.revtexReprint {
+		t.Error("revtex preprint should not be reprint mode")
+	}
+	if pre.twoColumn {
+		t.Error("revtex preprint should stay one-column")
+	}
+}
+
+// revtexReprintMode: reprint / twocolumn / a journal substyle imply two-column; the
+// bare society option aps does not; an explicit preprint or onecolumn overrides.
+func TestRevtexReprintMode(t *testing.T) {
+	for _, tc := range []struct {
+		opts []string
+		want bool
+	}{
+		{[]string{"reprint", "aps", "prl"}, true},
+		{[]string{"twocolumn"}, true},
+		{[]string{"aps", "prd"}, true},            // journal substyle implies reprint
+		{[]string{"aps"}, false},                  // society alone: default preprint
+		{[]string{"preprint"}, false},             // explicit preprint
+		{[]string{"reprint", "onecolumn"}, false}, // explicit onecolumn overrides
+		{nil, false},
+	} {
+		if got := revtexReprintMode(tc.opts); got != tc.want {
+			t.Errorf("revtexReprintMode(%v)=%v, want %v", tc.opts, got, tc.want)
+		}
+	}
+}
+
 // hasTwoColumns reports whether the page box contains a horizontal box holding at
 // least two vertical sub-boxes (the left and right columns).
 func hasTwoColumns(page *boxNode) bool {
