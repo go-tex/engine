@@ -558,6 +558,15 @@ var mathNoise = map[string]struct {
 }{
 	"hspace": {1, `\; `}, "mspace": {1, `\; `}, "vspace": {1, ``},
 	"label": {1, ``}, "nonumber": {0, ``}, "notag": {0, ``},
+	// \def\setlength#1#2{#1 #2\relax} and \def\addtolength#1#2{\advance#1 #2\relax}
+	// (latex.ltx:7347-7348): an assignment to a length, carrying no maths at all.
+	"setlength": {2, ``}, "addtolength": {2, ``},
+	// The infinitely stretchable skips are \hskip with a fixed glue —
+	// primitive("hfil",hskip,fil_code), fil_glue = 0pt plus 1fil (tex.web:20547,
+	// §3318) — so they take no argument. The maths layer cannot stretch, so what
+	// they contribute here is nothing; leaving them in cost the whole formula.
+	"hfil": {0, ``}, "hfill": {0, ``}, "hss": {0, ``}, "hfilneg": {0, ``},
+	"vfil": {0, ``}, "vfill": {0, ``}, "vss": {0, ``}, "vfilneg": {0, ``},
 	"qedhere": {0, ``}, "noalign": {1, ``},
 }
 
@@ -568,6 +577,12 @@ var mathNoise = map[string]struct {
 // renders no glue.
 var mathGlue = map[string]bool{
 	"hskip": true, "vskip": true, "kern": true, "mskip": true, "mkern": true,
+	// The glue PARAMETERS are assignments — \leftskip 0pt, \parskip=\medskipamount
+	// — and TeX reads the same <glue> after them (tex.web §224, glue_par). A class
+	// sets one inside a display and the whole formula went with it.
+	"leftskip": true, "rightskip": true, "parindent": true, "parskip": true,
+	"baselineskip": true, "lineskip": true, "abovedisplayskip": true,
+	"belowdisplayskip": true, "mathsurround": true, "parfillskip": true,
 }
 
 // mathTextSymbol are commands whose MATH meaning is a different symbol from their
@@ -694,6 +709,12 @@ func scanMathGlue(s string) (int, bool) {
 	p := 0
 	for p < len(s) && s[p] == ' ' {
 		p++
+	}
+	if p < len(s) && s[p] == '=' { // \leftskip=0pt — TeX's optional equals
+		p++
+		for p < len(s) && s[p] == ' ' {
+			p++
+		}
 	}
 	if p < len(s) && s[p] == '\\' { // \mathindent, \parindent, \baselineskip…
 		p++
