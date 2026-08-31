@@ -38,6 +38,32 @@ func (e *Engine) loadBoxCmds() {
 	e.prim("sbox", func(e *Engine) { e.doSbox() })
 	e.prim("savebox", func(e *Engine) { e.doSavebox() })
 	e.prim("usebox", func(e *Engine) { e.place(e.doUsebox()) })
+	e.prim("lrbox", func(e *Engine) { e.doLrbox() }) // \begin{lrbox}{\reg} … \end{lrbox}
+	e.prim("endlrbox", func(e *Engine) {})           // consumed by collectEnvBody
+}
+
+// doLrbox implements the lrbox environment: \begin{lrbox}{\name} … \end{lrbox} is
+// the environment form of \sbox — it typesets its body as an \hbox and stores it in
+// \name's register for a later \usebox, rather than setting it on the page. Without
+// this the environment is undefined: its body LEAKS into the running text where the
+// \begin sits, and the register stays void so the matching \usebox produces nothing.
+// The register operand is read first, then the body is collected up to \end{lrbox}
+// (which closes the group \begin opened) and packed exactly as \sbox does.
+func (e *Engine) doLrbox() {
+	reg, ok := e.readSetBoxHandle()
+	body := e.collectEnvBody("lrbox")
+	if !ok {
+		return // invalid handle: the body is consumed (no leak), nothing to store
+	}
+	// Typeset the collected body as \hbox{body} — the braces give it its own group,
+	// matching \sbox{\name}{body}.
+	toks := make([]tok, 0, len(body)+2)
+	toks = append(toks, chTok('{', catBegin))
+	toks = append(toks, body...)
+	toks = append(toks, chTok('}', catEnd))
+	e.push(toks)
+	list, _ := e.grabHboxList()
+	e.setBoxScoped(reg, hpackSP(list, packNatural, 0), false)
 }
 
 // doMakebox implements \makebox[width][pos]{content}: with no [width] it packs the
