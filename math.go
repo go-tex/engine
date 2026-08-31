@@ -271,6 +271,12 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			// Non-rendering commands (spacing \hspace/\mspace; metadata \label,
 			// \nonumber, …) must not drop the equation: spacing becomes a space, the
 			// rest is removed, then retry.
+			// siunitx quantities: composed here rather than dropped, with the unit
+			// upright as siunitx sets it.
+			if q, qok := e.resolveMathSIUnitx(src, name); qok {
+				src = q
+				continue
+			}
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
 				continue
@@ -396,6 +402,89 @@ var mathRefArity = map[string]bool{
 	"cref": true, "Cref": true, "nameref": true, "vref": true,
 	"cite": true, "citep": true, "citet": true, "citealp": true,
 	"citealt": true, "citeauthor": true, "citeyear": true, "Citep": true, "Citet": true,
+}
+
+// mathSIUnitxArity is siunitx's quantity commands and how many braced arguments
+// each takes. The engine already composes them for text (siunitx.go); in a formula
+// they reached the maths layer as unknown commands and cost the whole equation —
+// 158 of the 4172 formulas the arXiv corpus drops are \SI.
+var mathSIUnitxArity = map[string]int{
+	"num": 1, "ang": 1, "si": 1, "unit": 1, "SI": 2, "qty": 2,
+}
+
+// resolveMathSIUnitx substitutes a siunitx quantity into a maths source string,
+// composing it with the same functions the text-mode primitives use.
+//
+// The unit goes inside \mathrm, which is siunitx's own default (unit-font-command =
+// \mathrm, siunitx.sty:6209, and \__siunitx_print_math_auxvi:Nn \mathrm at :3910)
+// and the SI rule it implements: a unit symbol is upright, never italic — which is
+// what a maths layer would otherwise make of "m/s".
+func (e *Engine) resolveMathSIUnitx(src, name string) (string, bool) {
+	n, ok := mathSIUnitxArity[name]
+	if !ok {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := skipMathOptArg(src[i+len(needle):]) // \SI[per-mode=symbol]{…}{…}
+		args, consumed, ok := parseMathArgs(rest, n)
+		if !ok {
+			out.WriteString(needle)
+			src = src[i+len(needle):]
+			continue
+		}
+		out.WriteString(mathQuantityText(name, args))
+		src = rest[consumed:]
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
+}
+
+// mathQuantityText composes one siunitx quantity as maths source.
+func mathQuantityText(name string, args []string) string {
+	unit := func(a string) string {
+		u := mathThinSpace(formatUnitTokens(tokenizeTeX(a)))
+		if u == "" {
+			return ""
+		}
+		return "\\mathrm {" + u + "}"
+	}
+	switch name {
+	case "num":
+		v, err := formatNumber(args[0])
+		if err != nil {
+			return ""
+		}
+		return mathThinSpace(v)
+	case "ang":
+		return mathThinSpace(formatAngle(args[0]))
+	case "si", "unit":
+		return unit(args[0])
+	default: // SI, qty
+		v, err := formatNumber(args[0])
+		u := unit(args[1])
+		switch {
+		case err != nil || v == "":
+			return u
+		case u == "":
+			return mathThinSpace(v)
+		}
+		return mathThinSpace(v) + "\\, " + u
+	}
+}
+
+// mathThinSpace rewrites the \thinspace the text composer emits as the \, the maths
+// layer knows; both are TeX's thin space, spelled for their own mode.
+func mathThinSpace(s string) string {
+	return strings.ReplaceAll(s, "\\thinspace ", "\\, ")
 }
 
 // resolveMathRef replaces every \name{key} cross-reference or citation in a math
