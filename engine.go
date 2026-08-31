@@ -103,25 +103,26 @@ type Engine struct {
 	vsize            int    // page height for the page builder (sp)
 	baselineskip     int    // baseline-to-baseline glue (sp)
 	baseBaselineskip int    // the single-spaced baseline skip, the 1.0 reference for setspace
+	explicitStretch  bool   // an explicit spacing command (setspace / \linespread / \setstretch) ran
 	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
 	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
 	parindent        int    // width of the indentation box at a paragraph's start (sp)
 	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
 	suppressParskip  bool   // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
-	hyph          *hyphenator // a document's own \patterns, if any (nil = none loaded)
-	enHyph        *hyphenator // lazily built cache of the embedded US-English patterns
-	hyphenpenalty int         // penalty at a discretionary hyphen
-	leftskip      glueSpec    // glue at the left of every line
-	rightskip     glueSpec    // glue at the right of every line (fil ⇒ ragged right)
-	columnsep     int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
-	columnseprule int         // \columnseprule: rule thickness between columns (sp, 0 = none)
-	twoColumn     bool        // class/\twocolumn two-column page layout (see twocolumn.go)
-	twoColApplied bool        // guard: the column measure has been applied to e.hsize once
-	oneColHsize   int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
-	colRegions    []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
-	classPaperSize string     // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
-	geom          *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
+	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
+	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns
+	hyphenpenalty  int         // penalty at a discretionary hyphen
+	leftskip       glueSpec    // glue at the left of every line
+	rightskip      glueSpec    // glue at the right of every line (fil ⇒ ragged right)
+	columnsep      int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
+	columnseprule  int         // \columnseprule: rule thickness between columns (sp, 0 = none)
+	twoColumn      bool        // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColApplied  bool        // guard: the column measure has been applied to e.hsize once
+	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
+	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
+	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
+	geom           *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save        []saveItem
@@ -132,7 +133,7 @@ type Engine struct {
 	// resolve is Options.Resolve: a host-supplied source of texmf files, tried
 	// after the search path and before the embedded set (see hostTeXFile).
 	resolve func(name string) ([]byte, bool)
-	jobName  string // \jobname: the main input file's base name ("" ⇒ texput)
+	jobName string // \jobname: the main input file's base name ("" ⇒ texput)
 
 	out    strings.Builder   // \message output
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)

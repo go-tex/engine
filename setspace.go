@@ -13,12 +13,39 @@ package engine
 
 import "strconv"
 
-// setLineStretch sets \baselineskip to the single-spaced reference times f.
+// setLineStretch sets \baselineskip to the single-spaced reference times f. It also
+// records that an explicit spacing command has run, so applyBaselineStretch does not
+// re-apply the \baselinestretch macro over a setspace-chosen (size-adjusted) skip.
 func (e *Engine) setLineStretch(f float64) {
 	if f <= 0 {
 		f = 1
 	}
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
+	e.explicitStretch = true
+}
+
+// applyBaselineStretch honors LaTeX's NATIVE line-spacing mechanism at
+// \begin{document}: a document that sets its spacing with a plain
+// \renewcommand{\baselinestretch}{f} (rather than setspace's \onehalfspacing /
+// \setstretch / \linespread, which set the baseline skip themselves) had that
+// setting ignored — real LaTeX applies \baselinestretch inside \@setfontsize, which
+// the engine stubs to a no-op. 2683 corpus papers set it this way (most a stretch >1,
+// so the engine was under-spacing them). Skipped when an explicit spacing command
+// already ran, so setspace's size-adjusted value is not clobbered, and a value of 1
+// (the default, or an explicit single-spacing) changes nothing.
+func (e *Engine) applyBaselineStretch() {
+	if e.explicitStretch {
+		return
+	}
+	m := e.eq["baselinestretch"]
+	if m == nil || m.kind != mMacro {
+		return
+	}
+	f, ok := parseFloatArg(e.toksToString(m.body))
+	if !ok || f <= 0 || f == 1 {
+		return
+	}
+	e.setLineStretch(f)
 }
 
 // ptsizeCode returns the class base-size code \@ptsize — 0/1/2 for 10/11/12pt,
