@@ -91,6 +91,28 @@ func (e *Engine) doHref() {
 	e.placeInline(linkNode{url: url, inner: hpackSP(list, packNatural, 0)})
 }
 
+// doHyperref implements hyperref's \hyperref, in both its forms:
+//
+//	\hyperref[label]{text}                 — an internal link to a \label
+//	\hyperref{url}{category}{name}{text}   — the low-level four-argument form
+//
+// Either way the VISIBLE part is the final {text}; the engine has no internal-link
+// destination for the label form, so the recovery is to typeset that text (the
+// clickability is dropped). Without a handler \hyperref was undefined and its text
+// was DROPPED — the visible words of a cross-reference vanished (273 occurrences in
+// the corpus). The text tokens are composed normally (macros expand).
+func (e *Engine) doHyperref() {
+	if _, ok := e.scanOptBracketToks(); ok {
+		e.push(e.readBraceToks()) // [label]{text}: label dropped, text typeset
+		return
+	}
+	// The four-argument {url}{category}{name}{text} form: keep only the visible text.
+	e.readBraceToks()
+	e.readBraceToks()
+	e.readBraceToks()
+	e.push(e.readBraceToks())
+}
+
 // urlBox typesets a literal URL string as a natural-width hbox in the verbatim
 // (tt) font, or nil when no font is available to measure with.
 func (e *Engine) urlBox(url string) *boxNode {
