@@ -1889,6 +1889,15 @@ func (e *Engine) loadMore() {
 	e.prim("lstlisting", func(e *Engine) { e.doLstlisting() })
 	e.prim("endlstlisting", func(e *Engine) {})
 	e.prim("lstinline", func(e *Engine) { e.doLstinline() })
+	// minted package: Pygments-highlighted code (see minted.go). With no shell-escape
+	// / Pygments available the faithful fallback is verbatim, exactly as minted's own
+	// draft mode does — the \begin{minted}[opts]{lang} block and the \mintinline /
+	// \mint inline forms all reuse the listings verbatim machinery.
+	e.prim("minted", func(e *Engine) { e.doMinted() })
+	e.prim("endminted", func(e *Engine) {})
+	e.prim("mintinline", func(e *Engine) { e.doMintinline() })
+	e.prim("mint", func(e *Engine) { e.doMintinline() })
+	e.prim("inputminted", func(e *Engine) { e.doInputminted() })
 	// geometry package: page size and margins driving \hsize/\vsize and the render
 	// margin (see geometry.go). \usepackage[..]{geometry} is intercepted in
 	// doUsepackage; \geometry{..} re-applies at any point.
