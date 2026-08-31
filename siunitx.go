@@ -118,6 +118,14 @@ var siPowers = map[string]string{
 }
 
 // isASCIILetter reports whether r is an ASCII letter (a control word constituent).
+// isCtrlLetter reports whether r may appear in a control WORD. TeX reads one as a
+// run of category-11 letters, and LaTeX makes @ a letter in package and class code
+// (\makeatletter): \c@inst and \the@inst are ONE control sequence each. Split at
+// the @, they name macros that do not exist — \c, \the — so a source retokenised
+// here would lose them. Every control sequence this engine writes out carries a
+// trailing space, so a name never bleeds into what follows it.
+func isCtrlLetter(r rune) bool { return isASCIILetter(r) || r == '@' }
+
 func isASCIILetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
@@ -135,9 +143,9 @@ func tokenizeTeX(s string) []tok {
 		switch r {
 		case '\\':
 			j := i + 1
-			if j < len(rs) && isASCIILetter(rs[j]) {
+			if j < len(rs) && isCtrlLetter(rs[j]) {
 				k := j
-				for k < len(rs) && isASCIILetter(rs[k]) {
+				for k < len(rs) && isCtrlLetter(rs[k]) {
 					k++
 				}
 				ts = append(ts, csTok(string(rs[j:k])))
