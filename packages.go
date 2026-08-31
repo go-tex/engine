@@ -121,14 +121,17 @@ var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
 // realPGF reports whether the real pgf/TikZ sources may be loaded.
 func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 
-// twoColumnOptIn reports whether the \documentclass[twocolumn] option activates the
-// two-column output routine (twocolumn.go). It is opt-in through GOTEX_TWOCOLUMN while
-// the routine's page-fill is paired with each class's real \textheight: the routine
-// places words in the right COLUMN positions (proven on revtex 2605.12538, where the
-// median displacement fell from 5.4 to 0.6), but two \vsize-tall columns on the current
-// article-shaped page height hold ~2x the text, so the page count drifts (a document
-// loses or gains pages) until the paired geometry lands. Off by default, the corpus is
-// untouched; the mechanism and its tests ship ready for that next step.
+// twoColumnOptIn reports whether GOTEX_TWOCOLUMN forces the two-column output routine
+// (twocolumn.go) on for classes that are NOT yet live by default. The standard classes
+// (article/report/book [twocolumn], see standardTwoColClass) drive the routine LIVE
+// without this var — they render two columns with a full-width frontmatter and the
+// densification improves the page count (validated by rendering: 2601.20606 28→26pp vs
+// tectonic 25). Revtex reprint renders correctly two-column with a spanning frontmatter
+// too (2605.12538 / 2111.11413), but stays behind this var: it is a net page-count
+// regression on the layout sample until column leading and float placement are wired
+// (a long reprint like 2601.22272 over-fills, 62pp→51pp). This var also opts in the
+// remaining classes (acmart sigconf, IEEEtran conference, any other twocolumn option)
+// while their column engines are brought up.
 func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
 
 // pdfAspectOptIn reports whether an un-rasterisable PDF figure's placeholder is
@@ -428,8 +431,15 @@ func (e *Engine) doDocumentClass() {
 			e.classPaperSize = strings.TrimSpace(o)
 		}
 	}
-	if twoColumnOptIn() && hasOption(opts, "twocolumn") && !classManagesOwnColumns(name) {
-		e.twoColumn = true // \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go)
+	if hasOption(opts, "twocolumn") && !classManagesOwnColumns(name) {
+		// \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go). Live for
+		// the standard classes whose \twocolumn is LaTeX's own (article/report/book),
+		// which render correctly and paginate closer to the reference; other classes
+		// stay behind GOTEX_TWOCOLUMN until validated.
+		if standardTwoColClass(name) || twoColumnOptIn() {
+			e.twoColumn = true
+			e.twoColLive = true // let the document's \twocolumn/\onecolumn fire
+		}
 	}
 	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
@@ -474,13 +484,25 @@ func (e *Engine) doDocumentClass() {
 		// article-shaped page (its geometry is already close). A bundled revtex .cls
 		// resolves above and defines these itself.
 		//
-		// NOTE: revtex's journal styles (aps/prl) set the body in two columns, and the
-		// two-column output routine (twocolumn.go) renders them correctly in position —
-		// but only once paired with revtex's real (smaller) text height. Left on the
-		// article-shaped page height, two full-height columns hold ~2x the text and the
-		// document loses pages. So two-column stays OFF for revtex until that geometry is
-		// wired; the measure proved the mechanism (2605.12538 medDisp 5.4->0.6) but the
-		// page count regressed without the paired \textheight.
+		// revtex's reprint / journal styles (reprint, twocolumn, or a journal substyle
+		// like prl/prd) set the body in two columns with a FULL-WIDTH frontmatter
+		// (title/authors/affiliations/abstract). The emulation's \maketitle runs an
+		// internal hook (\gotex@revtexbodytwocol) at its end that, in reprint mode,
+		// keeps everything set so far full-width and switches the body to two columns
+		// (twocolumn.go). The default (preprint) stays one-column.
+		//
+		// This RENDERS correctly (two columns with a spanning title/abstract, verified
+		// on 2605.12538 / 2111.11413), but it stays behind GOTEX_TWOCOLUMN: on the n=50
+		// layout sample it is a net page-count REGRESSION, driven by long reprints where
+		// the engine's two columns hold more than real revtex's. The base single-column
+		// emulation's tuned geometry happens to match the reference page count closely
+		// (2601.22272: base 61 vs tectonic 62), and two-columning it UNDER-paginates
+		// (51). The remaining gap is column leading and float placement (the fallback
+		// \textheight is already within ~3%), a larger change than this PR; until it
+		// lands revtex stays one-column by default so the corpus is untouched, and the
+		// mechanism opts in through the env var. \documentclass[twocolumn]{article} is
+		// LIVE (above) because there the two-column densification IMPROVES the page count.
+		e.revtexReprint = twoColumnOptIn() && revtexReprintMode(opts)
 		e.loadRevtexEmulation()
 		return
 	}
@@ -732,6 +754,51 @@ func classManagesOwnColumns(name string) bool {
 	}
 	switch name {
 	case "acmart", "IEEEtran", "IEEEconf", "aastex", "aastex6", "aastex61", "aastex62", "aastex631", "elsarticle":
+		return true
+	}
+	return false
+}
+
+// standardTwoColClass reports whether name is a standard LaTeX class whose two-column
+// layout is LaTeX's own \twocolumn machinery, so a [twocolumn] option can drive the
+// engine's two-column page builder live (no GOTEX_TWOCOLUMN gate). These render
+// correctly and paginate closer to the reference; other classes stay gated.
+func standardTwoColClass(name string) bool {
+	switch name {
+	case "article", "report", "book":
+		return true
+	}
+	return false
+}
+
+// revtexReprintMode reports whether a revtex option list selects the two-column
+// reprint layout: the explicit reprint / twocolumn options, or a journal substyle
+// that implies reprint (prl/prd/…). revtex DEFAULTS to one-column preprint, and an
+// explicit preprint or onecolumn option keeps it there.
+func revtexReprintMode(opts []string) bool {
+	for _, o := range opts {
+		switch strings.TrimSpace(o) {
+		case "preprint", "onecolumn":
+			return false
+		}
+	}
+	for _, o := range opts {
+		if revtexTwoColOption(strings.TrimSpace(o)) {
+			return true
+		}
+	}
+	return false
+}
+
+// revtexTwoColOption reports whether one revtex option implies the two-column reprint
+// layout: reprint/twocolumn, or a journal substyle. The society option "aps" alone
+// does not (it defaults to preprint); only the specific journals imply reprint.
+func revtexTwoColOption(o string) bool {
+	switch o {
+	case "reprint", "twocolumn",
+		"prl", "prd", "prb", "pra", "prc", "pre", "prx", "prxquantum",
+		"prapplied", "prfluids", "prmaterials", "prper", "prab", "praccel",
+		"prresearch", "rmp", "prstab", "prstper":
 		return true
 	}
 	return false

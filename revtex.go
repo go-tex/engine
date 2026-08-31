@@ -47,7 +47,7 @@ const RevtexAuthorBlock = `
 \def\preprint#1{}
 \def\pacs#1{}
 \def\keywords#1{}
-\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@revtexauthors\par}\smallskip{\itshape\@revtexaffils\par}\end{center}\par\bigskip}
+\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@revtexauthors\par}\smallskip{\itshape\@revtexaffils\par}\end{center}\par\bigskip\gotex@revtexbodytwocol}
 \makeatother
 `
 
