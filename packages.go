@@ -512,6 +512,16 @@ func (e *Engine) doUsepackageLoad() {
 		}
 		if data, _, ok := e.findTeXFile(name, []string{".sty"}); ok {
 			e.loadTeXFile(data, name, ".sty", append(append([]string{}, opts...), e.takePassed(name)...))
+			continue
+		}
+		if name == "apacite" {
+			// apacite drives an APA-style .bbl but is often required by a journal
+			// class (agujournal, sn-jnl) without the .sty being bundled. Left
+			// unloaded, its content-bearing reference macros are undefined and the
+			// lenient path gobbles their arguments, dropping every reference's year,
+			// title, journal and pages. Install the reference-list stubs so that
+			// content survives (see apacite.go). A bundled apacite.sty resolves above.
+			e.loadApaciteStubs()
 		}
 	}
 }
