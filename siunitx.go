@@ -475,4 +475,8 @@ func (e *Engine) loadSIUnitx() {
 	}
 	e.prim("SI", quantityPrim)
 	e.prim("qty", quantityPrim)
+	// numprint: \numprint[unit]{number} and its \np shortcut — the same formatted
+	// number as \num, plus an optional unit (see numprint.go).
+	e.prim("numprint", func(e *Engine) { e.doNumprint() })
+	e.prim("np", func(e *Engine) { e.doNumprint() })
 }
