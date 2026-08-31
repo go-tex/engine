@@ -326,7 +326,12 @@ func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 		}
 		out.WriteString(src[:i])
 		rest := src[i+len(needle):]
-		args, consumed, ok := parseMathArgs(rest, n)
+		// \newcommand{\cmd}[n][default] makes the FIRST of the n parameters optional:
+		// \cmd is \@protected@testopt, which supplies {default} when no [ follows
+		// (latex.ltx:1187-1199), and the remaining n-1 are grabbed as usual. Reading
+		// all n as mandatory left every such macro unexpanded, and the maths layer
+		// then refused the formula — a paper's own \qbinom[q]{N}{k} among them.
+		args, consumed, ok := parseMathArgsOpt(rest, n, m.optArg, e.toksToString(m.optDefault))
 		if !ok {
 			out.WriteString(needle) // leave this occurrence for go-tex/math to reject
 			src = rest
@@ -687,6 +692,51 @@ func stripMathNoise(src, name string) (string, bool) {
 	}
 	out.WriteString(src)
 	return out.String(), changed
+}
+
+// parseMathArgsOpt reads a macro's arguments out of a maths source string. With
+// optArg set, the first of the n parameters is LaTeX's optional one: a leading
+// [..] if there is one, and def otherwise.
+func parseMathArgsOpt(s string, n int, optArg bool, def string) ([]string, int, bool) {
+	if !optArg || n == 0 {
+		return parseMathArgs(s, n)
+	}
+	first, rest, taken := takeMathOptArg(s)
+	if !taken {
+		first = def
+	}
+	args, consumed, ok := parseMathArgs(rest, n-1)
+	if !ok {
+		return nil, 0, false
+	}
+	return append([]string{first}, args...), len(s) - len(rest) + consumed, true
+}
+
+// takeMathOptArg reads a leading [..] argument (after any spaces), returning its
+// text, what follows it, and whether one was there. skipMathOptArg beside it throws
+// the same argument away; this one keeps it.
+func takeMathOptArg(s string) (arg, rest string, ok bool) {
+	p := 0
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	if p >= len(s) || s[p] != '[' {
+		return "", s, false
+	}
+	depth := 0
+	for i := p; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+		case ']':
+			if depth == 0 {
+				return s[p+1 : i], s[i+1:], true
+			}
+		}
+	}
+	return "", s, false // unclosed [ : not an optional argument
 }
 
 // skipMathOptArg drops a leading optional [..] argument (and any spaces before it)
