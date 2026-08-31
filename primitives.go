@@ -2095,6 +2095,11 @@ func (e *Engine) loadStomach() {
 			e.switchToTwoColumn(nil)
 		}
 	})
+	// \gotex@dblfloat{figure|table} is the internal hook \begin{figure*}/\begin{table*}
+	// runs (via \@dblfloat, classprims.go). Under the two-column opt-in it typesets the
+	// float full-width as a spanning band across both columns; otherwise it sets the
+	// unstarred one-column float (twocolumn.go, doDblFloat).
+	e.prim("gotex@dblfloat", func(e *Engine) { e.doDblFloat(e.readBraceName()) })
 	e.loadBoxCmds()
 }
 

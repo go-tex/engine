@@ -227,6 +227,14 @@ func vpackSP(list []node, mode packMode, target int) *boxNode {
 			}
 			x += d + c.height
 			d = c.depth
+		case spanNode: // a stray full-width band (normally lifted out by the two-column pager)
+			if c.box != nil {
+				if c.box.width > w {
+					w = c.box.width
+				}
+				x += d + c.box.height
+				d = c.box.depth
+			}
 		case frameNode:
 			if c.width() > w {
 				w = c.width()
