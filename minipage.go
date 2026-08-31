@@ -100,6 +100,27 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			// \csname builds a control sequence that may be the \end this scanner hunts
 			// (see runsCsname): run it so the sequence surfaces on the next iteration.
 			e.runCsname(t)
+		case depth == 0 && name == "minipage" && t.cs_ && t.cs == "column" && e.expandsToEnd(csTok("beamer@colclose")):
+			// beamer's \column begins by running \beamer@colclose, which holds the
+			// PREVIOUS column's closer (beamerbaseframecomponents.sty:281-283):
+			//
+			//	\newcommand<>\beamer@columncom[2][\beamer@colmode]{%
+			//	  \beamer@colclose
+			//	  \def\beamer@colclose{\end{minipage}\hfill\end{actionenv}\ignorespaces}%
+			//
+			// so a \column met while collecting a minipage's body IS that minipage's
+			// deferred \end — and a raw scan never sees it, \column taking arguments
+			// where the narrow expandsToEnd rule only reaches parameterless macros.
+			// Read raw, the first column swallowed its sibling and everything after the
+			// frame: a talk with two columns in a [fragile] frame rendered one page.
+			//
+			// The body ends here and \column goes back to open the next column;
+			// \beamer@colclose is emptied because its \end{minipage} has just been
+			// honoured, which is what beamer itself does after running it (:269).
+			e.back(t)
+			e.define("beamer@colclose", &meaning{kind: mMacro}, true)
+			e.endEnvGroup()
+			return body
 		case t.cs_ && t.cs != "end" && t.cs != "begin" && e.expandsToEnd(t):
 			// A user macro standing in for \end{...} (e.g. \newcommand\emp{\end{minipage}}):
 			// read raw here it hides the \end, so the body scanner would run to EOF and
@@ -118,6 +139,15 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				depth-- // a nested instance closes; re-emit for the nested typeset
 				body = append(body, csTok("end"))
 				body = append(body, braceNameToks(n)...)
+			case name == "minipage" && depth == 0 && e.endMacroLeadsToEnd(n) &&
+				e.expandsToEnd(csTok("beamer@colclose")):
+				// \end{columns} closes the open column the same way \column does: its
+				// \endcolumns begins with \beamer@colclose (beamerbaseframecomponents
+				// .sty:237), which holds this minipage's \end. Stored raw, the scan ran
+				// past the whole columns block and shredded the frame — 17 pages to 1.
+				// Push \end<n>'s body so \beamer@colclose, and then its \end{minipage},
+				// surface for the depth bookkeeping.
+				e.push(e.eq["end"+n].body)
 			case e.endMacroExpandsToEnd(n):
 				// \end{n} whose \end<n> macro produces the real terminator by
 				// expansion rather than a literal token — elsarticle/ifacconf's
