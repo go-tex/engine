@@ -74,6 +74,22 @@ func (e *Engine) fullWidth() int {
 	return e.hsize
 }
 
+// setTextWidth assigns \textwidth. \textwidth is the width of the whole text block —
+// the FULL one-column width, which in two-column mode spans both columns and the gutter,
+// NOT the column measure e.hsize. Before the two-column measure has been entered
+// (oneColHsize == 0) the two coincide and the standard classes size the text block by
+// assigning \textwidth, so the assignment sets e.hsize (the paragraph measure) exactly as
+// the old \let\textwidth\hsize did. Once two-column has split the measure into columns
+// (oneColHsize holds the full width) an assignment sets that remembered full width and
+// leaves the column measure alone.
+func (e *Engine) setTextWidth(v int, global bool) {
+	if e.oneColHsize > 0 {
+		e.oneColHsize = v
+		return
+	}
+	e.setEngineDimen(saveHsize, &e.hsize, v, global)
+}
+
 // dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the columns
 // below it: the \dbltextfloatsep register when the class set it, else LaTeX's 20pt default.
 func (e *Engine) dblTextFloatSep() int {

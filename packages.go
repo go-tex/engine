@@ -126,12 +126,14 @@ func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 // (article/report/book [twocolumn], see standardTwoColClass) drive the routine LIVE
 // without this var — they render two columns with a full-width frontmatter and the
 // densification improves the page count (validated by rendering: 2601.20606 28→26pp vs
-// tectonic 25). Revtex reprint renders correctly two-column with a spanning frontmatter
-// too (2605.12538 / 2111.11413), but stays behind this var: it is a net page-count
-// regression on the layout sample until column leading and float placement are wired
-// (a long reprint like 2601.22272 over-fills, 62pp→51pp). This var also opts in the
-// remaining classes (acmart sigconf, IEEEtran conference, any other twocolumn option)
-// while their column engines are brought up.
+// tectonic 25). Revtex reprint renders two-column with a spanning frontmatter too and
+// its figure-heavy PAGE COUNT now CONVERGES — the earlier under-pagination (2601.22272:
+// 51pp vs tectonic 62) was relative-width floats collapsing to ~zero in the graphics
+// parser; with that fixed the reprint reaches 60–62pp under this var. It stays gated only
+// because a `figure*` spanning float is still set inline in one column and paints past
+// the column edge (see the revtex branch below). This var also opts in the remaining
+// classes (acmart sigconf, IEEEtran conference, any other twocolumn option) while their
+// column engines are brought up.
 func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
 
 // pdfAspectOptIn reports whether an un-rasterisable PDF figure's placeholder is
@@ -491,17 +493,23 @@ func (e *Engine) doDocumentClass() {
 		// keeps everything set so far full-width and switches the body to two columns
 		// (twocolumn.go). The default (preprint) stays one-column.
 		//
-		// This RENDERS correctly (two columns with a spanning title/abstract, verified
-		// on 2605.12538 / 2111.11413), but it stays behind GOTEX_TWOCOLUMN: on the n=50
-		// layout sample it is a net page-count REGRESSION, driven by long reprints where
-		// the engine's two columns hold more than real revtex's. The base single-column
-		// emulation's tuned geometry happens to match the reference page count closely
-		// (2601.22272: base 61 vs tectonic 62), and two-columning it UNDER-paginates
-		// (51). The remaining gap is column leading and float placement (the fallback
-		// \textheight is already within ~3%), a larger change than this PR; until it
-		// lands revtex stays one-column by default so the corpus is untouched, and the
-		// mechanism opts in through the env var. \documentclass[twocolumn]{article} is
-		// LIVE (above) because there the two-column densification IMPROVES the page count.
+		// This RENDERS the body two-column with a spanning title/abstract, and the
+		// figure-heavy PAGE COUNT now converges: the earlier two-column under-pagination
+		// (2601.22272: 51pp vs tectonic 62) was the relative-width floats collapsing to
+		// ~zero in the graphics-option parser, so they reserved no vertical space. With
+		// that fixed (scanGraphicsOpts evaluates 0.48\textwidth as a real dimension in
+		// two-column mode, \textwidth spans both columns, and the placeholder takes the
+		// figure's true aspect) 2601.22272 reaches 62pp — exactly tectonic.
+		//
+		// It nonetheless STAYS behind GOTEX_TWOCOLUMN, because a `figure*` (a
+		// both-columns-spanning float — 21 of them in 2601.22272) is still set INLINE in
+		// one column at its full \textwidth, so it paints past the column into the gutter
+		// and off the page edge (≈half of them). Reproducing it as a real full-width band
+		// (the \@topnewpage/\twocolumn[span] machinery already built for the frontmatter,
+		// but placed mid-flow) is the remaining work; until it lands revtex reprint is not
+		// "correct two-column" and opts in through the env var, leaving the corpus default
+		// (one-column, its tuned geometry matching the reference closely — 2601.22272:
+		// 61 vs 62) untouched.
 		e.revtexReprint = twoColumnOptIn() && revtexReprintMode(opts)
 		e.loadRevtexEmulation()
 		return

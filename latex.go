@@ -497,11 +497,14 @@ const MiniLaTeXKernel = `
 \def\squared{²}
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
-% Width lengths used as the target of \begin{tabularx}{...} (and tabular*): they
-% all resolve to \hsize, the current line width, so \linewidth/\textwidth/
-% \columnwidth are accepted wherever a rigid <dimen> is scanned.
+% Width lengths used as the target of \begin{tabularx}{...} (and tabular*):
+% \linewidth and \columnwidth are the CURRENT column measure, so they resolve to
+% \hsize wherever a rigid <dimen> is scanned. \textwidth is different — it is the
+% width of the whole text block (both columns and the gutter in two-column mode),
+% so it is its own engine dimension parameter (see \textwidth in primitives.go /
+% setTextWidth in twocolumn.go) that reads the full one-column width; in
+% single-column mode the two coincide, so nothing changes there.
 \let\linewidth\hsize
-\let\textwidth\hsize
 \let\columnwidth\hsize
 % ─── sub-captions / \captionof / \captionsetup (feat/subcaption) ─────────────
 % A pragmatic subset of the caption / subcaption packages. Everything here is
