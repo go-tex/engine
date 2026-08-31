@@ -260,6 +260,17 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			continue
 		}
 		next, ok := e.expandMacroInMathSource(src, name)
+		if ok {
+			// The body just spliced in is TeX, not maths: a class's \the@inst is
+			// \number\c@inst, an affiliation mark is an \@for loop over \expandafter
+			// and \edef. Those primitives are the ENGINE's to run, and the maths layer
+			// can only refuse them. Run the substituted material through the gullet —
+			// bounded to what was spliced, and unable to read past it since an isolated
+			// expansion stops at its own sentinel.
+			if flat := e.toksToString(e.expandList(tokenizeTeX(next))); flat != "" {
+				next = flat
+			}
+		}
 		if !ok {
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
 			// cannot render. Strip them from the source — keeping any content
