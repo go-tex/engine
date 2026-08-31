@@ -1799,6 +1799,10 @@ func (e *Engine) loadMore() {
 	e.prim("endsubfigure", func(e *Engine) {})                          // consumed by doSubfigure
 	e.prim("subtable", func(e *Engine) { e.doSubfigure("subtable") })
 	e.prim("endsubtable", func(e *Engine) {})
+	e.prim("overpic", func(e *Engine) { e.doOverpic("overpic") })   // graphic with a picture overlay
+	e.prim("endoverpic", func(e *Engine) {})                        // consumed by doOverpic
+	e.prim("overpic*", func(e *Engine) { e.doOverpic("overpic*") }) // starred: overlays a grid
+	e.prim("endoverpic*", func(e *Engine) {})
 	e.prim("char", func(e *Engine) { e.startChar(rune(e.scanInt())) }) // typeset a glyph by code
 	for _, acc := range []string{"'", "`", "^", "\"", "~", "=", ".", "u", "v", "H", "r", "c", "k", "b", "d"} {
 		a := acc
