@@ -338,7 +338,7 @@ func (e *Engine) doGlobal() {
 		e.doSettodim('h', true)
 	case "settodepth":
 		e.doSettodim('d', true)
-	case "hsize", "vsize", "parindent", "baselineskip":
+	case "hsize", "textwidth", "vsize", "parindent", "baselineskip":
 		// \global\hsize=… : the engine's own dimension parameters are scoped like
 		// registers now, so the global flag has to reach the assignment or the
 		// enclosing group would put the old value back.
@@ -619,6 +619,8 @@ func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(
 	switch m.name {
 	case "hsize":
 		return func() int { return e.hsize }, func(v int) { e.setEngineDimen(saveHsize, &e.hsize, v, global) }, true
+	case "textwidth":
+		return func() int { return e.fullWidth() }, func(v int) { e.setTextWidth(v, global) }, true
 	case "vsize":
 		return func() int { return e.vsize }, func(v int) { e.setEngineDimen(saveVsize, &e.vsize, v, global) }, true
 	case "parindent":
@@ -1024,6 +1026,9 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "hsize":
 				e.pushString(formatPt(e.hsize))
+				return
+			case m.kind == mPrim && m.name == "textwidth":
+				e.pushString(formatPt(e.fullWidth()))
 				return
 			case m.kind == mPrim && m.name == "vsize":
 				e.pushString(formatPt(e.vsize))
@@ -1879,6 +1884,13 @@ func (e *Engine) loadMore() {
 	e.prim("font", func(e *Engine) { e.doFont() })
 	e.prim("input", func(e *Engine) { e.doInput() })
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveHsize, &e.hsize, e.scanDimen(), false) })
+	// \textwidth is the width of the whole text block, NOT the column measure \hsize:
+	// in two-column mode it spans both columns and the gutter, so a figure sized
+	// width=0.48\textwidth fills nearly a column and width=\textwidth spans the page.
+	// It reads e.fullWidth() and its assignment routes through setTextWidth (see
+	// twocolumn.go), which keeps the old \let\textwidth\hsize behaviour before the
+	// two-column measure is split. \columnwidth / \linewidth stay \let to \hsize.
+	e.prim("textwidth", func(e *Engine) { e.scanEquals(); e.setTextWidth(e.scanDimen(), false) })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveVsize, &e.vsize, e.scanDimen(), false) })
 	e.prim("baselineskip", func(e *Engine) {
 		e.scanEquals()

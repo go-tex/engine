@@ -23,7 +23,7 @@ func TestPDFRasterizeSeam(t *testing.T) {
 
 	// No rasteriser: a PDF figure cannot be loaded (→ placeholder upstream).
 	RasterizePDF = nil
-	if _, _, _, _, _, _, err := loadImage(pdf); err == nil {
+	if _, _, _, _, _, _, err := loadImage(pdf, false); err == nil {
 		t.Fatal("expected an error with no PDF rasteriser wired")
 	}
 
@@ -38,7 +38,7 @@ func TestPDFRasterizeSeam(t *testing.T) {
 	}
 	defer func() { RasterizePDF = nil }()
 
-	data, format, w, h, dpiX, dpiY, err := loadImage(pdf)
+	data, format, w, h, dpiX, dpiY, err := loadImage(pdf, false)
 	if err != nil {
 		t.Fatalf("wired PDF load: %v", err)
 	}

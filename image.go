@@ -92,7 +92,12 @@ func (e *Engine) doIncludegraphics() {
 	if name == "" {
 		return
 	}
-	data, format, iw, ih, dpiX, dpiY, err := loadImage(name)
+	// Size an un-rasterisable PDF placeholder to the figure's TRUE aspect (not a blind
+	// square) whenever GOTEX_PDFASPECT is set OR the page is set in two columns. In
+	// two-column mode the relative-width floats reserve real space (see
+	// scanGraphicsOpts) and a square over-reserves a wide figure's height, so the true
+	// aspect is what keeps a figure-heavy two-column page's count right.
+	data, format, iw, ih, dpiX, dpiY, err := loadImage(name, pdfAspectOptIn() || e.twoColumn)
 	if err != nil {
 		if e.tolerant() {
 			// Best-effort preview: a real document's figure files are not shipped
@@ -196,7 +201,7 @@ func graphicsSize(iw, ih, wReq, hReq int, scale float64, dpiX, dpiY float64) (w,
 // pixels-as-points fallback. An SVG source (a ".svg" file, a data:image/svg+xml
 // URI, or content sniffed as SVG) is handled by loadSVGImage; everything else
 // goes through the go-gfx codec (PNG/JPEG/…).
-func loadImage(name string) (data []byte, format imgFormat, iw, ih int, dpiX, dpiY float64, err error) {
+func loadImage(name string, aspect bool) (data []byte, format imgFormat, iw, ih int, dpiX, dpiY float64, err error) {
 	svgHint := false
 	if strings.HasPrefix(name, "data:") {
 		svgHint = svgDataURI(name)
@@ -225,7 +230,7 @@ func loadImage(name string) (data []byte, format imgFormat, iw, ih int, dpiX, dp
 		// wired or rasterisation fails — treated as pixels at 72dpi (1 PDF point = 1
 		// bp = 1/72 inch), so natSP converts them straight back to the box's points.
 		boxIW, boxIH, haveBox := 0, 0, false
-		if pdfAspectOptIn() {
+		if aspect {
 			if w, h, ok := pdfIntrinsicPoints(data); ok {
 				boxIW, boxIH, haveBox = int(w+0.5), int(h+0.5), true
 			}
@@ -399,34 +404,142 @@ func (e *Engine) scanGraphicsOpts() (w, h int, scale float64) {
 		e.back(t)
 		return 0, 0, 0
 	}
-	// Collect the bracket content as raw text up to ']'.
-	var b strings.Builder
+	// Collect the bracket content as a TOKEN list (control sequences KEPT) up to the
+	// closing ']' at brace level 0. Keeping the tokens is what lets a value like
+	// width=0.48\textwidth be evaluated as a real TeX dimension: a raw-text scan
+	// dropped the \textwidth control sequence and read "0.48" as 0.48pt, collapsing
+	// every \columnwidth/\textwidth/\linewidth-relative figure — the overwhelming
+	// majority in real papers — to a fraction of a point, so it reserved almost no
+	// vertical space.
+	var toks []tok
+	depth := 0
 	for {
 		u, ok := e.getNext()
-		if !ok || (!u.cs_ && u.ch == ']') {
+		if !ok {
 			break
 		}
 		if !u.cs_ {
-			b.WriteRune(u.ch)
+			switch u.ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			case ']':
+				if depth <= 0 {
+					goto scan
+				}
+			}
 		}
+		toks = append(toks, u)
 	}
-	for _, part := range strings.Split(b.String(), ",") {
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
+scan:
+	// The correct token evaluation is scoped to TWO-COLUMN mode. There, figures set to
+	// a fraction of \columnwidth/\textwidth are the norm and their reserved height is
+	// the binding constraint on pagination (a figure-heavy reprint under-paginates
+	// badly when they collapse — 2601.22272: 51pp vs 62). In one-column mode the
+	// single-column class emulations (revtex preprint, IEEEtran, acmart, amsart) were
+	// tuned against these figures collapsing to ~zero, and evaluating them correctly
+	// there shifts every such baseline at once — a broad re-tuning that is out of this
+	// change's scope. So one-column mode keeps the legacy raw-text read (control
+	// sequences dropped), byte-for-byte, until that re-tuning lands.
+	evalDimen := func(val []tok) int {
+		if e.twoColumn {
+			return e.evalDimenTokens(val)
+		}
+		return parseDimenStr(tokensToText(val))
+	}
+	for _, seg := range splitTokensAtComma(toks) {
+		key, val, ok := splitKeyValueTokens(seg)
+		if !ok {
 			continue
 		}
-		key := strings.TrimSpace(kv[0])
-		val := strings.TrimSpace(kv[1])
 		switch key {
 		case "width":
-			w = parseDimenStr(val)
+			w = evalDimen(val)
 		case "height":
-			h = parseDimenStr(val)
+			h = evalDimen(val)
 		case "scale":
-			scale, _ = strconv.ParseFloat(val, 64)
+			scale, _ = strconv.ParseFloat(strings.TrimSpace(tokensToText(val)), 64)
 		}
 	}
 	return w, h, scale
+}
+
+// splitTokensAtComma splits a token list on comma tokens at brace level 0.
+func splitTokensAtComma(toks []tok) [][]tok {
+	var out [][]tok
+	var cur []tok
+	depth := 0
+	for _, t := range toks {
+		if !t.cs_ {
+			switch t.ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			case ',':
+				if depth <= 0 {
+					out = append(out, cur)
+					cur = nil
+					continue
+				}
+			}
+		}
+		cur = append(cur, t)
+	}
+	return append(out, cur)
+}
+
+// splitKeyValueTokens splits one key=value segment at its first '=' (brace level 0),
+// returning the trimmed key text and the value tokens. A segment with no '=' is not a
+// key/value pair (ok=false).
+func splitKeyValueTokens(seg []tok) (key string, val []tok, ok bool) {
+	depth := 0
+	for i, t := range seg {
+		if !t.cs_ {
+			switch t.ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			case '=':
+				if depth <= 0 {
+					return strings.TrimSpace(tokensToText(seg[:i])), seg[i+1:], true
+				}
+			}
+		}
+	}
+	return "", nil, false
+}
+
+// tokensToText renders a token list as its literal characters (control sequences
+// contribute nothing), for a key name or a plain numeric value like scale=0.7.
+func tokensToText(toks []tok) string {
+	var b strings.Builder
+	for _, t := range toks {
+		if !t.cs_ {
+			b.WriteRune(t.ch)
+		}
+	}
+	return b.String()
+}
+
+// evalDimenTokens evaluates a token list as a TeX <dimen>, in isolation from the
+// surrounding input so a value like 0.48\textwidth or \columnwidth is resolved
+// through the engine's real dimension scanner (coercing \textwidth to the full text
+// width, \columnwidth/\linewidth to the column measure). The token list is made the
+// only input for the scan and the base string is fenced off (noBase), so nothing the
+// scanner reads past the value can leak into or out of the graphics option list.
+func (e *Engine) evalDimenTokens(toks []tok) int {
+	if len(toks) == 0 {
+		return 0
+	}
+	savedLists, savedNoBase := e.lists, e.noBase
+	e.lists = [][]tok{append([]tok(nil), toks...)}
+	e.noBase = true
+	v := e.scanDimen()
+	e.lists, e.noBase = savedLists, savedNoBase
+	return v
 }
 
 // parseDimenStr converts a TeX dimension string ("5cm", "100pt", "1.5in") to scaled

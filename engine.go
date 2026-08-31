@@ -2165,6 +2165,8 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.boxDim('d'), 0
 			case m.kind == mPrim && m.name == "hsize":
 				return e.hsize, 0
+			case m.kind == mPrim && m.name == "textwidth":
+				return e.fullWidth(), 0
 			case m.kind == mPrim && m.name == "vsize":
 				return e.vsize, 0
 			case m.kind == mPrim && m.name == "parindent":
@@ -2510,6 +2512,8 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 				return e.boxDim('d'), true
 			case m.kind == mPrim && m.name == "hsize":
 				return e.hsize, true
+			case m.kind == mPrim && m.name == "textwidth":
+				return e.fullWidth(), true
 			case m.kind == mPrim && m.name == "vsize":
 				return e.vsize, true
 			case m.kind == mPrim && m.name == "parindent":

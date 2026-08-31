@@ -134,6 +134,8 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 	// box must not resize every page that follows.
 	case m.kind == mPrim && m.name == "hsize":
 		e.setEngineDimen(saveHsize, &e.hsize, addOrSet(add, e.hsize, g.width), global)
+	case m.kind == mPrim && m.name == "textwidth":
+		e.setTextWidth(addOrSet(add, e.fullWidth(), g.width), global)
 	case m.kind == mPrim && m.name == "vsize":
 		e.setEngineDimen(saveVsize, &e.vsize, addOrSet(add, e.vsize, g.width), global)
 	case m.kind == mPrim && m.name == "parindent":
