@@ -250,6 +250,15 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 		if name == "" {
 			return svg, m, err
 		}
+		// A command whose MATHS meaning is another symbol is substituted before the
+		// macro table is consulted: \dag is a macro here (plain.tex's \mathhexbox
+		// form), and expanding it would only turn the unknown \dag into an unknown
+		// \char. LaTeX picks by mode — \ifmmode{\dagger}\else\textdagger\fi — and
+		// this path is the maths half of that test.
+		if sym, ok := mathTextSymbol[name]; ok {
+			src = replaceMathCS(src, name, sym)
+			continue
+		}
 		next, ok := e.expandMacroInMathSource(src, name)
 		if !ok {
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
@@ -285,6 +294,11 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			// {group}: they and the glue they take are removed.
 			if glued, gok := stripMathGlue(src, name); gok {
 				src = glued
+				continue
+			}
+			// \penalty and its kin carry a <number> the same way.
+			if pen, pok := stripMathPenalty(src, name); pok {
+				src = pen
 				continue
 			}
 			return svg, m, err
@@ -556,6 +570,29 @@ var mathGlue = map[string]bool{
 	"hskip": true, "vskip": true, "kern": true, "mskip": true, "mkern": true,
 }
 
+// mathTextSymbol are commands whose MATH meaning is a different symbol from their
+// text one, and which the maths layer therefore cannot be handed as they stand:
+//
+//	\DeclareRobustCommand{\dag}{\ifmmode{\dagger}\else\textdagger\fi}
+//	\DeclareRobustCommand{\ddag}{\ifmmode{\ddagger}\else\textdaggerdbl\fi}
+//	                                                     (latex.ltx:7195-7196)
+//
+// The engine's own \dag is plain.tex's \mathhexbox form, which reaches the maths
+// layer as \char and costs the formula. \dagger and \ddagger are what LaTeX means
+// in maths, and the maths layer knows them (\mathbin at U+2020/U+2021,
+// unicode-math-table.tex:127-128).
+var mathTextSymbol = map[string]string{
+	"dag": `\dagger`, "ddag": `\ddagger`,
+}
+
+// mathPenalty are the primitives whose argument is a <number> rather than a glue.
+// \penalty is append_penalty — scan_int, then a penalty node (tex.web §21242-21250):
+// a break cost, carrying no maths at all, and 15 of the 200 arXiv papers put one
+// inside a formula through a macro of their own.
+var mathPenalty = map[string]bool{
+	"penalty": true, "postdisplaypenalty": true, "predisplaypenalty": true,
+}
+
 // stripMathGlue removes every occurrence of a glue primitive and the <glue> that
 // follows it from a math source string, reporting whether it changed anything. The
 // glue is either a register or macro (\mathindent, \parindent) or a dimen with its
@@ -587,6 +624,66 @@ func stripMathGlue(src, name string) (string, bool) {
 	}
 	out.WriteString(src)
 	return out.String(), changed
+}
+
+// stripMathPenalty removes every occurrence of a penalty primitive and the <number>
+// that follows it. The number may be a plain integer, a signed one, or a count
+// register spelled as a control sequence (\@M, \@highpenalty).
+func stripMathPenalty(src, name string) (string, bool) {
+	if !mathPenalty[name] {
+		return src, false
+	}
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := src[i+len(needle):]
+		n, ok := scanMathNumber(rest)
+		if !ok {
+			out.WriteString(needle)
+			src = rest
+			continue
+		}
+		src = rest[n:]
+		changed = true
+	}
+	out.WriteString(src)
+	return out.String(), changed
+}
+
+// scanMathNumber returns how many bytes at the start of s a <number> occupies —
+// digits, or a control sequence standing for a count — and whether one is there.
+func scanMathNumber(s string) (int, bool) {
+	p := 0
+	for p < len(s) && s[p] == ' ' {
+		p++
+	}
+	if p < len(s) && s[p] == '\\' { // \@M, \@highpenalty, \z@ …
+		p++
+		for p < len(s) && (isMathLetter(s[p]) || s[p] == '@') {
+			p++
+		}
+		if p < len(s) && s[p] == ' ' {
+			p++
+		}
+		return p, true
+	}
+	for p < len(s) && (s[p] == '-' || s[p] == '+') {
+		p++
+	}
+	digits := p
+	for p < len(s) && s[p] >= '0' && s[p] <= '9' {
+		p++
+	}
+	if p == digits {
+		return 0, false
+	}
+	return p, true
 }
 
 // scanMathGlue returns how many bytes at the start of s a <glue> occupies, and
