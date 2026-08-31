@@ -331,7 +331,8 @@ const LaTeX2eKernelHelpers = `
 % accumulators and the named hooks of the 2020 format (see hooks.go), in the order
 % the real format uses: begindocument/before, the \AtBeginDocument code, then
 % begindocument/end, then the document environment's own env/document/begin.
-\def\document{\catcode64=12 \UseHook{begindocument/before}\@begindocumenthook
+\def\document{\catcode64=12 \gotex@applybaselinestretch
+  \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 \def\enddocument{\UseHook{env/document/end}\@enddocumenthook\UseHook{enddocument}%
   \UseHook{enddocument/afterlastpage}\UseHook{enddocument/afteraux}%

@@ -1641,6 +1641,9 @@ func (e *Engine) loadMore() {
 	e.prim("linespread", func(e *Engine) { e.doSetstretch() })
 	e.prim("spacing", func(e *Engine) { e.doSpacing() })
 	e.prim("endspacing", func(e *Engine) { e.endSpacing() })
+	// Applied once at \begin{document} (see kernelhelpers.go) to honor a native
+	// \renewcommand{\baselinestretch}{f} the way \@setfontsize would.
+	e.prim("gotex@applybaselinestretch", func(e *Engine) { e.applyBaselineStretch() })
 	// graphicx box transformations: scale, mirror, resize and rotate the content,
 	// which the SVG/PDF drivers realise with native affine transforms.
 	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
