@@ -263,11 +263,23 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 	var rows []alignRow
 	var row alignRow
 	var cell strings.Builder
+	// TeX's own rule (tex.web §6738-6742, §7259-7264): an alignment entry ends at a
+	// tab or \cr only when align_state is back to what it was at the entry's start,
+	// and align_state counts braces — +1 for a {, -1 for a }, IMPLICIT ones included
+	// (§7492-7493, where \bgroup and \egroup are counted from a token list). That is
+	// what protects a nested alignment: amsmath's bmatrix is
+	//
+	//	\newenvironment{bmatrix}{\left[\env@matrix}{\endmatrix\right]}   (amsmath.sty)
+	//	\def\env@matrix{…\array{*\c@MaxMatrixCols c}}
+	//	\def\@array[#1]#2{…\bgroup …}                                    (latex.ltx)
+	//
+	// so the matrix's & sits one brace deeper and belongs to the matrix.
+	//
+	// This engine never expands \bmatrix — the maths layer parses the source text
+	// itself — so that \bgroup never arrives and the depth counter cannot see it.
+	// The environment is counted instead, which is the same protection by another
+	// road; \bgroup/\egroup are counted where they DO arrive, as TeX counts them.
 	depth := 0
-	// A nested math environment carries its OWN & and \\: \begin{bmatrix}…&…\\…
-	// \end{bmatrix} inside a cell is one matrix, not four cells over two rows. Brace
-	// depth does not see it — a matrix is not braced — so environments are counted
-	// too, and while one is open the separators belong to it.
 	envDepth := 0
 	endCell := func() {
 		row.cells = append(row.cells, cell.String())
@@ -324,9 +336,13 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "label":
 			row.labels = append(row.labels, e.readBraceName())
 		default:
-			if !t.cs_ && t.cat == catBegin {
+			b := t
+			if c, implicit := e.implicitChar(t); implicit {
+				b = c // \bgroup / \egroup count as braces, as in tex.web §7492-7493
+			}
+			if !b.cs_ && b.cat == catBegin {
 				depth++
-			} else if !t.cs_ && t.cat == catEnd {
+			} else if !b.cs_ && b.cat == catEnd {
 				depth--
 			}
 			if t.cs_ {
