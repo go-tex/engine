@@ -1114,6 +1114,15 @@ func (e *Engine) skipToElseOrFiPast(pending int) string {
 		if !ok {
 			return "fi"
 		}
+		if t.cs_ && t.cs == sentinel.cs {
+			// The end of an isolated expansion (expandList). A conditional opened
+			// inside it cannot be closed by material OUTSIDE it: TeX would read on to
+			// the end of the file, but here that file is the caller's own pending
+			// input, and skipping into it consumes the document. Put the sentinel
+			// back so the expansion ends where it was told to.
+			e.back(t)
+			return "fi"
+		}
 		if !t.cs_ {
 			continue
 		}
@@ -1325,6 +1334,15 @@ func (e *Engine) skipToElseOrFi() string {
 		if !ok {
 			return "fi"
 		}
+		if t.cs_ && t.cs == sentinel.cs {
+			// The end of an isolated expansion (expandList). A conditional opened
+			// inside it cannot be closed by material OUTSIDE it: TeX would read on to
+			// the end of the file, but here that file is the caller's own pending
+			// input, and skipping into it consumes the document. Put the sentinel
+			// back so the expansion ends where it was told to.
+			e.back(t)
+			return "fi"
+		}
 		if !t.cs_ {
 			continue
 		}
@@ -1352,6 +1370,15 @@ func (e *Engine) skipToElseOrFiOrOr() string {
 		if !ok {
 			return "fi"
 		}
+		if t.cs_ && t.cs == sentinel.cs {
+			// The end of an isolated expansion (expandList). A conditional opened
+			// inside it cannot be closed by material OUTSIDE it: TeX would read on to
+			// the end of the file, but here that file is the caller's own pending
+			// input, and skipping into it consumes the document. Put the sentinel
+			// back so the expansion ends where it was told to.
+			e.back(t)
+			return "fi"
+		}
 		if !t.cs_ {
 			continue
 		}
@@ -1377,6 +1404,15 @@ func (e *Engine) skipToFi() {
 	for {
 		t, ok := e.getNext()
 		if !ok {
+			return
+		}
+		if t.cs_ && t.cs == sentinel.cs {
+			// The end of an isolated expansion (expandList). A conditional opened
+			// inside it cannot be closed by material OUTSIDE it: TeX would read on to
+			// the end of the file, but here that file is the caller's own pending
+			// input, and skipping into it consumes the document. Put the sentinel
+			// back so the expansion ends where it was told to.
+			e.back(t)
 			return
 		}
 		if !t.cs_ {
@@ -1451,12 +1487,22 @@ var sentinel = tok{cs: "\x00end-expand", cs_: true}
 // expandList fully expands a token list in isolation (for \edef / \message),
 // stopping at the sentinel rather than by counting input lists.
 func (e *Engine) expandList(ts []tok) []tok {
+	// The list's own depth on the input stack. An unbalanced conditional inside ts
+	// skips forward looking for its \fi and can swallow the sentinel with it; from
+	// there the loop would read the CALLER's pending lists — the rest of the
+	// document — and consume them into this expansion. Falling below the depth the
+	// list was pushed at means exactly that, and stops it. Measured on a paper whose
+	// formulas carry class internals: 78% of its glyphs left the page without this.
+	base := len(e.lists)
 	e.push(append(append([]tok(nil), ts...), sentinel))
 	saved := e.noBase
 	e.noBase = true
 	e.expandDepth++
 	var out []tok
 	for {
+		if len(e.lists) < base+1 {
+			break // our own list is gone: stop rather than eat what follows it
+		}
 		t, ok := e.getXToken()
 		if !ok || (t.cs_ && t.cs == sentinel.cs) {
 			break
