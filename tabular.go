@@ -592,6 +592,13 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 	var cur [][]tok
 	var cell []tok
 	depth := 0
+	// A nested environment carries its OWN & and \\ — $\begin{matrix} a & b
+	// \end{matrix}$ in a cell is one matrix, not two cells. TeX protects it with the
+	// brace \@array opens (latex.ltx:12101, reached through amsmath's \env@matrix),
+	// counted in align_state (tex.web §6738-6742, §7259-7264); this engine never
+	// expands \matrix, so the environment is counted instead — the same rule the
+	// maths alignment scanner follows since #153.
+	envDepth := 0
 	endCell := func() { cur = append(cur, cell); cell = nil }
 	endRow := func() {
 		endCell()
@@ -606,7 +613,7 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			break
 		}
 		switch {
-		case depth == 0 && t.cs_ && e.isTabularConditional(t):
+		case depth == 0 && envDepth == 0 && t.cs_ && e.isTabularConditional(t):
 			// A conditional at the body's top level (\ifcopyright … \\ … \fi, as in
 			// the eptcs licence block): evaluate it here rather than storing it raw.
 			// TeX evaluates such a conditional as the alignment is scanned, so only
@@ -621,9 +628,9 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			// would. Only at brace depth 0: a conditional nested inside a cell's {…}
 			// stays raw and is evaluated when that cell is typeset.
 			e.eq[t.cs].prim(e)
-		case depth == 0 && e.runsCsname(t):
+		case depth == 0 && envDepth == 0 && e.runsCsname(t):
 			e.runCsname(t) // see runsCsname: \csname may build this environment's \end
-		case depth == 0 && t.cs_ && t.cs != "end" && e.hidesTabularEnd(t):
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs != "end" && e.hidesTabularEnd(t):
 			// A macro that hides this environment's \end: read raw it never surfaces, so
 			// the body scanner runs to EOF and swallows the rest of the document. Expand
 			// it in place and the \end shows up on the next iteration.
@@ -638,6 +645,18 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			// Read raw, it only surfaced while the CELL was being typeset, in the middle
 			// of a box (issue #106).
 			e.expandMacro(e.meaningOf(t))
+		case t.cs_ && t.cs == "begin":
+			// Kept whole, name and all: what follows belongs to this environment
+			// until its own \end.
+			name := e.readBraceName()
+			cell = append(cell, t)
+			cell = append(cell, braceNameToks(name)...)
+			envDepth++
+		case t.cs_ && t.cs == "end" && envDepth > 0:
+			name := e.readBraceName()
+			cell = append(cell, t)
+			cell = append(cell, braceNameToks(name)...)
+			envDepth--
 		case depth == 0 && t.cs_ && t.cs == "end":
 			if name := e.readBraceName(); name == env {
 				endRow()
@@ -646,14 +665,14 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 				e.endEnvGroup()
 				return items
 			}
-		case depth == 0 && t.cs_ && t.cs == "hline":
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "hline":
 			endRow() // flush any pending row, then record the rule
 			items = append(items, tabItem{hline: true})
-		case depth == 0 && t.cs_ && t.cs == "cline":
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "cline":
 			endRow()
 			from, to := parseCline(e.readBraceName())
 			items = append(items, tabItem{cline: true, cfrom: from, cto: to})
-		case depth == 0 && t.cs_ && (t.cs == "toprule" || t.cs == "midrule" || t.cs == "bottomrule"):
+		case depth == 0 && envDepth == 0 && t.cs_ && (t.cs == "toprule" || t.cs == "midrule" || t.cs == "bottomrule"):
 			endRow()
 			w := heavyRuleWidth
 			if t.cs == "midrule" {
@@ -663,7 +682,7 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 				w = d // \toprule[<dimen>] weight override
 			}
 			items = append(items, tabItem{brule: true, weight: w})
-		case depth == 0 && t.cs_ && t.cs == "cmidrule":
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "cmidrule":
 			endRow()
 			w := lightRuleWidth
 			if d, ok := e.readOptBracketDimen(); ok && d > 0 {
@@ -672,14 +691,18 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			tl, tr := e.readCmidTrim() // optional (l)/(r)/(lr) trimming
 			from, to := parseCline(e.readBraceName())
 			items = append(items, tabItem{bcmid: true, cfrom: from, cto: to, weight: w, btrimL: tl, btrimR: tr})
-		case depth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == `\`: // \\ row separator
 			endRow()
-		case depth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
+		case depth == 0 && envDepth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
 			endCell()
 		default:
-			if !t.cs_ && t.cat == catBegin {
+			b := t
+			if c, implicit := e.implicitChar(t); implicit {
+				b = c // \bgroup / \egroup count as braces (tex.web §7492-7493)
+			}
+			if !b.cs_ && b.cat == catBegin {
 				depth++
-			} else if !t.cs_ && t.cat == catEnd {
+			} else if !b.cs_ && b.cat == catEnd {
 				depth--
 			}
 			cell = append(cell, t)
