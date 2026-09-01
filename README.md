@@ -100,11 +100,34 @@ longer shifts the line numbers the editor maps glyphs back to). A real
 reproduces the reference engine's prose on the fidelity gate. Because the class
 files are `go:embed`ed and the resolver needs no filesystem, **the real classes
 also run in the `js/wasm` build — genuine LaTeX class rendering in the browser,
-with no TeXLive and no server.** `amsart` is embedded and its class loads (its
-`\maketitle` even drove real token-register support — `\toks`/`\newtoks` — into
-the engine), but `\documentclass{amsart}` is kept on the emulation for now: its
-own `\newtheorem…[section]` machinery loops on the engine, so it waits on that
-fix before it is routed to the real class.
+with no TeXLive and no server.** `amsart` now joins them: `\documentclass{amsart}`
+loads the real embedded `amsart.cls` and typesets its own title, sections and
+theorem heads (its `\maketitle` drove real token-register support — `\toks`/
+`\newtoks` — into the engine, and its `\newtheorem…[section]` machinery, which
+used to loop, runs through the class-kernel substrate's counter hooks).
+`GOTEX_AMSART=0` forces the old emulation back, for comparing the two paths.
+
+### Supported classes & packages, at a glance
+
+The full, honest matrix — every supported class, package, primitive, output
+format and image type, with its status, plus every remaining gap — lives at
+[go-tex.github.io/docs](https://go-tex.github.io/docs/). In short:
+
+- **Classes (real embedded):** `article`, `report`, `book`, `amsart`. `beamer`
+  runs its real class when resolvable. `revtex4-x`, `acmart`, `IEEEtran`,
+  `elsarticle` fall back to content-preserving emulation. Any other resolvable
+  `.cls` is loaded and run as real TeX.
+- **Packages with native handling:** `amsmath` (equation/align/gather/multline/…),
+  `amssymb`, `amsthm`, `graphicx`, `xcolor`, `hyperref`, `geometry`, `fancyhdr`,
+  `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
+  `subcaption`, `algorithm`/`algorithmic`, `listings`, `minted`, `siunitx`,
+  `numprint`, `makeidx`, `verbatim`, BibTeX. Any other resolvable `.sty` runs as
+  real TeX macros through the full LaTeX2e option mechanism.
+- **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
+  float pagination (`GOTEX_FLOATS`), two-column reprint layouts
+  (`GOTEX_TWOCOLUMN`), PDF-figure rasterization (needs the `go-tex/pdfrender`
+  module), clickable PDF links, `biblatex`, EPS graphics, paragraph table
+  columns, and the XeTeX/LuaTeX Unicode engines / `fontspec`.
 
 ## Status & roadmap to parity
 
@@ -121,13 +144,15 @@ Each stage is gated by an objective oracle:
 5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
    text) and self-contained **SVG** pages; the SVG carries a source map for
    click-to-line.
-6. ✅ **Real classes** — `\documentclass{article|report|book}` loads and runs the
-   genuine embedded LaTeX class (see above), reproducing the reference engine's
-   prose on the fidelity gate — in native builds **and** in `js/wasm`.
+6. ✅ **Real classes** — `\documentclass{article|report|book|amsart}` loads and
+   runs the genuine embedded LaTeX class (see above), reproducing the reference
+   engine's prose on the fidelity gate — in native builds **and** in `js/wasm`.
 
-Next: `amsart`'s `\newtheorem` fix (then route it to the real class), more real
-packages (`amsmath`, `hyperref`, `graphicx`), a broader real-document conformance
-corpus (PDF-diff vs pdftex/xetex), and the TRIP test. Coverage ~91%;
+Next: real TikZ/pgf (behind `GOTEX_PGF` today), float pagination and two-column
+reprint layouts out of their env flags, PDF-figure rasterization and clickable
+PDF links, a broader real-document conformance corpus (PDF-diff vs pdftex/xetex),
+and the TRIP test — see the [capability reference](https://go-tex.github.io/docs/)
+for the complete list of gaps. Coverage ~91%;
 the meaningful gate is the conformance ratchet plus the fidelity check against a
 real LaTeX engine, not a fixed coverage figure. Pure Go, CGO=0, `go vet` clean,
 green across three 64-bit arches under qemu plus `js/wasm` and `wasip1/wasm`.
