@@ -150,6 +150,168 @@ func TestDblFloatOneColumnStaysInline(t *testing.T) {
 	}
 }
 
+// hasChar reports whether a set character with rune ch appears anywhere in a box tree.
+func hasChar(n node, ch rune) bool {
+	switch v := n.(type) {
+	case charNode:
+		return v.ch == ch
+	case *boxNode:
+		for _, c := range v.list {
+			if hasChar(c, ch) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// The optional [placement] on \begin{figure*}[t] is the double-column float's placement
+// argument. \@dblfloat, unlike the one-column \@float, does not read it through
+// \@ifnextchar, so an unconsumed "[t]" used to be collected into the band body and set as
+// a literal glyph atop the figure. doDblFloat now consumes it in Go, so no bracket or
+// placement letter leaks into the band.
+func TestDblFloatPlacementNotLeaked(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	uri := pngDataURI(t, 200, 80)
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\documentclass[twocolumn]{article}\begin{document}` +
+		`First paragraph to settle the measure.\par` +
+		`\begin{figure*}[htbp]\includegraphics[width=\textwidth]{` + uri + `}` +
+		`\caption{No leak.}\end{figure*}` +
+		`\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	band := firstSpanBand(e.mvl)
+	if band == nil {
+		t.Fatal("no band placed")
+	}
+	// The caption text ("No leak.") is legitimately present; the placement bits are not.
+	// '[' can appear only from a leaked optional argument (the caption has none).
+	if hasChar(band, '[') {
+		t.Error("band contains a '[' — the [htbp] placement argument leaked into the body")
+	}
+}
+
+// A multi-panel figure* opens its body with a row of \includegraphics. That first
+// paragraph carries \parindent, and at the full text width two side-by-side
+// 0.48\textwidth panels plus the indent overflow the line by a hair, wrapping the second
+// panel and cascading a 2×N grid into extra rows that inflate the band to most of a page.
+// doDblFloat zeroes \parindent in the band body so the panels pack side by side as they
+// do under TeXLive — the band stays one image-row tall, not two.
+func TestDblFloatPanelsPackSideBySide(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	uri := pngDataURI(t, 100, 100) // square: one row's height ≈ one panel's width
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\documentclass[twocolumn]{article}\begin{document}` +
+		`First paragraph to settle the measure.\par` +
+		`\begin{figure*}[t]` +
+		`\includegraphics[width=0.48\textwidth]{` + uri + `}` +
+		`\includegraphics[width=0.48\textwidth]{` + uri + `}` +
+		`\end{figure*}` +
+		`\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	band := firstSpanBand(e.mvl)
+	if band == nil {
+		t.Fatal("no band placed")
+	}
+	full := 2*e.hsize + e.columnsep
+	panel := 48 * full / 100 // a 0.48\textwidth square panel is this tall
+	// Side by side, the band is about one panel tall (plus small slack); a cascade would
+	// stack the two panels and make it ~2×.
+	if band.height+band.depth > 3*panel/2 {
+		t.Errorf("band height %d exceeds 1.5 panels (%d) — panels did not pack side by side (parindent cascade)",
+			band.height+band.depth, 3*panel/2)
+	}
+}
+
+// firstSpanNode returns the first spanNode on the list (band plus its placement flags).
+func firstSpanNode(nodes []node) (spanNode, bool) {
+	for _, n := range nodes {
+		if sn, ok := n.(spanNode); ok {
+			return sn, true
+		}
+	}
+	return spanNode{}, false
+}
+
+// A figure* whose placement is [p] with no top bit is a float-page-only double float:
+// LaTeX may place it only on a float page, never atop a text page. The bit threads from
+// the environment's optional argument onto the band so the pager keeps it off a text-page
+// top; a [t] or default float carries no such flag.
+func TestDblFloatFloatPageOnlyFromPlacement(t *testing.T) {
+	t.Setenv("GOTEX_TWOCOLUMN", "1")
+	uri := pngDataURI(t, 200, 80)
+	run := func(pos string) spanNode {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		src := `\documentclass[twocolumn]{article}\begin{document}` +
+			`First paragraph to settle the measure.\par` +
+			`\begin{figure*}` + pos + `\includegraphics[width=\textwidth]{` + uri + `}` +
+			`\caption{c.}\end{figure*}` +
+			`\end{document}`
+		if _, err := e.Run(src); err != nil {
+			t.Fatal(err)
+		}
+		sn, ok := firstSpanNode(e.mvl)
+		if !ok {
+			t.Fatalf("pos %q: no span band placed", pos)
+		}
+		return sn
+	}
+	if sn := run(`[p]`); !sn.floatPageOnly {
+		t.Error("figure*[p] band should be floatPageOnly")
+	}
+	if sn := run(`[t]`); sn.floatPageOnly {
+		t.Error("figure*[t] band should not be floatPageOnly")
+	}
+	if sn := run(``); sn.floatPageOnly {
+		t.Error("figure* with default placement should not be floatPageOnly")
+	}
+}
+
+func TestFloatPlacementBits(t *testing.T) {
+	cases := []struct {
+		in   string
+		bits string
+		fpo  bool
+	}{
+		{`t`, "t", false},
+		{`htbp`, "htbp", false},
+		{`!p`, "p", true},
+		{`p`, "p", true},
+		{`tp`, "tp", false},
+		{`b`, "b", false},
+		{``, "", false},
+		{`H`, "h", false},
+	}
+	for _, c := range cases {
+		var toks []tok
+		for _, r := range c.in {
+			toks = append(toks, chTok(r, catOther))
+		}
+		if got := placementBits(toks); got != c.bits {
+			t.Errorf("placementBits(%q) = %q, want %q", c.in, got, c.bits)
+		}
+		if got := floatPageOnly(c.bits); got != c.fpo {
+			t.Errorf("floatPageOnly(%q) = %v, want %v", c.bits, got, c.fpo)
+		}
+	}
+}
+
 // \textwidth reads the full text-block width even after the two-column measure has
 // halved \hsize, while \columnwidth and \linewidth follow \hsize down to one column.
 func TestTextwidthSpansBothColumns(t *testing.T) {

@@ -71,16 +71,62 @@ type colRegion struct {
 // The two-column pager (paginateTwoColList) lifts every spanNode out of the galley and
 // places its box atop the page whose flow position it reaches; ordinary column material
 // never contains one, so the packers treat it defensively as its inner box.
-type spanNode struct{ box *boxNode }
+type spanNode struct {
+	box *boxNode
+	// floatPageOnly is set when the float's placement was [p] with no top bit: LaTeX may
+	// then place it only on a float page, never at the top of a text page. The pager keeps
+	// such a band out of a text-page top and lets it collect onto a band-only page.
+	floatPageOnly bool
+}
 
 func (spanNode) isNode() {}
+
+// placementBits returns the placement letters (h/t/b/p, and the ! override stripped) of a
+// float's optional [placement] argument, lower-cased. An empty result means the default.
+func placementBits(toks []tok) string {
+	var b []byte
+	for _, t := range toks {
+		if t.cs_ {
+			continue
+		}
+		switch t.ch {
+		case 'h', 'H', 't', 'b', 'p':
+			c := t.ch
+			if c == 'H' {
+				c = 'h'
+			}
+			b = append(b, byte(c))
+		}
+	}
+	return string(b)
+}
+
+// floatPageOnly reports whether a placement string sends a double-column float to a float
+// page only — [p] with no top ('t') or here ('h') bit. LaTeX supports only t and p for a
+// double-column float (never a page bottom), so a b-only spec still defaults to top/page.
+func floatPageOnly(place string) bool {
+	if place == "" {
+		return false
+	}
+	hasP, hasTopOrHere := false, false
+	for i := 0; i < len(place); i++ {
+		switch place[i] {
+		case 'p':
+			hasP = true
+		case 't', 'h':
+			hasTopOrHere = true
+		}
+	}
+	return hasP && !hasTopOrHere
+}
 
 // pendingBand is a full-width band awaiting placement, tagged with the number of flowing
 // (non-span) nodes that precede it: the band is placed across the top of the page whose
 // flow position first reaches flowIndex.
 type pendingBand struct {
-	flowIndex int
-	box       *boxNode
+	flowIndex     int
+	box           *boxNode
+	floatPageOnly bool
 }
 
 // fullWidth is the one-column measure: the width the frontmatter and any \onecolumn or
@@ -177,6 +223,14 @@ func (e *Engine) switchToTwoColumn(span *boxNode) {
 //
 // captype is "figure" or "table"; the environment name is captype+"*".
 func (e *Engine) doDblFloat(captype string) {
+	// Consume the optional [placement] that follows \@dblfloat{type}. The one-column
+	// \@float path reads it through \@ifnextchar, but a band collects its body verbatim,
+	// so an unread [t]/[htbp] would land in the galley and typeset as a literal "[t]" atop
+	// the figure. Standard LaTeX places a double-column float only at a page top or on a
+	// float page (t/p — never a page bottom), so the bits are recorded but do not force a
+	// bottom band; they gate deferral to a float page (see the pager).
+	posToks, _ := e.scanOptBracketToks()
+	place := placementBits(posToks)
 	if !e.twoColumn || !twoColumnOptIn() {
 		// Not spanning here: either one-column, or a LIVE standard-class two-column
 		// document (article/report/book [twocolumn]) with the band still gated. Set the
@@ -200,15 +254,24 @@ func (e *Engine) doDblFloat(captype string) {
 	// float's own centering, caption and counters run exactly as in one column, but across
 	// the whole page. typesetSpanFullWidth caps it at \textheight and sets its width.
 	body := e.collectEnvBody(captype + "*")
-	toks := make([]tok, 0, len(body)+2)
+	toks := make([]tok, 0, len(body)+3)
 	toks = append(toks, csTok(captype))
+	// A figure*/table* body is set at the full text width. Its first paragraph — the
+	// row of \includegraphics that a multi-panel figure opens with — carries \parindent,
+	// and at the full width two side-by-side 0.48\textwidth panels plus that indent
+	// overflow the line by a hair, so the second panel wraps and a 2x2 grid cascades into
+	// three or four rows, inflating the band to most of a page. Real LaTeX packs these
+	// compactly (a full-width figure*'s panels sit side by side); \@parboxrestore-style
+	// resets zero the indent inside float boxes. Zero it here so the grid packs as it does
+	// under TeXLive, keeping the band its true height.
+	toks = append(toks, csTok("parindent"), chTok('0', catOther), chTok('p', catLetter), chTok('t', catLetter))
 	toks = append(toks, body...)
 	toks = append(toks, csTok("end"+captype))
 	band := e.typesetSpanFullWidth(toks)
 	if band == nil || band.height+band.depth == 0 {
 		return // an empty float band reserves nothing
 	}
-	e.contribute(spanNode{box: band})
+	e.contribute(spanNode{box: band, floatPageOnly: floatPageOnly(place)})
 }
 
 // startTwoColumn implements the \twocolumn command: like real LaTeX it \clearpage's
@@ -295,7 +358,7 @@ func (e *Engine) paginateTwoColList(list []node, colW int, span *boxNode, pageOf
 	for _, n := range list {
 		if sn, ok := n.(spanNode); ok {
 			if sn.box != nil {
-				bands = append(bands, pendingBand{flowIndex: len(flow), box: sn.box})
+				bands = append(bands, pendingBand{flowIndex: len(flow), box: sn.box, floatPageOnly: sn.floatPageOnly})
 			}
 			continue
 		}
@@ -373,6 +436,12 @@ func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, page
 		left, right, next := takeCols(start, e.bandsReserve(pageBands))
 		grew := false
 		for bi < len(bands) && bands[bi].flowIndex < next {
+			if bands[bi].floatPageOnly {
+				// [p]: never rides atop a text page — defer to a band-only (float) page.
+				pending = append(pending, bands[bi].box)
+				bi++
+				continue
+			}
 			need := bands[bi].box.height + bands[bi].box.depth + e.dblTextFloatSep()
 			if len(pageBands) > 0 && e.bandsReserve(pageBands)+need > fullVsize {
 				break // no room atop this page; a later page's top takes it
