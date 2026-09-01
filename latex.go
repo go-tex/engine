@@ -784,7 +784,17 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(LaTeX2eClassLead); err != nil {
 		return err
 	}
-	return e.LoadFormat(AMSClassSubstrate)
+	if err := e.LoadFormat(AMSClassSubstrate); err != nil {
+		return err
+	}
+	// Real single-column float placement (figure/table): loaded LAST and ONLY under
+	// GOTEX_FLOATS, so it overrides the classic inline \@float from LaTeX2eClassLead. With
+	// the flag off this substrate is never loaded and \@float keeps its untouched inline
+	// definition, so the default output is byte-for-byte unchanged. See floatplace.go.
+	if floatsEnabled() {
+		return e.LoadFormat(FloatPlacementSubstrate)
+	}
+	return nil
 }
 
 // doNewcommand implements LaTeX's \newcommand / \renewcommand / \providecommand:

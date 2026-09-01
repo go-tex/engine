@@ -73,6 +73,13 @@ func (e *Engine) Pages() []*boxNode {
 	if len(e.colRegions) > 0 {
 		return e.pagesByRegion()
 	}
+	// Under GOTEX_FLOATS, a document that captured any figure/table float paginates
+	// through the float placer (top/bottom/float-page placement + deferral); otherwise the
+	// plain single-column breaker. mvlHasFloats is false unless the placer is enabled, so
+	// with the flag off this is the ordinary path and the output is unchanged.
+	if floatsEnabled() && e.mvlHasFloats() {
+		return e.pagesWithFloats()
+	}
 	return e.paginateSingleList(e.mvl, 0)
 }
 

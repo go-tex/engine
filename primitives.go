@@ -2100,6 +2100,12 @@ func (e *Engine) loadStomach() {
 	// float full-width as a spanning band across both columns; otherwise it sets the
 	// unstarred one-column float (twocolumn.go, doDblFloat).
 	e.prim("gotex@dblfloat", func(e *Engine) { e.doDblFloat(e.readBraceName()) })
+	// \gotex@floatbegin{figure|table} is the internal hook the redefined \@float runs under
+	// GOTEX_FLOATS (FloatPlacementSubstrate, floatplace.go): it captures the standard float
+	// environment's body into a box and contributes a floatNode for real top/bottom/float-
+	// page placement. It is registered unconditionally but reached only when the substrate
+	// (loaded only under the flag) redefines \@float to call it.
+	e.prim("gotex@floatbegin", func(e *Engine) { e.doFloatBegin() })
 	e.loadBoxCmds()
 }
 
