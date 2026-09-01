@@ -260,17 +260,6 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			continue
 		}
 		next, ok := e.expandMacroInMathSource(src, name)
-		if ok {
-			// The body just spliced in is TeX, not maths: a class's \the@inst is
-			// \number\c@inst, an affiliation mark is an \@for loop over \expandafter
-			// and \edef. Those primitives are the ENGINE's to run, and the maths layer
-			// can only refuse them. Run the substituted material through the gullet —
-			// bounded to what was spliced, and unable to read past it since an isolated
-			// expansion stops at its own sentinel.
-			if flat := e.toksToString(e.expandList(tokenizeTeX(next))); flat != "" {
-				next = flat
-			}
-		}
 		if !ok {
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
 			// cannot render. Strip them from the source — keeping any content
@@ -338,7 +327,7 @@ func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 		return "", false
 	}
 	if len(m.params) == 0 {
-		return replaceMathCS(src, name, e.toksToString(m.body)), true
+		return replaceMathCS(src, name, e.flattenMathBody(e.toksToString(m.body))), true
 	}
 	needle := "\\" + name + " "
 	n := len(m.params)
@@ -362,7 +351,7 @@ func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 			src = rest
 			continue
 		}
-		out.WriteString(e.substituteMathBody(m.body, args))
+		out.WriteString(e.flattenMathBody(e.substituteMathBody(m.body, args)))
 		src = rest[consumed:]
 		changed = true
 	}
@@ -969,6 +958,37 @@ func (e *Engine) substituteMathBody(body []tok, args []string) string {
 		}
 	}
 	return b.String()
+}
+
+// flattenMathBody runs a substituted macro body through the gullet, as \edef would.
+// A class's body is TeX, not maths — \the@inst is \number\c@inst, an author's mark
+// is an \@for loop over \expandafter and \edef — and the maths layer can only refuse
+// those primitives, which costs the whole formula.
+//
+// Only the body just substituted goes through, never the surrounding source: the
+// source holds commands the maths layer renders itself, and the engine's text-mode
+// stand-ins for them would win. \cdot is \char183 here (latex.go) and \begin is
+//
+//	\def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
+//
+// so flattening the whole source turned every \cdot into \char and every
+// \begin{bmatrix} into \bmatrix — 935 dropped formulas over 45 papers for the first,
+// 676 over 42 for the second, and one paper typeset its matrices as text, 411251
+// glyphs on seven pages.
+//
+// \begin and \end are still marked \noexpand inside the body itself, where the same
+// reasoning applies to a macro that wraps an environment.
+func (e *Engine) flattenMathBody(body string) string {
+	ts := tokenizeTeX(body)
+	for i, t := range ts {
+		if t.cs_ && (t.cs == "begin" || t.cs == "end") {
+			ts[i].noexp = true
+		}
+	}
+	if flat := e.toksToString(e.expandList(ts)); flat != "" {
+		return flat
+	}
+	return body
 }
 
 // unknownMathCommand extracts the command name X from a go-tex/math "unknown command
