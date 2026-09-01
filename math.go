@@ -981,7 +981,7 @@ func (e *Engine) substituteMathBody(body []tok, args []string) string {
 func (e *Engine) flattenMathBody(body string) string {
 	ts := tokenizeTeX(body)
 	for i, t := range ts {
-		if t.cs_ && (t.cs == "begin" || t.cs == "end") {
+		if t.cs_ && (t.cs == "begin" || t.cs == "end" || e.isCharStandIn(t.cs)) {
 			ts[i].noexp = true
 		}
 	}
@@ -989,6 +989,25 @@ func (e *Engine) flattenMathBody(body string) string {
 		return flat
 	}
 	return body
+}
+
+// isCharStandIn reports whether a name is the engine's TEXT-mode stand-in for a
+// character it has no glyph command for:
+//
+//	\def\cdot{\char183\relax}     \def\bullet{\char8226\relax}     (latex.go)
+//	\protected\def\_{\char95\relax}                                (classkernel.go)
+//
+// In a formula those names are the maths layer's own — \cdot is ⋅ and it renders it —
+// so flattening one into \char costs the formula: 935 dropped over 45 papers when the
+// whole source went through the gullet, 118 over 11 with only the substituted body.
+// A body beginning with \char is what makes a stand-in recognisable without a list to
+// keep in step with the kernel.
+func (e *Engine) isCharStandIn(name string) bool {
+	m := e.eq[name]
+	if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
+		return false
+	}
+	return m.body[0].cs_ && m.body[0].cs == "char"
 }
 
 // unknownMathCommand extracts the command name X from a go-tex/math "unknown command
