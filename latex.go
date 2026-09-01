@@ -197,6 +197,30 @@ const MiniLaTeXKernel = `
 \long\def\endfigure{\par\endgroup\bigskip}
 \long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
 \long\def\endtable{\par\endgroup\bigskip}
+% ─── the float package: \newfloat / \floatname / \floatstyle / … ─────────────
+% \newfloat{type}{placement}{ext}[within] declares a NEW float type that reuses
+% the same one-column float path as figure/table, so \begin{type}…\end{type}
+% typesets its body and \caption numbers it "Name N" via \fnum@<type>. Placement,
+% the list-of extension and [within] are ignored (floats render inline; there is
+% no separate list-of-floats pass). Without this a \newfloat-declared environment
+% (program, listing, procedure, …) is undefined and its whole body — often a tall
+% block — is dropped, shifting every following page. See float.sty (Lingnau).
+\def\newfloat#1#2#3{\@ifnextchar[{\gotex@newfloat{#1}}{\gotex@newfloat{#1}[]}}
+\def\gotex@newfloat#1[#2]{%
+  \@ifundefined{c@#1}{\expandafter\newcount\csname c@#1\endcsname}{}%
+  \expandafter\def\csname the#1\endcsname{\expandafter\the\csname c@#1\endcsname}%
+  \@ifundefined{#1name}{\@namedef{#1name}{#1}}{}%
+  \expandafter\def\csname fnum@#1\endcsname{\csname #1name\endcsname\space\csname the#1\endcsname}%
+  \expandafter\long\expandafter\def\csname #1\endcsname{\par\bigskip\begingroup\centering\def\@captype{#1}\@discardopt}%
+  \expandafter\long\expandafter\def\csname end#1\endcsname{\par\endgroup\bigskip}%
+}
+% \floatname sets the caption label of an already-declared type; the others are
+% styling/listing directives with no effect on inline float rendering.
+\def\floatname#1#2{\@namedef{#1name}{#2}}
+\def\floatstyle#1{}
+\def\restylefloat{\@ifstar\@gobble\@gobble}
+\def\floatplacement#1#2{}
+\def\listof#1#2{}
 % ─── algorithm float + algorithmic/algpseudocode body ───────────────────────────
 % The algorithms / algorithmicx (algpseudocode) packages. \begin{algorithm} is a
 % float exactly like figure/table (caption "Algorithm N"). \begin{algorithmic}
