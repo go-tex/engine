@@ -201,14 +201,64 @@ func graphicsSize(iw, ih, wReq, hReq int, scale float64, dpiX, dpiY float64) (w,
 // pixels-as-points fallback. An SVG source (a ".svg" file, a data:image/svg+xml
 // URI, or content sniffed as SVG) is handled by loadSVGImage; everything else
 // goes through the go-gfx codec (PNG/JPEG/…).
+// graphicsSearchExts is the order an extension-less \includegraphics reference is
+// searched — pdf first, matching pdftex's \Gin@extensions — with both cases so a
+// case-sensitive filesystem finds fig.PNG for {fig} too.
+var graphicsSearchExts = []string{
+	".pdf", ".png", ".jpg", ".jpeg", ".svg", ".gif",
+	".PDF", ".PNG", ".JPG", ".JPEG", ".SVG", ".GIF",
+}
+
+// hasKnownGraphicsExt reports whether name already ends in a graphics extension,
+// which graphicx honours verbatim rather than searching past.
+func hasKnownGraphicsExt(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".pdf", ".png", ".jpg", ".jpeg", ".svg", ".gif", ".eps", ".ps", ".bmp", ".tif", ".tiff":
+		return true
+	}
+	return false
+}
+
+// resolveGraphicsPath resolves an \includegraphics reference to a file on disk the
+// way graphicx does: an exact hit wins; otherwise, when the reference carries no
+// known graphics extension, each extension is appended in turn and the first that
+// exists is used. This lets a figure written \includegraphics{fig} — the
+// extension-less form real papers use — resolve to fig.pdf / fig.png / … instead
+// of failing to a placeholder. ok is false when nothing matches, leaving the
+// caller to read the name as given (and report the miss as before).
+func resolveGraphicsPath(name string) (string, bool) {
+	if _, err := os.Stat(name); err == nil {
+		return name, true
+	}
+	if hasKnownGraphicsExt(name) {
+		return "", false
+	}
+	for _, ext := range graphicsSearchExts {
+		if cand := name + ext; fileExists(cand) {
+			return cand, true
+		}
+	}
+	return "", false
+}
+
+// fileExists reports whether path is an existing regular file (not a directory).
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 func loadImage(name string, aspect bool) (data []byte, format imgFormat, iw, ih int, dpiX, dpiY float64, err error) {
 	svgHint := false
 	if strings.HasPrefix(name, "data:") {
 		svgHint = svgDataURI(name)
 		data, err = decodeDataURI(name)
 	} else {
-		svgHint = strings.EqualFold(filepath.Ext(name), ".svg")
-		data, err = os.ReadFile(name)
+		path := name
+		if p, ok := resolveGraphicsPath(name); ok {
+			path = p
+		}
+		svgHint = strings.EqualFold(filepath.Ext(path), ".svg")
+		data, err = os.ReadFile(path)
 	}
 	if err != nil {
 		return nil, 0, 0, 0, 0, 0, err
