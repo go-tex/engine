@@ -79,6 +79,8 @@ func TestBodyRobustnessCommands(t *testing.T) {
 				hasMath = true
 			case *boxNode:
 				walk(v.list)
+			case *floatNode:
+				walk(v.box.list) // a captured float is material too, just not placed yet
 			}
 		}
 	}
@@ -303,6 +305,8 @@ func pageChars(e *Engine) string {
 				s = append(s, v.ch)
 			case *boxNode:
 				walk(v.list)
+			case *floatNode:
+				walk(v.box.list) // a captured float is material too, just not placed yet
 			}
 		}
 	}
