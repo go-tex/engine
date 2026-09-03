@@ -153,3 +153,53 @@ func TestFloatTopPlacement(t *testing.T) {
 		t.Error("[t] float box was not found at the top of any page")
 	}
 }
+
+// The captured body is a box being built, so an assignment inside it must not
+// escape into the document. The real case is a figure holding
+// \put(-0.33\textwidth,…): \put is undefined, so \textwidth reads as the start of
+// an assignment, takes the missing number as zero, and — before the body was given
+// a group of its own — left \hsize at 0pt for the rest of the paper, which then set
+// one word per line (1439 pages against a reference of 333).
+func TestCapturedFloatBodyCannotChangeTheTextWidth(t *testing.T) {
+	t.Setenv("GOTEX_FLOATS", "1")
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\documentclass{article}\begin{document}` +
+		`\begin{figure}\textwidth=0pt\caption{Plot}\end{figure}` +
+		strings.Repeat(`Body text paragraph. `, 20) + `\par`); err != nil {
+		t.Fatal(err)
+	}
+	if e.hsize <= 0 {
+		t.Fatalf("\\hsize = %d sp after the float: an assignment escaped the captured body", e.hsize)
+	}
+}
+
+// A float written halfway down a page belongs at the top of THAT page: LaTeX
+// contributes it at its anchor and \@addtocurcol (latex.ltx:15636) tests it against
+// the room left in the column. Taking only floats anchored before the page began
+// pushed every one of them at least a page later.
+func TestFloatAnchoredInsideThePageRidesIt(t *testing.T) {
+	t.Setenv("GOTEX_FLOATS", "1")
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	// Text, then a figure, then more text: the figure is anchored inside page 1.
+	if _, err := e.Run(`\documentclass{article}\begin{document}` +
+		strings.Repeat(`Opening paragraph. `, 10) + `\par` +
+		`\begin{figure}\caption{Plot}\end{figure}` +
+		strings.Repeat(`Body text paragraph. `, 10) + `\par`); err != nil {
+		t.Fatal(err)
+	}
+	pages := e.Pages()
+	if len(pages) != 1 {
+		t.Fatalf("the whole document fits one page, got %d", len(pages))
+	}
+	if txt := mvlText(pages[0].list); !strings.Contains(txt, "Figure1:Plot") {
+		t.Errorf("the float did not ride the page it was written on: %q", txt)
+	}
+}
