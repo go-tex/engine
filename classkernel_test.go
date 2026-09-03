@@ -336,3 +336,33 @@ func TestClassKernelLoads(t *testing.T) {
 		}
 	}
 }
+
+// \tikzstyle is written with spaces around its = as often as without, and the
+// bracket group usually runs over several lines:
+//
+//	\tikzstyle{thmbox} = [
+//	  draw=black, fill=white
+//	]
+//
+// A delimited \def\tikzstyle#1=[#2]{} matches those characters EXACTLY, so with a
+// space before the = it scans on for a literal "=[" that never comes and swallows
+// the rest of the file. One arXiv paper lost all 18 of its pages that way.
+func TestTikzstyleSpacedFormKeepsTheDocument(t *testing.T) {
+	for _, src := range []string{
+		"\\tikzstyle{thmbox} = [\n  draw=black, fill=white\n]\n",
+		`\tikzstyle{thmbox}=[draw]`,
+		`\tikzstyle{thmbox}`, // neither = nor [ follows: nothing to gobble
+	} {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\documentclass{article}\begin{document}` + src + `APRES\par\end{document}`); err != nil {
+			t.Fatalf("%q: %v", src, err)
+		}
+		if txt := mvlText(e.mvl); !strings.Contains(txt, "APRES") {
+			t.Errorf("%q swallowed the document: page carries %q", src, txt)
+		}
+	}
+}
