@@ -529,8 +529,16 @@ const LaTeX2eClassKernel = `
 \def\setuptodonotes#1{}
 \def\selectlanguage#1{}
 % \tikzstyle{name}=[key=val,…] is the deprecated TikZ style form; the engine draws
-% no TikZ, so gobble the name and the =[…] value (delimited so the whole call goes).
-\def\tikzstyle#1=[#2]{}
+% no TikZ, so the name and the =[…] value are gobbled. NOT with a delimited #1=[#2]:
+% real documents write "\tikzstyle{thmbox} = [" with spaces around the =, and a
+% delimited parameter matches the characters exactly — it then scans for a literal
+% "=[" that never comes and swallows the rest of the file. One arXiv paper lost all
+% 18 of its pages that way. \@ifnextchar skips spaces, so this reads the = and the
+% bracket group however they are spaced, and does nothing when either is absent.
+\def\tikzstyle#1{\gotex@tikzstyle@next}
+\def\gotex@tikzstyle@next{\@ifnextchar={\gotex@tikzstyle@eq}{\@ifnextchar[\gotex@tikzstyle@val\relax}}
+\def\gotex@tikzstyle@eq={\gotex@tikzstyle@next}
+\def\gotex@tikzstyle@val[#1]{}
 % \addbibresource[opts]{file.bib} registers a biblatex database; nothing here reads
 % it, so gobble the file (and any optional argument).
 \def\addbibresource{\@ifnextchar[\@gobbleaddbibres\@gobble}
