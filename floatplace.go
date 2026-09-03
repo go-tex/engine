@@ -17,12 +17,15 @@ import (
 // tectonic 56). This attacks that under-pagination while rendering figures where TeXLive
 // puts them (page top/bottom, float pages) rather than inline where written.
 //
-// It is gated behind GOTEX_FLOATS and OFF by default: with the flag clear the float
-// macros keep their untouched classic inline definitions (LaTeX2eClassLead), the
-// FloatPlacementSubstrate is never loaded, Pages() never dispatches here, and the default
-// corpus output is byte-for-byte unchanged (verified). The naive-placement proxy tradeoff
-// (word displacement rises even as rendering becomes faithful) is why this stays opt-in;
-// the yardstick for it is RENDERING and page count vs tectonic, not the -layout mean.
+// It is ON by default; GOTEX_FLOATS=0 restores the inline path, where the float macros
+// keep their untouched classic inline definitions (LaTeX2eClassLead), the
+// FloatPlacementSubstrate is never loaded and Pages() never dispatches here. Measured
+// over the 157 arXiv papers with a tectonic reference, placing floats and letting a
+// figure state its own size (see figureDeclaredSize) beats setting them inline: Σ page
+// error 616 → 586, papers within TWO pages 83 → 93, the median document 2 pages out
+// either way. The yardstick is RENDERING and page count against tectonic, not the
+// word-position mean: a float moved to the top of its page displaces every word below
+// it, which that mean reads as divergence even when the page is now right.
 //
 // Reference parameters, read from latex.ltx \@xfloat / \@addtocurcol via tectonic
 // \meaning: default placement `tbp`; \topfraction .7, \bottomfraction .3, \textfraction
@@ -31,9 +34,9 @@ import (
 // table environments (single column); figure*/table* keep the two-column band path
 // (twocolumn.go) and [h]/[H] floats stay inline (LaTeX keeps them roughly where written).
 
-// floatsEnabled reports whether the real float placer (this file) is active. OFF by
-// default; set GOTEX_FLOATS to any non-empty value to opt in.
-func floatsEnabled() bool { return os.Getenv("GOTEX_FLOATS") != "" }
+// floatsEnabled reports whether the real float placer (this file) is active. It is the
+// default; GOTEX_FLOATS=0 opts back out to the inline path.
+func floatsEnabled() bool { return os.Getenv("GOTEX_FLOATS") != "0" }
 
 // FloatPlacementSubstrate routes the figure/table environments through the placer. It is
 // loaded by LoadLaTeX ONLY when floatsEnabled(), so with the flag off the environments

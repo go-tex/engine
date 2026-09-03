@@ -18,6 +18,7 @@ import (
 	"errors"
 	"image"
 	"image/png" // re-encode exotic formats for embedding
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -126,8 +127,18 @@ func (e *Engine) doIncludegraphics() {
 func (e *Engine) placeholderImage(wReq, hReq, iw, ih int, scale, dpiX, dpiY float64, name string) {
 	// iw/ih carry the figure's intrinsic size when it was recoverable (a PDF page
 	// box); with them, a width-only \includegraphics keeps the figure's true aspect
-	// instead of collapsing to a square. When absent (iw==ih==0) the box falls back
-	// to the requested dimensions, then to a default figure size.
+	// instead of collapsing to a square.
+	//
+	// When they are absent, the file itself may still SAY how big it is — an EPS in
+	// its %%BoundingBox, a PDF in its /MediaBox — and reading that costs no rendering
+	// at all. It is what makes the reserved box the right SHAPE: with only [width=…]
+	// given, the height then follows the figure's own aspect instead of a fixed
+	// default, and the text around it breaks where it should.
+	if iw <= 0 || ih <= 0 {
+		if dw, dh := figureDeclaredSize(name); dw > 0 && dh > 0 {
+			iw, ih, dpiX, dpiY = dw, dh, 72, 72 // a declared box is in PostScript points
+		}
+	}
 	w, h := graphicsSize(iw, ih, wReq, hReq, scale, dpiX, dpiY)
 	if w <= 0 {
 		w = 120 * unity // a default figure width when the source gave none
@@ -619,4 +630,96 @@ func parseDimenStr(s string) int {
 		f = 1 // default: points
 	}
 	return int(num*f*float64(unity) + 0.5)
+}
+
+// figureDeclaredSize returns the size a figure file states for itself, in whole
+// PostScript points (bp), or (0, 0) when it states none or cannot be read. Two
+// formats state one and neither can be decoded here:
+//
+//   - EPS, in its %%BoundingBox (or the more precise %%HiResBoundingBox) comment,
+//     which is what dvips and the graphics package read;
+//   - PDF, in the page's /MediaBox — used when no rasteriser is wired (the browser
+//     build), since a rasterised figure carries its size in its pixels.
+//
+// Only the head of the file is read: both declarations are in it, and a figure can
+// be tens of megabytes.
+func figureDeclaredSize(name string) (w, h int) {
+	f, err := os.Open(name)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+	head := make([]byte, 64<<10)
+	n, _ := io.ReadFull(f, head)
+	head = head[:n]
+	switch {
+	case bytes.HasPrefix(head, []byte("%!PS")), bytes.Contains(head, []byte("%%BoundingBox")):
+		return epsBoundingBox(head)
+	case bytes.HasPrefix(head, []byte("%PDF-")):
+		return pdfMediaBox(head)
+	}
+	return 0, 0
+}
+
+// epsBoundingBox reads %%HiResBoundingBox in preference to %%BoundingBox (the
+// first is in real numbers, the second rounded to integers), skipping the
+// "(atend)" form an EPS may use to defer the box to its trailer — which is past
+// the head this reads.
+func epsBoundingBox(head []byte) (w, h int) {
+	for _, key := range []string{"%%HiResBoundingBox:", "%%BoundingBox:"} {
+		i := bytes.Index(head, []byte(key))
+		if i < 0 {
+			continue
+		}
+		line := head[i+len(key):]
+		if j := bytes.IndexAny(line, "\r\n"); j >= 0 {
+			line = line[:j]
+		}
+		if x, y, ok := boxExtent(strings.Fields(string(line))); ok {
+			return x, y
+		}
+	}
+	return 0, 0
+}
+
+// pdfMediaBox reads the first /MediaBox [llx lly urx ury] in the file's head. A
+// figure PDF holds one page, so the first box is that page's.
+func pdfMediaBox(head []byte) (w, h int) {
+	i := bytes.Index(head, []byte("/MediaBox"))
+	if i < 0 {
+		return 0, 0
+	}
+	rest := head[i+len("/MediaBox"):]
+	open := bytes.IndexByte(rest, '[')
+	close := bytes.IndexByte(rest, ']')
+	if open < 0 || close < open {
+		return 0, 0
+	}
+	x, y, ok := boxExtent(strings.Fields(string(rest[open+1 : close])))
+	if !ok {
+		return 0, 0
+	}
+	return x, y
+}
+
+// boxExtent turns four numbers "llx lly urx ury" into the box's width and height,
+// rounded to whole points. A degenerate or reversed box yields ok=false, so the
+// caller keeps its own default rather than reserving nothing.
+func boxExtent(f []string) (w, h int, ok bool) {
+	if len(f) < 4 {
+		return 0, 0, false
+	}
+	var v [4]float64
+	for i := range v {
+		x, err := strconv.ParseFloat(f[i], 64)
+		if err != nil {
+			return 0, 0, false
+		}
+		v[i] = x
+	}
+	dx, dy := v[2]-v[0], v[3]-v[1]
+	if dx <= 0 || dy <= 0 {
+		return 0, 0, false
+	}
+	return int(dx + 0.5), int(dy + 0.5), true
 }

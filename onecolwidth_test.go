@@ -17,7 +17,7 @@ func TestOneColumnFaithfulFigureWidth(t *testing.T) {
 		if faithful {
 			t.Setenv("GOTEX_FLOATS", "1")
 		} else {
-			t.Setenv("GOTEX_FLOATS", "")
+			t.Setenv("GOTEX_FLOATS", "0") // opt out: the legacy raw-text read
 		}
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {

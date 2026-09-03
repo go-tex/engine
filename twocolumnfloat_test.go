@@ -50,9 +50,10 @@ func TestTwoColumnFigureReservesTextwidthSpace(t *testing.T) {
 		t.Errorf("two-column figure width %d not wider than one column %d", two.width, e.hsize)
 	}
 
-	// One-column mode keeps the legacy raw-text read (the \textwidth token is dropped,
-	// "0.9" is taken as 0.9pt), so the same source reserves almost nothing — the tuned
-	// single-column corpus baseline is untouched by this change.
+	// Opted out of the placer, one-column keeps the legacy raw-text read (the
+	// \textwidth token is dropped and "0.9" is taken as 0.9pt), so the same source
+	// reserves almost nothing.
+	t.Setenv("GOTEX_FLOATS", "0")
 	one, _ := run(``)
 	if one.width > unity {
 		t.Errorf("one-column figure width = %d sp, expected the legacy sub-point size", one.width)
@@ -123,10 +124,10 @@ func TestDblFloatSpansBothColumns(t *testing.T) {
 	}
 }
 
-// Outside two-column mode a figure* degrades to the unstarred one-column float set inline
-// on the vertical list — no full-width band — exactly as the historical figure*=\figure
-// alias did, so the single-column corpus is untouched.
-func TestDblFloatOneColumnStaysInline(t *testing.T) {
+// Outside two-column mode a figure* degrades to the unstarred one-column float — no
+// full-width band — exactly as LaTeX does, where a starred float in one column is an
+// ordinary float. With the placer it is therefore CAPTURED, not set inline.
+func TestDblFloatOneColumnIsAnOrdinaryFloat(t *testing.T) {
 	uri := pngDataURI(t, 200, 80)
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
@@ -144,10 +145,13 @@ func TestDblFloatOneColumnStaysInline(t *testing.T) {
 		t.Fatal("two-column mode unexpectedly active")
 	}
 	if band := firstSpanBand(e.mvl); band != nil {
-		t.Errorf("one-column figure* produced a full-width band (%d sp wide); expected an inline float", band.width)
+		t.Errorf("one-column figure* produced a full-width band (%d sp wide); expected an ordinary float", band.width)
 	}
-	if _, ok := firstImage(e.mvl); !ok {
-		t.Error("one-column figure* did not place its image inline")
+	if !e.mvlHasFloats() {
+		t.Error("one-column figure* was not captured as an ordinary float")
+	}
+	if txt := mvlText(e.Pages()[0].list); !strings.Contains(txt, "Figure1:Inline.") {
+		t.Errorf("the figure* caption is missing from the page: %q", txt)
 	}
 }
 

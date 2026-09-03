@@ -26,13 +26,13 @@ func floatMeaningBody(e *Engine) string {
 	return b.String()
 }
 
-// With GOTEX_FLOATS unset (the default), the FloatPlacementSubstrate is never
+// With GOTEX_FLOATS=0, the FloatPlacementSubstrate is never
 // loaded: \@float keeps its classic inline definition, no float is captured, and
 // the main vertical list carries no floatNode — so the default output is the
 // untouched inline rendering. This is the byte-identical-off guarantee at the
 // macro level (the integration cmp against the base binary covers the bytes).
 func TestFloatFlagOffKeepsInline(t *testing.T) {
-	t.Setenv("GOTEX_FLOATS", "") // force OFF regardless of the ambient environment
+	t.Setenv("GOTEX_FLOATS", "0") // opt back out of the placer
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
