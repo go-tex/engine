@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: stable }
       - run: go vet ./...
       - run: go build ./...
@@ -38,7 +38,7 @@ jobs:
         goarch: [riscv64, ppc64le, s390x]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: stable }
       # Bounded on purpose. On 2026-08-19 this step sat on an unreachable Ubuntu
       # mirror for over an hour, in several repositories at once, and the lane
@@ -66,7 +66,7 @@ jobs:
     strategy: { matrix: { goos: [js, wasip1] } }
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: stable }
       - run: GOOS=${{ matrix.goos }} GOARCH=wasm go build ./...
   fidelity:
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: stable }
       - name: install poppler
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
