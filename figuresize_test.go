@@ -40,18 +40,32 @@ func TestFigureDeclaredSize(t *testing.T) {
 }
 
 // The placeholder for an EPS included with [width=…] must be as tall as the file's
-// aspect ratio says, not the engine's default.
+// aspect ratio says, not the engine's default square. The document names the figure
+// the way a paper does — a bare file name, resolved against the working directory —
+// rather than an absolute path, which would carry the temporary directory's own
+// characters (a backslash on Windows, a ~ in a runner's short path) into TeX's
+// tokeniser and be read as something else.
 func TestEPSPlaceholderKeepsItsAspect(t *testing.T) {
 	dir := t.TempDir()
-	eps := filepath.Join(dir, "fig.eps")
-	if err := os.WriteFile(eps, []byte("%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 400 100\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "fig.eps"),
+		[]byte("%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 400 100\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd) //nolint:errcheck // restoring the test's own directory
+
 	e, err := compile([]byte(`\documentclass{article}\usepackage{graphicx}\begin{document}`+
-		`\includegraphics[width=200pt]{`+eps+`}\end{document}`), Options{Lenient: true})
+		`\includegraphics[width=200pt]{fig.eps}\end{document}`), Options{Lenient: true})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
+
 	var got *frameNode
 	var walk func([]node)
 	walk = func(ns []node) {
