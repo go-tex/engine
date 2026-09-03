@@ -1830,6 +1830,7 @@ func (e *Engine) loadMore() {
 	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })     // hyperref: literal URL, no link
 	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() }) // hyperref: named in-document destination
 	e.prim("hyperlink", func(e *Engine) { e.doHyperlink() })     // hyperref: same-document link to a target
+	e.prim("hypersetup", func(e *Engine) { e.doHypersetup() })   // hyperref: link-styling options (colorlinks, urlcolor, …)
 	e.prim("hyperref", func(e *Engine) { e.doHyperref() })       // hyperref: internal link by \label, or 4-arg form
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font

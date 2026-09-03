@@ -66,7 +66,12 @@ func (e *Engine) doHyperlink() { e.doInternalLink(false) }
 // a normal hbox list (so macros expand), then places an internalLinkNode inline.
 func (e *Engine) doInternalLink(target bool) {
 	name, _ := e.readRawBracedArg()
+	save := e.curColor
+	if !target && e.hyperColorlinks { // a \hypertarget destination is not coloured, only a \hyperlink
+		e.curColor = e.hyperLinkColor
+	}
 	list, _ := e.grabHboxList()
+	e.curColor = save
 	e.placeInline(internalLinkNode{name: name, target: target, inner: hpackSP(list, packNatural, 0)})
 }
 

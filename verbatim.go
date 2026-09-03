@@ -106,7 +106,10 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 			continue
 		}
 		w, h, d := font.charDimsSP(r)
-		out = append(out, charNode{ch: r, width: w, height: h, depth: d, srcLine: line})
+		// Stamp the current colour like ordinary text (see appendChar): \color
+		// applies to verbatim too, so \textcolor{red}{\verb|x|} — and a coloured
+		// \url under hyperref's colorlinks — reach the drivers in that colour.
+		out = append(out, charNode{ch: r, width: w, height: h, depth: d, srcLine: line, color: e.curColor})
 	}
 	return out
 }

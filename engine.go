@@ -92,7 +92,13 @@ type Engine struct {
 	baseFontPx int               // \normalsize size in px/pt (the 100% for \large/\small/…)
 	curColor   uint32            // current text colour (0xRRGGBB; 0 = default black)
 	colors     map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
-	mathR      mathRendererT     // lazily-built go-tex/math renderer (see math.go)
+
+	// hyperref link styling (see hyperstyle.go). When colorlinks is on the link
+	// text is painted in its colour instead of a border box being drawn.
+	hyperColorlinks bool          // colorlinks option: colour link text (else leave it black)
+	hyperURLColor   uint32        // \url/\href colour when colorlinks is on (hyperref urlcolor)
+	hyperLinkColor  uint32        // \hyperlink colour when colorlinks is on (hyperref linkcolor)
+	mathR           mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
 	inPar            bool   // a paragraph is being accumulated
@@ -424,8 +430,10 @@ func New() *Engine {
 	e.prevDepth = ignoreDepth
 	e.stepLimit = maxExpandSteps // absolute runaway-expansion ceiling (tests may lower it)
 	e.tightLimit = tightLoopSteps
-	e.pageStyle = "empty" // no page number until \pagestyle{plain}/\pagenumbering
-	e.pageNumStyle = 'a'  // arabic page numbers by default
+	e.pageStyle = "empty"       // no page number until \pagestyle{plain}/\pagenumbering
+	e.pageNumStyle = 'a'        // arabic page numbers by default
+	e.hyperURLColor = 0xFF00FF  // hyperref default urlcolor (magenta) — used once colorlinks is on
+	e.hyperLinkColor = 0xFF0000 // hyperref default linkcolor (red)
 	for i := range e.catcode {
 		e.catcode[i] = catOther
 	}
