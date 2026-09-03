@@ -483,17 +483,21 @@ func (e *Engine) scanGraphicsOpts() (w, h int, scale float64) {
 		toks = append(toks, u)
 	}
 scan:
-	// The correct token evaluation is scoped to TWO-COLUMN mode. There, figures set to
-	// a fraction of \columnwidth/\textwidth are the norm and their reserved height is
+	// The correct token evaluation is the default in TWO-COLUMN mode. There, figures set
+	// to a fraction of \columnwidth/\textwidth are the norm and their reserved height is
 	// the binding constraint on pagination (a figure-heavy reprint under-paginates
-	// badly when they collapse — 2601.22272: 51pp vs 62). In one-column mode the
-	// single-column class emulations (revtex preprint, IEEEtran, acmart, amsart) were
-	// tuned against these figures collapsing to ~zero, and evaluating them correctly
-	// there shifts every such baseline at once — a broad re-tuning that is out of this
-	// change's scope. So one-column mode keeps the legacy raw-text read (control
-	// sequences dropped), byte-for-byte, until that re-tuning lands.
+	// badly when they collapse — 2601.22272: 51pp vs 62).
+	//
+	// In ONE-COLUMN mode it is additionally applied under the GOTEX_FLOATS faithful
+	// figure mode: a reader who opted into real float placement (and, with it, real
+	// figure rasters) needs figures to reserve their true \linewidth-relative height
+	// rather than collapse. With the flag OFF, one-column keeps the legacy raw-text read
+	// (control sequences dropped) byte-for-byte — evaluating it correctly there shifts
+	// every single-column class-emulation baseline (revtex preprint, IEEEtran, acmart,
+	// amsart) at once, which were tuned against the collapse — so that broad re-tuning
+	// stays behind the opt-in flag instead of moving the default.
 	evalDimen := func(val []tok) int {
-		if e.twoColumn {
+		if e.twoColumn || floatsEnabled() {
 			return e.evalDimenTokens(val)
 		}
 		return parseDimenStr(tokensToText(val))
