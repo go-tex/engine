@@ -247,14 +247,22 @@ func (d *pdfDraw) frame(fr frameNode, x, baseline float64) {
 	d.box(fr.inner, x+spToPt(fr.rule+fr.sep), baseline)
 }
 
-// link paints a hyperlink's inner box. go-pdfkit currently exposes no
-// link-annotation API — neither Page nor Document has an AddLink/Annotation/URI
-// method (verified with `go doc github.com/go-pdfkit/pdfkit`) — so the PDF renders
-// the content without a clickable rectangle; the SVG driver carries the live link
-// (see paintLinkSP). When pdfkit gains a URI link annotation, add a /Link annot
-// over Rect (x, baseline-height) .. (x+width, baseline+depth) here.
+// link paints a hyperlink's inner box and adds a clickable /Link annotation over
+// it, so \href/\url is navigable in the PDF just as the SVG driver's <a href> makes
+// it in SVG (see paintLinkSP). The annotation rectangle is the inner box —
+// engine-top-down (x, baseline-height) .. (x+width, baseline+depth) — flipped into
+// PDF's y-up default user space, which is where an annotation /Rect lives.
 func (d *pdfDraw) link(ln linkNode, x, baseline float64) {
 	d.box(ln.inner, x, baseline)
+	if ln.url == "" {
+		return
+	}
+	d.p.AddLink(pdfkit.Rect{
+		X:      x,
+		Y:      d.y(baseline + spToPt(ln.inner.depth)),
+		Width:  spToPt(ln.inner.width),
+		Height: spToPt(ln.inner.height + ln.inner.depth),
+	}, ln.url)
 }
 
 // deco draws a text decoration: the inner box on the baseline, then a rule of

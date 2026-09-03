@@ -5,8 +5,8 @@ go 1.26.4
 require github.com/go-opentype/opentype v0.12.0
 
 require (
-	github.com/go-gfx/gfx v0.18.0
-	github.com/go-pdfkit/pdfkit v0.6.0
+	github.com/go-gfx/gfx v0.19.0
+	github.com/go-pdfkit/pdfkit v0.7.0
 	github.com/go-tex/math v0.25.0
 	github.com/go-tex/pdfrender v0.1.0
 	golang.org/x/text v0.41.0
@@ -16,38 +16,38 @@ require (
 	github.com/ajroetker/go-highway v0.0.4 // indirect
 	github.com/ajroetker/go-jpeg2000 v0.0.2 // indirect
 	github.com/ajroetker/pdf/render v0.0.1-antfly003 // indirect
-	github.com/andybalholm/brotli v1.2.2 // indirect
+	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
-	github.com/go-crdt/collab v0.25.0 // indirect
-	github.com/go-crdt/crdt v0.31.0 // indirect
+	github.com/go-crdt/collab v0.37.0 // indirect
+	github.com/go-crdt/crdt v0.39.0 // indirect
 	github.com/go-icons/iconoir v0.2.0 // indirect
-	github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38 // indirect
+	github.com/go-images/images v0.0.0-20260831115433-23d959d868e3 // indirect
 	github.com/go-opentype/shape v0.5.0 // indirect
-	github.com/go-richdoc/richdoc v0.2.0 // indirect
-	github.com/go-widgets/mvvm v0.5.0 // indirect
+	github.com/go-richdoc/richdoc v0.3.0 // indirect
+	github.com/go-widgets/mvvm v0.9.0 // indirect
 	github.com/hhrutter/lzw v1.0.0 // indirect
 	github.com/hhrutter/pkcs7 v0.2.0 // indirect
 	github.com/hhrutter/tiff v1.0.2 // indirect
 	github.com/pdfcpu/pdfcpu v0.11.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tannevaled/gobig2 v0.1.0 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
-	github.com/go-opentype/fonts v0.8.0 // indirect
+	github.com/go-opentype/fonts v0.9.0 // indirect
 	github.com/go-tex/texmf v0.5.0
 	github.com/go-typeset/bidi v0.3.0 // indirect
 	github.com/go-typeset/hyphenation v1.0.0
 	github.com/go-typeset/linebreak v1.1.0
-	github.com/go-widgets/painter v0.11.0 // indirect
-	github.com/go-widgets/toolkit v0.288.0 // indirect
+	github.com/go-widgets/painter v0.12.0 // indirect
+	github.com/go-widgets/toolkit v0.301.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	golang.org/x/image v0.45.0 // indirect
