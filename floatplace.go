@@ -64,6 +64,7 @@ const FloatPlacementSubstrate = `
 type floatNode struct {
 	box   *boxNode
 	place string // placement bits (h/t/b/p), lower-cased; "" means default "tbp"
+	kind  string // caption type: "figure" or "table" — floats of one type keep their order
 }
 
 func (*floatNode) isNode() {}
@@ -98,9 +99,20 @@ func (e *Engine) doFloatBegin() {
 	}
 	e.define("@captype", &meaning{kind: mMacro, body: stringToToks(kind)}, true)
 	body := e.collectEnvBody(env)
+	// The body is a BOX being built, so what it assigns must stay inside it: \@xfloat
+	// sets the float in \vbox\bgroup…\egroup (latex.ltx:12950), and the engine's own
+	// inline \@float opens a \begingroup that \end@float closes. Capturing the body
+	// and running it with no group of its own let an assignment escape into the
+	// document. One real paper shows the cost: a figure holding
+	// \put(-0.33\textwidth,0.5\textwidth){…} — \put undefined, so \textwidth reads as
+	// the start of an assignment and takes the missing number as zero — left \hsize
+	// at 0pt for the remaining 230 pages, which then set ONE WORD PER LINE and ran to
+	// 1439 pages against a reference of 333.
+	e.beginGroup()
 	box := e.typesetGroupToVbox(append([]tok{csTok("centering")}, body...))
+	e.endGroup()
 	box.width = e.hsize
-	e.contribute(&floatNode{box: box, place: place})
+	e.contribute(&floatNode{box: box, place: place, kind: kind})
 }
 
 // isStandardFloatEnv reports whether name is one of the standard float environments,
@@ -129,6 +141,18 @@ func (e *Engine) currentEnvName() string {
 		}
 	}
 	return "figure"
+}
+
+// kindDeferred reports whether a float of this caption type is still waiting, which
+// forbids a later one of the same type from being placed first (\@bitor\@currtype
+// \@deferlist in \@addtocurcol): figure 3 must never appear before figure 2.
+func kindDeferred(deferred []anchoredFloat, kind string) bool {
+	for _, af := range deferred {
+		if af.f.kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // mvlHasFloats reports whether the main vertical list carries any captured floatNode.
@@ -376,6 +400,46 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 		e.vsize = pageVsize
 		end := e.findPageBreak(text, start)
 		e.vsize = savedVsize
+
+		// A float written INSIDE this page is a candidate for this page's own top.
+		// LaTeX contributes a float at its anchor — \@xfloat fires the output routine
+		// there with \@floatpenalty — and \@addtocurcol (latex.ltx:15636) then tests it
+		// against the room LEFT in the column: it goes to the top of the page being
+		// built whenever \@colroom exceeds the height already set plus \textfraction
+		// plus the float. That is why a figure declared halfway down a page comes out
+		// at the top of THAT page. Taking only the floats anchored before the page
+		// began pushed every one of them a page later, and at the end of the document
+		// onto float pages of their own.
+		for fi < len(floats) && floats[fi].at < end {
+			af := floats[fi]
+			fi++
+			// \@bitor\@currtype\@deferlist: a float may not overtake an earlier one
+			// of its own type that is still waiting.
+			if len(top) < 2 && af.c.allowTop && !kindDeferred(deferred, af.f.kind) {
+				need := fh(af)
+				if len(top) > 0 {
+					need += e.floatSep()
+				}
+				want := topH + need
+				wantReserve := want + botH + e.textFloatSep()
+				if botH > 0 {
+					wantReserve += e.textFloatSep()
+				}
+				if want <= topCap && wantReserve <= vsize-textMin {
+					top = append(top, af)
+					topH, reserve = want, wantReserve
+					pageVsize = vsize - reserve
+					if pageVsize < textMin {
+						pageVsize = textMin
+					}
+					e.vsize = pageVsize
+					end = e.findPageBreak(text, start) // less room now: the text stops earlier
+					e.vsize = savedVsize
+					continue
+				}
+			}
+			deferred = append(deferred, af)
+		}
 		pageText := trimTrailingGlue(text[start:end])
 
 		// Emit only a non-empty page (as paginateSingleList does): an empty text break with
