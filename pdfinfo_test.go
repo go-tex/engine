@@ -39,6 +39,17 @@ func TestPDFInfoTitleAndAuthor(t *testing.T) {
 	}
 }
 
+// \hypersetup{pdfsubject=…,pdfkeywords=…} reaches the info dictionary too.
+func TestPDFInfoSubjectAndKeywords(t *testing.T) {
+	out := renderPDFDoc(t, `\hypersetup{pdfsubject={On widget theory},pdfkeywords={widgets, gadgets}}Body.`)
+	if !strings.Contains(out, `/Subject (On widget theory)`) {
+		t.Errorf("pdfsubject did not reach /Info /Subject")
+	}
+	if !strings.Contains(out, `/Keywords (widgets, gadgets)`) {
+		t.Errorf("pdfkeywords did not reach /Info /Keywords")
+	}
+}
+
 // An accented pdftitle is written UTF-16BE, not as raw UTF-8 (the payoff of the
 // go-pdfkit v0.10.0 text-string work).
 func TestPDFInfoAccentedTitleIsUTF16(t *testing.T) {

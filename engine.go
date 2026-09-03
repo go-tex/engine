@@ -100,6 +100,8 @@ type Engine struct {
 	hyperLinkColor  uint32        // \hyperlink colour when colorlinks is on (hyperref linkcolor)
 	pdfTitle        string        // \hypersetup{pdftitle=…} → PDF /Info /Title
 	pdfAuthor       string        // \hypersetup{pdfauthor=…} → PDF /Info /Author
+	pdfSubject      string        // \hypersetup{pdfsubject=…} → PDF /Info /Subject
+	pdfKeywords     string        // \hypersetup{pdfkeywords=…} → PDF /Info /Keywords
 	mathR           mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
