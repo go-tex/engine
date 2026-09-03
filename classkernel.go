@@ -601,5 +601,38 @@ const LaTeX2eClassKernel = `
 \def\textpm{±}
 \def\textmu{µ}
 \def\textbardbl{‖}
+% ── picture mode (ltpictur) ─────────────────────────────────────────────────
+% \put is here for what its ABSENCE costs, not for what it draws. Undefined, it
+% leaves its own coordinates in the input, and "(-0.33\textwidth," then reads as
+% the start of an ASSIGNMENT to \textwidth whose missing number TeX takes as zero:
+% one figure in a real paper zeroed \hsize for its remaining 230 pages, which then
+% set one word per line. These are ltpictur's own definitions; the drawing
+% commands (\line, \circle, \oval…) are not here, the engine having no picture
+% layer to draw them with.
+%
+% \@defaultunits is the trick that lets a coordinate be either a bare factor (in
+% \unitlength) or a real dimension: the assignment stops as soon as it has a
+% complete dimen, and \remove@to@nnil swallows whatever the scan left behind — so
+% "0.5" takes \unitlength as its unit and "-0.33\textwidth" keeps its own.
+\newdimen\unitlength \unitlength=1pt
+\newdimen\@xdim
+\newdimen\@ydim
+\def\@nnil{\@nil}
+\def\remove@to@nnil#1\@nnil{}
+\def\@defaultunits{\afterassignment\remove@to@nnil}
+\def\@defaultunitsset#1#2#3{\@defaultunits#1\dimexpr#2#3\relax\relax\@nnil}
+\long\def\put(#1,#2)#3{%
+  \@defaultunitsset\@tempdimc{#2}\unitlength
+  \raise\@tempdimc\hb@xt@\z@{%
+    \@defaultunitsset\@tempdimc{#1}\unitlength
+    \kern\@tempdimc #3\hss}%
+  \ignorespaces}
+\def\multiput(#1,#2)#3{%
+  \@defaultunitsset\@xdim{#1}\unitlength
+  \@defaultunitsset\@ydim{#2}\unitlength
+  \@multiput(}
+\long\def\@multiput(#1,#2)#3#4{%
+  \raise\@ydim\hb@xt@\z@{\kern\@xdim #4\hss}%
+  \ignorespaces}
 \catcode64=11
 `
