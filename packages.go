@@ -546,6 +546,12 @@ func (e *Engine) doUsepackageLoad() {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue
 		}
+		if name == "hyperref" && len(opts) > 0 {
+			// hyperref routes its package options through the same keyval as
+			// \hypersetup, so \usepackage[colorlinks,urlcolor=blue]{hyperref} styles
+			// links exactly as the \hypersetup form does (see hyperstyle.go).
+			e.applyHypersetup(strings.Join(opts, ","))
+		}
 		if emulateOnly(name) {
 			continue
 		}

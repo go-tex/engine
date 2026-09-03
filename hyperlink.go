@@ -20,15 +20,16 @@ package engine
 // hbox — the same "box wrapper" shape as frameNode (see boxframe.go). The SVG
 // driver emits an <a href="URL"> around the inner box, so the engine's SVG is a
 // genuinely clickable document in a browser (the differentiator gotex targets).
-// go-pdfkit exposes no link-annotation API yet, so the PDF driver paints the inner
-// box without a clickable rectangle (documented in pdfdriver.go's link method).
+// The PDF driver lays a /Link–/URI annotation over the same box (go-pdfkit's
+// Page.AddLink), so the PDF is clickable too. When hyperref's colorlinks option is
+// on the link text is additionally painted in its colour (see hyperstyle.go).
 
 import "strings"
 
 // linkNode wraps a packed inner hbox in a hyperlink to url. It carries the same
 // reference-point dimensions as its inner box, so it packs, breaks across lines and
 // paints like any other box item; the drivers additionally wrap the inner content
-// in a clickable target (an SVG <a>; PDF has no link annotation in go-pdfkit yet).
+// in a clickable target (an SVG <a>; a PDF /Link–/URI annotation).
 type linkNode struct {
 	url   string
 	inner *boxNode
@@ -47,7 +48,9 @@ func (ln linkNode) depth() int  { return ln.inner.depth }
 // verbatim (tt) font and wraps the result in a hyperlink pointing to itself.
 func (e *Engine) doURL() {
 	url, _ := e.readRawBracedArg()
+	save := e.beginLinkColor(e.hyperURLColor)
 	inner := e.urlBox(url)
+	e.curColor = save
 	if inner == nil {
 		return
 	}
@@ -87,7 +90,9 @@ func (e *Engine) doNolinkurl() {
 // (macros expand) and the whole is wrapped in a hyperlink pointing to URL.
 func (e *Engine) doHref() {
 	url, _ := e.readRawBracedArg()
+	save := e.beginLinkColor(e.hyperURLColor)
 	list, _ := e.grabHboxList()
+	e.curColor = save
 	e.placeInline(linkNode{url: url, inner: hpackSP(list, packNatural, 0)})
 }
 

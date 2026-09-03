@@ -630,7 +630,8 @@ const MiniLaTeXKernel = `
 \def\MFUhyphentrue{}
 \def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
 \def\@gobbleoptonly[#1]{}
-\def\hypersetup#1{}
+% \hypersetup is a real primitive (see hyperstyle.go) that reads hyperref's
+% link-styling options (colorlinks, urlcolor, linkcolor); it is not stubbed here.
 % xcolor's colour-model machinery, as a package reads it. This engine keeps
 % colours in RGB rather than xcolor's model tables, but a package that draws asks
 % which model is in force so it can pick the right device (pgf does this to choose
