@@ -53,6 +53,18 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		d.box(page, margin, vmargin+spToPt(page.height))
 		d.drawSpecials()
 	}
+	// Section headings become the PDF's outline (the viewer's bookmark sidebar):
+	// every \@tocentry of kind "toc" (a sectioning entry, not a caption) is an item
+	// at its level, jumping to the page its anchor fell on. AddOutlineItem ignores an
+	// out-of-range page.
+	for _, te := range e.tocEntries {
+		if te.kind != "toc" {
+			continue
+		}
+		if pg := e.pageOfIndex(te.marker); pg >= 1 {
+			doc.AddOutlineItem(te.title, te.level, pg-1)
+		}
+	}
 	return doc.Write(w)
 }
 
