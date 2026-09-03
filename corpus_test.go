@@ -52,6 +52,14 @@ func TestCorpus(t *testing.T) {
 			if !containsAny(all, "<path", "<rect", "<image", "<a ", "<g transform") {
 				t.Errorf("SVG has no drawn content (glyphs/rules/images/links)")
 			}
+			// …and it draws at least as much as it did: see glyphFloor.
+			name := strings.TrimSuffix(filepath.Base(f), ".tex")
+			floor, ok := glyphFloor[name]
+			if !ok {
+				t.Errorf("no glyph floor recorded for %s: add one (see glyphFloor)", name)
+			} else if got := strings.Count(all, "<path"); got < floor {
+				t.Errorf("drew %d glyphs, floor is %d: content was lost", got, floor)
+			}
 
 			// PDF pipeline: must produce a valid, non-trivial PDF without crashing.
 			var buf bytes.Buffer
@@ -70,6 +78,60 @@ func TestCorpus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// glyphFloor is the census guard: the fewest glyphs each corpus document may draw
+// before the build fails. TestCorpus already asks whether a document drew ANYTHING;
+// that passes a document which silently lost half its content, which is exactly the
+// failure this engine keeps having — a body scanner that swallows to the wrong \end,
+// a group that never closes, an environment skipped whole. The numbers are today's
+// counts less a tenth: ordinary layout work (a line breaking differently, a float
+// moving) never moves a document's glyph count by that much, while a swallowed
+// environment or a lost \input moves it far more.
+//
+// A floor is a RATCHET, not a target. When a change legitimately draws fewer glyphs
+// (a stub replaced by real output that sets less, say), raise or lower the entry
+// deliberately and say why in the commit — do not silently retune the table.
+var glyphFloor = map[string]int{
+	"01-tabularx":                   148,
+	"02-listes-enumitem":            105,
+	"03-interligne-setspace":        331,
+	"04-multi-colonnes":             268,
+	"05-image-svg":                  71,
+	"06-en-tetes-fancyhdr":          177,
+	"07-matrices-aligne":            106,
+	"08-unites-siunitx":             135,
+	"09-equations-tag-sous-numeros": 99,
+	"10-boites-latex":               124,
+	"11-couleur-avancee":            132,
+	"12-code-lstlisting":            107,
+	"13-references-typees":          94,
+	"14-liens-internes":             117,
+	"15-transformations":            110,
+	"16-booktabs":                   45,
+	"17-sectionnement":              161,
+	"18-multline-eqnarray":          167,
+	"19-compteurs-longueurs":        59,
+	"20-phantom-smash":              115,
+	"21-align-gather":               128,
+	"22-theoremes":                  174,
+	"23-decorations":                95,
+	"24-sommaire":                   301,
+	"25-equations":                  100,
+	"26-couleur":                    104,
+	"27-encadres-parbox":            159,
+	"28-liens":                      74,
+	"29-listes":                     76,
+	"30-tailles-notes":              76,
+	"31-image":                      40,
+	"32-typographie":                95,
+	"33-note-code":                  104,
+	"34-article-latex":              91,
+	"35-tableau":                    40,
+	"36-colonnes-p":                 110,
+	"37-references":                 153,
+	"38-mathematiques":              78,
+	"39-francais":                   69,
 }
 
 func containsAny(s string, subs ...string) bool {
