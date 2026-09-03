@@ -33,7 +33,12 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		return fmt.Errorf("texengine: PDF font load: %w", err)
 	}
 	size := float64(ef.sizePt())
-	doc := pdfkit.New(pdfkit.Options{})
+	// \hypersetup{pdftitle=…,pdfauthor=…} populates the PDF information dictionary,
+	// so a viewer's title bar and document properties — and reference managers —
+	// read the paper's real title and author rather than nothing (see hyperstyle.go).
+	// go-pdfkit encodes a non-ASCII value as a UTF-16BE text string, so an accented
+	// title is correct.
+	doc := pdfkit.New(pdfkit.Options{Title: e.pdfTitle, Author: e.pdfAuthor})
 	vmargin := e.renderVMargin(margin)
 	paperW, paperH, _ := e.paperSizePt()
 	for _, page := range e.Pages() {
