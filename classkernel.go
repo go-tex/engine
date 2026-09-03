@@ -524,6 +524,20 @@ const LaTeX2eClassKernel = `
 \def\setkeys#1#2{}
 \def\lstset#1{}
 \def\lstdefinestyle#1#2{}
+\def\DeclareGraphicsExtensions#1{}
+\def\sisetup#1{}
+\def\setuptodonotes#1{}
+\def\selectlanguage#1{}
+% \tikzstyle{name}=[key=val,…] is the deprecated TikZ style form; the engine draws
+% no TikZ, so gobble the name and the =[…] value (delimited so the whole call goes).
+\def\tikzstyle#1=[#2]{}
+% \addbibresource[opts]{file.bib} registers a biblatex database; nothing here reads
+% it, so gobble the file (and any optional argument).
+\def\addbibresource{\@ifnextchar[\@gobbleaddbibres\@gobble}
+\def\@gobbleaddbibres[#1]#2{}
+% \sc is the deprecated small-caps font declaration; with no small-caps face, keep
+% it a no-op like \bf/\it so the following text survives at the normal shape.
+\def\sc{}
 % \enlargethispage[*]{<len>} adjusts the current page height; the page builder has
 % no such knob, so gobble the length (star form too).
 \def\enlargethispage{\@ifstar\@gobble\@gobble}
