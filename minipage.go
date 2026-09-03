@@ -35,6 +35,51 @@ func (e *Engine) doMinipage() {
 	e.place(alignParbox(vbox, pos))
 }
 
+// honourColClose takes the \end{minipage} off the front of \beamer@colclose and
+// leaves the REST of it in place. The closer beamer builds is
+//
+//	\def\beamer@colclose{\end{minipage}\hfill\end{actionenv}\ignorespaces}
+//
+// (beamerbaseframecomponents.sty:283), and a body scanner that meets the next
+// \column has honoured only its FIRST half — the \end{minipage}. Emptying the whole
+// macro, as this did, dropped the \end{actionenv} that pairs with the
+// \begin{actionenv} the column opened: two columns then left one environment group
+// open, and the \end{frame} that followed closed THAT instead of the frame, so the
+// next frame never started its own page. A talk with two columns lost a page break
+// and could emit its pages out of order (issue #205).
+func (e *Engine) honourColClose() {
+	m := e.eq["beamer@colclose"]
+	rest := []tok(nil)
+	if m != nil && m.kind == mMacro {
+		rest = colCloseAfterEndMinipage(m.body)
+	}
+	e.define("beamer@colclose", &meaning{kind: mMacro, body: rest}, true)
+}
+
+// colCloseAfterEndMinipage returns what follows a leading \end{minipage} in a
+// \beamer@colclose body, or nil when the body does not begin with one (nothing was
+// honoured, so nothing is dropped).
+func colCloseAfterEndMinipage(body []tok) []tok {
+	if len(body) == 0 || !body[0].cs_ || body[0].cs != "end" {
+		return nil
+	}
+	i, name := 1, ""
+	if i < len(body) && !body[i].cs_ && body[i].cat == catBegin {
+		i++
+		for i < len(body) && !body[i].cs_ && body[i].cat != catEnd {
+			name += string(body[i].ch)
+			i++
+		}
+		if i < len(body) {
+			i++ // the closing brace
+		}
+	}
+	if name != "minipage" {
+		return nil
+	}
+	return append([]tok(nil), body[i:]...)
+}
+
 // collectEnvBody reads raw tokens (no expansion) up to the matching \end{name} and
 // returns the body tokens. It tracks nesting: a \begin{name} deeper in the body
 // increments the depth and a \end{name} decrements it, so only the \end{name} at
@@ -118,7 +163,7 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			// \beamer@colclose is emptied because its \end{minipage} has just been
 			// honoured, which is what beamer itself does after running it (:269).
 			e.back(t)
-			e.define("beamer@colclose", &meaning{kind: mMacro}, true)
+			e.honourColClose()
 			e.endEnvGroup()
 			return body
 		case t.cs_ && t.cs != "end" && t.cs != "begin" && e.expandsToEnd(t):
