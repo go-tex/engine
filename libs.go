@@ -24,6 +24,8 @@ import (
 type (
 	Item = linebreak.Item
 	Line = linebreak.Line
+	// LineBreakParams carries TeX's demerit parameters to the optimiser.
+	LineBreakParams = linebreak.Params
 )
 
 const (
@@ -32,11 +34,12 @@ const (
 )
 
 var (
-	Box        = linebreak.Box
-	Glue       = linebreak.Glue
-	Glyph      = linebreak.Glyph
-	Penalty    = linebreak.Penalty
-	KnuthPlass = linebreak.KnuthPlass
+	Box            = linebreak.Box
+	Glue           = linebreak.Glue
+	Glyph          = linebreak.Glyph
+	Penalty        = linebreak.Penalty
+	KnuthPlass     = linebreak.KnuthPlass
+	KnuthPlassWith = linebreak.KnuthPlassWith
 )
 
 // hyphenator is the engine's name for the upstream Hyphenator.

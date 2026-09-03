@@ -45,7 +45,7 @@ require (
 	github.com/go-tex/texmf v0.5.0
 	github.com/go-typeset/bidi v0.3.0 // indirect
 	github.com/go-typeset/hyphenation v1.0.0
-	github.com/go-typeset/linebreak v1.0.0
+	github.com/go-typeset/linebreak v1.1.0
 	github.com/go-widgets/painter v0.11.0 // indirect
 	github.com/go-widgets/toolkit v0.288.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
