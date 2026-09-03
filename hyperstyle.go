@@ -28,6 +28,8 @@ import "strings"
 //   - linkcolor: colour of internal links (\hyperlink).
 //   - urlcolor:  colour of \url and \href.
 //   - allcolors: sets both link and url colours at once.
+//   - pdftitle / pdfauthor: the PDF /Info document title and author (see
+//     pdfdriver.go); a non-ASCII value reaches the PDF as UTF-16BE.
 func (e *Engine) applyHypersetup(opts string) {
 	for _, seg := range splitKVSegments(opts, ',') {
 		key, val, has := cutKeyVal(seg)
@@ -41,6 +43,10 @@ func (e *Engine) applyHypersetup(opts string) {
 		case "allcolors", "allcolours":
 			c := e.resolveColor(val)
 			e.hyperLinkColor, e.hyperURLColor = c, c
+		case "pdftitle":
+			e.pdfTitle = val
+		case "pdfauthor":
+			e.pdfAuthor = val
 		}
 	}
 }
