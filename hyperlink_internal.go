@@ -33,6 +33,8 @@ package engine
 import (
 	"fmt"
 	"strings"
+
+	"github.com/go-pdfkit/pdfkit"
 )
 
 // internalLinkNode wraps a packed inner hbox as an in-document anchor: when target
@@ -85,12 +87,24 @@ func paintInternalLinkSP(sb *strings.Builder, n internalLinkNode, x, baseline fl
 	sb.WriteString(`</a>`)
 }
 
-// internalLink paints an in-document anchor's inner box. go-pdfkit exposes no
-// named-destination or link-annotation API (see the file comment), so the PDF
-// renders the content without a reachable anchor or clickable jump; the SVG driver
-// carries the live navigation. When pdfkit gains destinations, register a /Dest for
-// a target and a /Link GoTo annotation over Rect (x, baseline-height) ..
-// (x+width, baseline+depth) for a link here.
+// internalLink paints an in-document anchor's inner box and, in the PDF, makes it
+// navigable: a \hypertarget registers a named /Dest (anchored at the box's top-left)
+// and a \hyperlink adds a /GoTo /Link annotation over the box that jumps to that name
+// — the counterpart of the SVG driver's <g id> / <a href="#name"> (see
+// paintInternalLinkSP). Coordinates flip from engine top-down into PDF y-up.
 func (d *pdfDraw) internalLink(n internalLinkNode, x, baseline float64) {
 	d.box(n.inner, x, baseline)
+	if n.name == "" {
+		return
+	}
+	if n.target {
+		d.p.AddNamedDest(n.name, x, d.y(baseline-spToPt(n.inner.height)))
+		return
+	}
+	d.p.AddNamedLink(pdfkit.Rect{
+		X:      x,
+		Y:      d.y(baseline + spToPt(n.inner.depth)),
+		Width:  spToPt(n.inner.width),
+		Height: spToPt(n.inner.height + n.inner.depth),
+	}, n.name)
 }

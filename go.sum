@@ -46,6 +46,8 @@ github.com/go-pdfkit/pdfkit v0.6.0 h1:88siogDfC3jLmObL5aR58PwUpJvz+pIyTiqJFkOo38
 github.com/go-pdfkit/pdfkit v0.6.0/go.mod h1:QjSRgTiJgf5kYuHho5zhqkcYg2p1/PpfYyUNqpeREBs=
 github.com/go-pdfkit/pdfkit v0.7.0 h1:BveVwdrx2bcxqnelEE8EopAdRGInBgoVLMraeL6hKxw=
 github.com/go-pdfkit/pdfkit v0.7.0/go.mod h1:NSn++aXoOrlB4AxwzY8mMzjG/v9fBGFGyQ/eZ0wRD5k=
+github.com/go-pdfkit/pdfkit v0.8.0 h1:ut74g1oxe6ZVKdlF0DqPN33GSbQJebcZHfJoPKvAm7I=
+github.com/go-pdfkit/pdfkit v0.8.0/go.mod h1:NSn++aXoOrlB4AxwzY8mMzjG/v9fBGFGyQ/eZ0wRD5k=
 github.com/go-richdoc/richdoc v0.2.0 h1:z9cLox9MoInZL6fIlweMzgDT/VqgnB2ZucSIEaRFglY=
 github.com/go-richdoc/richdoc v0.2.0/go.mod h1:aCX8ulqg5CoKqSWgWeEWul1Oj0d2VxQeaQNI0+jsm7c=
 github.com/go-richdoc/richdoc v0.3.0 h1:BPUHZ0NUrmDVffs2jJcj6ur8mqlccZpZVpCOsuQT9gQ=
