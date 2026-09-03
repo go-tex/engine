@@ -78,6 +78,17 @@ func (e *Engine) readBraceGroupString() string {
 // makes a single-engine run (no two-pass) still render whatever precedes the
 // command, which is what direct callers and tests rely on.
 func (e *Engine) tocList(kind string) []tocEntry {
+	// A real class asks for its list by FILE name — \@starttoc{lof} for the list of
+	// figures, {lot} for tables (latex.ltx: \listoffigures calls \@starttoc{lof}) —
+	// while an entry records the caption type \@captype gave it. Without this
+	// mapping \listoffigures and \listoftables came out as a heading with nothing
+	// under it, whatever the document contained.
+	switch kind {
+	case "lof":
+		kind = "figure"
+	case "lot":
+		kind = "table"
+	}
 	src := e.tocSource
 	if src == nil {
 		src = e.tocEntries

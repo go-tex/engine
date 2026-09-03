@@ -180,10 +180,21 @@ func TestListOfFiguresAndTables(t *testing.T) {
 	collectChars(e.mvl, &b)
 	// Inter-word spaces are glue (not charNodes), so compare with spaces removed.
 	text := strings.ReplaceAll(b.String(), " ", "")
-	for _, want := range []string{"ListofFigures", "ListofTables", "Apicture", "Somedata"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("output missing %q: %q", want, text)
-		}
+	// Each title must appear UNDER its own heading, not merely somewhere on the page:
+	// the caption itself carries the same words, so a bare Contains passed even when
+	// both lists came out as empty headings (which is what they did — a class asks for
+	// its list by file name, \@starttoc{lof}, and nothing matched the "figure" kind
+	// the entry was recorded under).
+	lof := strings.Index(text, "ListofFigures")
+	lot := strings.Index(text, "ListofTables")
+	if lof < 0 || lot < 0 || lot < lof {
+		t.Fatalf("headings missing or out of order: %q", text)
+	}
+	if entry := text[lof:lot]; !strings.Contains(entry, "1Apicture") {
+		t.Errorf("the list of figures carries no entry: %q", entry)
+	}
+	if entry := text[lot:]; !strings.Contains(entry, "1Somedata") {
+		t.Errorf("the list of tables carries no entry: %q", entry)
 	}
 }
 
