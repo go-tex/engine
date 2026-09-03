@@ -55,28 +55,9 @@ func splitAtForcedBreaks(list []node) [][]node {
 // layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
 // contributes the lines of one paragraph fragment to the main vertical list.
 func (e *Engine) layoutSegment(hlist []node) {
-	e.applyTwoColumnMeasure()      // halve e.hsize to the column width on the first paragraph (two-column mode)
-	list := e.hyphenateList(hlist) // insert discretionary hyphens (if patterns loaded)
-
-	// \parfillskip (0pt plus 1fil) fills the last line; a forced break ends it.
-	list = append(list,
-		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}},
-		penaltyNode{penalty: -int(InfPenalty)})
-
-	items := toItems(list)
+	e.applyTwoColumnMeasure() // halve e.hsize to the column width on the first paragraph (two-column mode)
 	lineWidth := spToPt(e.hsize)
-	lines, ok := KnuthPlass(items, lineWidth, 200, 10)
-	// The first pass can "succeed" with a single over/underfull line via the forced
-	// final break. When it leaves a bad line, run the emergency pass at a large
-	// tolerance so discretionary (hyphen) and no-stretch breaks become feasible —
-	// TeX's second pass. Adopt it only if it removes the bad line.
-	if !ok || hasBadLine(lines) {
-		if l2, ok2 := KnuthPlass(items, lineWidth, maxBadRatio, 10); ok2 {
-			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
-				lines, ok = l2, true
-			}
-		}
-	}
+	list, lines, ok := e.breakSegment(hlist, lineWidth)
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
 	}
@@ -109,6 +90,58 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 }
 
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio
+// breakSegment runs TeX's line-breaking passes over one paragraph fragment and
+// returns the node list its line indices refer to (tex.web §16986-16999). The
+// FIRST pass tries the paragraph with no hyphenation at all, at \pretolerance:
+// discretionaries do not exist yet, so an unhyphenated solution wins whenever one
+// is feasible — which is why real TeX hyphenates far less than an optimiser that
+// always has the hyphens in hand. Only when that pass finds nothing is the second
+// pass run over the hyphenated list at \tolerance, and then an emergency pass at
+// a large tolerance if a bad line survives.
+func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, bool) {
+	p := LineBreakParams{
+		Tolerance:   float64(e.namedInt("tolerance")),
+		LinePenalty: float64(e.namedInt("linepenalty")),
+		AdjDemerits: float64(e.namedInt("adjdemerits")),
+		DoubleHyph:  float64(e.namedInt("doublehyphendemerits")),
+		FinalHyph:   float64(e.namedInt("finalhyphendemerits")),
+	}
+	if pre := e.namedInt("pretolerance"); pre >= 0 {
+		q := p
+		q.Tolerance = float64(pre)
+		plain := withParFill(hlist)
+		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
+			return plain, lines, true
+		}
+	}
+	list := withParFill(e.hyphenateList(hlist)) // insert discretionary hyphens (if patterns loaded)
+	items := toItems(list)
+	lines, ok := KnuthPlassWith(items, lineWidth, p)
+	// The second pass can "succeed" with a single over/underfull line via the forced
+	// final break. When it leaves a bad line, run the emergency pass at a large
+	// tolerance so discretionary (hyphen) and no-stretch breaks become feasible.
+	// Adopt it only if it removes the bad line.
+	if !ok || hasBadLine(lines) {
+		q := p
+		q.Tolerance = maxBadRatio
+		if l2, ok2 := KnuthPlassWith(items, lineWidth, q); ok2 {
+			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
+				lines, ok = l2, true
+			}
+		}
+	}
+	return list, lines, ok
+}
+
+// withParFill closes a horizontal list the way TeX ends every paragraph: with
+// \parfillskip (0pt plus 1fil), which lets the last line stop short, and a forced
+// break. It copies, so the caller's list is left alone.
+func withParFill(list []node) []node {
+	return append(append([]node{}, list...),
+		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}},
+		penaltyNode{penalty: -int(InfPenalty)})
+}
+
 // well outside the normal [-1, small] range — the capped/infinite bad values).
 func hasBadLine(lines []Line) bool {
 	for _, ln := range lines {

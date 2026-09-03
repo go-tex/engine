@@ -40,8 +40,8 @@ github.com/go-typeset/bidi v0.3.0 h1:4fjGjejvjE2LzLNzY4si8PkVO321NcsKIiANhWT3jF4
 github.com/go-typeset/bidi v0.3.0/go.mod h1:ct3cmYT8Qt1FGJQ+2QaakrUxqaP4ZysgdQQg2ym5+Xo=
 github.com/go-typeset/hyphenation v1.0.0 h1:4N0gdMbLTmL+/B8D3nufrFicD02jN2RymwQzvZ5ri4I=
 github.com/go-typeset/hyphenation v1.0.0/go.mod h1:/D5JhpQUfbwV+3fOdOs81g18GqmBQD1WRnGnU/5xmSk=
-github.com/go-typeset/linebreak v1.0.0 h1:hp2UcyWOfGScdDpUUZbUUvt9eqI6uzv0xDMElo+b3LQ=
-github.com/go-typeset/linebreak v1.0.0/go.mod h1:R/cGNV1zxcwRDq5tyAzwQ1ubWh/hbQvw5mAeF4s2C7Q=
+github.com/go-typeset/linebreak v1.1.0 h1:i//14S2P7yViKO3utgj6LqCtQO7zomiWVY/JtDhRlfs=
+github.com/go-typeset/linebreak v1.1.0/go.mod h1:R/cGNV1zxcwRDq5tyAzwQ1ubWh/hbQvw5mAeF4s2C7Q=
 github.com/go-widgets/mvvm v0.5.0 h1:o5hh6HAxbApONcbZxmyV9q12pCAPGRd6L24aS3gaCbA=
 github.com/go-widgets/mvvm v0.5.0/go.mod h1:Phdrd434RLxXW1D6dL1PPQH1tABwYLIN2X7jQVC4TbY=
 github.com/go-widgets/painter v0.11.0 h1:xsj4zTz8B43rOZnWrx7ZsaUBMgJyvgaE/Pq2FfcG2Sw=
