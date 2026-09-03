@@ -70,7 +70,11 @@ func (e *Engine) Pages() []*boxNode {
 	// \onecolumn / \twocolumn split the document into page-aligned regions (both
 	// commands \clearpage first — verified against the reference), each paginated in
 	// its own column mode; see twocolumn.go.
-	if len(e.colRegions) > 0 {
+	// A document that only ever asked for ONE column still records a region once the
+	// column machinery is live, and the region pager knows nothing about floats — it
+	// would drop every captured one. So regions route there only when one of them
+	// actually has two columns.
+	if len(e.colRegions) > 0 && (!floatsEnabled() || !e.mvlHasFloats() || e.hasTwoColumnRegion()) {
 		return e.pagesByRegion()
 	}
 	// Under GOTEX_FLOATS, a document that captured any figure/table float paginates
