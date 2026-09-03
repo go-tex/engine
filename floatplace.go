@@ -92,7 +92,7 @@ func (e *Engine) doFloatBegin() {
 	// keeps an [h]/[ht]/[H] float roughly where written, so floating it would misplace it
 	// against the reference. Only a standard-env t/b/p float is captured.
 	env := e.currentEnvName()
-	if e.twoColumn || len(e.colRegions) > 0 || strings.ContainsAny(place, "hH") || !isStandardFloatEnv(env) {
+	if e.inTwoColumnRegion() || strings.ContainsAny(place, "hH") || !isStandardFloatEnv(env) {
 		// The [placement] was consumed above, so the inline helper just typesets the body.
 		e.push(append([]tok{csTok("gotex@inlinefloat")}, braceNameToks(kind)...))
 		return
@@ -113,6 +113,31 @@ func (e *Engine) doFloatBegin() {
 	e.endGroup()
 	box.width = e.hsize
 	e.contribute(&floatNode{box: box, place: place, kind: kind})
+}
+
+// inTwoColumnRegion reports whether the material being set right now belongs to a
+// two-column region — the single-column placer must leave those to the column pager.
+// A \onecolumn region counts as ONE column: merely having regions at all does not make
+// the page two-column, and reading it that way sent every float of an ordinary article
+// back to the inline path as soon as the column machinery was live.
+func (e *Engine) inTwoColumnRegion() bool {
+	if e.twoColumn {
+		return true
+	}
+	if n := len(e.colRegions); n > 0 {
+		return e.colRegions[n-1].cols > 1
+	}
+	return false
+}
+
+// hasTwoColumnRegion reports whether any region of the document is set in two columns.
+func (e *Engine) hasTwoColumnRegion() bool {
+	for _, r := range e.colRegions {
+		if r.cols > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // isStandardFloatEnv reports whether name is one of the standard float environments,

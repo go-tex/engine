@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -338,5 +339,36 @@ func TestTextwidthSpansBothColumns(t *testing.T) {
 	}
 	if got := read("linewidth"); got != col {
 		t.Errorf("\\linewidth = %d sp, want the column measure %d", got, col)
+	}
+}
+
+// The single-column float placer and the column machinery must not both claim the
+// page. A document that only ever asked for ONE column still records a region once
+// the column routine is live, and the region pager knows nothing about floats: sent
+// there, every captured float would be dropped from the output.
+func TestOneColumnRegionsDoNotSwallowFloats(t *testing.T) {
+	t.Setenv("GOTEX_FLOATS", "1")
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\documentclass{article}\begin{document}\onecolumn` +
+		`\begin{figure}\caption{Plot}\end{figure}Body.\par`); err != nil {
+		t.Fatal(err)
+	}
+	if !e.mvlHasFloats() {
+		t.Fatal("the figure was not captured")
+	}
+	pages := e.Pages()
+	if len(pages) == 0 {
+		t.Fatal("no pages")
+	}
+	var all strings.Builder
+	for _, p := range pages {
+		all.WriteString(mvlText(p.list))
+	}
+	if !strings.Contains(all.String(), "Figure1:Plot") {
+		t.Errorf("the float was dropped by the region pager: %q", all.String())
 	}
 }

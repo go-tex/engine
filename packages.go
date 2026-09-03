@@ -121,20 +121,20 @@ var pgfPackages = map[string]bool{"tikz": true, "pgf": true, "pgfplots": true}
 // realPGF reports whether the real pgf/TikZ sources may be loaded.
 func realPGF() bool { return os.Getenv("GOTEX_PGF") != "" }
 
-// twoColumnOptIn reports whether GOTEX_TWOCOLUMN forces the two-column output routine
-// (twocolumn.go) on for classes that are NOT yet live by default. The standard classes
-// (article/report/book [twocolumn], see standardTwoColClass) drive the routine LIVE
-// without this var — they render two columns with a full-width frontmatter and the
-// densification improves the page count (validated by rendering: 2601.20606 28→26pp vs
-// tectonic 25). Revtex reprint renders two-column with a spanning frontmatter too and
-// its figure* / table* floats now render as real full-width bands spanning both columns
-// (\@dblfloat → \gotex@dblfloat, twocolumn.go) rather than painting past the column edge.
-// It stays gated only because the PAGE COUNT overshoots — a both-columns band blocks the
-// whole page height where the old inline float blocked one column, so 2601.22272 rises to
-// 69pp against tectonic's denser-packed 62 (see the revtex branch below). This var also
-// opts in the remaining classes (acmart sigconf, IEEEtran conference, any other twocolumn
-// option) while their column engines are brought up.
-func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "" }
+// twoColumnOptIn reports whether the two-column output routine (twocolumn.go) runs for
+// classes whose \twocolumn is not LaTeX's own — revtex reprint, acmart sigconf, IEEEtran
+// conference and the rest. It is ON by default and GOTEX_TWOCOLUMN=0 turns it back off.
+// The standard classes (article/report/book [twocolumn], see standardTwoColClass) drove
+// the routine LIVE even before that.
+//
+// It was gated while the column engines were brought up, on the strength of one paper
+// whose page count overshot. Measured over the 157 arXiv papers with a tectonic
+// reference it is better on every count that matters — Σ page error 632 → 616, MEDIAN
+// error 3 → 2 pages, papers within two pages 77 → 83, exact 20 → 21, beamer untouched —
+// with 21 papers closer and 11 further. Setting a two-column paper in one column is also
+// what makes its figures twice too wide: \linewidth is a COLUMN there, and half the
+// papers that inflate under faithful figure widths (issue #146) are two-column classes.
+func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "0" }
 
 // pdfAspectOptIn reports whether an un-rasterisable PDF figure's placeholder is
 // sized to the figure's TRUE aspect ratio (read from its page box, see pdfbox.go)
