@@ -319,3 +319,49 @@ func TestNewtheoremUnsupportedWithin(t *testing.T) {
 		t.Errorf("label = %q, want \"0.1\"", got)
 	}
 }
+
+// \newtheorem*{env}{Heading} is amsthm's unnumbered form. Unhandled, the star
+// stopped readBraceName dead: nothing was defined and the star and the heading were
+// left in the stream to be TYPESET — one arXiv paper opened on a spurious page
+// carrying "*theoremTheorem *namedconjectureConjecture".
+func TestNewtheoremStarDefinesAnUnnumberedTheorem(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\newtheorem*{thm}{Theorem}\newtheorem{lem}{Lemma}` +
+		`\begin{thm}corps\end{thm}\begin{lem}autre\end{lem}\par`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	txt := mvlText(e.mvl)
+	if strings.Contains(txt, "*") {
+		t.Errorf("the star was typeset: %q", txt)
+	}
+	if !strings.Contains(txt, "Theorem") || !strings.Contains(txt, "corps") {
+		t.Errorf("the unnumbered theorem did not print its heading and body: %q", txt)
+	}
+	// Unnumbered: no "Theorem 1", while the numbered sibling still counts.
+	if strings.Contains(txt, "Theorem1") || strings.Contains(txt, "Theorem 1") {
+		t.Errorf("a \\newtheorem* environment must carry no number: %q", txt)
+	}
+	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), "Lemma1") {
+		t.Errorf("the numbered sibling lost its number: %q", txt)
+	}
+}
+
+// The starred form keeps the optional note: \begin{thm}[Smith] heads "Theorem (Smith)."
+func TestNewtheoremStarKeepsItsNote(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\newtheorem*{thm}{Theorem}\begin{thm}[Smith]corps\end{thm}\par`); err != nil {
+		t.Fatal(err)
+	}
+	if txt := mvlText(e.mvl); !strings.Contains(txt, "Smith") {
+		t.Errorf("the note was lost: %q", txt)
+	}
+}
