@@ -1899,6 +1899,11 @@ func (e *Engine) loadMore() {
 	e.prim("crcr", func(e *Engine) {}) //  "
 	e.prim("font", func(e *Engine) { e.doFont() })
 	e.prim("input", func(e *Engine) { e.doInput() })
+	e.prim("import", func(e *Engine) { e.doImport(false) })    // import.sty
+	e.prim("subimport", func(e *Engine) { e.doImport(true) })  // import.sty, path relative
+	e.prim("inputfrom", func(e *Engine) { e.doImport(false) }) // \inputfrom = \import without \clearpage here
+	e.prim("subinputfrom", func(e *Engine) { e.doImport(true) })
+	e.prim("gotexendimport", func(e *Engine) { e.importPop() })
 	e.prim("hsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveHsize, &e.hsize, e.scanDimen(), false) })
 	// \textwidth is the width of the whole text block, NOT the column measure \hsize:
 	// in two-column mode it spans both columns and the gutter, so a figure sized
