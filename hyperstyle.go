@@ -30,6 +30,8 @@ import "strings"
 //   - allcolors: sets both link and url colours at once.
 //   - pdftitle / pdfauthor / pdfsubject / pdfkeywords: the PDF /Info document
 //     metadata (see pdfdriver.go); a non-ASCII value reaches the PDF as UTF-16BE.
+//   - pdfusetitle (boolean): derive pdftitle/pdfauthor from \title/\author when they
+//     are not set explicitly (markup and accents cleaned; see pdfstring.go).
 func (e *Engine) applyHypersetup(opts string) {
 	for _, seg := range splitKVSegments(opts, ',') {
 		key, val, has := cutKeyVal(seg)
@@ -51,6 +53,8 @@ func (e *Engine) applyHypersetup(opts string) {
 			e.pdfSubject = val
 		case "pdfkeywords":
 			e.pdfKeywords = val
+		case "pdfusetitle":
+			e.pdfUseTitle = boolOpt(val, has)
 		}
 	}
 }

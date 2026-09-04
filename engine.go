@@ -102,6 +102,7 @@ type Engine struct {
 	pdfAuthor       string        // \hypersetup{pdfauthor=…} → PDF /Info /Author
 	pdfSubject      string        // \hypersetup{pdfsubject=…} → PDF /Info /Subject
 	pdfKeywords     string        // \hypersetup{pdfkeywords=…} → PDF /Info /Keywords
+	pdfUseTitle     bool          // \hypersetup{pdfusetitle}: derive title/author from \@title/\@author
 	mathR           mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
