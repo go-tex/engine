@@ -3,7 +3,10 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // mvlBoxes returns the boxes contributed directly to a vertical list (the line
 // boxes of an unframed listing, or the single wrapper box of a framed one).
@@ -340,5 +343,53 @@ func TestLstlistingSourceLines(t *testing.T) {
 	}
 	if got['b'] != 3 {
 		t.Errorf("glyph 'b' source line = %d, want 3", got['b'])
+	}
+}
+
+// A verbatim environment inside a minipage is not read from the character buffer:
+// the minipage captured its whole body as tokens first, so the buffer's cursor is
+// already past \end{minipage}. Reading it there copied the document that FOLLOWS —
+// \end{minipage}, the text after it and \end{document} all vanished into the
+// listing, which was then printed at the end of the page.
+func TestListingInsideMinipageKeepsTheDocument(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\documentclass{article}\begin{document}` +
+		"\\begin{minipage}{200pt}\n\\begin{lstlisting}\ncode ici\n\\end{lstlisting}\n\\end{minipage}\n" +
+		`APRES\par\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "APRES") {
+		t.Errorf("the text after the minipage was swallowed: %q", txt)
+	}
+	if strings.Contains(txt, `\end{document}`) {
+		t.Errorf("\\end{document} was typeset as text: %q", txt)
+	}
+	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), "codeici") {
+		t.Errorf("the listing's own content is missing: %q", txt)
+	}
+}
+
+// The same environment OUTSIDE any captured body still reads the character buffer,
+// where the body is verbatim to the character — indentation included.
+func TestListingOutsideACapturedBodyStaysVerbatim(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\documentclass{article}\begin{document}` +
+		"\\begin{lstlisting}\n    indente\n\\end{lstlisting}\n" +
+		`APRES\par\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if txt := mvlText(e.mvl); !strings.Contains(txt, "indente") || !strings.Contains(txt, "APRES") {
+		t.Errorf("plain listing lost content: %q", txt)
 	}
 }
