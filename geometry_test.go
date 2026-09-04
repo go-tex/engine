@@ -628,9 +628,14 @@ func TestIEEEtranJournalGeometry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IEEEtran journal: %v", err)
 	}
-	if e.hsize != ptToSP(504) || e.vsize != ptToSP(696) || e.baselineskip != ptToSP(12) {
+	// The TEXT BLOCK is 504pt wide; e.hsize is the column measure, half of it less
+	// the gutter, because an emulated IEEEtran now sets two columns (packages.go).
+	if e.fullWidth() != ptToSP(504) || e.vsize != ptToSP(696) || e.baselineskip != ptToSP(12) {
 		t.Errorf("journal block = %d×%d bls %d, want %d×%d bls %d",
-			e.hsize, e.vsize, e.baselineskip, ptToSP(504), ptToSP(696), ptToSP(12))
+			e.fullWidth(), e.vsize, e.baselineskip, ptToSP(504), ptToSP(696), ptToSP(12))
+	}
+	if !e.twoColumn {
+		t.Error("an emulated IEEEtran must set two columns: the class is two-column by nature")
 	}
 }
 
@@ -642,8 +647,8 @@ func TestIEEEtranConferenceGeometry(t *testing.T) {
 	if e.vsize != ptToSP(668) {
 		t.Errorf("conference vsize = %d, want %d (9.25in)", e.vsize, ptToSP(668))
 	}
-	if e.hsize != ptToSP(504) {
-		t.Errorf("conference hsize = %d, want %d", e.hsize, ptToSP(504))
+	if e.fullWidth() != ptToSP(504) { // e.hsize is the column measure (two columns)
+		t.Errorf("conference text block = %d, want %d", e.fullWidth(), ptToSP(504))
 	}
 }
 

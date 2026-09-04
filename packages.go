@@ -443,6 +443,16 @@ func (e *Engine) doDocumentClass() {
 			e.twoColLive = true // let the document's \twocolumn/\onecolumn fire
 		}
 	}
+	// IEEEtran is two-column BY NATURE — its papers never pass [twocolumn], the class
+	// simply sets two columns (IEEEtran.cls's \@twocolumnfalse is the exception, the
+	// `onecolumn' option). Served by the article-shaped emulation, nothing turned them
+	// on and every such paper was set one column wide: measured, 2607.20748 came out
+	// 43 pages against a reference of 27, and its lines ran 477pt on a 648pt page
+	// where a real IEEEtran column is 252pt.
+	if isIEEEtranClass(name) && !e.classFileResolvable(name) && !hasOption(opts, "onecolumn") {
+		e.twoColumn = true
+		e.twoColLive = true
+	}
 	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
 		return
@@ -777,6 +787,16 @@ func classManagesOwnColumns(name string) bool {
 	}
 	switch name {
 	case "acmart", "IEEEtran", "IEEEconf", "aastex", "aastex6", "aastex61", "aastex62", "aastex631", "elsarticle":
+		return true
+	}
+	return false
+}
+
+// isIEEEtranClass reports whether name is one of the IEEE classes whose layout is
+// two columns unless the paper asks otherwise.
+func isIEEEtranClass(name string) bool {
+	switch name {
+	case "IEEEtran", "IEEEconf":
 		return true
 	}
 	return false
