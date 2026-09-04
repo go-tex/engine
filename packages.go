@@ -472,6 +472,15 @@ func (e *Engine) doDocumentClass() {
 			return // GOTEX_AMSART=0 forces the built-in emulation
 		}
 	}
+	// acmart's sigconf/sigplan/acmtog/… formats are two-column by nature — the
+	// format sets two columns, not a [twocolumn] option. Set them whether or not the
+	// paper bundles acmart.cls: the emulation floor below handles the unbundled case,
+	// but a paper that ships the real class loads it (single-column in this engine)
+	// and would otherwise miss the column layout entirely.
+	if name == "acmart" && acmartTwoColumnFormat(opts) {
+		e.twoColumn = true
+		e.twoColLive = true
+	}
 	if (name == "acmart" || name == "IEEEtran") && !e.classFileResolvable(name) {
 		// acmart and IEEEtran are not embedded, and when the paper does not bundle
 		// the .cls they fall to the article-shaped emulation, which sizes their page
@@ -483,15 +492,8 @@ func (e *Engine) doDocumentClass() {
 		if name == "acmart" {
 			e.applyAcmartGeometry(opts)
 			e.loadAcmartMetadata() // gobble acmart's top-matter metadata + CCSXML block
-			// acmart's conference/journal formats (sigconf, sigplan, acmtog …) are
-			// TWO-column by nature — like IEEEtran, the paper never passes [twocolumn],
-			// the format sets it. The single-column floor above approximates the page
-			// count, but the two columns pack their own way; set two columns as the
-			// class does, so those papers paginate the way ACM prints them.
-			if acmartTwoColumnFormat(opts) {
-				e.twoColumn = true
-				e.twoColLive = true
-			}
+			// (two columns for the two-column formats are set above, before this
+			// emulation-floor branch, so a bundled acmart.cls gets them too.)
 		} else {
 			e.applyIEEEtranGeometry(opts)
 		}
