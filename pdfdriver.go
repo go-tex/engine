@@ -185,9 +185,11 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			d.leader(c.leader, cx, baseline, w)
 			cx += w
 		case charNode:
-			d.setSize(float64(c.size))
-			d.setColor(c.color)
-			d.drawCharMapped(cx, baseline, c.ch)
+			if !c.covered { // covered: it holds its place and draws nothing
+				d.setSize(float64(c.size))
+				d.setColor(c.color)
+				d.drawCharMapped(cx, baseline, c.ch)
+			}
 			cx += spToPt(c.width)
 		case ruleNode:
 			d.setColor(0)

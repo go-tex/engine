@@ -49,6 +49,10 @@ type charNode struct { // a set character from the current font (metrics in sp)
 	srcLine              int    // 1-based source line this glyph came from (0 = unknown)
 	size                 int    // font size (px/pt) this glyph was set at (0 = base)
 	color                uint32 // 0xRRGGBB fill colour (0 = default black)
+	// covered marks material beamer is hiding on THIS overlay: it keeps its
+	// metrics — the line and the page must look the same whether or not the step
+	// has arrived — and draws no ink. See doBeginInvisible.
+	covered bool
 }
 type discNode struct{ penalty int } // a discretionary hyphen point (Liang)
 

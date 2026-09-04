@@ -116,6 +116,19 @@ func (e *Engine) loadPrimitives() {
 	e.define("bgroup", &meaning{kind: mLetChar, ch: '{', cat: catBegin}, true)
 	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
 	e.prim("relax", func(e *Engine) {})
+	// beamer hides what an overlay has not reached by wrapping it in pgf's
+	// invisibility pair (beamerbaseoverlay.sty:316, \beamer@startcovered). The pair
+	// lives in a pgfsys driver this engine does not load, so without these it was
+	// undefined — skipped, in lenient mode — and every step of a \pause'd frame came
+	// out carrying the WHOLE frame. Covered material keeps its metrics and draws no
+	// ink, which is what beamer means by covered: the page must not move as the
+	// steps arrive.
+	e.prim("pgfsys@begininvisible", func(e *Engine) { e.coveringDepth++ })
+	e.prim("pgfsys@endinvisible", func(e *Engine) {
+		if e.coveringDepth > 0 {
+			e.coveringDepth--
+		}
+	})
 	// \nullfont selects the empty font (see nullfont.go); it is a font switch, so
 	// it is scoped by the enclosing group like any other.
 	e.eq["nullfont"] = &meaning{kind: mFont, font: nullFont{}, name: "nullfont"}
