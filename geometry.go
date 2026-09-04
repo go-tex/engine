@@ -497,6 +497,20 @@ var acmartFormats = map[string]classGeometry{
 // Two-column formats are still rendered single-column (columns are separately
 // scoped), but the single-column-equivalent block above makes the page count
 // right regardless.
+// acmartTwoColumnFormat reports whether any acmart format option selects a
+// two-column format (as opposed to the single-column manuscript/acmsmall/…). The
+// format is given bare ([sigconf]) or as format=… ([format=sigconf]).
+func acmartTwoColumnFormat(opts []string) bool {
+	for _, o := range opts {
+		o = strings.TrimPrefix(strings.TrimSpace(o), "format=")
+		switch strings.TrimSpace(o) {
+		case "sigconf", "siggraph", "sigchi", "sigplan", "acmtog", "acmengage", "sigchi-a":
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) applyAcmartGeometry(opts []string) {
 	g := acmartFormats["manuscript"] // acmart.cls's default format
 	for _, o := range opts {
