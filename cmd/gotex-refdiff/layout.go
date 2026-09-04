@@ -330,7 +330,7 @@ type layoutScore struct {
 // When alignment finds no common words at all the two documents share no
 // comparable layout, which is itself a gross divergence: a full unit is added.
 func scoreLayout(ref, got []normWord, refPages, gotPages int) layoutScore {
-	pairs := alignWords(ref, got)
+	pairs := plausiblePairs(alignWords(ref, got), ref, got)
 	disp := displacements(pairs, ref, got)
 	med, p95 := medianP95(disp)
 	agree := lineBreakAgreement(pairs, ref, got)
@@ -347,6 +347,32 @@ func scoreLayout(ref, got []normWord, refPages, gotPages int) layoutScore {
 		s.divergence += 1 // no shared layout to measure: a gross divergence
 	}
 	return s
+}
+
+// maxPairPages is how far apart the two halves of a matched word may sit before
+// the match is disbelieved, in pages (vpos counts 1.0 per page).
+const maxPairPages = 1.0
+
+// plausiblePairs drops matches whose two halves sit more than maxPairPages apart.
+// Such a pair is an ALIGNMENT error, not a layout observation: the aligner walks
+// both streams in order, so once they disagree about a run — a figure this engine
+// floats to the top of a page while the reference leaves it inline, say — it can
+// stay locked on a systematic offset and go on pairing the same words tens of pages
+// apart. Left in, one paper reported a 95th-percentile displacement of 37.8 PAGES
+// while its median was 0.14 and its page count matched the reference exactly; the
+// statistic was describing the aligner, not the layout.
+//
+// Dropping them costs nothing that was ever meaningful: a word is not "displaced by
+// 37 pages", it is unmatched. What survives is the local displacement the score is
+// meant to measure, and `matched` reports the pairs actually believed.
+func plausiblePairs(pairs []alignPair, ref, got []normWord) []alignPair {
+	out := pairs[:0:0]
+	for _, p := range pairs {
+		if math.Abs(ref[p.ri].vpos-got[p.gi].vpos) <= maxPairPages {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // displacements returns the page-relative displacement of every matched word:
