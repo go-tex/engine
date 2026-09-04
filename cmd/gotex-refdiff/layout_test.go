@@ -633,3 +633,31 @@ func TestAttrMap(t *testing.T) {
 		t.Fatalf("absent attr should be omitted: %v", a)
 	}
 }
+
+// A matched pair whose halves sit more than a page apart is disbelieved: the
+// aligner walks both streams in order, so once they disagree about a run it can
+// stay locked on an offset and pair the same word tens of pages away. Left in, one
+// corpus paper reported a 95th-percentile displacement of 37.8 PAGES with a median
+// of 0.14 and a page count matching the reference exactly.
+func TestImplausiblePairsAreDropped(t *testing.T) {
+	ref := []normWord{{text: "a", vpos: 0.10}, {text: "b", vpos: 0.20}, {text: "c", vpos: 0.30}}
+	got := []normWord{{text: "a", vpos: 0.12}, {text: "b", vpos: 9.20}, {text: "c", vpos: 1.05}}
+	in := []alignPair{{0, 0}, {1, 1}, {2, 2}}
+	out := plausiblePairs(in, ref, got)
+	if len(out) != 2 {
+		t.Fatalf("kept %d pairs, want 2 (the 9-page one dropped): %+v", len(out), out)
+	}
+	if out[0] != (alignPair{0, 0}) || out[1] != (alignPair{2, 2}) {
+		t.Errorf("kept the wrong pairs: %+v", out)
+	}
+}
+
+// Exactly one page apart is still believed: a word may legitimately sit at the foot
+// of one page and the head of the next when a break moves.
+func TestAPairOnePageApartSurvives(t *testing.T) {
+	ref := []normWord{{text: "a", vpos: 0.95}}
+	got := []normWord{{text: "a", vpos: 1.95}}
+	if out := plausiblePairs([]alignPair{{0, 0}}, ref, got); len(out) != 1 {
+		t.Errorf("a pair exactly one page apart was dropped")
+	}
+}
