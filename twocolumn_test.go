@@ -188,8 +188,14 @@ func TestTwoColumnSpan(t *testing.T) {
 
 // A bare twocolumn class option switches on the generic two-column routine only for
 // classes that use LaTeX's standard \twocolumn. Classes that run their own column engine
-// (revtex via ltxgrid, the acmart/IEEEtran journal layouts) are excluded, so the option
-// does not mis-drive them.
+// (revtex via ltxgrid, acmart's journal layouts) are excluded, so the option does not
+// mis-drive them.
+//
+// IEEEtran is the exception, and for a reason the exclusion misses: its column engine
+// exists only in IEEEtran.cls. Emulated — which is what happens when the paper does not
+// bundle the class — NOTHING drove the columns and the paper was set one column wide
+// across the whole text block. It is two-column by nature here (see packages.go), so it
+// is expected true whether or not the option is given.
 func TestTwoColumnClassExclusion(t *testing.T) {
 	t.Setenv("GOTEX_TWOCOLUMN", "1")
 	for _, tc := range []struct {
@@ -200,7 +206,7 @@ func TestTwoColumnClassExclusion(t *testing.T) {
 		{"report", true},
 		{"revtex4-2", false},
 		{"acmart", false},
-		{"IEEEtran", false},
+		{"IEEEtran", true}, // two-column by nature, emulated here
 	} {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
