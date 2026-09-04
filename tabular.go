@@ -106,6 +106,32 @@ func (e *Engine) doTabular() {
 	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
 }
 
+// doTabularStar typesets a tabular* environment: \begin{tabular*}{W}[pos]{spec}.
+// LaTeX reads the width and then IS tabular, with the alignment packed to it
+// (latex.ltx:12092):
+//
+//	\@namedef{tabular*}#1{\setlength\dimen@{#1}\edef\@halignto{to\the\dimen@}\@tabular}
+//
+// so the width is a target for the inter-column glue, and the body, the rules,
+// \\ and & behave exactly as in tabular. Here the assembled box is packed to that
+// width, which is what \extracolsep{\fill} in the preamble is asking for; when the
+// natural table is wider, packing to a smaller width would overlap columns, so the
+// natural box is kept (an overfull \hbox in TeX's terms).
+//
+// Undefined, its 10 uses in one IEEEtran paper each set their body as running text
+// and the paper came out 43 pages against a reference of 27.
+func (e *Engine) doTabularStar() {
+	width := e.readBraceDimen()
+	e.scanOptBracketToks() // optional [t]/[b]/[c], after the width for tabular*
+	aligns, pwidths, vrules := e.scanColSpec()
+	items := e.collectTabularBody("tabular*")
+	box := e.buildTabularBox(aligns, pwidths, vrules, items)
+	if width > box.width {
+		box = hpackSP([]node{box, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}}, packTo, width)
+	}
+	e.place(box)
+}
+
 // doTabularx typesets a tabularx environment: \begin{tabularx}{W}{spec}. Unlike
 // tabular it takes a leading {width} argument (a rigid <dimen>, e.g. \hsize or
 // \linewidth); every X column in {spec} is a paragraph column whose width is

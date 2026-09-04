@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func lastVbox(e *Engine) *boxNode {
 	for i := len(e.mvl) - 1; i >= 0; i-- {
@@ -281,5 +284,40 @@ func TestTabularxOptionalPlacement(t *testing.T) {
 		if !contains(got, want) {
 			t.Errorf("tabularx[t] text %q missing %q", got, want)
 		}
+	}
+}
+
+// tabular* takes a {width} before its column spec (latex.ltx:12092) and is then
+// tabular. Undefined, the width and the spec were typeset as running text and the
+// body set as a paragraph: one IEEEtran paper used it ten times.
+func TestTabularStarTakesItsWidthAndSetsATable(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := `\begin{tabular*}{200pt}{@{\extracolsep{\fill}}lr}` +
+		`un & deux \\ trois & quatre \\` +
+		`\end{tabular*}\par`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	txt := mvlText(e.mvl)
+	for _, leak := range []string{"200pt", "extracolsep", "lr"} {
+		if strings.Contains(txt, leak) {
+			t.Errorf("%q leaked into the text: %q", leak, txt)
+		}
+	}
+	var box *boxNode // packed to the requested width, so an hbox around the table vbox
+	for _, n := range e.mvl {
+		if b, ok := n.(*boxNode); ok {
+			box = b
+		}
+	}
+	if box == nil {
+		t.Fatal("no table box was placed")
+	}
+	if box.width < ptToSP(200) {
+		t.Errorf("table width %d, want at least the requested 200pt (%d)", box.width, ptToSP(200))
 	}
 }
