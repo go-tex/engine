@@ -80,6 +80,10 @@ type Engine struct {
 	// glyphs/boxes can be stamped with their origin line for errors + navigation.
 	lineStarts []int // rune offset of each source line's start
 	srcPos     int   // rune offset where the current token began
+	// importPath is the directory \import is currently reading from, and importStack
+	// the enclosing ones (importpkg.go).
+	importPath  string
+	importStack []string
 	// coveringDepth counts the open \pgfsys@begininvisible groups: beamer wraps
 	// material an overlay has not reached in them, and while it is positive every
 	// glyph set is marked covered (metrics kept, no ink).
