@@ -483,6 +483,15 @@ func (e *Engine) doDocumentClass() {
 		if name == "acmart" {
 			e.applyAcmartGeometry(opts)
 			e.loadAcmartMetadata() // gobble acmart's top-matter metadata + CCSXML block
+			// acmart's conference/journal formats (sigconf, sigplan, acmtog …) are
+			// TWO-column by nature — like IEEEtran, the paper never passes [twocolumn],
+			// the format sets it. The single-column floor above approximates the page
+			// count, but the two columns pack their own way; set two columns as the
+			// class does, so those papers paginate the way ACM prints them.
+			if acmartTwoColumnFormat(opts) {
+				e.twoColumn = true
+				e.twoColLive = true
+			}
 		} else {
 			e.applyIEEEtranGeometry(opts)
 		}

@@ -594,15 +594,41 @@ func TestAcmartDefaultFormatIsManuscript(t *testing.T) {
 	}
 }
 
+func TestAcmartTwoColumnFormat(t *testing.T) {
+	twoCol := [][]string{
+		{"sigconf", "screen"}, {"sigplan"}, {"acmtog"}, {"siggraph"},
+		{"format=sigconf"}, {"review=false", "format=sigplan"},
+	}
+	for _, opts := range twoCol {
+		if !acmartTwoColumnFormat(opts) {
+			t.Errorf("acmartTwoColumnFormat(%v) = false, want true", opts)
+		}
+	}
+	oneCol := [][]string{
+		{"manuscript"}, {"acmsmall"}, {"acmlarge", "review"}, {"format=acmsmall"}, {},
+	}
+	for _, opts := range oneCol {
+		if acmartTwoColumnFormat(opts) {
+			t.Errorf("acmartTwoColumnFormat(%v) = true, want false (single column)", opts)
+		}
+	}
+}
+
 func TestAcmartSigconfGeometry(t *testing.T) {
 	e, err := compile([]byte(`\documentclass[sigconf,screen]{acmart}\begin{document}x\end{document}`), Options{Lenient: true})
 	if err != nil {
 		t.Fatalf("acmart sigconf: %v", err)
 	}
 	g := acmartFormats["sigconf"]
-	if e.hsize != ptToSP(g.inkedW) || e.vsize != ptToSP(g.textH) || e.baselineskip != ptToSP(g.leading) {
+	// e.hsize is the column measure (half the block less the gutter) because an
+	// emulated acmart sigconf now sets two columns, as the format does; the full
+	// text block is fullWidth().
+	if e.fullWidth() != ptToSP(g.inkedW) || e.vsize != ptToSP(g.textH) || e.baselineskip != ptToSP(g.leading) {
 		t.Errorf("sigconf block = %d×%d bls %d, want %d×%d bls %d",
-			e.hsize, e.vsize, e.baselineskip, ptToSP(g.inkedW), ptToSP(g.textH), ptToSP(g.leading))
+			e.fullWidth(), e.vsize, e.baselineskip, ptToSP(g.inkedW), ptToSP(g.textH), ptToSP(g.leading))
+	}
+	if !e.twoColumn {
+		t.Error("acmart sigconf must set two columns: the format is two-column by nature")
 	}
 }
 
@@ -613,8 +639,10 @@ func TestAcmartGeometryPackageOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acmart+geometry: %v", err)
 	}
-	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.hsize != want {
-		t.Errorf("hsize = %d, want %d (geometry wins)", e.hsize, want)
+	// sigconf is two-column, so e.hsize is the column measure; the geometry-set
+	// text block is the full width.
+	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.fullWidth() != want {
+		t.Errorf("full width = %d, want %d (geometry wins)", e.fullWidth(), want)
 	}
 	if want := texSP(t, "11in") - 2*texSP(t, "1in"); e.vsize != want {
 		t.Errorf("vsize = %d, want %d (geometry wins)", e.vsize, want)
