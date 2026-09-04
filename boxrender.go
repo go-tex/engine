@@ -137,7 +137,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += w
 		case charNode:
 			lg.set(c.srcLine)
-			if font != nil {
+			if font != nil && !c.covered { // covered: it holds its place and draws nothing
 				if d := font.glyphPathAt(c.ch); d != "" {
 					fill := ""
 					if c.color != 0 { // override the enclosing <g fill="black">

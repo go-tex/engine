@@ -80,18 +80,22 @@ type Engine struct {
 	// glyphs/boxes can be stamped with their origin line for errors + navigation.
 	lineStarts []int // rune offset of each source line's start
 	srcPos     int   // rune offset where the current token began
-	curSrcLine int   // 1-based line of the current token (0 = unknown)
-	curSrcCol  int   // 0-based column of the current token
-	count      [256]int
-	dimen      [256]int          // \dimen registers, in scaled points (1pt = 65536sp)
-	skip       [256]glueSpec     // \skip (glue) registers
-	box        [256]*boxNode     // \box registers (nil = void)
-	mvl        []node            // main vertical list (top-level contributions)
-	curFont    fontFace          // current font for measuring/rendering characters
-	baseFont   fontFace          // the \normalsize font — glyph source + size reference for scaling
-	baseFontPx int               // \normalsize size in px/pt (the 100% for \large/\small/…)
-	curColor   uint32            // current text colour (0xRRGGBB; 0 = default black)
-	colors     map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
+	// coveringDepth counts the open \pgfsys@begininvisible groups: beamer wraps
+	// material an overlay has not reached in them, and while it is positive every
+	// glyph set is marked covered (metrics kept, no ink).
+	coveringDepth int
+	curSrcLine    int // 1-based line of the current token (0 = unknown)
+	curSrcCol     int // 0-based column of the current token
+	count         [256]int
+	dimen         [256]int          // \dimen registers, in scaled points (1pt = 65536sp)
+	skip          [256]glueSpec     // \skip (glue) registers
+	box           [256]*boxNode     // \box registers (nil = void)
+	mvl           []node            // main vertical list (top-level contributions)
+	curFont       fontFace          // current font for measuring/rendering characters
+	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
+	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	curColor      uint32            // current text colour (0xRRGGBB; 0 = default black)
+	colors        map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
 
 	// hyperref link styling (see hyperstyle.go). When colorlinks is on the link
 	// text is painted in its colour instead of a border box being drawn.
@@ -1672,7 +1676,7 @@ func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), color: e.curColor})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), color: e.curColor, covered: e.coveringDepth > 0})
 }
 
 // lastChar returns the rune of the trailing character node, if the list ends in
