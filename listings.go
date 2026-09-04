@@ -103,6 +103,17 @@ func (e *Engine) doLstlisting() {
 // character lives on (for glyph stamping). It is shared by every verbatim-body
 // environment: lstlisting and minted read their bodies identically.
 func (e *Engine) readRawEnvBody(end string) (content string, firstLine int) {
+	// The body may not be in the character buffer at all. A minipage, a captured
+	// float or a beamer column reads its whole body as TOKENS first and typesets it
+	// afterwards, by which time the buffer's cursor sits PAST the captured body —
+	// so scanning the buffer here copies the document that FOLLOWS and swallows it.
+	// Measured: a minipage holding one lstlisting ate \end{minipage}, the text after
+	// it and \end{document}, then printed the listing at the end of the page.
+	if body, ok := e.rawEnvBodyFromLists(end); ok {
+		e.endEnvGroup() // as below: this environment read its own \end
+		line, _ := e.lineColAt(e.srcPos)
+		return trimVerbEdges(body), line
+	}
 	startOff := e.bpos
 	rest := string(e.base[e.bpos:])
 	idx := strings.Index(rest, end)
@@ -123,6 +134,76 @@ func (e *Engine) readRawEnvBody(end string) (content string, firstLine int) {
 		firstLine++
 	}
 	return content, firstLine
+}
+
+// rawEnvBodyFromLists reads a verbatim environment's body out of the PENDING TOKEN
+// LISTS, up to the \end{name} that end names, and reports whether it found it. It
+// never touches the character buffer: when the marker is not in the lists it puts
+// back everything it took and answers false, so an ordinary document — whose body
+// is still in the buffer — takes the scan below exactly as before.
+//
+// The tokens went through the mouth when the enclosing body was captured, so this is
+// verbatim only up to what tokenising already decided: a % comment took its line
+// with it there. That is a smaller loss than the alternative, which is losing the
+// rest of the document.
+func (e *Engine) rawEnvBodyFromLists(end string) (string, bool) {
+	name := strings.TrimSuffix(strings.TrimPrefix(end, `\end{`), "}")
+	var taken []tok
+	for len(e.lists) > 0 {
+		t, ok := e.getNext()
+		if !ok {
+			break
+		}
+		taken = append(taken, t)
+		if !t.cs_ || t.cs != "end" {
+			continue
+		}
+		if n, ok := e.peekBraceNameFromLists(); ok && n == name {
+			return e.toksToString(taken[:len(taken)-1]), true
+		}
+	}
+	e.push(taken) // not ours: leave the input exactly as it was
+	return "", false
+}
+
+// peekBraceNameFromLists reads a {name} group from the pending lists and CONSUMES it,
+// used right after an \end token to see which environment it closes.
+func (e *Engine) peekBraceNameFromLists() (string, bool) {
+	var taken []tok
+	var name []rune
+	depth := 0
+	for len(e.lists) > 0 {
+		t, ok := e.getNext()
+		if !ok {
+			break
+		}
+		taken = append(taken, t)
+		if t.cs_ {
+			break // a control sequence inside the braces: not a plain environment name
+		}
+		switch t.cat {
+		case catBegin:
+			depth++
+			if depth > 1 {
+				e.push(taken)
+				return "", false
+			}
+		case catEnd:
+			return string(name), depth == 1
+		default:
+			if depth == 1 {
+				name = append(name, t.ch)
+			}
+		}
+	}
+	e.push(taken)
+	return "", false
+}
+
+// trimVerbEdges drops the newline right after \begin and right before \end, the way
+// the buffer scan does.
+func trimVerbEdges(s string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(s, "\n"), "\n")
 }
 
 // renderVerbatimBlock sets content as a code block: each line verbatim in the tt
