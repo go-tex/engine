@@ -363,6 +363,9 @@ const MiniLaTeXKernel = `
 % both switch to italic for the body (amsthm's "plain" style). \@endtheorem ends
 % the paragraph, closes the environment group (reverting \it) and adds space.
 \def\@begintheorem#1#2{\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+% \newtheorem*'s unnumbered head: the same heading with no number, so no space
+% before the period ("Theorem." rather than "Theorem .").
+\def\@beginthmnonum#1{\noindent{\bf #1}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
 \def\@stdbegintheorem{{\bf .}\ \it }
 \def\@opargbegintheorem[#1]{{\bf\ (#1).}\ \it }
 \def\@endtheorem{\par\endgroup\medskip}
@@ -465,6 +468,7 @@ const MiniLaTeXKernel = `
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+\def\@beginthmnonum#1{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
 % ── siunitx unit-name macros ────────────────────────────────────────────────
 % Standalone expansions for the unit/prefix/power macros. \si, \unit, \SI, \qty
 % and \ang read their arguments raw (no expansion) and resolve names in Go, so

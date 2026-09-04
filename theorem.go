@@ -31,6 +31,19 @@ import "strings"
 // {Heading} (share another environment's counter) and \newtheorem{env}{Heading}
 // [within] (number within a parent counter, e.g. Theorem 1.1) forms.
 func (e *Engine) doNewtheorem() {
+	// \newtheorem*{env}{Heading} is amsthm's UNNUMBERED form. Unhandled, the star
+	// stopped readBraceName dead: it read no name, the environment stayed undefined,
+	// and the star and the heading were left in the stream to be TYPESET. One paper
+	// opened on a page of its own carrying "*theoremTheorem *namedconjectureConjecture"
+	// and then set its three theorem bodies as plain paragraphs.
+	starred := false
+	if t, ok := e.getNext(); ok {
+		if !t.cs_ && t.ch == '*' {
+			starred = true
+		} else {
+			e.back(t)
+		}
+	}
 	env := e.readBraceName()
 	sharedToks, hasShared := e.scanOptBracketToks() // [shared] BEFORE the heading
 	// The heading is read as the TOKENS it is made of, never as a name: beamer
@@ -42,6 +55,11 @@ func (e *Engine) doNewtheorem() {
 	head := e.readBraceToks()
 	withinToks, hasWithin := e.scanOptBracketToks() // [within] AFTER the heading
 	if env == "" {
+		return
+	}
+
+	if starred {
+		e.defineUnnumberedTheorem(env, head)
 		return
 	}
 
@@ -95,6 +113,20 @@ func (e *Engine) doNewtheorem() {
 	e.define(env, &meaning{kind: mMacro, body: body}, true)
 
 	// \end<env>: the fixed closing macro (end paragraph, close group, vertical space).
+	e.define("end"+env, &meaning{kind: mMacro, body: []tok{csTok("@endtheorem")}}, true)
+}
+
+// defineUnnumberedTheorem defines the \newtheorem* form: the same heading and the
+// same grouping as a numbered theorem, with no counter, no \the<env>, and an empty
+// number handed to \@begintheorem — which is what amsthm's starred form produces.
+func (e *Engine) defineUnnumberedTheorem(env string, head []tok) {
+	body := []tok{
+		csTok("par"), csTok("medskip"), csTok("begingroup"),
+		csTok("@beginthmnonum"), chTok('{', catBegin),
+	}
+	body = append(body, head...)
+	body = append(body, chTok('}', catEnd))
+	e.define(env, &meaning{kind: mMacro, body: body}, true)
 	e.define("end"+env, &meaning{kind: mMacro, body: []tok{csTok("@endtheorem")}}, true)
 }
 
