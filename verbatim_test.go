@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // \verb sets its delimited text literally inline: backslashes, braces and other
 // specials are ordinary characters, no macro expands.
@@ -58,5 +61,49 @@ func TestVerbatimSourceLines(t *testing.T) {
 	}
 	if got['b'] != 3 { // 'b' first appears in "beta" on line 3
 		t.Errorf("verbatim glyph 'b' source line = %d, want 3", got['b'])
+	}
+}
+
+// fancyvrb's \Verb takes its text braced as well as delimited. The braced form is
+// the one that must be read from TOKENS: a paper writes
+// \newcommand{\jl}[1]{\small\Verb{#1}} and uses it a hundred times, so by the time
+// \Verb runs its argument is a macro parameter and the file is long past.
+func TestVerbFancyReadsBracedAndDelimitedForms(t *testing.T) {
+	for _, tc := range []struct{ name, src, want string }{
+		{"braced", `\Verb{code_ici()}`, "code_ici()"},
+		{"delimited", `\Verb|code_ici()|`, "code_ici()"},
+		{"through a macro", `\newcommand{\jl}[1]{\Verb{#1}}\jl{code_ici()}`, "code_ici()"},
+		{"with options", `\Verb[fontsize=\small]{code_ici()}`, "code_ici()"},
+	} {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(tc.src + `\par`); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		got := strings.ReplaceAll(mvlText(e.mvl), " ", "")
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: got %q, want it to carry %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The delimited form must not lose its first character: peeking with a TOKEN read
+// moves the buffer cursor past the delimiter, and \Verb|autre_code()| then came out
+// as "utre_code()||" — the character after the bar had become the delimiter.
+func TestVerbFancyDelimitedKeepsItsFirstCharacter(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`avant \Verb|autre_code()| apres\par`); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.ReplaceAll(mvlText(e.mvl), " ", "")
+	if !strings.Contains(got, "autre_code()") || strings.Contains(got, "|") {
+		t.Errorf("delimited \\Verb mangled: %q", got)
 	}
 }

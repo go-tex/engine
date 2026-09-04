@@ -1837,6 +1837,7 @@ func (e *Engine) loadMore() {
 		}
 	})
 	e.prim("verb", func(e *Engine) { e.doVerb() })
+	e.prim("Verb", func(e *Engine) { e.doVerbFancy() })          // fancyvrb: \Verb[opts]{text} or |text|
 	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
 	e.prim("Url", func(e *Engine) { e.doBigURL() })              // url.sty low-level \Url: typeset + close its \begingroup
 	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
