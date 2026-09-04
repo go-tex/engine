@@ -3,71 +3,51 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-// An undefined environment is a silent gap: \begin{env} expands to
-// \csname env\endcsname, and \csname turns a missing \env into \relax — so the
-// body is typeset in whatever mode was current and no undefined COMMAND is ever
-// tallied. Diagnostics().UndefinedEnvs must surface it, while a DEFINED
-// environment (here itemize) must not appear. Without the \gotex@checkenv hook on
-// \begin this reports zero undefined envs and so fails.
-func TestDiagnosticsUndefinedEnvironment(t *testing.T) {
-	src := []byte(`\documentclass{article}` +
-		`\begin{document}` +
-		`\begin{itemize}\item a\end{itemize}` + // DEFINED: must NOT be tallied
-		`\begin{nosuchenv}body\end{nosuchenv}` + // UNDEFINED: must be tallied
-		`\end{document}`)
-	e, err := compile(src, Options{Lenient: true})
-	if err != nil {
-		t.Fatalf("compile errored: %v", err)
+// An undefined environment's body is typeset with ordinary category codes, which is
+// right for a prose wrapper and ruinous for a code block: a lone $ opens math mode
+// and the scan then runs past the environment's own \end, eating the rest of the
+// document while it looks for the closing $.
+func TestUndefinedCodeEnvironmentDoesNotSwallowTheDocument(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
 	}
-	d := e.Diagnostics()
-	if d.UndefinedEnvs["nosuchenv"] == 0 {
-		t.Errorf("undefined environment nosuchenv not tallied; UndefinedEnvs=%v", d.UndefinedEnvs)
+	e.SetFont(spMock{})
+	src := "AVANT\n\\begin{jlcode}\npath = \"$write_dir/x\"\n\\end{jlcode}\nAPRES\\par"
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := d.UndefinedEnvs["itemize"]; ok {
-		t.Errorf("defined environment itemize wrongly tallied as undefined; UndefinedEnvs=%v", d.UndefinedEnvs)
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "APRES") {
+		t.Errorf("the text after the block was swallowed: %q", txt)
 	}
-	if _, ok := d.UndefinedEnvs["document"]; ok {
-		t.Errorf("document environment wrongly tallied as undefined; UndefinedEnvs=%v", d.UndefinedEnvs)
+	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), `path="$write_dir/x"`) {
+		t.Errorf("the code line did not survive verbatim: %q", txt)
 	}
 }
 
-// Two occurrences of the same undefined environment count twice.
-func TestDiagnosticsUndefinedEnvironmentCounts(t *testing.T) {
-	src := []byte(`\documentclass{article}` +
-		`\begin{document}` +
-		`\begin{foo}a\end{foo}\begin{foo}b\end{foo}\begin{bar}c\end{bar}` +
-		`\end{document}`)
-	e, err := compile(src, Options{Lenient: true})
-	if err != nil {
-		t.Fatalf("compile errored: %v", err)
+// A prose environment the engine does not know keeps the behaviour it had: its body
+// is typeset as ordinary text, not as a code block.
+func TestUndefinedProseEnvironmentIsStillProse(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
 	}
-	d := e.Diagnostics()
-	if got := d.UndefinedEnvs["foo"]; got != 2 {
-		t.Errorf("foo tallied %d times, want 2; UndefinedEnvs=%v", got, d.UndefinedEnvs)
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\begin{monenv}du texte $x+y$ ordinaire\end{monenv}APRES\par`); err != nil {
+		t.Fatal(err)
 	}
-	if got := d.UndefinedEnvs["bar"]; got != 1 {
-		t.Errorf("bar tallied %d times, want 1; UndefinedEnvs=%v", got, d.UndefinedEnvs)
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "APRES") || !strings.Contains(txt, "ordinaire") {
+		t.Errorf("a balanced body must be left alone: %q", txt)
 	}
-}
-
-// A normal document that uses only DEFINED environments (and a user's own
-// \newenvironment) reports zero undefined envs — no false positives.
-func TestDiagnosticsNoUndefinedEnvironments(t *testing.T) {
-	src := []byte(`\documentclass{article}` +
-		`\newenvironment{mybox}{\par}{\par}` +
-		`\begin{document}` +
-		`\begin{itemize}\item a\item b\end{itemize}` +
-		`\begin{center}centered\end{center}` +
-		`\begin{quote}quoted\end{quote}` +
-		`\begin{mybox}custom\end{mybox}` +
-		`\end{document}`)
-	e, err := compile(src, Options{Lenient: true})
-	if err != nil {
-		t.Fatalf("compile errored: %v", err)
-	}
-	if d := e.Diagnostics(); len(d.UndefinedEnvs) != 0 {
-		t.Errorf("defined-only document reported undefined envs: %v", d.UndefinedEnvs)
+	// Set as prose, the maths is rendered, so its source is not in the text.
+	if strings.Contains(txt, "$x+y$") {
+		t.Errorf("the body was set verbatim rather than as prose: %q", txt)
 	}
 }

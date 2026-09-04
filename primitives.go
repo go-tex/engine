@@ -880,7 +880,54 @@ func (e *Engine) doCheckEnv() {
 			e.undefinedEnvs = map[string]int{}
 		}
 		e.undefinedEnvs[name]++
+		e.undefinedEnvAsCode(name)
 	}
+}
+
+// undefinedEnvAsCode rescues the body of an undefined environment that is plainly
+// CODE, by setting it verbatim instead of executing it as prose.
+//
+// An undefined environment's body is typeset with the ordinary category codes,
+// which is right for a prose wrapper and ruinous for a code block: a lone $ in
+// "path = \"$write_dir/x\"" opens math mode, and the scan then runs past the
+// environment's own \end and eats the rest of the DOCUMENT looking for the closing
+// $. Measured on one arXiv paper (jlcode, a Julia listings environment the paper
+// does not ship): the conclusions, the acknowledgements, the appendix bodies and
+// all 71 bibliography entries vanished — half the paper, 15 pages instead of 27.
+//
+// The test is the imbalance itself: prose does not carry an odd number of math
+// shifts, code does. When the body between here and \end{name} has one, it is read
+// raw and set as a verbatim block, and the \end is consumed with it. Everything
+// else keeps the behaviour it had.
+//
+// Only when the body is still in the FILE. Inside a captured body (a minipage, a
+// float, a beamer column) the character cursor is already past it and reading there
+// would copy the document that follows — the mistake #214 fixed. The tell is where
+// the \end lives: a captured body carries its own \end in the pending token lists,
+// while an ordinary \begin leaves only the tail of its own expansion there.
+func pendingHoldsEnd(lists [][]tok) bool {
+	for _, l := range lists {
+		for _, t := range l {
+			if t.cs_ && t.cs == "end" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (e *Engine) undefinedEnvAsCode(name string) {
+	if pendingHoldsEnd(e.lists) {
+		return
+	}
+	end := `\end{` + name + `}`
+	rest := string(e.base[e.bpos:])
+	i := strings.Index(rest, end)
+	if i < 0 || strings.Count(rest[:i], "$")%2 == 0 {
+		return
+	}
+	content, line := e.readRawEnvBody(end) // consumes the body AND its \end
+	e.renderVerbatimBlock(content, line, lstOptions{})
 }
 
 // setCurrentEnv records the environment being opened in \@currenvir, as LaTeX's own
