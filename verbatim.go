@@ -81,6 +81,57 @@ func (e *Engine) doVerb() {
 	e.parList = append(e.parList, e.verbNodes(text, font, e.curSrcLine)...)
 }
 
+// doVerbFancy implements fancyvrb's \Verb[options]{text} and \Verb[options]|text|.
+// The braced form is the one modern fancyvrb documents, and it is the one this
+// engine must read from TOKENS rather than from the character buffer: a paper
+// writes \newcommand{\jl}[1]{\small\Verb{#1}} and uses it a hundred times, so by
+// the time \Verb runs its argument is a macro parameter, long gone from the file.
+// Undefined, those hundred fragments of code were skipped with their text.
+//
+// The delimited form still reads the buffer, exactly as \verb does.
+func (e *Engine) doVerbFancy() {
+	// While the argument is still in the FILE, everything is peeked raw: reading a
+	// token to look ahead would move the buffer cursor past the delimiter and push
+	// the token onto the list, and \Verb|code| would then take the character after
+	// the bar as its delimiter (measured: "|autre_code()|" came out "utre_code()||").
+	if len(e.lists) == 0 {
+		e.skipRawSpace()
+		if e.bpos < len(e.base) && e.base[e.bpos] == '[' {
+			for e.bpos < len(e.base) && e.base[e.bpos] != ']' {
+				e.bpos++
+			}
+			if e.bpos < len(e.base) {
+				e.bpos++
+			}
+			e.skipRawSpace()
+		}
+		if e.bpos < len(e.base) && e.base[e.bpos] != '{' {
+			e.doVerb() // \Verb|text|: the classic delimited form
+			return
+		}
+	} else {
+		e.scanOptBracketToks() // [commandchars=…, fontsize=…]: no verbatim styling here
+	}
+	text := e.toksToString(e.readBraceToksRaw())
+	font := e.verbFont()
+	if font == nil {
+		return
+	}
+	if !e.inPar {
+		e.beginParagraph(true)
+	}
+	e.parList = append(e.parList, e.verbNodes(text, font, e.curSrcLine)...)
+}
+
+// skipRawSpace advances past spaces in the character buffer, without tokenising:
+// a look-ahead that goes through the mouth cannot be undone for \verb-like
+// scanning, which reads characters rather than tokens.
+func (e *Engine) skipRawSpace() {
+	for e.bpos < len(e.base) && (e.base[e.bpos] == ' ' || e.base[e.bpos] == '\t') {
+		e.bpos++
+	}
+}
+
 // verbFont returns the tt font when one is bound, else the current font.
 func (e *Engine) verbFont() fontFace {
 	if m := e.eq["tt"]; m != nil && m.kind == mFont && m.font != nil {
