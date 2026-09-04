@@ -33,9 +33,13 @@ type tocEntry struct {
 	kind   string
 	level  int
 	number string
-	title  string
-	marker int
-	page   int
+	title  string // detokenized, re-typeset for the on-page contents list
+	// plainTitle is title with markup and accents resolved to clean Unicode text,
+	// for a PDF bookmark /Title (a detokenized title would show literal \name and
+	// accent commands as mojibake; see pdfstring.go).
+	plainTitle string
+	marker     int
+	page       int
 }
 
 // doTOCEntry implements \@tocentry{kind}{level}{number}{title}: it appends a
@@ -48,14 +52,33 @@ func (e *Engine) doTOCEntry() {
 	kind := e.readBraceGroupString()
 	level, _ := strconv.Atoi(trimSpaces(e.readBraceGroupString()))
 	number := e.readBraceGroupString()
-	title := e.readBraceGroupString()
+	title, plain := e.readTitleGroupBoth()
 	e.tocEntries = append(e.tocEntries, tocEntry{
-		kind:   kind,
-		level:  level,
-		number: number,
-		title:  title,
-		marker: len(e.mvl),
+		kind:       kind,
+		level:      level,
+		number:     number,
+		title:      title,
+		plainTitle: plain,
+		marker:     len(e.mvl),
 	})
+}
+
+// readTitleGroupBoth reads a {…} title group once and returns it two ways: the
+// detokenized string the on-page contents list re-typesets (like
+// readBraceGroupString), and a clean plain-text rendering for a PDF bookmark
+// (see pdfstring.go). Reading once keeps the two in step and consumes the group
+// exactly once.
+func (e *Engine) readTitleGroupBoth() (detok, plain string) {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return "", ""
+	}
+	toks := e.expandList(e.grabGroup())
+	return e.toksToString(toks), e.tokensToPlainText(toks)
 }
 
 // readBraceGroupString reads a {…} group and returns its content fully expanded

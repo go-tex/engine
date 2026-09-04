@@ -38,9 +38,19 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 	// and reference managers — read the paper's real metadata rather than nothing
 	// (see hyperstyle.go). go-pdfkit encodes a non-ASCII value as a UTF-16BE text
 	// string, so an accented title is correct.
+	title, author := e.pdfTitle, e.pdfAuthor
+	if e.pdfUseTitle {
+		// pdfusetitle: fall back to \title/\author, cleaned of markup (pdfstring.go).
+		if title == "" {
+			title = e.macroPlainText("@title")
+		}
+		if author == "" {
+			author = e.macroPlainText("@author")
+		}
+	}
 	doc := pdfkit.New(pdfkit.Options{
-		Title:    e.pdfTitle,
-		Author:   e.pdfAuthor,
+		Title:    title,
+		Author:   author,
 		Subject:  e.pdfSubject,
 		Keywords: e.pdfKeywords,
 	})
@@ -72,7 +82,9 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 			continue
 		}
 		if pg := e.pageOfIndex(te.marker); pg >= 1 {
-			doc.AddOutlineItem(te.title, te.level, pg-1)
+			// plainTitle has markup and accents resolved, so a heading like
+			// \section{R\'esum\'e} reads "Résumé" in the sidebar, not "R\'esum\'e".
+			doc.AddOutlineItem(te.plainTitle, te.level, pg-1)
 		}
 	}
 	return doc.Write(w)
