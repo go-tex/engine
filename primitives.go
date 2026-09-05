@@ -2040,6 +2040,9 @@ func (e *Engine) loadMore() {
 	e.prim("mintinline", func(e *Engine) { e.doMintinline() })
 	e.prim("mint", func(e *Engine) { e.doMintinline() })
 	e.prim("inputminted", func(e *Engine) { e.doInputminted() })
+	e.prim("newminted", func(e *Engine) { e.doNewminted() })
+	e.prim("newmintinline", func(e *Engine) { e.doNewmintinline("inline") })
+	e.prim("newmint", func(e *Engine) { e.doNewmintinline("") })
 	// jss.cls (Journal of Statistical Software / Sweave / knitr): Code, CodeInput and
 	// CodeOutput are fancyvrb verbatim environments; CodeChunk is a transparent
 	// wrapper grouping an input/output pair (see jsscode.go).

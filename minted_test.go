@@ -90,3 +90,59 @@ func TestLstlistingStillWorksAfterExtraction(t *testing.T) {
 		}
 	}
 }
+
+// minted's \newminted{lang}{opts} is how a paper gets a code environment of its
+// own: it defines <lang>code. One arXiv paper writes \newminted{jl}{…} and then 28
+// jlcode blocks — and one of those blocks holds a lone $ in a shell path, which was
+// enough to swallow the rest of the paper (#225).
+func TestNewmintedDefinesItsEnvironment(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := "\\newminted{jl}{fontsize=\\footnotesize}\n" +
+		"AVANT\n\\begin{jlcode}\npath = \"$w/x\"\n\\end{jlcode}\nAPRES\\par"
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "APRES") {
+		t.Errorf("the lone $ in the code swallowed the document: %q", txt)
+	}
+	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), `path="$w/x"`) {
+		t.Errorf("the code line is not set verbatim: %q", txt)
+	}
+}
+
+// The optional argument names the environment instead of deriving it.
+func TestNewmintedOptionalNameWins(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	src := "\\newminted[julia]{jl}{}\n\\begin{julia}\ncode_ici\n\\end{julia}\nAPRES\\par"
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	txt := mvlText(e.mvl)
+	if !strings.Contains(txt, "code_ici") || !strings.Contains(txt, "APRES") {
+		t.Errorf("the named environment did not set its body: %q", txt)
+	}
+}
+
+// \newmintinline gives \<lang>inline, the inline sibling.
+func TestNewmintinlineDefinesItsCommand(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\newmintinline{jl}{}avant \jlinline|code_ici()| apres\par`); err != nil {
+		t.Fatal(err)
+	}
+	if txt := strings.ReplaceAll(mvlText(e.mvl), " ", ""); !strings.Contains(txt, "code_ici()") {
+		t.Errorf("the inline command lost its code: %q", txt)
+	}
+}

@@ -98,6 +98,13 @@ var neverLoadReal = map[string]bool{
 	"hyperref": true, "fontspec": true, "inputenc": true, "fontenc": true,
 	"babel": true, "biblatex": true, "listings": true, "pstricks": true,
 	"xcolor": true, "color": true, "graphicx": true, "graphics": true,
+	// minted shells out to Pygments and builds its environments through fancyvrb's
+	// capture machinery. Loaded for real — a paper that ships minted.sty gets it —
+	// \newminted's environments came out defined but unusable: the body reached the
+	// page through a token list with the ordinary category codes, so a lone $ in a
+	// code line opened maths and ate the rest of the document (#225). The engine's
+	// own minted (minted.go) is minted's OWN draft-mode behaviour: verbatim.
+	"minted": true,
 	// bm builds its bold-math commands from low-level math-alphabet machinery
 	// (\install@mathalphabet, \getanddefine@fonts) the engine's font model does not
 	// run, and its \protected@edef\bm#1{\bm{#1}} re-dispatch expands the robust \bm
