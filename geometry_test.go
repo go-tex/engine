@@ -720,3 +720,112 @@ func TestAcmartRealClassNotOverriddenByFloor(t *testing.T) {
 		t.Error("emulation floor was applied even though acmart.cls was resolvable")
 	}
 }
+
+// achemso's manuscript mode is the double-spaced review layout ACS requires for
+// submission, and it is what arXiv preprints in that class use. Without it the
+// article emulation kept the size-default leading and packed twice the text onto
+// every page: corpus paper 2209.13121 came out in 23 pages against the real
+// class's 42, with 98% of its words present — compressed, not lost.
+func TestAchemsoManuscriptIsDoubleSpaced(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		opts    []string
+		wantMan bool
+	}{
+		{"the arXiv form", []string{"manuscript=article", "layout=traditional"}, true},
+		{"another article type", []string{"manuscript=note"}, true},
+		{"the bare option", []string{"manuscript"}, true},
+		{"the journal layout", []string{"journal=jacsat"}, false},
+		{"no options at all", nil, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := achemsoManuscript(c.opts); got != c.wantMan {
+				t.Fatalf("achemsoManuscript(%v) = %v, want %v", c.opts, got, c.wantMan)
+			}
+			e := New()
+			e.LoadLaTeX()
+			e.SetFont(spMock{})
+			before := e.baselineskip
+			e.applyAchemsoGeometry(c.opts)
+			if !c.wantMan {
+				if e.baselineskip != before {
+					t.Errorf("baselineskip moved to %d for a non-manuscript layout", e.baselineskip)
+				}
+				return
+			}
+			// 23.9pt between baselines, measured from the class's own reference PDF.
+			if want := ptToSP(23.9); e.baselineskip != want {
+				t.Errorf("baselineskip = %d, want %d (23.9pt, double-spaced)", e.baselineskip, want)
+			}
+			// The single-spacing reference moves with it, so a \singlespacing inside
+			// the document does not snap back to the emulation's default.
+			if e.baseBaselineskip != e.baselineskip {
+				t.Errorf("baseBaselineskip = %d, want it to follow at %d", e.baseBaselineskip, e.baselineskip)
+			}
+			if want := ptToSP(468); e.hsize != want {
+				t.Errorf("hsize = %d, want %d (468pt, letter less 1in margins)", e.hsize, want)
+			}
+			if want := ptToSP(648); e.vsize != want {
+				t.Errorf("vsize = %d, want %d (648pt)", e.vsize, want)
+			}
+		})
+	}
+}
+
+// elsarticle sizes nothing for its default (preprint) type — the class is
+// \LoadClass{article} plus Elsevier front matter — but its JOURNAL types install
+// a text block through geometry. The values here are elsarticle.cls's own.
+func TestElsarticleJournalTypes(t *testing.T) {
+	for _, c := range []struct {
+		opts         []string
+		want         bool
+		wantW, wantH float64
+	}{
+		{[]string{"10pt", "3p"}, true, 468, 622},
+		{[]string{"1p"}, true, 384, 562},
+		{[]string{"5p", "twocolumn"}, true, 522, 682},
+		{[]string{"preprint", "12pt", "a4paper"}, false, 0, 0},
+		{nil, false, 0, 0},
+	} {
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		lead := e.baselineskip
+		got := e.applyElsarticleGeometry(c.opts)
+		if got != c.want {
+			t.Errorf("applyElsarticleGeometry(%v) = %v, want %v", c.opts, got, c.want)
+			continue
+		}
+		if !c.want {
+			continue
+		}
+		if want := ptToSP(c.wantW); e.hsize != want {
+			t.Errorf("%v: hsize = %d, want %d", c.opts, e.hsize, want)
+		}
+		if want := ptToSP(c.wantH); e.vsize != want {
+			t.Errorf("%v: vsize = %d, want %d", c.opts, e.vsize, want)
+		}
+		// A journal type keeps \baselinestretch at 1, so the size option's leading
+		// must survive untouched.
+		if e.baselineskip != lead {
+			t.Errorf("%v: leading moved to %d, want it left at %d", c.opts, e.baselineskip, lead)
+		}
+	}
+}
+
+// The paper size a class defaults to must not override one the paper chose.
+func TestNamesPaperSize(t *testing.T) {
+	for _, c := range []struct {
+		opts []string
+		want bool
+	}{
+		{[]string{"preprint", "12pt", "a4paper"}, true},
+		{[]string{"letterpaper"}, true},
+		{[]string{"10pt", "3p"}, false},
+		{nil, false},
+	} {
+		if got := namesPaperSize(c.opts); got != c.want {
+			t.Errorf("namesPaperSize(%v) = %v, want %v", c.opts, got, c.want)
+		}
+	}
+}
