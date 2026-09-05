@@ -177,6 +177,34 @@ const MiniLaTeXKernel = `
 % publication); in a .bbl it appears hundreds of times. It is an interword space
 % here — left undefined it was skipped, which merely lost the space between blocks.
 \long\def\newblock{\space}
+% harvard.sty's .bbl entry head. \harvarditem[⟨abbrev⟩]{⟨author⟩}{⟨year⟩}{⟨key⟩}
+% opens a reference exactly where \bibitem does, so it is routed to the same entry
+% renderer with "author (year)" as the label. Left undefined, a harvard-style
+% bibliography lost EVERY entry: one thesis in the corpus (2402.04711) carries 252 of
+% them, and its reference list — a fifth of the document — was simply not there.
+% \harvardand joins the last two authors; \harvardyearleft/right bracket the year.
+\def\harvarditem{\@ifnextbracket\@hvitemopt\@hvitemnoopt}
+\def\@hvitemopt[#1]#2#3#4{\@bibitemopt[#2 (#3)]{#4}}
+\def\@hvitemnoopt#1#2#3{\@bibitemopt[#1 (#2)]{#3}}
+\def\harvardand{and}
+\def\harvardyearleft{(}
+\def\harvardyearright{)}
+% glossaries: \newacronym[⟨opts⟩]{⟨label⟩}{⟨short⟩}{⟨long⟩} declares an acronym and
+% \gls{⟨label⟩} prints it. This engine keeps only the SHORT form (what the expansion
+% is after first use, and what the running text reads as); an unknown label prints
+% its own name rather than nothing, so a missing declaration costs a word, not a
+% sentence. Left undefined, \gls dropped its argument silently — 235 times in one
+% corpus thesis.
+\def\newacronym{\@ifnextbracket\@newacroopt\@newacronoopt}
+\def\@newacroopt[#1]#2#3#4{\expandafter\gdef\csname gls@#2\endcsname{#3}}
+\def\@newacronoopt#1#2#3{\expandafter\gdef\csname gls@#1\endcsname{#2}}
+\def\gls#1{\@ifundefined{gls@#1}{#1}{\csname gls@#1\endcsname}}
+\def\Gls#1{\gls{#1}}
+\def\glspl#1{\gls{#1}s}
+\def\Glspl#1{\gls{#1}s}
+\def\acrshort#1{\gls{#1}}
+\def\acrlong#1{\gls{#1}}
+\def\glsentryshort#1{\gls{#1}}
 % bibunits: a document with per-part bibliographies wraps each in
 % \begin{bibunit}…\putbib[db]…\end{bibunit}. \putbib \input's the current unit's
 % pre-generated bu<N>.bbl (see doPutbib); the [db] database name is consumed. The
