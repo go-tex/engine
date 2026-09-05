@@ -65,9 +65,12 @@ func TestLenientBodyFailuresTolerated(t *testing.T) {
 	cases := []struct {
 		name, src, wantSkip string
 	}{
+		// A missing figure is NOT a skipped \includegraphics: the command is defined
+		// and ran, reserving a placeholder box. It is reported under FiguresDropped,
+		// by cause — asserted in TestFigureDropIsReportedByCauseNotAsUndefinedCommand.
 		{"missing image", `\documentclass{article}\begin{document}
 Before.\par\includegraphics[width=100pt]{no-such-figure.png}\par After.
-\end{document}`, "includegraphics"},
+\end{document}`, ""},
 		{"unknown math", `\documentclass{article}\begin{document}
 Text $a + \someunknownmathop b$ more text.
 \end{document}`, `\someunknownmathop`},

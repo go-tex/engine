@@ -159,6 +159,21 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+	// A figure whose FILE could not be loaded used to be tallied as a skipped
+	// \includegraphics, which named the wrong thing: the command is defined and did
+	// reserve the box. Report the cause instead — only one of the three is a gap the
+	// engine could close.
+	if len(d.FiguresDropped) > 0 {
+		list := sortedByCount(d.FiguresDropped)
+		n := 0
+		for _, e := range list {
+			n += e.count
+		}
+		fmt.Fprintf(w, "gotex: %d figure(s) placed as an empty box — the file, not the command, is what failed:\n", n)
+		for _, e := range list {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 	} else {
