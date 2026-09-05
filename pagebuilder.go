@@ -91,10 +91,24 @@ func (e *Engine) Pages() []*boxNode {
 // cost-based breaker, numbering them from pageOffset+1.
 func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 	var pages []*boxNode
+	// Whatsits from slices that held no box. TeX keeps them on the contribution
+	// list rather than shipping a page for them; see pageIsUnshippable.
+	var carry []node
 	for start := 0; start < len(list); {
 		end := e.findPageBreak(list, start)
-		if page := trimTrailingGlue(list[start:end]); len(page) > 0 {
-			pages = append(pages, e.assemblePage(page, pageOffset+len(pages)+1))
+		page := trimTrailingGlue(list[start:end])
+		switch {
+		case pageIsUnshippable(page):
+			for _, n := range page {
+				if _, isSpecial := n.(specialNode); isSpecial {
+					carry = append(carry, n)
+				}
+			}
+		case len(page) > 0:
+			full := make([]node, 0, len(carry)+len(page))
+			full = append(append(full, carry...), page...)
+			carry = nil
+			pages = append(pages, e.assemblePage(full, pageOffset+len(pages)+1))
 		}
 		if end == len(list) {
 			break
@@ -130,6 +144,26 @@ func (e *Engine) effectiveVsize() int {
 		return e.vsize
 	}
 	return ptToSP(8.9 * 7227.0 / 100.0) // plain TeX \vsize = 8.9in
+}
+
+// pageIsUnshippable reports whether a page slice holds nothing that would make the
+// page non-empty for TeX. tex.web §1000 sets page_contents to box_there only for an
+// hlist, vlist or rule node; a whatsit is contributed WITHOUT doing so, and the glue,
+// kerns and penalties that reach a page holding no box are discarded outright
+// ("goto done1"). So \newpage — \par\penalty-10000 — before any box ships nothing.
+//
+// Here it shipped a blank sheet as soon as a class preamble held a \special: oupau.cls
+// writes \special{papersize=210mm,297mm} (line 81), and every document that class set
+// therefore opened on an empty page, its title pushed to page 2.
+func pageIsUnshippable(page []node) bool {
+	for _, n := range page {
+		switch n.(type) {
+		case glueNode, penaltyNode, kernNode, specialNode:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // findPageBreak returns the exclusive end index of the page beginning at start.
