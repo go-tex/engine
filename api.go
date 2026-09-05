@@ -265,10 +265,26 @@ func CompileToPDFReport(src []byte, opt Options, w io.Writer) (int, map[string]i
 	return len(e.Pages()), e.SkippedCommands(), nil
 }
 
+// maxReruns bounds how many extra render passes compile will spend chasing a
+// stable set of page numbers, after the auxiliary pass and the first render.
+// LaTeX bounds this too — it asks the user to rerun and eventually gives up —
+// because a document can oscillate and never settle.
+const maxReruns = 2
+
 // compile builds an engine and runs the source, ready for rendering. When the
 // document defines cross-reference \labels it compiles twice — the first pass
 // gathers the label table (so forward \refs resolve), exactly as LaTeX uses its
 // .aux file — carrying the labels into the second, rendered pass.
+//
+// Two passes are not always enough. The auxiliary pass lays out a document whose
+// table of contents and index are still empty, so it is SHORTER than the one the
+// reader gets: every page number it collects can be too low, and a table of
+// contents long enough to spill onto a second page shifts every entry it lists
+// by one. LaTeX meets the same problem and answers it by rerunning until the
+// numbers stop moving ("Rerun to get cross-references right"). So does compile —
+// but it only pays for a rerun when the numbers actually moved, since deciding
+// that is free: the rendered pass can be asked where its own markers fell and
+// the answer compared with what it was handed.
 func compile(src []byte, opt Options) (*Engine, error) {
 	src = []byte(normalizeEOL(string(src))) // tolerate a CRLF document (e.g. from Windows)
 	latex := isLaTeX(src)
@@ -280,22 +296,26 @@ func compile(src []byte, opt Options) (*Engine, error) {
 		if _, err := aux.Run(string(src)); err != nil {
 			return nil, err
 		}
-		aux.finalizeTOCPages()
-		aux.finalizeIndexPages()
-		e, err := buildEngine(opt, true)
-		if err != nil {
-			return nil, err
+		aux.finalizePages()
+		prev := aux
+		for rerun := 0; ; rerun++ {
+			e, err := buildEngine(opt, true)
+			if err != nil {
+				return nil, err
+			}
+			e.carryCrossRefs(prev)
+			if _, err := e.Run(string(src)); err != nil {
+				return nil, err
+			}
+			// What this pass was handed, before finalizePages overwrites it with
+			// what this pass itself produced.
+			was := e.labelPages
+			e.finalizePages()
+			if rerun == maxReruns || e.crossRefsAgree(was) {
+				return e, nil
+			}
+			prev = e
 		}
-		e.labels = aux.labels
-		e.refTypes = aux.refTypes
-		e.refNames = aux.refNames
-		e.bibAuthor = aux.bibAuthor // \citet author labels, gathered by the aux \bibliography
-		e.tocSource = aux.tocEntries
-		e.indexSource = aux.indexEntries
-		if _, err := e.Run(string(src)); err != nil {
-			return nil, err
-		}
-		return e, nil
 	}
 	e, err := buildEngine(opt, latex)
 	if err != nil {

@@ -166,7 +166,14 @@ type Engine struct {
 	// time and carried through the two-pass compile exactly like labels.
 	refTypes map[string]string // \label → \@currentreftype, used by \autoref / \cref
 	refNames map[string]string // \label → \@currentlabelname (title), used by \nameref
-	err      error
+	// \pageref: where in the main vertical list each \label was declared, turned
+	// into a page number once the run has finished and carried into the render
+	// pass — the same marker→page mechanism the table of contents uses, because
+	// a label's page is knowable only after the whole document has been broken
+	// into pages.
+	labelMarks map[string]int // \label → len(mvl) at declaration, this run
+	labelPages map[string]int // \label → page number, carried from the aux pass
+	err        error
 
 	// BibTeX bibliography (see bibtex.go): which keys were \cite'd/\nocite'd (and
 	// their first-citation order), whether \nocite{*} requested every entry, the
