@@ -84,6 +84,10 @@ type Engine struct {
 	// expandingCS is the control sequence whose macro is being expanded right now,
 	// so a recovery can name it (see noteExtraBrace).
 	expandingCS string
+
+	// beamerBands: this document is a beamer talk, whose head/foot geometry bands
+	// must be folded into the body because its frame machinery is not run here.
+	beamerBands bool
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
 	importPath  string

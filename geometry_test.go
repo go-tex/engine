@@ -501,22 +501,39 @@ func TestGeometryEvalDoesNotEatTheDocument(t *testing.T) {
 }
 
 func TestGeometryHeadAndFootBands(t *testing.T) {
-	// head/headsep/foot sit between the margins and the text block, so they come
-	// off \vsize. They default to zero: a document that never names them keeps the
-	// plain top/bottom arithmetic.
+	// geometry's vertical equation is paperheight = top + height + bottom, and by
+	// default height is \textheight ALONE: the running head sits INSIDE the top
+	// margin, so naming headheight/headsep/footskip does not move the first line or
+	// shorten the body. Only includehead/includefoot fold a band into height.
+	//
+	// Folding them unconditionally cost five lines on every page of a document whose
+	// style names them: automl.sty's \newgeometry{textheight=9in, top=1in,
+	// headheight=12\p@, headsep=20\p@, footskip=0.5in} lost 32pt at the top and 36pt
+	// at the bottom, setting 44 lines a page where the reference sets 49.
 	e := runGeom(t, `\usepackage[papersize={12.8cm,9.6cm},hmargin=1cm,vmargin=0cm,`+
 		`head=0.5cm,headsep=0pt,foot=0.5cm]{geometry}`)
-	if want := texSP(t, "9.6cm") - 2*texSP(t, "0.5cm"); e.vsize != want {
-		t.Errorf("vsize = %d, want %d (paper − head − foot)", e.vsize, want)
+	if want := texSP(t, "9.6cm"); e.vsize != want {
+		t.Errorf("vsize = %d, want %d (the bands are NOT part of the body)", e.vsize, want)
 	}
-	// The renderer's vertical margin is the top margin plus the head band, which is
-	// the whole distance from the paper edge down to the first line.
-	if got, want := e.renderVMargin(72), spToPt(texSP(t, "0.5cm")); got != want {
-		t.Errorf("renderVMargin = %v, want %v", got, want)
+	if got, want := e.renderVMargin(72), spToPt(texSP(t, "0cm")); got != want {
+		t.Errorf("renderVMargin = %v, want %v (the head sits in the margin)", got, want)
 	}
 	// Horizontally it is still the left margin, and the two now differ.
 	if got, want := e.renderMargin(72), spToPt(texSP(t, "1cm")); got != want {
 		t.Errorf("renderMargin = %v, want %v", got, want)
+	}
+}
+
+// includeheadfoot is what folds the bands INTO the body: then they do come off the
+// text height and the first line moves down by the head band.
+func TestGeometryIncludeHeadFootFoldsTheBands(t *testing.T) {
+	e := runGeom(t, `\usepackage[papersize={12.8cm,9.6cm},hmargin=1cm,vmargin=0cm,`+
+		`head=0.5cm,headsep=0pt,foot=0.5cm,includeheadfoot]{geometry}`)
+	if want := texSP(t, "9.6cm") - 2*texSP(t, "0.5cm"); e.vsize != want {
+		t.Errorf("vsize = %d, want %d (paper − head − foot)", e.vsize, want)
+	}
+	if got, want := e.renderVMargin(72), spToPt(texSP(t, "0.5cm")); got != want {
+		t.Errorf("renderVMargin = %v, want %v", got, want)
 	}
 }
 

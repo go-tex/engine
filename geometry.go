@@ -90,6 +90,24 @@ type geomState struct {
 	// with head=0.5cm and foot=0.5cm, so ignoring the bands overstated its text
 	// height by the whole 1cm.
 	head, headsep, foot int
+	// inclHead/inclFoot say whether those bands are part of the BODY. geometry's
+	// vertical equation is paperheight = top + height + bottom, and by default
+	// height is \textheight alone: the running head sits INSIDE the top margin, so
+	// naming headheight/headsep does not move the first line. Only includehead /
+	// includefoot / includeheadfoot fold a band into height, which is when it costs
+	// the body its space.
+	//
+	// Adding the bands unconditionally cost five lines on every page of a document
+	// whose style sets them — automl.sty's \newgeometry{textheight=9in, top=1in,
+	// headheight=12\p@, headsep=20\p@, footskip=0.5in} lost 32pt at the top and
+	// 36pt at the bottom, 44 lines a page where the reference sets 49.
+	inclHead, inclFoot bool
+	// beamerBands keeps the old unconditional folding for beamer alone. beamer asks
+	// for head=0.5cm/foot=0.5cm WITHOUT includeheadfoot, so real geometry hands it
+	// \textheight = \paperheight and beamer's own frame machinery carves the two
+	// bands out again. This engine does not run that machinery, so folding them here
+	// is what keeps a slide the right height.
+	beamerBands bool
 }
 
 // newGeomState returns the geometry defaults: the class's paper size (a4paper/…), or
@@ -103,7 +121,8 @@ func (e *Engine) newGeomState() *geomState {
 	}
 	w, h, _ := e.paper(size)
 	m, _ := e.geomEval("1in")
-	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m}
+	return &geomState{paperW: w, paperH: h, left: m, right: m, top: m, bottom: m,
+		beamerBands: e.beamerBands}
 }
 
 // parseGeomFloat reads a bare decimal factor (the geometry `scale` value, e.g. 0.775).
@@ -262,10 +281,16 @@ func (e *Engine) applyGeometry(opts string) {
 				// and/or foot INTO the body, so the text height loses headheight+headsep
 				// (12pt+25pt) and/or footskip (30pt) — the standard 10–12pt class values.
 				if key == "includehead" || key == "includeheadfoot" {
-					g.head, g.headsep = ptToSP(12), ptToSP(25)
+					g.inclHead = true
+					if g.head == 0 && g.headsep == 0 { // no explicit band: the standard class values
+						g.head, g.headsep = ptToSP(12), ptToSP(25)
+					}
 				}
 				if key == "includefoot" || key == "includeheadfoot" {
-					g.foot = ptToSP(30)
+					g.inclFoot = true
+					if g.foot == 0 {
+						g.foot = ptToSP(30)
+					}
 				}
 			default:
 				if w, h, ok := e.paper(key); ok {
@@ -382,7 +407,7 @@ func (e *Engine) applyGeometry(opts string) {
 	if g.hasTextH {
 		e.vsize = g.textH
 	} else {
-		e.vsize = g.paperH - g.top - g.bottom - g.head - g.headsep - g.foot
+		e.vsize = g.paperH - g.top - g.bottom - g.bodyBands()
 	}
 	e.publishGeometry(g)
 }
@@ -691,6 +716,20 @@ func (e *Engine) namedDimen(name string) (int, bool) {
 	return 0, false
 }
 
+// bodyBands is how much of the page height the running-head and running-foot bands
+// take FROM THE BODY: nothing unless the document asked for includehead/includefoot
+// (or it is beamer, whose frame machinery this engine does not run). See geomState.
+func (g *geomState) bodyBands() int {
+	n := 0
+	if g.inclHead || g.beamerBands {
+		n += g.head + g.headsep
+	}
+	if g.inclFoot || g.beamerBands {
+		n += g.foot
+	}
+	return n
+}
+
 // renderVMargin returns the margin the drivers should leave above and below the
 // text block. It is the top margin PLUS the running-head band, because the head
 // sits between the paper edge and the text: what the renderer needs is the whole
@@ -703,7 +742,11 @@ func (e *Engine) namedDimen(name string) (int, bool) {
 // tall.
 func (e *Engine) renderVMargin(fallback float64) float64 {
 	if e.geom != nil {
-		return spToPt(e.geom.top + e.geom.head + e.geom.headsep)
+		m := e.geom.top
+		if e.geom.inclHead || e.geom.beamerBands {
+			m += e.geom.head + e.geom.headsep
+		}
+		return spToPt(m)
 	}
 	if d, ok := e.classTopMargin(); ok {
 		return spToPt(d)
