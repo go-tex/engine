@@ -104,6 +104,18 @@ func (e *Engine) scanMathSource() (string, bool) {
 				e.push(braceNameToks(name))
 			}
 		}
+		// A formula cannot cross a GROUP BOUNDARY or a paragraph: meeting \endgroup or
+		// \par at the top level means the $ was never closed, and TeX says so
+		// ("Missing $ inserted"). Scanning on instead swallowed whatever followed —
+		// measured on one arXiv paper, an unpaired $ inside an algorithmic block ate
+		// the block's \endgroup's, the groups desynchronised, and the \def\item that
+		// \enumerate posts in its own group was no longer in force: every later item
+		// took the generic \item, whose optional-argument grab then ran into a } (#229).
+		// The token goes back so the group closes and the document carries on.
+		if depth == 0 && e.endsUnterminatedMath(t) {
+			e.back(t)
+			break
+		}
 		// A $ inside a \mbox{…$…$…}/\text{…} group (depth > 0) is that group's own
 		// nested inline math, NOT the closing shift — treating it as the close used
 		// to truncate the math here and desynchronise every $ in the rest of the
@@ -135,6 +147,20 @@ func (e *Engine) scanMathSource() (string, bool) {
 		}
 	}
 	return b.String(), display
+}
+
+// endsUnterminatedMath reports whether t proves the formula was never closed: a
+// \endgroup that would close a group the formula opened outside itself, or the \par
+// that ends a paragraph. Both are errors inside maths in real TeX.
+func (e *Engine) endsUnterminatedMath(t tok) bool {
+	if !t.cs_ {
+		return false
+	}
+	m := e.meaningOf(t)
+	if m == nil || m.kind != mPrim {
+		return false
+	}
+	return m.name == "endgroup" || m.name == "par"
 }
 
 // peekBracedName reads a {name} that follows, returning the name; when the next
