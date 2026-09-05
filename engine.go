@@ -389,6 +389,11 @@ type meaning struct {
 	kind   mkind
 	params []tok // macro parameter text
 	body   []tok // macro replacement text
+	// bodyPlain memoises whether body contains no parameter token, so a macro with
+	// no parameters can be pushed WITHOUT copying: a pushed list is read-only (see
+	// getNext, which consumes it by re-slicing, and back, which pushes a fresh
+	// slice). 0 = not yet examined, 1 = plain, 2 = contains a parameter.
+	bodyPlain int8
 
 	// optArg marks a LaTeX-style macro whose first parameter is optional: at call
 	// time #1 is taken from a bracketed [..] argument if one is present, otherwise
@@ -1212,7 +1217,28 @@ func (e *Engine) expandMacro(m *meaning) {
 		e.argRunaway = false
 		return
 	}
-	var body []tok
+	// A macro whose body holds no parameter token expands to that body unchanged,
+	// so with no arguments to substitute the copy below would be a verbatim one.
+	// Push the stored body instead: pushed lists are read-only, and this is the
+	// common case (most kernel and class macros take no arguments), which made the
+	// per-call copy the engine's single largest allocation after glyph outlines
+	// were memoised.
+	if m.bodyPlain == 0 {
+		m.bodyPlain = 1
+		for _, b := range m.body {
+			if b.cat == catParam && !b.cs_ && b.ch >= '1' && b.ch <= '9' {
+				m.bodyPlain = 2
+				break
+			}
+		}
+	}
+	if m.bodyPlain == 1 && len(args) == 0 {
+		e.push(m.body)
+		return
+	}
+	// Otherwise build the replacement text. Sizing it up front turns the append
+	// growth (nil, 1, 2, 4, …) into a single allocation for the common shapes.
+	body := make([]tok, 0, len(m.body))
 	for i := 0; i < len(m.body); i++ {
 		b := m.body[i]
 		if b.cat == catParam && !b.cs_ && b.ch >= '1' && b.ch <= '9' {
