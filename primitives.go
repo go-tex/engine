@@ -1908,8 +1908,10 @@ func (e *Engine) loadMore() {
 	e.prim("gotex@putbib", func(e *Engine) { e.doPutbib() })                 // bibunits: \input the current unit's bu<N>.bbl
 	e.prim("tabular", func(e *Engine) { e.doTabular() })
 	e.prim("tabular*", func(e *Engine) { e.doTabularStar() })
-	e.prim("endtabular*", func(e *Engine) {}) // consumed by doTabularStar
-	e.prim("endtabular", func(e *Engine) {})  // consumed by doTabular; defined for safety
+	e.prim("longtable", func(e *Engine) { e.doLongtable() })
+	e.prim("endlongtable", func(e *Engine) {}) // consumed by doLongtable
+	e.prim("endtabular*", func(e *Engine) {})  // consumed by doTabularStar
+	e.prim("endtabular", func(e *Engine) {})   // consumed by doTabular; defined for safety
 	e.prim("tabularx", func(e *Engine) { e.doTabularx() })
 	e.prim("endtabularx", func(e *Engine) {}) // consumed by doTabularx; defined for safety
 	e.prim("minipage", func(e *Engine) { e.doMinipage() })
