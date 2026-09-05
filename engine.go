@@ -2511,16 +2511,27 @@ func (e *Engine) applyUnit(intPart, f int) int {
 	case key == "sp":
 		e.skipOneOptSpace()
 		return intPart // sp is already scaled; fraction is dropped
-	case key == "em" || key == "ex":
-		// Font-relative units: 1em ≈ the font size (quad), 1ex ≈ half of it.
+	case key == "em" || key == "ex" || key == "mu":
+		// Font-relative units: 1em ≈ the font size (quad), 1ex ≈ half of it, and
+		// 18mu = 1em (TeXbook ch. 18 — the math unit, taken from family 2).
+		//
+		// TeX admits mu only in math glue and reports "Illegal unit of measure
+		// (mu inserted)" elsewhere (tex.web §8987); left unrecognised here the two
+		// letters went BACK into the input and were typeset. A class that sets
+		// \thinmuskip = 3mu / \medmuskip = 4mu / \thickmuskip = 5mu in its
+		// preamble (oupau.cls:101-103) therefore printed "mu mu mu" on the title
+		// page of every document using it.
 		e.skipOneOptSpace()
 		size := 10
 		if e.curFont != nil {
 			size = e.curFont.sizePt()
 		}
 		coeff := intPart*unity + f // the decimal coefficient × unity
-		if key == "ex" {
+		switch key {
+		case "ex":
 			return coeff * size / 2
+		case "mu":
+			return coeff * size / 18
 		}
 		return coeff * size
 	default:
