@@ -38,11 +38,14 @@ const (
 // tabItem is one item of a tabular body: a full rule (\hline), a partial rule
 // (\cline{from-to}, 1-based inclusive column range), or a data row.
 type tabItem struct {
-	hline bool
-	cline bool
-	cfrom int
-	cto   int
-	cells [][]tok
+	// ltmark names a longtable head/foot terminator that closed the run of rows
+	// before it; empty for an ordinary row. See longtable.go.
+	ltmark string
+	hline  bool
+	cline  bool
+	cfrom  int
+	cto    int
+	cells  [][]tok
 	// booktabs rules: brule is a full-width \toprule/\midrule/\bottomrule, bcmid
 	// is a partial \cmidrule (reusing cfrom/cto as its 1-based column range).
 	// weight is the rule thickness in sp; btrimL/btrimR carry \cmidrule's (l)/(r)
@@ -512,8 +515,18 @@ func (e *Engine) scanColSpec() ([]byte, []int, []bool) {
 			pwidths = append(pwidths, 0)
 			col++
 		case 'p', 'm', 'b': // paragraph column: p{width} (m/b treated as p)
-			aligns = append(aligns, 'p')
-			pwidths = append(pwidths, e.readBraceDimen())
+			if w := e.readColumnWidth(); w > 0 {
+				aligns = append(aligns, 'p')
+				pwidths = append(pwidths, w)
+			} else {
+				// A width this engine cannot evaluate — Pandoc emits computed ones,
+				// p{(\columnwidth - 8\tabcolsep) * \real{0.3580}}. A zero-width
+				// paragraph column would set every cell one character per line, so
+				// the column falls back to its natural width instead. The CONTENT is
+				// what matters; the measure is an approximation.
+				aligns = append(aligns, 'l')
+				pwidths = append(pwidths, 0)
+			}
 			col++
 		case 'X': // tabularx flexible paragraph column; width resolved later
 			aligns = append(aligns, 'X')
@@ -639,6 +652,11 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			break
 		}
 		switch {
+		case depth == 0 && envDepth == 0 && env == "longtable" && t.cs_ && longtableMarks[t.cs]:
+			// A longtable head/foot terminator closes the run of rows before it; record
+			// it so the assembler can keep the first head and the last foot (longtable.go).
+			endRow()
+			items = append(items, tabItem{ltmark: t.cs})
 		case depth == 0 && envDepth == 0 && t.cs_ && e.isTabularConditional(t):
 			// A conditional at the body's top level (\ifcopyright … \\ … \fi, as in
 			// the eptcs licence block): evaluate it here rather than storing it raw.
@@ -1221,4 +1239,52 @@ func allEmpty(row [][]tok) bool {
 		}
 	}
 	return true
+}
+
+// readColumnWidth reads a paragraph column's {width} group and returns the width in
+// sp, or 0 when it is an expression this engine cannot evaluate.
+//
+// It differs from readBraceDimen in the one way that matters here: it consumes the
+// WHOLE group even when the width does not parse. Pandoc writes its table columns as
+// computed widths —
+//
+//	p{(\columnwidth - 8\tabcolsep) * \real{0.3580}}
+//
+// — and readBraceDimen stops at the first token scanDimen cannot use and pushes the
+// rest back. Those leftovers are then read by scanColSpec as if they were column
+// letters, and the braces among them unbalance the spec: its own closing brace is
+// consumed early, the body scanner never meets the environment's \end, and the table
+// is swallowed along with everything after it. Measured on 2304.05592, routing such a
+// table through the tabular machinery without this cost 18128 of its 60129 glyphs —
+// thirty percent of the document — so consuming the group is the invariant and the
+// width is best effort.
+func (e *Engine) readColumnWidth() int {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || !(t.cat == catBegin && !t.cs_) {
+		if ok {
+			e.back(t)
+		}
+		return 0
+	}
+	d := e.scanDimen()
+	// Drain the rest of the group, whatever it is. A simple {5cm} leaves only the
+	// closing brace; a computed one leaves an expression whose nested {…} must be
+	// counted so the matching brace — and no more — is consumed.
+	for depth := 1; depth > 0; {
+		u, ok := e.getNext()
+		if !ok {
+			break
+		}
+		if u.cs_ {
+			continue
+		}
+		switch u.cat {
+		case catBegin:
+			depth++
+		case catEnd:
+			depth--
+		}
+	}
+	return d
 }
