@@ -1771,7 +1771,7 @@ func (e *Engine) loadMore() {
 	e.prim("fcolorbox", func(e *Engine) { e.place(e.doFcolorbox()) })
 	e.prim("label", func(e *Engine) { e.doLabel() })
 	e.prim("ref", func(e *Engine) { e.doRef() })
-	e.prim("pageref", func(e *Engine) { e.doRef() }) // page numbers not modelled; reuse the ref text
+	e.prim("pageref", func(e *Engine) { e.doPageref() })
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
 	e.prim("@tocentry", func(e *Engine) { e.doTOCEntry() })

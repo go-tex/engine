@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -284,5 +285,52 @@ func TestTOCFallbackSinglePass(t *testing.T) {
 	collectChars(e.mvl, &b)
 	if !strings.Contains(b.String(), "Contents") || !strings.Contains(b.String(), "Alpha") {
 		t.Errorf("single-pass fallback TOC missing heading or entry: %q", b.String())
+	}
+}
+
+// A contents list long enough to spill onto a second page pushes every section
+// it lists one page further down than the auxiliary pass — which laid out a
+// document with no contents list at all — measured. Two passes report those
+// stale numbers; compile reruns until they settle.
+//
+// The short document is the control, and it is the part that proves the fix is
+// arithmetic rather than a constant: its contents list fits on one page, so
+// nothing moves and no rerun is spent.
+func TestTOCPagesSettleAcrossReruns(t *testing.T) {
+	doc := func(n int) []byte {
+		var b strings.Builder
+		b.WriteString("\\documentclass{article}\n\\begin{document}\n\\tableofcontents\n")
+		for i := 1; i <= n; i++ {
+			fmt.Fprintf(&b, "\\newpage\\section{Section number %d}Body %d.\n", i, i)
+		}
+		b.WriteString("\\end{document}")
+		return []byte(b.String())
+	}
+	for _, c := range []struct {
+		name      string
+		sections  int
+		wantFirst int // page the first section falls on
+	}{
+		{"contents on one page", 30, 2},
+		{"contents spilling onto a second", 45, 3},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e, err := compile(doc(c.sections), Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := e.tocSource[0].page; got != c.wantFirst {
+				t.Errorf("contents list places section 1 on page %d, want %d", got, c.wantFirst)
+			}
+			// Every number the reader sees must be one this very pass would
+			// measure again — the definition of having settled.
+			if !e.crossRefsAgree(e.labelPages) {
+				t.Error("page numbers had not settled when compile returned")
+			}
+			last := len(e.tocSource) - 1
+			if got, want := e.tocSource[last].page, c.wantFirst+last; got != want {
+				t.Errorf("contents list places the last section on page %d, want %d", got, want)
+			}
+		})
 	}
 }

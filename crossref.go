@@ -3,6 +3,8 @@
 
 package engine
 
+import "strconv"
+
 // This file implements LaTeX's cross-reference mechanism (\label / \ref and its
 // variants). LaTeX resolves references through an auxiliary file written on one
 // run and read on the next, so a forward \ref (used before its \label) resolves
@@ -26,9 +28,99 @@ func (e *Engine) doLabel() {
 		e.labels = map[string]string{}
 	}
 	e.labels[key] = val
+	// Remember where in the main vertical list the label was declared, so that
+	// once the document is broken into pages we can say which page it fell on
+	// (finalizeLabelPages, for \pageref).
+	if e.labelMarks == nil {
+		e.labelMarks = map[string]int{}
+	}
+	e.labelMarks[key] = len(e.mvl)
 	// Additionally freeze the reference type and title name for typed references
 	// (\autoref / \nameref / \cref / \Cref); see typedrefs.go.
 	e.recordRefMeta(key)
+}
+
+// finalizeLabelPages turns each label's recorded main-vertical-list position
+// into a page number, once the run has broken the document into pages. It is
+// the \pageref counterpart of finalizeTOCPages, and is called on the auxiliary
+// pass so that the render pass can resolve a \pageref that precedes its \label.
+func (e *Engine) finalizeLabelPages() {
+	if len(e.labelMarks) == 0 {
+		return
+	}
+	pages := make(map[string]int, len(e.labelMarks))
+	for key, mark := range e.labelMarks {
+		pages[key] = e.pageOfIndex(mark)
+	}
+	e.labelPages = pages
+}
+
+// doPageref implements \pageref: the number of the page its \label fell on.
+// LaTeX resolves this through the .aux file; the engine resolves it from the
+// label page table gathered by the auxiliary pass. An unknown key — or a single
+// pass, which has no table yet — yields "??", LaTeX's unresolved marker.
+func (e *Engine) doPageref() {
+	key := e.readBraceName()
+	if p, ok := e.labelPages[key]; ok && p > 0 {
+		e.pushString(strconv.Itoa(p))
+		return
+	}
+	e.pushString("??")
+}
+
+// finalizePages resolves every marker this run recorded — table of contents,
+// index and \label — into the page it fell on, now that the document has been
+// broken into pages.
+func (e *Engine) finalizePages() {
+	e.finalizeTOCPages()
+	e.finalizeIndexPages()
+	e.finalizeLabelPages()
+}
+
+// carryCrossRefs hands this engine everything a previous pass learned that a
+// later one needs to resolve a reference made before its definition: the label
+// table and its typed variants, the \citet author labels, and the table of
+// contents and index entries with the pages that pass measured.
+func (e *Engine) carryCrossRefs(prev *Engine) {
+	e.labels = prev.labels
+	e.refTypes = prev.refTypes
+	e.refNames = prev.refNames
+	e.labelPages = prev.labelPages
+	e.bibAuthor = prev.bibAuthor // \citet author labels, gathered by the aux \bibliography
+	e.tocSource = prev.tocEntries
+	e.indexSource = prev.indexEntries
+}
+
+// crossRefsAgree reports whether the page numbers this run typeset are the ones
+// it would collect from its own output — that is, whether the numbers have
+// stopped moving and a further pass would change nothing. wasLabelPages is the
+// label table the run was handed, captured before finalizePages replaced it.
+func (e *Engine) crossRefsAgree(wasLabelPages map[string]int) bool {
+	if len(wasLabelPages) != len(e.labelPages) {
+		return false
+	}
+	for k, v := range wasLabelPages {
+		if e.labelPages[k] != v {
+			return false
+		}
+	}
+	if len(e.tocSource) != len(e.tocEntries) {
+		return false
+	}
+	for i := range e.tocSource {
+		if e.tocSource[i].page != e.tocEntries[i].page {
+			return false
+		}
+	}
+	if len(e.indexSource) != len(e.indexEntries) {
+		return false
+	}
+	for i := range e.indexSource {
+		if e.indexSource[i].page != e.indexEntries[i].page {
+			return false
+		}
+	}
+	return true
 }
 
 // doRef pushes the recorded reference text for a key back into the input. An
@@ -75,6 +167,7 @@ func (e *Engine) doCite() {
 func needsTwoPass(src []byte) bool {
 	return indexOf(src, `\label`) >= 0 ||
 		indexOf(src, `\bibitem`) >= 0 ||
+		indexOf(src, `\pageref`) >= 0 || // needs the label page table (finalizeLabelPages)
 		indexOf(src, `\bibliography`) >= 0 || // \cite forward-references an auto bibliography
 		indexOf(src, `\tableofcontents`) >= 0 ||
 		indexOf(src, `\listoffigures`) >= 0 ||

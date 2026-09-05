@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // mvlText collects every character typeset in a node tree, ignoring glue/kern/
 // rules — enough to read back the letters and digits a run produced.
@@ -151,6 +154,88 @@ func TestSplitComma(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("splitComma[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// \pageref names the page its \label fell on — not the label's own reference
+// text. The two are easy to confuse because they agree on a one-page document,
+// so this test puts the target three pages away from the reference to it.
+func TestPagerefResolvesToPage(t *testing.T) {
+	src := []byte(`\documentclass{article}
+\begin{document}
+Target on page \pageref{far}, section \ref{far}.
+\newpage x \newpage \section{Far}\label{far} here.
+\end{document}`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.labelPages["far"]; got != 3 {
+		t.Fatalf("label far resolved to page %d, want 3", got)
+	}
+	var b strings.Builder
+	collectChars(e.mvl, &b)
+	if text := b.String(); !strings.Contains(text, "page3") {
+		t.Errorf("\\pageref did not typeset page 3: %q", text)
+	}
+}
+
+// A \pageref whose label is unknown — or whose page never resolved — yields
+// LaTeX's "??" rather than a wrong number.
+func TestPagerefUnresolved(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	e.labelPages = map[string]int{"a": 4, "unset": 0}
+	if _, err := e.Run(`\noindent\pageref{a} and \pageref{unset} and \pageref{gone}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := mvlText(e.mvl); got != "4and??and??" {
+		t.Errorf("pagerefs typeset %q, want %q", got, "4and??and??")
+	}
+}
+
+// finalizeLabelPages leaves the table alone when the run declared no \label.
+func TestFinalizeLabelPagesWithoutLabels(t *testing.T) {
+	e := New()
+	e.finalizeLabelPages()
+	if e.labelPages != nil {
+		t.Errorf("labelPages = %v, want nil when no label was declared", e.labelPages)
+	}
+}
+
+// crossRefsAgree is what decides whether another pass is worth paying for: it
+// must report disagreement for every table that can move, and only then.
+func TestCrossRefsAgree(t *testing.T) {
+	was := map[string]int{"a": 2}
+	base := func() *Engine {
+		return &Engine{
+			labelPages:   map[string]int{"a": 2},
+			tocSource:    []tocEntry{{page: 1}},
+			tocEntries:   []tocEntry{{page: 1}},
+			indexSource:  []indexEntry{{page: 5}},
+			indexEntries: []indexEntry{{page: 5}},
+		}
+	}
+	if !base().crossRefsAgree(was) {
+		t.Error("identical tables should agree")
+	}
+	for _, c := range []struct {
+		name string
+		mut  func(*Engine)
+	}{
+		{"a label appearing", func(e *Engine) { e.labelPages["b"] = 3 }},
+		{"a label moving", func(e *Engine) { e.labelPages["a"] = 9 }},
+		{"a contents entry appearing", func(e *Engine) { e.tocEntries = nil }},
+		{"a contents entry moving", func(e *Engine) { e.tocEntries[0].page = 7 }},
+		{"an index entry appearing", func(e *Engine) { e.indexEntries = nil }},
+		{"an index entry moving", func(e *Engine) { e.indexEntries[0].page = 7 }},
+	} {
+		e := base()
+		c.mut(e)
+		if e.crossRefsAgree(was) {
+			t.Errorf("%s should force a rerun", c.name)
 		}
 	}
 }
