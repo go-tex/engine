@@ -80,6 +80,9 @@ type Engine struct {
 	// glyphs/boxes can be stamped with their origin line for errors + navigation.
 	lineStarts []int // rune offset of each source line's start
 	srcPos     int   // rune offset where the current token began
+	// expandingCS is the control sequence whose macro is being expanded right now,
+	// so a recovery can name it (see noteExtraBrace).
+	expandingCS string
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
 	importPath  string
@@ -1161,7 +1164,10 @@ func (e *Engine) getXToken() (tok, bool) {
 				e.tripRunaway()
 				return tok{}, false
 			}
+			saved := e.expandingCS
+			e.expandingCS = t.cs
 			e.expandMacro(m)
+			e.expandingCS = saved
 		case mPrim:
 			if isExpandable(m.name) {
 				if e.stepOverrun() {
@@ -1382,11 +1388,21 @@ func isFileEndSentinel(t tok) bool {
 
 // noteExtraBrace records TeX's "Argument of \x has an extra }" the way the engine
 // records its other recoveries, so a document that trips it is not silently wrong.
+//
+// It names the macro. The tally used to carry one anonymous "Argument has an extra
+// }" line, which says that an argument grab was abandoned somewhere and leaves the
+// reader to bisect the document to find out where — hours, on a paper of any size.
+// The name is the macro currently being expanded (expandingCS), which is exactly
+// the \x of TeX's own message.
 func (e *Engine) noteExtraBrace() {
 	if e.skippedCS == nil {
 		e.skippedCS = map[string]int{}
 	}
-	e.skippedCS["Argument has an extra }"]++
+	key := "Argument has an extra }"
+	if e.expandingCS != "" {
+		key = "Argument of \\" + e.expandingCS + " has an extra }"
+	}
+	e.skippedCS[key]++
 }
 
 func (e *Engine) grabDelimited(delim []tok) []tok {
