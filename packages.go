@@ -460,6 +460,17 @@ func (e *Engine) doDocumentClass() {
 		e.twoColumn = true
 		e.twoColLive = true
 	}
+	if name == "beamer" {
+		// beamer's \RequirePackage[…, head=0.5cm, headsep=0pt, foot=0.5cm]{geometry}
+		// names the bands WITHOUT includeheadfoot, so geometry hands it a full-page
+		// \textheight and beamer's own frame machinery carves the two out again. This
+		// engine does not run that machinery; folding the bands into the body here is
+		// what keeps a slide the right height. See geomState.beamerBands.
+		e.beamerBands = true
+		if e.geom != nil {
+			e.geom.beamerBands = true
+		}
+	}
 	if name == "beamer" && !e.realBeamer() {
 		e.loadBeamer()
 		return
