@@ -171,6 +171,10 @@ type Engine struct {
 	// pass — the same marker→page mechanism the table of contents uses, because
 	// a label's page is knowable only after the whole document has been broken
 	// into pages.
+	// Display-math environments whose \halign-based redefinition by a class was
+	// refused, so that the matching \end… half is refused too (see doDef).
+	keptNativeEnv map[string]bool
+
 	labelMarks map[string]int // \label → len(mvl) at declaration, this run
 	labelPages map[string]int // \label → page number, carried from the aux pass
 	err        error
