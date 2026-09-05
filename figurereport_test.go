@@ -4,8 +4,7 @@
 package engine
 
 import (
-	"os"
-	"path/filepath"
+	"encoding/base64"
 	"testing"
 )
 
@@ -15,19 +14,18 @@ import (
 // 333-page corpus book this turned "63 undefined \includegraphics" (a lie that
 // costs an hour) into "63 PDF figures, no rasteriser wired" (a cause).
 func TestFigureDropIsReportedByCauseNotAsUndefinedCommand(t *testing.T) {
-	dir := t.TempDir()
-	// A file that exists and is a PDF: loadable enough to be identified, not
-	// rasterisable without a renderer wired.
-	pdf := filepath.Join(dir, "fig.pdf")
-	if err := os.WriteFile(pdf, []byte("%PDF-1.4\n%%EOF\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	// The sources are a data: URI and a plain relative name — never a temp-directory
+	// PATH. A t.TempDir() path is read here as TeX source, where a "#" (which Go puts
+	// in a subtest's directory name) is a parameter character and a Windows "\\Users"
+	// is a control sequence: the figure then fails to resolve and every cause comes
+	// back "file not found". That passed on macOS and failed on Linux and Windows.
+	pdf := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString([]byte("%PDF-1.4\n%%EOF\n"))
 	for _, c := range []struct {
 		name string
 		file string
 		want string
 	}{
-		{"an absent file", filepath.Join(dir, "nothing-here.png"), "file not found"},
+		{"an absent file", "no-such-figure-here.png", "file not found"},
 		{"a PDF with no rasteriser", pdf, "PDF figure, no rasteriser wired"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
