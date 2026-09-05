@@ -270,6 +270,12 @@ type Engine struct {
 	// into their own MathDropped view. nil until the first math drop. See
 	// recordMathSkip; the raw entries also remain in skippedCS for SkippedCommands.
 	mathDropped map[string]int
+	// figuresDropped tallies \includegraphics calls whose FILE could not be loaded,
+	// keyed by cause (see figureDropReason). Separate from skippedCS because the
+	// command is defined and ran — it reserved a placeholder box — so reporting it
+	// as an undefined command names the wrong thing entirely. nil until the first
+	// figure is dropped.
+	figuresDropped map[string]int
 
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
@@ -1935,6 +1941,13 @@ type Diagnostics struct {
 	// (which stays text-mode undefined commands) so a math feature gap is not conflated
 	// with a missing text macro. nil/empty when no equation was dropped.
 	MathDropped map[string]int
+
+	// FiguresDropped tallies figures whose file could not be loaded, keyed by cause
+	// ("PDF figure, no rasteriser wired", "file not found", "unreadable or
+	// unsupported format"). The engine still reserves a placeholder box, so this is
+	// not lost layout — it is lost PICTURE, and the cause says whether the document
+	// is at fault or the engine is. nil/empty when every figure loaded.
+	FiguresDropped map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -1954,6 +1967,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 	for k, v := range e.undefinedEnvs {
 		undefinedEnvs[k] = v
 	}
+	var figuresDropped map[string]int
+	if len(e.figuresDropped) > 0 {
+		figuresDropped = make(map[string]int, len(e.figuresDropped))
+		for k, v := range e.figuresDropped {
+			figuresDropped[k] = v
+		}
+	}
 	var mathDropped map[string]int
 	if len(e.mathDropped) > 0 {
 		mathDropped = make(map[string]int, len(e.mathDropped))
@@ -1962,12 +1982,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 		}
 	}
 	return Diagnostics{
-		Skipped:       skipped,
-		Runaway:       e.runaway,
-		OpenGroups:    len(e.groups),
-		PageCapHit:    e.skippedCS["gotex@pagelimit"] > 0,
-		UndefinedEnvs: undefinedEnvs,
-		MathDropped:   mathDropped,
+		Skipped:        skipped,
+		Runaway:        e.runaway,
+		OpenGroups:     len(e.groups),
+		PageCapHit:     e.skippedCS["gotex@pagelimit"] > 0,
+		UndefinedEnvs:  undefinedEnvs,
+		MathDropped:    mathDropped,
+		FiguresDropped: figuresDropped,
 	}
 }
 

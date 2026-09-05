@@ -19,6 +19,7 @@ import (
 	"image"
 	"image/png" // re-encode exotic formats for embedding
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -107,6 +108,7 @@ func (e *Engine) doIncludegraphics() {
 			// surrounding text still flows, instead of aborting the whole compile.
 			// For a PDF figure loadImage still recovers the page box (iw/ih), so the
 			// placeholder keeps the figure's real aspect instead of a blind square.
+			e.recordFigureDrop(err)
 			e.placeholderImage(wReq, hReq, iw, ih, scale, dpiX, dpiY, name)
 			return
 		}
@@ -146,13 +148,37 @@ func (e *Engine) placeholderImage(wReq, hReq, iw, ih int, scale, dpiX, dpiY floa
 	if h <= 0 {
 		h = 90 * unity
 	}
-	if e.skippedCS == nil {
-		e.skippedCS = map[string]int{}
-	}
-	e.skippedCS["includegraphics"]++
 	e.startImage()
 	inner := &boxNode{kind: hbox, width: w, height: h}
 	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})
+}
+
+// recordFigureDrop tallies a figure the engine could not load, by REASON.
+//
+// It used to be tallied as a skipped "includegraphics", which said the opposite of
+// what happened: the command is defined and did its job — it reserved the box — and
+// what failed was the FILE. A report that names the command sends a reader looking
+// for a missing macro, and the three real causes (no rasteriser, absent file,
+// format we cannot decode) are worth telling apart, since only the first is a
+// feature the engine could grow.
+func (e *Engine) recordFigureDrop(err error) {
+	if e.figuresDropped == nil {
+		e.figuresDropped = map[string]int{}
+	}
+	e.figuresDropped[figureDropReason(err)]++
+}
+
+// figureDropReason buckets a load failure into a cause a reader can act on. The
+// filename is deliberately left out so the counts aggregate over a corpus.
+func figureDropReason(err error) string {
+	switch {
+	case errors.Is(err, errNoPDFRasterizer):
+		return "PDF figure, no rasteriser wired"
+	case errors.Is(err, fs.ErrNotExist):
+		return "file not found"
+	default:
+		return "unreadable or unsupported format"
+	}
 }
 
 // startImage ensures a paragraph is open so the image joins horizontal mode.
