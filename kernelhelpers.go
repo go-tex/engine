@@ -334,10 +334,23 @@ const LaTeX2eKernelHelpers = `
 \def\document{\catcode64=12 \gotex@applybaselinestretch
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
+% \enddocument also plants the LastPage label the lastpage package is loaded for,
+% so \pageref{LastPage} — the "page 1 of N" every report and CV wants — names the
+% final page. It is placed before the closing \vfill so it falls ON that page, and
+% after the closing \par, so the last paragraph has been contributed to the page
+% before the marker is taken. Planting it unconditionally rather than behind
+% \usepackage{lastpage} costs one unused label and covers the documents that
+% inherit it from a class.
+%
+% Only the PAGE half is used. Real lastpage writes \newlabel{LastPage}{{}{\thepage}},
+% so a \ref{LastPage} there is empty where ours gives the last section number;
+% emptying \@currentlabel to match cost 348 glyphs off the last page of corpus
+% paper 2401.17012 — content that, it turns out, only survives BY passing through
+% \@currentlabel. Reported separately; a label nobody \refs is not worth it.
 \def\enddocument{\UseHook{env/document/end}\@enddocumenthook\UseHook{enddocument}%
   \UseHook{enddocument/afterlastpage}\UseHook{enddocument/afteraux}%
   \UseHook{enddocument/info}\UseHook{enddocument/end}%
-  \par\vfill\penalty-10000 }
+  \par\label{LastPage}\vfill\penalty-10000 }
 % ── loaded-package / loaded-class registry (see CONTRACT above) ─────────────
 \def\@ifl@aded#1#2{\@ifundefined{ver@#2.#1}\@secondoftwo\@firstoftwo}
 % \@ptionlist{<file>} expands to the options that <file> was loaded with (the Go
