@@ -34,6 +34,65 @@ func (e *Engine) doMinted() {
 	e.renderVerbatimBlock(content, line, mintedOptions(opts))
 }
 
+// doNewminted implements minted's \newminted[options]{language}{options} family,
+// which is how a paper gets a code environment of its own:
+//
+//	\newminted{jl}{fontsize=\footnotesize,breaklines}   defines the jlcode environment
+//	\newminted[julia]{jl}{…}                            names it julia instead
+//
+// minted derives the environment's name from the LANGUAGE plus "code" (or takes the
+// optional argument as the name), and the same family gives \newmintinline and
+// \newmint their inline commands. The derived environments are registered here as
+// verbatim blocks — the engine's minted is verbatim throughout — so their bodies are
+// read raw instead of being executed as prose.
+//
+// One arXiv paper writes \newminted{jl}{…} and then 28 jlcode blocks; one of those
+// blocks holds a lone $ in a shell path, which was enough to swallow the rest of the
+// paper (#225).
+func (e *Engine) doNewminted() {
+	name, ok := e.scanRawOptBracket() // [envname]: minted's own name for it
+	lang := e.scanRawBraceArg()
+	opts := e.scanRawBraceArg() // the environment's default options
+	if !ok || strings.TrimSpace(name) == "" {
+		name = lang + "code"
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	e.defineVerbatimEnv(name, opts)
+}
+
+// doNewmintinline implements \newmintinline[cmdname]{language}{options}, whose
+// command is \<language>inline unless the optional name says otherwise. It is the
+// inline sibling of \newminted, and \newmint's \<language> command is the same
+// shape.
+func (e *Engine) doNewmintinline(suffix string) {
+	name, ok := e.scanRawOptBracket()
+	lang := e.scanRawBraceArg()
+	e.scanRawBraceArg() // options: not honoured inline
+	if !ok || strings.TrimSpace(name) == "" {
+		name = lang + suffix
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	e.prim(name, func(e *Engine) { e.doMintinline() })
+}
+
+// defineVerbatimEnv registers name as a verbatim code environment carrying opts,
+// the way \newminted's derived environments behave.
+func (e *Engine) defineVerbatimEnv(name, opts string) {
+	o := mintedOptions(opts)
+	e.prim(name, func(e *Engine) {
+		e.scanRawOptBracket() // a per-use [options] on the derived environment
+		content, line := e.readRawEnvBody(`\end{` + name + `}`)
+		e.renderVerbatimBlock(content, line, o)
+	})
+	e.prim("end"+name, func(e *Engine) {}) // consumed by readRawEnvBody
+}
+
 // doMintinline typesets \mintinline[options]{language}<delim>code<delim> (and the
 // equivalent \mint) inline in the tt font, reusing \lstinline's delimiter reader.
 func (e *Engine) doMintinline() {
