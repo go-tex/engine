@@ -29,8 +29,10 @@ func TestDelimitedArgumentRefusesAnExtraBrace(t *testing.T) {
 	if _, err := e.Run(`\let\stop\relax\def\eat#1\stop{}\eat }\stop`); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if e.SkippedCommands()["Argument has an extra }"] == 0 {
-		t.Errorf("the extra } was not reported: %v", e.SkippedCommands())
+	// Named after the macro whose argument was abandoned, so a corpus sweep says
+	// WHICH macro to look at rather than only that one of them failed.
+	if e.SkippedCommands()[`Argument of \eat has an extra }`] == 0 {
+		t.Errorf("the extra } was not reported against \\eat: %v", e.SkippedCommands())
 	}
 	// A BALANCED brace group inside a delimited argument is still fine.
 	if got := runExpr(t, `\let\stop\relax\def\eat#1\stop{\message{[#1]}}\eat {a}b\stop`); got != "[{a}b]" {
