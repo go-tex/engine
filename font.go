@@ -21,6 +21,14 @@ type OpenTypeFont struct {
 	// (rawAppendChar → charDimsSP → CharDims), which dominates run time on
 	// glyph-heavy math papers.
 	dimCache map[rune][3]float64
+	// pathCache memoises the SVG outline per rune, for the same reason and with the
+	// same safety argument as dimCache: the face is a fixed size, so a glyph's path
+	// never changes. Without it every OCCURRENCE of a character re-ran the CFF
+	// interpreter and re-formatted every coordinate of its outline — measured on a
+	// 198-page thesis, 356k glyph paintings over ~100 distinct characters, so the
+	// same few outlines were rebuilt thousands of times each. That single omission
+	// accounted for most of the render's 4.2 GB of allocation and 25 M objects.
+	pathCache map[rune]string
 }
 
 // NewOpenTypeFont builds a metrics source from a font and a pixel size.
@@ -80,11 +88,22 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 // glyphPath returns the SVG path ("d") for a rune's glyph at the face's size,
 // baseline-relative in SVG (Y-down) coordinates. Empty if the font lacks it.
 func (o *OpenTypeFont) glyphPath(r rune) string {
+	if d, ok := o.pathCache[r]; ok {
+		return d
+	}
 	gid, ok := o.f.GlyphIndex(r)
 	if !ok {
+		if o.pathCache == nil {
+			o.pathCache = map[rune]string{}
+		}
+		o.pathCache[r] = "" // a missing glyph is worth caching too: it is looked up as often
 		return ""
 	}
 	d, _ := o.fc.GlyphSVGPath(gid)
+	if o.pathCache == nil {
+		o.pathCache = map[rune]string{}
+	}
+	o.pathCache[r] = d
 	return d
 }
 
