@@ -239,3 +239,30 @@ func TestCrossRefsAgree(t *testing.T) {
 		}
 	}
 }
+
+// \pageref{LastPage} — the "page 1 of N" a report or CV asks the lastpage
+// package for — names the final page. The label is planted by \enddocument, so
+// it works whether the package was loaded, inherited from a class, or absent.
+func TestLastPageLabel(t *testing.T) {
+	src := []byte(`\documentclass{article}
+\usepackage{lastpage}
+\begin{document}Page 1 of \pageref{LastPage}.
+\newpage a \newpage b \newpage c\end{document}`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.labelPages["LastPage"]; got != 4 {
+		t.Errorf("LastPage resolved to page %d, want 4", got)
+	}
+	var b strings.Builder
+	collectChars(e.mvl, &b)
+	if text := b.String(); !strings.Contains(text, "of4") {
+		t.Errorf("\\pageref{LastPage} did not typeset 4: %q", text)
+	}
+	// The page is what LastPage is for, and the only half this plants meaningfully:
+	// real lastpage leaves \ref{LastPage} empty, so nothing should read ours.
+	if _, ok := e.labelPages["LastPage"]; !ok {
+		t.Error("LastPage has no page entry")
+	}
+}
