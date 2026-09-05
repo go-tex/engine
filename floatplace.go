@@ -157,18 +157,31 @@ func isStandardFloatEnv(name string) bool {
 // the captured float body at the matching \end. Falls back to the caption type's plain
 // name when \@currenvir is unset.
 func (e *Engine) currentEnvName() string {
-	if m := e.eq["@currenvir"]; m != nil {
-		var b []rune
-		for _, t := range m.body {
-			if !t.cs_ {
-				b = append(b, t.ch)
-			}
-		}
-		if len(b) > 0 {
-			return string(b)
-		}
+	if n, ok := e.currentEnvir(); ok {
+		return n
 	}
 	return "figure"
+}
+
+// currentEnvir is \@currenvir — the environment \begin opened — and whether it is
+// set at all. Callers that have no sensible fallback (\lrbox reached through a
+// class's own environment) need the second result: currentEnvName's "figure" would
+// be a wrong guess for them, not a neutral one.
+func (e *Engine) currentEnvir() (string, bool) {
+	m := e.eq["@currenvir"]
+	if m == nil {
+		return "", false
+	}
+	var b []rune
+	for _, t := range m.body {
+		if !t.cs_ {
+			b = append(b, t.ch)
+		}
+	}
+	if len(b) == 0 {
+		return "", false
+	}
+	return string(b), true
 }
 
 // kindDeferred reports whether a float of this caption type is still waiting, which

@@ -51,7 +51,19 @@ func (e *Engine) loadBoxCmds() {
 // (which closes the group \begin opened) and packed exactly as \sbox does.
 func (e *Engine) doLrbox() {
 	reg, ok := e.readSetBoxHandle()
-	body := e.collectEnvBody("lrbox")
+	// The body ends at the \end of the environment \begin actually opened, which
+	// need not be lrbox: a class may post \lrbox as ANOTHER environment's opening
+	// and \endlrbox as its closing. oupau.cls does exactly that —
+	//   \newbox\absbox  \def\abstract{\lrbox\absbox …}  \def\endabstract{\endlrbox}
+	// — so scanning for a literal \end{lrbox} found none, ran to the end of the
+	// file, and the abstract was set on the page where \begin{abstract} stood
+	// instead of into \absbox; the title page's \unhbox\absbox then produced
+	// nothing. \@currenvir is what LaTeX itself pairs \begin and \end by.
+	end := "lrbox"
+	if n, ok := e.currentEnvir(); ok {
+		end = n
+	}
+	body := e.collectEnvBody(end)
 	if !ok {
 		return // invalid handle: the body is consumed (no leak), nothing to store
 	}
@@ -147,7 +159,12 @@ func (e *Engine) doSavebox() {
 // register so the stored box survives and can be reused. A void register or an
 // invalid handle yields a nil box, which place drops.
 func (e *Engine) doUsebox() *boxNode {
-	reg, ok := e.readBoxHandle()
+	// LaTeX's \usebox is \long\def\usebox#1{\leavevmode\copy#1\relax}: a single
+	// token is a perfectly good undelimited argument, so \usebox\bx is as valid as
+	// \usebox{\bx} — and a class that writes the bare form got NOTHING, silently,
+	// because insisting on the braced form left the register unread. readSetBoxHandle
+	// accepts both (it is what \sbox already uses).
+	reg, ok := e.readSetBoxHandle()
 	if !ok {
 		return nil
 	}
