@@ -202,11 +202,53 @@ func (e *Engine) loadPrimitives() {
 
 // ── definitions ─────────────────────────────────────────────────────────────
 
+// nativeDisplayMathEnv lists the multi-line display environments the engine
+// typesets itself (doAlignEnv). A publisher class routinely copies latex.ltx's
+// own definition of one of these verbatim in order to tweak its spacing — and
+// that definition is built on \halign inside $$…$$, which the math renderer
+// cannot run. Taking the copy therefore does not change the spacing, it loses
+// the environment: arxiv.cls's \def\eqnarray put \everycr{}\halign to
+// \displaywidth… through the math path, which failed and left the rest of the
+// document typesetting its formulas in TEXT mode, where every math command is
+// undefined and the lenient path eats its argument. Keeping ours renders the
+// equations; taking theirs renders nothing and takes the surrounding prose with
+// it.
+var nativeDisplayMathEnv = map[string]bool{
+	"eqnarray": true, "eqnarray*": true,
+	"align": true, "align*": true,
+	"gather": true, "gather*": true,
+	"multline": true, "multline*": true,
+}
+
+// bodyUsesHalign reports whether a macro body drives \halign — the alignment
+// primitive the math renderer has no way to execute.
+func bodyUsesHalign(body []tok) bool {
+	for _, t := range body {
+		if t.cs_ && t.cs == "halign" {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) doDef(global, expandBody bool) {
 	name := e.scanCSName()
 	params, body := e.scanDefText()
 	if expandBody {
 		body = e.expandList(body)
+	}
+	// A \halign-based redefinition of an environment we typeset natively is
+	// dropped, and so is its matching \end… half, which would otherwise close an
+	// environment that never opened.
+	if nativeDisplayMathEnv[name] && bodyUsesHalign(body) {
+		if e.keptNativeEnv == nil {
+			e.keptNativeEnv = map[string]bool{}
+		}
+		e.keptNativeEnv[name] = true
+		return
+	}
+	if strings.HasPrefix(name, "end") && e.keptNativeEnv[strings.TrimPrefix(name, "end")] {
+		return
 	}
 	protected := e.pendingProtected
 	long := e.pendingLong
