@@ -13,6 +13,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -1401,6 +1402,13 @@ func (e *Engine) noteExtraBrace() {
 	key := "Argument has an extra }"
 	if e.expandingCS != "" {
 		key = "Argument of \\" + e.expandingCS + " has an extra }"
+	}
+	// …and WHERE. The name says which macro to look at, the line says which of its
+	// hundreds of calls: on a paper with seven of these, the name alone still left a
+	// bisection to do. Recovery lines are tallied by key, so the line number is part
+	// of the key — the same macro failing on two lines makes two entries.
+	if e.curSrcLine > 0 {
+		key += " (line " + strconv.Itoa(e.curSrcLine) + ")"
 	}
 	e.skippedCS[key]++
 }
