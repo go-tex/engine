@@ -234,3 +234,37 @@ func TestNamedSpacingCommandsAreNotGroupLocal(t *testing.T) {
 		t.Errorf("baselineskip came back to %d: \\doublespacing must outlive its group", before)
 	}
 }
+
+// \@setfontsize's third argument is \f@baselineskip, the UNSTRETCHED skip:
+// \selectfont then sets \baselineskip to \baselinestretch times it and
+// \normalbaselineskip to the result (latex.ltx set@fontsize, l.8540-8543). Taking
+// the argument as the final skip dropped a document's \linespread whenever its
+// class stated the leading through \@setfontsize.
+func TestSetfontsizeAppliesBaselinestretch(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		stretch string
+		want    float64
+	}{
+		{"no stretch", "", 11.5},
+		{"linespread 1.5", `\linespread{1.5}`, 17.25},
+		{"linespread 2", `\linespread{2}`, 23},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.LoadLaTeX()
+			e.SetFont(spMock{})
+			if _, err := e.Run(c.stretch + `\makeatletter\@setfontsize\normalsize\@xpt{11.5}`); err != nil {
+				t.Fatal(err)
+			}
+			if want := ptToSP(c.want); e.baselineskip != want {
+				t.Errorf("baselineskip = %d, want %d (%.2fpt)", e.baselineskip, want, c.want)
+			}
+			// The unstretched skip is kept as the single-spacing reference, as
+			// \normalbaselineskip is.
+			if want := ptToSP(11.5); e.baseBaselineskip != want {
+				t.Errorf("baseBaselineskip = %d, want %d (the unstretched 11.5pt)", e.baseBaselineskip, want)
+			}
+		})
+	}
+}
