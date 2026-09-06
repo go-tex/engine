@@ -208,7 +208,12 @@ const AMSClassSubstrate = `
 \newdimen\mathsurround
 \newdimen\lineskiplimit
 \newdimen\normallineskiplimit
+% \jot is the extra leading between the rows of a multi-line display. latex.ltx
+% ALLOCATES AND SETS IT (\newdimen\jot / \jot=3pt, l.11172-11173); allocating it
+% and leaving it zero made every reader have to guess whether a zero meant "unset"
+% or "this document wants none".
 \newdimen\jot
+\jot=3pt
 \newdimen\hangafter
 \newskip\tabskip
 \newskip\spaceskip

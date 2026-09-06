@@ -145,9 +145,15 @@ func TestListInterItemSpacing(t *testing.T) {
 		}
 		return g[1].glue
 	}
+	// The gap a list puts between two items is \itemsep + \parsep, not \itemsep
+	// alone: \@item adds \itemsep (latex.ltx l.11567) and the items are separate
+	// PARAGRAPHS, whose break carries \parskip — which \list sets to \parsep
+	// (l.11448). [noitemsep] zeroes both (enumitem.sty l.731-733), so the difference
+	// is the pair. At 11pt each is 4.5pt.
 	for _, env := range []string{"itemize", "enumerate"} {
-		if got := lead(env, "") - lead(env, "[noitemsep]"); got != texSPt(t, "4.5pt") {
-			t.Errorf("%s inter-item \\itemsep = %d, want %d (4.5pt at 11pt)", env, got, texSPt(t, "4.5pt"))
+		want := texSPt(t, "4.5pt") + texSPt(t, "4.5pt")
+		if got := lead(env, "") - lead(env, "[noitemsep]"); got != want {
+			t.Errorf("%s inter-item \\itemsep+\\parsep = %d, want %d (4.5pt + 4.5pt at 11pt)", env, got, want)
 		}
 	}
 }
@@ -183,9 +189,12 @@ func TestEnumitemSpacing(t *testing.T) {
 		t.Fatalf("noitemsep: expected 2 lines, got %+v", base)
 	}
 	// itemsep=12pt sets \itemsep=12pt: exactly 12pt over the interline baseline.
+	// itemsep=12pt sets BOTH \itemsep and \parsep to 12pt — enumitem's key writes the
+	// pair, as noitemsep/nosep zero the pair — so the gap grows by 24pt over the
+	// baseline, which is itself \itemsep+\parsep at zero.
 	g1 := lead(`[itemsep=12pt]`)
-	if got, want := g1[1].glue, base[1].glue+12*pt; got != want {
-		t.Errorf("itemsep=12pt: inter-item glue = %d, want %d (baseline %d + 12pt)", got, want, base[1].glue)
+	if got, want := g1[1].glue, base[1].glue+24*pt; got != want {
+		t.Errorf("itemsep=12pt: inter-item glue = %d, want %d (baseline %d + 2x12pt)", got, want, base[1].glue)
 	}
 	// nosep: inter-item glue back to the baseline, and the top \topsep removed.
 	g2 := lead(`[nosep]`)

@@ -70,12 +70,10 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 }
 
 // jotSkip is \jot, the extra leading between the rows of a multi-line display.
-// LaTeX allocates it as a \newskip and sets it to 3pt; a document may change it,
-// so it is read rather than hard-coded.
+// latex.ltx sets it to 3pt (l.11173) and the kernel substrate now does the same,
+// so a zero reading means a document asked for zero and is honoured.
 func (e *Engine) jotSkip() int {
-	// A zero reading means \jot was allocated (\newdimen\jot in the kernel
-	// substrate) but never set, not that a document asked for no extra leading.
-	if v, ok := e.namedDimen("jot"); ok && v > 0 {
+	if v, ok := e.namedDimen("jot"); ok {
 		return v
 	}
 	return 3 * unity

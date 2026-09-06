@@ -162,5 +162,40 @@ func (e *Engine) doSetfontsize() {
 	if !ok || f <= 0 {
 		return
 	}
-	e.setEngineDimen(saveBaselineskip, &e.baselineskip, ptToSP(f), false)
+	// \@setfontsize's third argument is \f@baselineskip, the UNSTRETCHED skip;
+	// \selectfont then sets \baselineskip to \baselinestretch times it and
+	// \normalbaselineskip to the result (latex.ltx set@fontsize, l.8540-8543). The
+	// first version of this took the argument as the final skip, which silently
+	// dropped a document's \linespread whenever its class stated the leading here.
+	// The factor must be read BEFORE the reference it is computed from is replaced.
+	stretch := e.baselineStretchFactor()
+	base := ptToSP(f)
+	e.baseBaselineskip = base
+	e.setEngineDimen(saveBaselineskip, &e.baselineskip, int(float64(base)*stretch+0.5), false)
+}
+
+// baselineStretchFactor is the line-spacing factor in force — what \selectfont
+// multiplies the font's skip by (\baselinestretch, latex.ltx l.8542).
+//
+// In this engine the factor is not kept in the \baselinestretch MACRO: \linespread
+// and setspace's commands are bound to setLineStretch, which writes the two skips
+// directly. So it is recovered where it actually lives, as the ratio of the current
+// skip to the single-spacing reference — and the macro is consulted only when no
+// spacing command has run, which is the case a plain
+// \renewcommand{\baselinestretch}{1.25} preamble leaves.
+func (e *Engine) baselineStretchFactor() float64 {
+	if e.baseBaselineskip > 0 && e.baselineskip > 0 {
+		if f := float64(e.baselineskip) / float64(e.baseBaselineskip); f > 0 {
+			return f
+		}
+	}
+	m := e.eq["baselinestretch"]
+	if m == nil || m.kind != mMacro {
+		return 1
+	}
+	f, ok := parseFloatArg(e.toksToString(m.body))
+	if !ok || f <= 0 {
+		return 1
+	}
+	return f
 }

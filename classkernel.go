@@ -156,6 +156,9 @@ const LaTeX2eClassKernel = `
 \newskip\parsep
 \newskip\topsep
 \newskip\partopsep
+% \@topsepadd is where \@trivlist accumulates \topsep + \partopsep, and what
+% \endtrivlist adds back below (latex.ltx l.11406).
+\newskip\@topsepadd
 % ── display skips ───────────────────────────────────────────────────────────
 \newskip\abovedisplayskip
 \newskip\belowdisplayskip

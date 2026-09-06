@@ -261,14 +261,23 @@ func (e *Engine) doEnumitemOpt() {
 
 	if spacingSet {
 		if nosep {
-			// nosep drops the list's top space: cancel the \addvspace\topsep the opener
-			// emitted (using \topsep's current value), then zero \topsep for the closer.
-			out = append(out, csTok("vskip"), chTok('-', catOther), csTok("topsep"), csTok("relax"))
+			// nosep drops the list's top space: cancel the \addvspace\@topsepadd the
+			// opener emitted (\topsep + \partopsep, its current value), then zero the
+			// four registers enumitem.sty zeroes — \partopsep, \topsep, \itemsep and
+			// \parsep (enumitem.sty l.725-729). \partopsep matters now that the list
+			// openers add it, as latex.ltx's \@trivlist does.
+			out = append(out, csTok("vskip"), chTok('-', catOther), csTok("@topsepadd"), csTok("relax"))
 		}
 		// Set the \itemsep register the list machinery's \@iteminterspace reads, rather
 		// than wrapping \item (which would double the inter-item glue).
 		out = append(out, assignToks("itemsep", sepToks)...)
+		// \parsep goes with it: enumitem.sty zeroes BOTH for noitemsep (l.731-733) and
+		// for nosep (l.725-729), and \@iteminterspace now adds \parsep as the list's
+		// \parskip, so leaving it alone made noitemsep keep a paragraph skip enumitem
+		// removes.
+		out = append(out, assignToks("parsep", sepToks)...)
 		if nosep {
+			out = append(out, assignToks("partopsep", stringToToks("0pt"))...)
 			out = append(out, assignToks("topsep", stringToToks("0pt"))...)
 		}
 	}
