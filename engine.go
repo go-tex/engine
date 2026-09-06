@@ -154,7 +154,10 @@ type Engine struct {
 	// komaClass records that \documentclass named a KOMA-Script class, whose base
 	// size default is 11pt rather than the standard classes' 10pt (see isKomaClass).
 	komaClass bool
-	geom      *geomState // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
+	// prevBaselineskip is the \baselineskip in force just before the last stretch
+	// command changed it, so a group-local \setstretch can restore it.
+	prevBaselineskip int
+	geom             *geomState // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save        []saveItem
