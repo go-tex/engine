@@ -24,10 +24,36 @@ type footnoteNode struct{ body *boxNode }
 
 func (footnoteNode) isNode() {}
 
-// footnoteReserve is the extra vertical space a note reserves beyond its body —
-// the separator rule and the gaps around it — so the page leaves room for the
-// foot area assemblePage builds.
-const footnoteReserve = 16 * unity
+// footinsSkip is \skip\footins: the space a page gives up to the foot area the
+// first time a footnote lands on it. ONCE per page, not once per note —
+// tex.web:19638 reduces page_goal by width(skip n) inside "Create a page insertion
+// node", which runs only for the FIRST \insert n of a page; every later insert
+// costs its own height and nothing more (l.19613).
+//
+// size1x.clo:203 states it per class size (9 / 10 / 10.8pt); setPtsize puts those
+// in the register. A zero reading means nobody set it — the register is allocated
+// by the class kernel and was never given a value — so the 10pt default stands in
+// rather than being taken for a document that wants no space at all.
+func (e *Engine) footinsSkip() int {
+	if m := e.eq["footins"]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < len(e.count) {
+		if n := e.count[m.code]; n >= 0 && n < len(e.skip) {
+			if w := e.skip[n].width; w > 0 {
+				return w
+			}
+		}
+	}
+	return 9 * unity // size10.clo:203
+}
+
+// setFootinsSkip stores v in \skip\footins, through the \footins count the way a
+// class would write it.
+func (e *Engine) setFootinsSkip(v int) {
+	if m := e.eq["footins"]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < len(e.count) {
+		if n := e.count[m.code]; n >= 0 && n < len(e.skip) {
+			e.skip[n] = glueSpec{width: v, stretch: 4 * unity, shrink: 2 * unity}
+		}
+	}
+}
 
 // doFootnote implements \footnote{text}: step the counter, typeset the numbered
 // note into a vbox held until the enclosing paragraph attaches it to the vertical
@@ -133,10 +159,15 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	}
 	vlist := append([]node{}, content...)
 	if len(notes) > 0 {
+		// \skip\footins above the rule, then \footnoterule — which costs NOTHING
+		// net: \kern-3pt, a .4pt rule, \kern2.6pt (latex.ltx:13162-13163). The
+		// gaps here were a flat 10pt and 4pt, 5.4pt more than the reference puts
+		// there.
 		vlist = append(vlist,
-			glueNode{spec: glueSpec{width: 10 * unity}},           // gap above the rule
-			ruleNode{width: e.hsize * 2 / 5, height: defaultRule}, // \footnoterule
-			glueNode{spec: glueSpec{width: 4 * unity}},            // gap below the rule
+			glueNode{spec: glueSpec{width: e.footinsSkip()}},
+			kernNode{width: -ptToSP(3)},
+			ruleNode{width: e.hsize * 2 / 5, height: defaultRule},
+			kernNode{width: ptToSP(2.6)},
 		)
 		for i, b := range notes {
 			if i > 0 {
@@ -196,3 +227,10 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 	}
 	return vpackSP(page, packNatural, 0)
 }
+
+// NOTE on \footnotesep: LaTeX puts a \rule\z@\footnotesep at the HEAD of every
+// note (latex.ltx:13199). It is a strut — it sets a minimum height for the note's
+// own box — not glue between notes, so adding it here as a gap is wrong: tried,
+// and it pushed the pitch from 10.41 to 11.06 against a reference of 9.63. What is
+// left of that 0.78 is the note being set on the BODY leading rather than
+// \footnotesize's 9.5pt, which is a different change (the held one).

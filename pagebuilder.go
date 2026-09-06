@@ -46,10 +46,12 @@ func vContribution(n node) int {
 	case internalLinkNode:
 		return c.height() + c.depth()
 	case footnoteNode:
-		// Reserve the note's height (plus rule + gaps) so the page breaks early
-		// enough to leave room for the foot area, even though the note is not
-		// painted inline (assemblePage lifts it to the page bottom).
-		return c.body.height + c.body.depth + footnoteReserve
+		// The note's own height, so the page breaks early enough to leave room for
+		// the foot area even though the note is not painted inline (assemblePage
+		// lifts it to the page bottom). The space the foot area itself costs —
+		// \skip\footins — is charged ONCE per page, by findPageBreak, not here:
+		// see footinsSkip.
+		return c.body.height + c.body.depth
 	}
 	return 0
 }
@@ -170,6 +172,7 @@ func pageIsUnshippable(page []node) bool {
 func (e *Engine) findPageBreak(list []node, start int) int {
 	vsize := e.effectiveVsize()
 	h := 0
+	sawFootnote := false
 	best := -1
 	least := math.Inf(1)
 	for i := start; i < len(list); i++ {
@@ -189,6 +192,18 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			}
 		}
 		h += vContribution(list[i])
+		// \skip\footins is what the FIRST footnote of a page costs beyond its own
+		// height, and it is charged once for the page (tex.web:19638: page_goal is
+		// reduced by width(skip n) inside "Create a page insertion node", which runs
+		// only when the first \insert n of a page is seen). Charging it per note —
+		// a flat 16pt each, as this did — reserved room nobody used: measured
+		// against tectonic on a page of four footnotes, our foot area ended 45pt
+		// above the bottom of the text block where the reference's ends flush with
+		// it, and the body gave up 88.9pt against the reference's 35.9.
+		if _, isFn := list[i].(footnoteNode); isFn && !sawFootnote {
+			sawFootnote = true
+			h += e.footinsSkip()
+		}
 		if h > vsize && best >= 0 {
 			return best
 		}

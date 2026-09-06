@@ -901,6 +901,19 @@ func (e *Engine) setPtsize(opts []string) {
 	// EVERY class size; the register is allocated by the class kernel here and was
 	// never given that value, so it read zero.
 	e.setNamedDimen("intextsep", ptToSP(12))
+	// The foot area: \skip\footins is what the first footnote of a page costs the
+	// page, \footnotesep the strut at the head of each note (size1x.clo:202-203).
+	// Both registers are allocated by the class kernel and were never given a
+	// value, so both read zero.
+	footins, fnsep := 9.0, 6.65
+	switch pt {
+	case "1":
+		footins, fnsep = 10.0, 7.7
+	case "2":
+		footins, fnsep = 10.8, 8.4
+	}
+	e.setFootinsSkip(ptToSP(footins))
+	e.setNamedDimen("footnotesep", ptToSP(fnsep))
 	e.setNamedDimen("topsep", ptToSP(topsep))
 	e.setNamedDimen("itemsep", ptToSP(itemsep))
 	e.setNamedDimen("parsep", ptToSP(itemsep))
