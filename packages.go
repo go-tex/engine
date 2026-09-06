@@ -864,6 +864,19 @@ func (e *Engine) setPtsize(opts []string) {
 	case "2":
 		topsep, itemsep = 10.0, 5.0
 	}
+	// \intextsep is the space above and below a float set in the running text
+	// ([h]/[H], and the two-column fall-back). LaTeX's size clos give 12pt at 10 and
+	// 11pt and 14pt at 12pt; the register is allocated by the class kernel and,
+	// until now, never set — so it read zero and the float paths used a flat
+	// \medskip instead, 6pt where the reference gives 12.
+	intext := 12.0
+	if pt == "2" {
+		intext = 14
+	}
+	e.setNamedDimen("intextsep", ptToSP(intext))
+	// LaTeX's standard classes set these to 10pt and 0pt at every size.
+	e.setNamedDimen("abovecaptionskip", ptToSP(10))
+	e.setNamedDimen("belowcaptionskip", 0)
 	e.setNamedDimen("topsep", ptToSP(topsep))
 	e.setNamedDimen("itemsep", ptToSP(itemsep))
 	e.setNamedDimen("parsep", ptToSP(itemsep))

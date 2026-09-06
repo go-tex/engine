@@ -226,7 +226,7 @@ const LaTeX2eClassLead = `
 % \gotex@dblfloat through the substrate alias (amssubstrate.go). A real bundled class
 % that defines its own \@dblfloat overrides this default and keeps its own.
 \def\@float#1{\par\medskip\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
-\def\end@float{\par\endgroup\medskip}
+\def\end@float{\par\endgroup\addvspace\intextsep}
 \def\@dblfloat#1{\gotex@dblfloat{#1}}
 \def\end@dblfloat{\end@float}
 \def\usecounter#1{}

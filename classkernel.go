@@ -174,6 +174,12 @@ const LaTeX2eClassKernel = `
 \newskip\floatsep
 \newskip\textfloatsep
 \newskip\intextsep
+% \abovecaptionskip / \belowcaptionskip: the space LaTeX puts between a float's
+% body and its \caption (10pt and 0pt in every standard class). Allocated here so
+% setPtsize can load them and \caption can \addvspace them; the caption package
+% and many classes reset them, which needs a real register to write to.
+\newskip\abovecaptionskip
+\newskip\belowcaptionskip
 \newskip\dblfloatsep
 \newskip\dbltextfloatsep
 \newdimen\footnotesep

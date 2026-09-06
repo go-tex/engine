@@ -314,7 +314,7 @@ const MiniLaTeXKernel = `
 \long\def\endalgorithmic{\par\endgroup}
 \expandafter\let\csname algpseudocode\endcsname\algorithmic
 \expandafter\let\csname endalgpseudocode\endcsname\endalgorithmic
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\addvspace\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 \long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \long\def\endquote{\par\endgroup\smallskip}
 \long\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
@@ -414,7 +414,7 @@ const MiniLaTeXKernel = `
 \newcount\c@tocdepth
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\addvspace\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 % ─── LaTeX counter interface (feat/counters) ─────────────────────────────────
 % Value-reading and counter-formatting commands. The mutating commands
 % (\newcounter/\setcounter/\addtocounter/\stepcounter/\refstepcounter) and the
@@ -492,7 +492,7 @@ const MiniLaTeXKernel = `
 \def\equation{\global\advance\c@equation by1\relax\edef\@currentlabel{\theequation}\def\@currentreftype{equation}\def\@currentlabelname{}\@equationbody}
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\def\@currentreftype{section}\def\@currentlabelname{#1}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\def\@currentreftype{subsection}\def\@currentlabelname{#1}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\addvspace\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
