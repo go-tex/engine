@@ -107,6 +107,15 @@ func (e *Engine) loadTeXParams() {
 		if e.eq[name] != nil || e.allocSkp >= 256 {
 			continue
 		}
+		// \parfillskip is the one of these with a non-zero value in every format:
+		// 0pt plus 1fil (latex.ltx:546, and plain.tex the same). It closes every
+		// paragraph (tex.web:16084), so a register left at zero justifies the last
+		// line of every paragraph to the full measure. Allocated and never set is
+		// exactly how it stood while the paragraph builder had the value written
+		// into it and never read the register at all.
+		if name == "parfillskip" {
+			e.skip[e.allocSkp] = glueSpec{stretch: unity, stretchOrder: 1}
+		}
 		e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true)
 		e.allocSkp++
 	}

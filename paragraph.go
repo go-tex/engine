@@ -109,12 +109,12 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	if pre := e.namedInt("pretolerance"); pre >= 0 {
 		q := p
 		q.Tolerance = float64(pre)
-		plain := withParFill(hlist)
+		plain := e.withParFill(hlist)
 		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
 			return plain, lines, true
 		}
 	}
-	list := withParFill(e.hyphenateList(hlist)) // insert discretionary hyphens (if patterns loaded)
+	list := e.withParFill(e.hyphenateList(hlist)) // insert discretionary hyphens (if patterns loaded)
 	items := toItems(list)
 	lines, ok := KnuthPlassWith(items, lineWidth, p)
 	// The second pass can "succeed" with a single over/underfull line via the forced
@@ -133,12 +133,23 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	return list, lines, ok
 }
 
-// withParFill closes a horizontal list the way TeX ends every paragraph: with
-// \parfillskip (0pt plus 1fil), which lets the last line stop short, and a forced
-// break. It copies, so the caller's list is left alone.
-func withParFill(list []node) []node {
+// withParFill closes a horizontal list the way TeX ends every paragraph: with the
+// \parfillskip PARAMETER, whatever it holds (tex.web:16084,
+// "link(tail):=new_param_glue(par_fill_skip_code)"), and a forced break. It
+// copies, so the caller's list is left alone.
+//
+// The value was hard-coded here as 0pt plus 1fil — LaTeX's default (latex.ltx:546)
+// but only its default. \centering and \raggedleft set \parfillskip to zero
+// (latex.ltx:11018, 11028) precisely so the last line does NOT get a third
+// infinite glue; with it hard-coded, a centred line carried \leftskip, \rightskip
+// AND \parfillskip and settled a third of the way across instead of halfway.
+func (e *Engine) withParFill(list []node) []node {
+	fill := glueSpec{stretch: unity, stretchOrder: 1}
+	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
+		fill = e.skip[m.code]
+	}
 	return append(append([]node{}, list...),
-		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}},
+		glueNode{spec: fill},
 		penaltyNode{penalty: -int(InfPenalty)})
 }
 

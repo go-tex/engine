@@ -218,7 +218,10 @@ const AMSClassSubstrate = `
 \newskip\tabskip
 \newskip\spaceskip
 \newskip\xspaceskip
-\newskip\parfillskip
+% latex.ltx:546. Allocated and never set, it read ZERO — and the paragraph
+% builder had the value hard-coded instead, so \parfillskip could not be
+% changed at all (which is what \centering does).
+\newskip\parfillskip \parfillskip=0pt plus 1fil
 \newskip\normalbaselineskip
 % \lastskip reads the last glue on the current list. The engine does not expose
 % list surgery, and every use is a spacing tweak off the critical path (amsart's
