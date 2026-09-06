@@ -64,6 +64,28 @@ func (e *Engine) mathSize() int {
 // scanMathSource reads raw (unexpanded) tokens up to the closing math shift,
 // reconstructing the math source string for go-tex/math. It returns the source
 // and whether the math was display style ($$…$$).
+// writeMathCS encodes a control sequence into go-tex/math source, as backslash-name
+// followed by a space. It is the ONE place that does so: scanMathSource,
+// substituteMathBody, collectMathUntilCS, the equation body and the alignment cells
+// all funnel through it, so a token that must not reach the maths layer is refused
+// once rather than in five places.
+//
+// A control sequence named after an END-OF-LINE character is such a token. tex.web
+// §354 makes an escape at the end of a line the EMPTY control sequence; this engine
+// names it after the \endlinechar that follows. Either way it means nothing to the
+// maths layer, and emitted verbatim it became "\<CR>": go-tex/math refuses the
+// command and the engine then drops the WHOLE equation. One appendix line ending in
+// a lone backslash cost a paper 15 formulas, and 7 of the corpus's 157 papers lose
+// 27 between them.
+func writeMathCS(b *strings.Builder, cs string) {
+	if cs == "" || cs == "\r" || cs == "\n" {
+		return
+	}
+	b.WriteByte('\\')
+	b.WriteString(cs)
+	b.WriteByte(' ')
+}
+
 func (e *Engine) scanMathSource() (string, bool) {
 	display := false
 	if t, ok := e.getNext(); ok {
@@ -139,9 +161,7 @@ func (e *Engine) scanMathSource() (string, bool) {
 			}
 		}
 		if t.cs_ {
-			b.WriteByte('\\')
-			b.WriteString(t.cs)
-			b.WriteByte(' ')
+			writeMathCS(&b, t.cs)
 		} else {
 			b.WriteRune(t.ch)
 		}
@@ -976,9 +996,7 @@ func (e *Engine) substituteMathBody(body []tok, args []string) string {
 			continue
 		}
 		if t.cs_ {
-			b.WriteByte('\\')
-			b.WriteString(t.cs)
-			b.WriteByte(' ')
+			writeMathCS(&b, t.cs)
 		} else {
 			b.WriteRune(t.ch)
 		}
@@ -1177,9 +1195,7 @@ func (e *Engine) collectMathUntilCS(close string) string {
 			continue
 		}
 		if t.cs_ {
-			b.WriteByte('\\')
-			b.WriteString(t.cs)
-			b.WriteByte(' ')
+			writeMathCS(&b, t.cs)
 		} else {
 			b.WriteRune(t.ch)
 		}

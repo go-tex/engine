@@ -346,9 +346,7 @@ func (e *Engine) collectAlignBody(name string) []alignRow {
 				depth--
 			}
 			if t.cs_ {
-				cell.WriteByte('\\')
-				cell.WriteString(t.cs)
-				cell.WriteByte(' ')
+				writeMathCS(&cell, t.cs)
 			} else {
 				cell.WriteRune(t.ch)
 			}
