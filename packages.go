@@ -499,6 +499,12 @@ func (e *Engine) doDocumentClass() {
 		e.twoColumn = true
 		e.twoColLive = true
 	}
+	// achemso's manuscript mode is double-spaced (see applyAchemsoGeometry). The
+	// class is not embedded, so an unbundled paper falls to the article emulation
+	// and would keep the size-default leading, fitting twice the text per page.
+	if name == "achemso" && !e.classFileResolvable(name) {
+		e.applyAchemsoGeometry(opts)
+	}
 	if (name == "acmart" || name == "IEEEtran") && !e.classFileResolvable(name) {
 		// acmart and IEEEtran are not embedded, and when the paper does not bundle
 		// the .cls they fall to the article-shaped emulation, which sizes their page
@@ -562,12 +568,46 @@ func (e *Engine) doDocumentClass() {
 		e.loadRevtexEmulation()
 		return
 	}
+	if name == "elsarticle" && !e.classFileResolvable(name) {
+		// elsarticle.cls is \LoadClass{article} plus Elsevier front matter: it sizes
+		// NOTHING itself, so its text block is article's for the same paper and size
+		// options. Unbundled it loaded nothing at all and kept the emulation's 466pt
+		// block where article gives 390pt on letter at 12pt — a fifth more text on
+		// every line, and 40 pages against the real class's 50 on corpus paper
+		// 2301.11256. Loading the embedded article.cls with the same options gets the
+		// exact block for any paper/size pair, with no table to keep in step.
+		if e.applyElsarticleGeometry(opts) {
+			return // a journal type: the class sizes it with geometry, not article's
+		}
+		// The preprint default. elsarticle's own \ExecuteOptions makes A4 the
+		// default paper, where article.cls would assume US letter, so name it
+		// unless the paper already chose.
+		aopts := append([]string{}, opts...)
+		if !namesPaperSize(opts) {
+			aopts = append(aopts, "a4paper")
+		}
+		if data, _, ok := e.findTeXFile("article", []string{".cls"}); ok {
+			e.loadTeXFile(data, "article", ".cls", append(aopts, e.takePassed(name)...))
+			return
+		}
+	}
 	if emulatedClasses[name] || emulateOnly(name) {
 		return // use the built-in emulation for a standard class
 	}
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok {
 		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
+}
+
+// namesPaperSize reports whether the class options already choose a paper size,
+// so a class default is not imposed over the paper's own choice.
+func namesPaperSize(opts []string) bool {
+	for _, o := range opts {
+		if strings.HasSuffix(strings.TrimSpace(o), "paper") {
+			return true
+		}
+	}
+	return false
 }
 
 // doUsepackageLoad implements \usepackage[options]{name,name,...}: geometry keeps

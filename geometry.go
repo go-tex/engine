@@ -546,6 +546,68 @@ func (e *Engine) applyAcmartGeometry(opts []string) {
 	e.applyClassGeometry(g)
 }
 
+// applyAchemsoGeometry gives the emulated achemso class its real text block and
+// base leading. achemso is the ACS journals' class; its MANUSCRIPT mode — what a
+// paper asks for with [manuscript=article] — is the double-spaced review layout
+// ACS requires for submission, and it is the mode arXiv preprints use.
+//
+// The values are measured from the reference PDF the real class produces: letter
+// paper with 1in margins (\textwidth 468pt, \textheight 648pt) and a 12pt body
+// set double-spaced, which puts consecutive baselines 23.9pt apart. Without this
+// the emulation kept the size-default 12pt leading and packed twice the text onto
+// every page: corpus paper 2209.13121 came out in 23 pages against the real
+// class's 42, with 98% of its words present — compressed, not lost.
+//
+// The journal layout (no manuscript option) is single-spaced and two-column; it is
+// left to the article emulation, whose leading is already the right order.
+func (e *Engine) applyAchemsoGeometry(opts []string) {
+	if !achemsoManuscript(opts) {
+		return
+	}
+	e.applyClassGeometry(classGeometry{inkedW: 468, textH: 648, leading: 23.9})
+}
+
+// achemsoManuscript reports whether the class options ask for the double-spaced
+// manuscript layout. The option carries a value (manuscript=article,
+// manuscript=note, …) naming the article type, and any of them is a manuscript.
+func achemsoManuscript(opts []string) bool {
+	for _, o := range opts {
+		k, _, _ := strings.Cut(strings.TrimSpace(o), "=")
+		if strings.TrimSpace(k) == "manuscript" {
+			return true
+		}
+	}
+	return false
+}
+
+// elsarticleFormats maps elsarticle's journal types to the text block the class
+// installs for them. The values are elsarticle.cls's own, read from its
+// \ifnum\jtype geometry blocks; all three are A4 and single-column unless the
+// paper also asks for [twocolumn].
+var elsarticleFormats = map[string]classGeometry{
+	"1p": {inkedW: 384, textH: 562},
+	"3p": {inkedW: 468, textH: 622},
+	"5p": {inkedW: 522, textH: 682},
+}
+
+// applyElsarticleGeometry installs the text block for an elsarticle JOURNAL type
+// (1p/3p/5p) and reports whether it did. The leading is left alone: those types
+// keep \baselinestretch at 1, so the size option's own leading is already right.
+//
+// The default type is preprint, which sets no geometry at all — the caller loads
+// the embedded article.cls for it instead, which is what elsarticle.cls itself
+// does (\LoadClass{article}).
+func (e *Engine) applyElsarticleGeometry(opts []string) bool {
+	for _, o := range opts {
+		if g, ok := elsarticleFormats[strings.TrimSpace(o)]; ok {
+			e.hsize = ptToSP(g.inkedW)
+			e.vsize = ptToSP(g.textH)
+			return true
+		}
+	}
+	return false
+}
+
 // applyIEEEtranGeometry gives the emulated IEEEtran class its real text block and
 // base leading. Like acmart, IEEEtran is served by the article emulation when the
 // paper does not bundle IEEEtran.cls, so its compact two-column block is otherwise
