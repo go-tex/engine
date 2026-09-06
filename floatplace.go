@@ -34,6 +34,25 @@ import (
 // table environments (single column); figure*/table* keep the two-column band path
 // (twocolumn.go) and [h]/[H] floats stay inline (LaTeX keeps them roughly where written).
 
+// forcedInlineFloat reports whether a placement argument pins the float where it is
+// written. Only two do: [H] (the float package's absolute "HERE"), and a bare [h]
+// with nothing else — with no fallback area named, LaTeX has nowhere else to put it.
+//
+// [htb] and friends are NOT pinned. In LaTeX 'h' is a PREFERENCE, tried first and
+// abandoned for t/b/p when the float does not fit the space left; treating it as
+// inline made 25 of the 54 figures in corpus paper 2407.18384 break their page
+// early and waste its foot, where the reference floats them to a page top and
+// fills the page with text.
+func forcedInlineFloat(place string) bool {
+	if strings.ContainsRune(place, 'H') {
+		return true
+	}
+	if !strings.ContainsRune(place, 'h') {
+		return false
+	}
+	return !strings.ContainsAny(place, "tbp")
+}
+
 // floatsEnabled reports whether the real float placer (this file) is active. It is the
 // default; GOTEX_FLOATS=0 opts back out to the inline path.
 func floatsEnabled() bool { return os.Getenv("GOTEX_FLOATS") != "0" }
@@ -95,7 +114,7 @@ func (e *Engine) doFloatBegin() {
 	// keeps an [h]/[ht]/[H] float roughly where written, so floating it would misplace it
 	// against the reference. Only a standard-env t/b/p float is captured.
 	env := e.currentEnvName()
-	if e.inTwoColumnRegion() || strings.ContainsAny(place, "hH") || !isStandardFloatEnv(env) {
+	if e.inTwoColumnRegion() || forcedInlineFloat(place) || !isStandardFloatEnv(env) {
 		// The [placement] was consumed above, so the inline helper just typesets the body.
 		e.push(append([]tok{csTok("gotex@inlinefloat")}, braceNameToks(kind)...))
 		return
