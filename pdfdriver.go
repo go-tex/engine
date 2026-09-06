@@ -218,6 +218,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			cx += spToPt(c.width())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
+			d.mathText(c, cx, baseline)
 			cx += spToPt(c.width)
 		case imageNode:
 			// The image's lower-left corner sits on the baseline; PDF user space is
@@ -390,11 +391,64 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			cy += spToPt(c.height() + c.depth())
 		case mathNode:
 			drawMathSVG(d.p, c.svg, x, d.y(cy))
+			d.mathText(c, x, cy+spToPt(c.height))
 			cy += spToPt(c.height + c.depth)
 		case specialNode:
 			d.special(c, x, cy)
 		}
 	}
+}
+
+// mathText overlays a formula's source on the page as INVISIBLE text, so a PDF can
+// be searched and copied across a formula.
+//
+// The formula itself is drawn as vector paths (mathpdf.go walks the SVG
+// go-tex/math emits). Outlines are shapes, not characters, so every equation was
+// missing from the PDF's text layer entirely — and so was any \mbox{…} or
+// \text{…} inside one, which is how papers put words in formulas. Measured on
+// "ONE $x+y$ two.\par THREE $\mbox{RRRRR}$ four.", pdftotext returned
+// "ONE|two.|THREE|FIVE|four." against the reference's "ONE x + y two.|THREE RRRRR
+// four.|FIVE": the formulas gone, and the words after them moved to the end of the
+// page because a reader seeing a wide hole treats what follows as another block.
+//
+// The SVG driver has done this since the text layer was built (boxrender.go:167,
+// tl.addPhrase(c.src, …)); this is the same thing in PDF's own idiom. Render mode
+// 3 paints nothing (pdfkit.RenderInvisible, "useful for OCR text layers"), so not
+// one pixel of the page changes — the characters are there for find, copy and a
+// screen reader, and for nothing else.
+//
+// What it says is the formula's SOURCE, which is the choice the SVG layer already
+// made and documented: it is what the author typed and what they would type to
+// search for it again.
+func (d *pdfDraw) mathText(c mathNode, x, baseline float64) {
+	src := collapseSpace(c.src) // the same cleaning the SVG layer does, for the same reason
+	w := spToPt(c.width)
+	if src == "" || w <= 0 {
+		return
+	}
+	// Fit the source to the formula's own width. Left at the body size it runs past
+	// the formula — a short equation with a long source spills into whatever is to
+	// its right, and a reader then reports the overflow as a separate block (the
+	// source of "{RRRRR}" landing on a line of its own). Character spacing does it
+	// without touching the font: the glyphs are invisible, so only the advances,
+	// which are what a reader measures words by, matter.
+	// ⚠ q/Q, not "set it back afterwards". Tr and Tc are graphics state and persist
+	// across BT/ET, and pdfkit emits them only when they are NON-ZERO
+	// (emitTextState). Setting the mode back to RenderFill therefore writes nothing
+	// and the page stays in mode 3: measured, the character after the first formula
+	// simply vanished, and so did everything after it that pdfkit had no reason to
+	// re-emit a Tr for. Save/Restore puts the real state back.
+	d.p.Save()
+	defer d.p.Restore()
+	if n := len([]rune(src)); n > 1 {
+		if tw := d.p.TextWidth(src); tw > 0 {
+			d.p.SetCharSpacing((w - tw) / float64(n-1))
+			defer d.p.SetCharSpacing(0)
+		}
+	}
+	d.p.SetRenderMode(pdfkit.RenderInvisible)
+	defer d.p.SetRenderMode(pdfkit.RenderFill)
+	_ = d.p.Text(x, d.y(baseline), src)
 }
 
 // leader paints a glue node's set width as a \leaders-like fill: leaderRule draws
