@@ -47,14 +47,47 @@ func TestFootnote(t *testing.T) {
 	}
 }
 
-// A footnoteNode reserves its body height plus the foot-area allowance, so the
-// page breaks early enough to fit the note.
-func TestFootnoteReservesHeight(t *testing.T) {
+// A footnoteNode reserves its OWN height, and nothing more. What the foot area
+// costs the page beyond that — \skip\footins — is charged once for the page, not
+// once per note (tex.web:19638).
+func TestFootnoteReservesItsOwnHeightOnly(t *testing.T) {
 	body := &boxNode{kind: vbox, height: 20 * unity, depth: 3 * unity}
-	got := vContribution(footnoteNode{body: body})
-	want := 20*unity + 3*unity + footnoteReserve
-	if got != want {
-		t.Errorf("footnote vContribution = %d, want %d", got, want)
+	if got, want := vContribution(footnoteNode{body: body}), 20*unity+3*unity; got != want {
+		t.Errorf("footnote vContribution = %d, want %d (its body, with no per-note allowance)", got, want)
+	}
+}
+
+// \skip\footins is charged ONCE for a page however many notes land on it. Charging
+// it per note reserved room nobody used: measured against tectonic on a page of
+// four footnotes, our foot area ended 45pt above the bottom of the text block where
+// the reference's ends flush with it.
+func TestFootinsSkipIsChargedOncePerPage(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	note := func() footnoteNode {
+		return footnoteNode{body: &boxNode{kind: vbox, height: 10 * unity}}
+	}
+	line := func() node { return &boxNode{kind: hbox, height: 10 * unity} }
+	skip := e.footinsSkip()
+	if skip <= 0 {
+		t.Fatal("\\skip\\footins reads zero; the test would prove nothing")
+	}
+	// vsize large enough that neither list breaks: the break index is the length.
+	e.vsize = 1000 * unity
+	one := []node{line(), note()}
+	two := []node{line(), note(), note()}
+	if e.findPageBreak(one, 0) != len(one) || e.findPageBreak(two, 0) != len(two) {
+		t.Fatal("the probe lists broke; vsize is too small for the test")
+	}
+	// Now squeeze: a vsize that fits one note's worth of foot area plus the lines.
+	// With the skip charged per note the second list would break early; with it
+	// charged once it does not.
+	e.vsize = 10*unity + 10*unity + 10*unity + skip
+	if got := e.findPageBreak(two, 0); got != len(two) {
+		t.Errorf("page broke at %d of %d: \\skip\\footins looks charged per note, not per page", got, len(two))
 	}
 }
 
