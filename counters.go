@@ -36,6 +36,35 @@ func (e *Engine) doNewcounter() {
 	if name == "" {
 		return
 	}
+	code := e.defineCounter(name)
+	if hasWithin && code >= 0 {
+		if within := strings.TrimSpace(e.toksToString(withinToks)); within != "" {
+			e.addToReset(name, within)
+		}
+	}
+}
+
+// doDefineCounter implements \@definecounter{name}, the counter-creating half of
+// \newcounter (latex.ltx: \newcounter is \@definecounter plus the optional
+// [within]). A class that builds its own \newtheorem calls it DIRECTLY — llncs.cls
+// does, at its lines 1053 and 1061 — and undefined it read no argument at all, so
+// the counter was never allocated: every theorem in such a document numbered 0, and
+// the class's own \c@proposition leaked into the running prose as literal text
+// ("Propositions 0\c@proposition and 0\c@proposition"). 14 of the fidelity corpus's
+// 157 papers call it, 200 times.
+//
+// It takes NO optional argument, so it must not be bound to doNewcounter: that would
+// scan a following [ that belongs to the document.
+func (e *Engine) doDefineCounter() {
+	if name := e.readBraceName(); name != "" {
+		e.defineCounter(name)
+	}
+}
+
+// defineCounter allocates \c@<name>, defines \the<name> as \arabic{name} and gives
+// the counter an empty reset list. It returns the register code, or -1 when the
+// engine's counter registers are exhausted.
+func (e *Engine) defineCounter(name string) int {
 	ctr := "c@" + name
 	code := -1
 	if m := e.eq[ctr]; m != nil && m.kind == mCountRef {
@@ -53,11 +82,7 @@ func (e *Engine) doNewcounter() {
 	if e.eq["cl@"+name] == nil {
 		e.define("cl@"+name, &meaning{kind: mMacro}, true)
 	}
-	if hasWithin && code >= 0 {
-		if within := strings.TrimSpace(e.toksToString(withinToks)); within != "" {
-			e.addToReset(name, within)
-		}
-	}
+	return code
 }
 
 // doAddtoreset implements LaTeX's \@addtoreset{foo}{bar}: it registers counter
