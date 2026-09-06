@@ -205,7 +205,7 @@ func (e *Engine) buildTabularBox(aligns []byte, pwidths []int, vrules []bool, it
 		}
 		built = append(built, tabBuilt{cells: cells})
 	}
-	return assembleTabular(built, ncol, pwidths, vrules)
+	return e.assembleTabular(built, ncol, pwidths, vrules)
 }
 
 // resolveXWidths computes the width of each X (flexible paragraph) column so that a
@@ -907,7 +907,7 @@ func (e *Engine) buildAlignedCell(toks []tok, align byte, pwidth int) []node {
 // assembleTabular computes column widths, builds each data row (cells packed to
 // their column width, inter-column separation, and | vertical rules), and stacks
 // the rows with \hline full-width rules into a vbox.
-func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *boxNode {
+func (e *Engine) assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *boxNode {
 	// Column widths come from single-column cells only (a \multicolumn spans several
 	// and is sized to their total). A column cursor tracks the real column each cell
 	// occupies, since a span makes the cell index diverge from the column index.
@@ -956,6 +956,7 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 			continue
 		}
 		rowBoxes[i] = buildTabRow(b.cells, ncol, colw, hasRule, vrule)
+		e.arrayStrut(rowBoxes[i])
 		if rowBoxes[i].width > maxW {
 			maxW = rowBoxes[i].width
 		}
@@ -1008,6 +1009,50 @@ func assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrules []bool) *
 		}
 	}
 	return vpackSP(vlist, packNatural, 0)
+}
+
+// arrayStrut raises a table row to at least the height and depth of \@arstrutbox,
+// which LaTeX copies into EVERY row (latex.ltx:12249, \@arstrut). The box is built
+// from \strutbox scaled by \arraystretch (l.12102-12105):
+//
+//	\setbox\@arstrutbox\hbox{\vrule \@height\arraystretch\ht\strutbox
+//	                            \@depth\arraystretch\dp\strutbox \@width\z@}
+//
+// and \strutbox is .7\baselineskip high and .3\baselineskip deep, so a row is
+// never shorter than the line it would occupy in running text.
+//
+// Ours had none — \strutbox is allocated as an EMPTY box and \arraystretch did not
+// exist — so a row was the natural height of its content. Measured against tectonic
+// on a tabular of short cells: a row cost 7.20pt where the reference gives 11.96,
+// which is \baselineskip to the hundredth, and one tabular came out 5.55pt flat.
+// The deficit HALVED when the cells were made 20pt tall, which is the signature of
+// a missing minimum height rather than of missing glue.
+func (e *Engine) arrayStrut(b *boxNode) {
+	if b == nil || e.baselineskip <= 0 {
+		return
+	}
+	f := e.arrayStretch()
+	if h := int(0.7*f*float64(e.baselineskip) + 0.5); b.height < h {
+		b.height = h
+	}
+	if d := int(0.3*f*float64(e.baselineskip) + 0.5); b.depth < d {
+		b.depth = d
+	}
+}
+
+// arrayStretch is \arraystretch, the factor a document scales every table row by
+// (\renewcommand{\arraystretch}{1.5} is the usual way to open a table up). It is a
+// MACRO holding a number, not a register, so it is read and parsed; anything that
+// is not a positive number leaves rows at their natural 1.
+func (e *Engine) arrayStretch() float64 {
+	m := e.eq["arraystretch"]
+	if m == nil || m.kind != mMacro {
+		return 1
+	}
+	if f, ok := parseFloatArg(e.toksToString(m.body)); ok && f > 0 {
+		return f
+	}
+	return 1
 }
 
 // spannedExtent returns the total vertical extent (sp) of the block a \multirow
