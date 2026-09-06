@@ -165,10 +165,16 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 	return out
 }
 
-// mvlAppendGap adds a small vertical gap (\smallskip-ish) to the main list.
+// mvlAppendGap adds the vertical space that surrounds a verbatim block.
+//
+// It is ADDED to the ordinary interline glue, not put in its place. \trivlist
+// opens with \addvspace\@topsepadd and the item's first line then goes onto the
+// page through the normal path; nothing sets prev_depth to ignore_depth around it,
+// any more than it does around a display (tex.web:22602, and see placeDisplay).
+// Suppressing it cost the interline glue at BOTH ends: measured against tectonic,
+// one verbatim block of one line cost 23.86pt against the reference's 31.88.
 func (e *Engine) mvlAppendGap() {
 	e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: e.trivlistSep()}})
-	e.prevDepth = ignoreDepth
 }
 
 // trivlistSep is the vertical space LaTeX puts above and below a verbatim block.
