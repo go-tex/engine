@@ -112,6 +112,29 @@ const MiniLaTeXKernel = `
 \def\@date{}
 \def\@shorttitle{}
 \def\@shortauthor{}
+% authblk's \affil[n]{text} TYPESETS NOTHING where it stands: it accumulates, and
+% the class's \@maketitle sets the accumulated list through \@author, which authblk
+% redefines to "authors \\[\affilsep] affiliations" (authblk.sty:148-171). Declared
+% here as a stub taking a mandatory #1, it grabbed the "[" instead and the rest
+% LEAKED into the running text — "1,5,6]Institute for Modelling and Simulation…"
+% opened a page of its own before the title, and 708 papers of the 22127-paper pool
+% write \affil[.
+%
+% Discarding it is not the fix either: measured, that costs a page to ten documents
+% already too short, because the leaked text was filling — in the wrong place — a
+% height the reference fills in the right one. It is set here instead, under the
+% authors, where \@maketitle puts it.
+% This is authblk's own design: the affiliation is appended to \@author, separated
+% by \\, so whatever \@maketitle the class has typesets it — article.cls sets
+% \@author inside \begin{tabular}[t]{c}, whose rows are exactly \\-separated
+% (article.cls:246-248), and the engine's own generic \maketitle centres it.
+% Appending to a \@author that was never given would break, so an absent one
+% starts empty and takes no separator.
+\long\def\gotex@affiladd#1{\ifx\@author\@empty\gdef\@author{#1}\else
+  \g@addto@macro\@author{\\ #1}\fi}
+\def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
+\long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
+\long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
 \long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}
@@ -791,7 +814,6 @@ const MiniLaTeXKernel = `
 \def\@setlistarg#1{}
 \def\RequirePackage{\usepackage}
 \def\and{\quad}
-\def\affil#1{}
 \def\crefname#1#2#3{}
 \def\Crefname#1#2#3{}
 \def\urlstyle#1{}
