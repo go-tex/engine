@@ -236,3 +236,66 @@ func TestClassScaledFontsEdges(t *testing.T) {
 		t.Errorf("degenerate factor: px=%d size=%d, want 1/1", e4.baseFontPx, e4.baseFont.sizePt())
 	}
 }
+
+// A class's size table drives \tiny…\Huge. size1x.clo redefines all ten commands
+// through \@setfontsize, stating each one's size in points; the engine reads them
+// against the size the same table states for \normalsize, so a caller's base size
+// still picks the body size and the table gives the ratios.
+//
+// The table is NOT a scale factor, which is the whole point: \large…\Huge are the
+// same points in a 10pt and an 11pt class (size10.clo:82-86 and size11.clo:82-86
+// are identical), and size12.clo caps \Huge at \@xxvpt — 24.88pt, the same as
+// \huge. Before \@setfontsize read the size, every one of those redefinitions was
+// a no-op and all ten came out at \normalsize.
+func TestClassSizeTableDrivesTheLadder(t *testing.T) {
+	cmds := []string{"tiny", "scriptsize", "footnotesize", "small", "normalsize",
+		"large", "Large", "LARGE", "huge", "Huge"}
+	letters := "abcdefghij"
+	for _, tc := range []struct {
+		opt  string
+		want [10]int
+	}{
+		// size10.clo: 5, 7, 8, 9, 10, 12, 14.4, 17.28, 20.74, 24.88
+		{"10pt", [10]int{5, 7, 8, 9, 10, 12, 14, 17, 21, 25}},
+		// size11.clo: 6, 8, 9, 10, 10.95, then the SAME five as 10pt
+		{"11pt", [10]int{6, 8, 9, 10, 11, 12, 14, 17, 21, 25}},
+		// size12.clo: 6, 8, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88, 24.88
+		{"12pt", [10]int{6, 8, 10, 11, 12, 14, 17, 21, 25, 25}},
+	} {
+		src := `\documentclass[` + tc.opt + `]{article}\begin{document}\noindent`
+		for i, c := range cmds {
+			src += `{\` + c + ` ` + string(letters[i]) + `}`
+		}
+		src += `\end{document}`
+		e, err := compile([]byte(src), Options{})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.opt, err)
+		}
+		sizes := glyphSizes(e)
+		for i, c := range cmds {
+			if got := sizes[rune(letters[i])]; got != tc.want[i] {
+				t.Errorf("[%s] \\%s = %dpt, want %dpt", tc.opt, c, got, tc.want[i])
+			}
+		}
+	}
+}
+
+// glyphSizes reports the point size each letter was set at, first occurrence wins.
+func glyphSizes(e *Engine) map[rune]int {
+	sizes := map[rune]int{}
+	var walk func([]node)
+	walk = func(ns []node) {
+		for _, n := range ns {
+			switch c := n.(type) {
+			case charNode:
+				if _, seen := sizes[c.ch]; !seen {
+					sizes[c.ch] = c.size
+				}
+			case *boxNode:
+				walk(c.list)
+			}
+		}
+	}
+	walk(e.mvl)
+	return sizes
+}

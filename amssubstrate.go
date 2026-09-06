@@ -260,10 +260,14 @@ const AMSClassSubstrate = `
 \def\f@family{}
 \def\fontsize#1#2{}
 % \@setfontsize keeps the exact shape it always had — a macro with three
-% undelimited arguments that typesets nothing — so nothing about how a class's
-% tokens are consumed changes. It only REPORTS the pair to the engine, which takes
-% the leading when the command being (re)defined is \normalsize.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@notefontsize{#3}\fi}
+% undelimited arguments — so nothing about how a class's tokens are consumed
+% changes. It now puts the font at the size the class states (\gotex@fontsizeat),
+% which is how a size table drives \tiny…\Huge; the size is read against the one
+% the class states for \normalsize, so Options.Size still picks the body size and
+% the table gives the ratios. It still REPORTS the \normalsize pair separately:
+% the leading, which is the base \baselinestretch is measured against, and the
+% size, which is the 100% the rest of the table is stated against.
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\gotex@fontsizeat{#2}}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}

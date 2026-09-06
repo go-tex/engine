@@ -1939,6 +1939,11 @@ func (e *Engine) loadMore() {
 	e.prim("hyperref", func(e *Engine) { e.doHyperref() })       // hyperref: internal link by \label, or 4-arg form
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
+	// \gotex@fontsizeat{size}: put the font at the size a class size table
+	// (size1x.clo) states for one of \tiny…\Huge, read against its \normalsize.
+	e.prim("gotex@fontsizeat", func(e *Engine) { e.doFontSizeAt() })
+	// \gotex@classnormalsize{size}: the size the class states for \normalsize.
+	e.prim("gotex@classnormalsize", func(e *Engine) { e.doClassNormalsize() })
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
