@@ -158,7 +158,7 @@ func TestClassKernelExpandable(t *testing.T) {
 		{"vpt", `\message{\@vpt}`, "5"},
 		{"xpt", `\message{\@xpt}`, "10"},
 		{"xiipt", `\message{\@xiipt}`, "12"},
-		{"xxvpt", `\message{\@xxvpt}`, "25"},
+		{"xxvpt", `\message{\@xxvpt}`, "24.88"}, // latex.ltx:7863, not a round 25
 		{"xipt", `\message{\@xipt}`, "10.95"},
 		// \p@ as a dimen prints 1.0pt
 		{"pat", `\message{\the\p@}`, "1.0pt"},

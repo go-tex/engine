@@ -253,3 +253,78 @@ type scalableFont interface {
 func (o *OpenTypeFont) atSizePx(px int) fontFace {
 	return &OpenTypeFont{f: o.f, fc: o.f.NewFace(px), upem: o.upem, px: px, data: o.data}
 }
+
+// doFontSizeAt implements the \gotex@fontsizeat primitive: it reads the size a
+// class size table states for one of \tiny…\Huge and puts the font there.
+//
+// LaTeX's ladder is a TABLE, not a scale factor. Every class size option file
+// redefines all ten commands (size11.clo:80-86, and our byte-identical copies in
+// texmf/):
+//
+//	\DeclareRobustCommand\large{\@setfontsize\large\@xiipt{14}}
+//
+// so \large is 12pt in a 10pt AND in an 11pt document, and size12.clo caps \Huge
+// at \@xxvpt — the same 24.88pt as \huge. \@setfontsize is the hook they all go
+// through (latex.ltx:10003-10007: \fontsize{#2}{#3}\selectfont), and ours threw
+// the size away, so every one of those redefinitions landed as a no-op: a document
+// that loaded article.cls came out with ONE font size for \tiny through \Huge —
+// a probe of all ten set at 10pt, \Huge 57% too narrow.
+//
+// The table's points are taken RELATIVE to the class's own \normalsize, not as
+// absolute points: Options.Size lets a caller pick the base size, and everything
+// scales off it. The ratio is what the table actually states — \Large is 14.4/10
+// of the body in a 10pt class and 14.4/10.95 in an 11pt one. The switch is scoped
+// like any other, so a group restores it.
+//
+// The leading is the table's second number and follows every size, which is what
+// \selectfont does with it (latex.ltx:8540-8543: \baselineskip\f@baselineskip,
+// then \baselineskip\f@linespread\baselineskip). It is stated in the class's own
+// points and taken as such, the same way \normalsize's is, and multiplied by the
+// line stretch in force. \footnotesize on the body leading is 21% too loose in a
+// 10pt class — 12pt where the table says 9.5 — which is what footnotes, captions
+// and bibliographies were set on. The assignment is scoped, so a group restores it.
+func (e *Engine) doFontSizeAt() {
+	size, ok := e.scanPtArg()
+	lead, leadOK := e.scanPtArg()
+	if leadOK && lead > 0 {
+		e.setEngineDimen(saveBaselineskip, &e.baselineskip,
+			int(float64(ptToSP(lead))*e.baselineStretchFactor()+0.5), false)
+	}
+	if !ok || size <= 0 || e.baseFontPx == 0 {
+		return
+	}
+	norm := e.classNormalsizePt
+	if norm <= 0 {
+		norm = 10 // the design size the kernel's number macros are stated against
+	}
+	f := e.curFont
+	if f == nil {
+		f = e.baseFont
+	}
+	sf, sok := f.(scalableFont)
+	if !sok {
+		return
+	}
+	px := int(float64(e.baseFontPx)*size/norm + 0.5)
+	if px < 1 {
+		px = 1
+	}
+	e.selectFont(sf.atSizePx(px))
+}
+
+// doClassNormalsize implements \gotex@classnormalsize: it records the size the
+// class states for \normalsize, which is what the rest of its table is measured
+// against. \@setfontsize reports it when the command being (re)defined is
+// \normalsize, the same test that already reports the body leading.
+func (e *Engine) doClassNormalsize() {
+	if v, ok := e.scanPtArg(); ok && v > 0 {
+		e.classNormalsizePt = v
+	}
+}
+
+// scanPtArg reads one brace group, expands it and reads a point value from it.
+// The class tables state a size as one of the kernel's number macros (\@xivpt →
+// 14.4), so the argument has to be expanded before it can be read.
+func (e *Engine) scanPtArg() (float64, bool) {
+	return parseFloatArg(e.toksToString(e.expandList(e.grabUndelimited())))
+}

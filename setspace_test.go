@@ -130,6 +130,11 @@ func TestSpacingAffectsParagraph(t *testing.T) {
 // third argument and nowhere else. neurips_2024.sty is the pattern:
 // \@setfontsize\normalsize\@xpt\@xipt — 10pt on an 11pt skip, where the article
 // default is 12pt. 24 of the 157 corpus papers set their leading this way.
+//
+// The third argument is the leading for EVERY size, not only \normalsize:
+// \selectfont sets \baselineskip from it each time (latex.ltx:8540-8543). What is
+// special about \normalsize is that its leading is also the single-spacing
+// reference \baselinestretch is measured against.
 func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -138,7 +143,7 @@ func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
 	}{
 		{"a conference style's normalsize", `\@setfontsize\normalsize\@xpt\@xipt`, 10.95},
 		{"a plain number", `\@setfontsize\normalsize{10}{13}`, 13},
-		{"another size command is ignored", `\@setfontsize\small\@ixpt\@xpt`, 0},
+		{"a smaller size takes its own leading", `\@setfontsize\small\@ixpt\@xpt`, 10},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

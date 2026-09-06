@@ -106,6 +106,10 @@ type Engine struct {
 	curFont       fontFace          // current font for measuring/rendering characters
 	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
 	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	// classNormalsizePt is the size the loaded class states for \normalsize (10,
+	// 10.95 or 12 for the standard size1x.clo). A class size table gives every
+	// other size in the same points, so this is the 100% they are read against.
+	classNormalsizePt float64
 	curColor      uint32            // current text colour (0xRRGGBB; 0 = default black)
 	colors        map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
 
@@ -131,6 +135,11 @@ type Engine struct {
 	baselineskip     int    // baseline-to-baseline glue (sp)
 	baseBaselineskip int    // the single-spaced baseline skip, the 1.0 reference for setspace
 	explicitStretch  bool   // an explicit spacing command (setspace / \linespread / \setstretch) ran
+	// lineStretch is the factor that command asked for. It is kept rather than
+	// recovered from the ratio of the two skips, because every size command now
+	// writes \baselineskip (latex.ltx:8540-8543) and the ratio would then read the
+	// size change back as a stretch.
+	lineStretch float64
 	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
 	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
 	parindent        int    // width of the indentation box at a paragraph's start (sp)
