@@ -1039,6 +1039,50 @@ func (e *Engine) isCharStandIn(name string) bool {
 // unknownMathCommand extracts the command name X from a go-tex/math "unknown command
 // \X" error, or "" when the message is a different failure. The name runs over letters
 // and @ (a LaTeX-internal control word), matching a TeX control-word token.
+// mathErrorClass reduces a go-tex/math error that names no unknown command to a
+// BOUNDED key, so a corpus census counts reasons instead of occurrences. Every such
+// refusal used to be tallied under the single opaque "$math$": 19 documents and 52
+// equations in the fidelity corpus, all indistinguishable — which is why the biggest
+// remaining content loss (64 documents drop equations, and they paginate 1.23 pages
+// SHORT each where the rest run 0.08 long) had no name to work from.
+//
+// Digits are replaced so a position or a size does not make every message its own
+// class, and the result is truncated: the key is a label for aggregation, not the
+// error itself.
+func mathErrorClass(msg string) string {
+	msg = strings.TrimSpace(msg)
+	var b strings.Builder
+	prevDigit := false
+	for _, r := range msg {
+		if r >= '0' && r <= '9' {
+			if !prevDigit {
+				b.WriteByte('#')
+			}
+			prevDigit = true
+			continue
+		}
+		prevDigit = false
+		// A blank is written visibly. The failing token is often a control SPACE, and
+		// collapsing the message's whitespace printed it as a bare "unknown command \\"
+		// — a reason that names nothing, which is the very fault this function exists
+		// to repair.
+		if r == ' ' || r == '\n' || r == '\t' {
+			b.WriteString("␣")
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := strings.ReplaceAll(b.String(), "␣␣", "␣")
+	out = strings.Trim(out, "␣")
+	if len(out) > 60 {
+		out = out[:60]
+	}
+	if out == "" {
+		return "(sans message)"
+	}
+	return out
+}
+
 func unknownMathCommand(errMsg string) string {
 	const marker = "unknown command \\"
 	i := strings.Index(errMsg, marker)
@@ -1083,7 +1127,7 @@ func (e *Engine) recordMathSkip(errMsg string) {
 	if e.mathDropped == nil {
 		e.mathDropped = map[string]int{}
 	}
-	key := "$math$"
+	key := "$math$ " + mathErrorClass(errMsg)
 	if name := unknownMathCommand(errMsg); name != "" {
 		key = "\\" + name
 	}
