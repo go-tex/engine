@@ -63,7 +63,11 @@ const LaTeX2eClassKernel = `
 \newcount\@Mii \@Mii=10002
 \newcount\@Miii \@Miii=10003
 \newcount\@Miv \@Miv=10004
-% Font-size number macros consumed by \@setfontsize (\@xpt → 10, …).
+% Font-size number macros consumed by \@setfontsize (\@xpt → 10, …), verbatim
+% from latex.ltx:7852-7863. The top four are NOT round numbers — the ladder is
+% geometric above \normalsize — and copying them rounded cost \huge three quarters
+% of a point and gave \Huge an eighth of a point too much. It did not show while
+% \@setfontsize threw the size away.
 \def\@vpt{5}
 \def\@vipt{6}
 \def\@viipt{7}
@@ -72,10 +76,10 @@ const LaTeX2eClassKernel = `
 \def\@xpt{10}
 \def\@xipt{10.95}
 \def\@xiipt{12}
-\def\@xivpt{14}
-\def\@xviipt{17}
-\def\@xxpt{20}
-\def\@xxvpt{25}
+\def\@xivpt{14.4}
+\def\@xviipt{17.28}
+\def\@xxpt{20.74}
+\def\@xxvpt{24.88}
 % ── scratch registers ───────────────────────────────────────────────────────
 % \@tempdima/b, \@tempcnta/b, \@tempskipa/b already come from the kernel-helper
 % layer; only \@tempdimc and the scratch box are added here. The engine has no

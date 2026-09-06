@@ -106,6 +106,10 @@ type Engine struct {
 	curFont       fontFace          // current font for measuring/rendering characters
 	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
 	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	// classNormalsizePt is the size the loaded class states for \normalsize (10,
+	// 10.95 or 12 for the standard size1x.clo). A class size table gives every
+	// other size in the same points, so this is the 100% they are read against.
+	classNormalsizePt float64
 	curColor      uint32            // current text colour (0xRRGGBB; 0 = default black)
 	colors        map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
 
