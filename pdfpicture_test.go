@@ -31,7 +31,10 @@ func TestPDFTextIsDrawnThroughPictureScopes(t *testing.T) {
 	}
 }
 
-// A page with no picture pays nothing: no graphics state is saved for text.
+// A page with no picture pays nothing beyond the page's own unit matrix: no
+// graphics state is saved for text. Every page opens with one `cm` converting TeX
+// points to the PDF's big points (bigPointsPerTeXPoint), so what this checks is
+// that there is no SECOND one — no per-text-run transform.
 func TestPDFTextWithoutAPictureIsUnchanged(t *testing.T) {
 	e := New()
 	e.SetFont(testFont(t))
@@ -43,8 +46,8 @@ func TestPDFTextWithoutAPictureIsUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range pdfStreams(t, buf.Bytes()) {
-		if strings.Contains(s, "BT") && strings.Contains(s, " cm\n") {
-			t.Errorf("plain text was transformed:\n%s", s)
+		if strings.Contains(s, "BT") && strings.Count(s, " cm\n") > 1 {
+			t.Errorf("plain text was transformed beyond the page matrix:\n%s", s)
 		}
 	}
 }

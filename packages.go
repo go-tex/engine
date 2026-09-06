@@ -429,6 +429,7 @@ func (e *Engine) doDocumentClass() {
 	if name == "" {
 		return
 	}
+	e.hasClass = true
 	e.komaClass = isKomaClass(name)
 	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back

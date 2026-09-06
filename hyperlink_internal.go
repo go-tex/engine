@@ -102,14 +102,18 @@ func (d *pdfDraw) internalLink(n internalLinkNode, x, baseline float64) {
 	if n.name == "" {
 		return
 	}
+	// ⚠ Destinations and annotation rectangles are in PAGE space, which the page's
+	// content matrix does not reach, so they carry the TeX-point-to-big-point
+	// conversion themselves (see bigPointsPerTeXPoint).
+	k := bigPointsPerTeXPoint
 	if n.target {
-		d.p.AddNamedDest(n.name, x, d.y(baseline-spToPt(n.inner.height)))
+		d.p.AddNamedDest(n.name, x*k, d.y(baseline-spToPt(n.inner.height))*k)
 		return
 	}
 	d.p.AddNamedLink(pdfkit.Rect{
-		X:      x,
-		Y:      d.y(baseline + spToPt(n.inner.depth)),
-		Width:  spToPt(n.inner.width),
-		Height: spToPt(n.inner.height + n.inner.depth),
+		X:      x * k,
+		Y:      d.y(baseline+spToPt(n.inner.depth)) * k,
+		Width:  spToPt(n.inner.width) * k,
+		Height: spToPt(n.inner.height+n.inner.depth) * k,
 	}, n.name)
 }

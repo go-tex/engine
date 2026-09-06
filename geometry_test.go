@@ -4,8 +4,11 @@
 package engine
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"testing"
 )
 
@@ -912,5 +915,65 @@ func TestRevtexGeometry(t *testing.T) {
 				t.Errorf("baseBaselineskip = %d, want it to follow at %d", e.baseBaselineskip, e.baselineskip)
 			}
 		})
+	}
+}
+
+// A PDF is measured in BIG points, 1/72in, and the layout computes in TeX points,
+// 1/72.27in. A plain article is 8.5in by 11in, which is 612 x 792 in a PDF — what
+// tectonic writes — and 614.295 x 794.97 if the two units are confused.
+func TestPDFPageIsInBigPoints(t *testing.T) {
+	src := []byte(`\documentclass{article}\begin{document}X\par\end{document}`)
+	var buf bytes.Buffer
+	if _, err := CompileToPDF(src, Options{}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	// The MediaBox is written into the page dictionary, uncompressed.
+	m := regexp.MustCompile(`/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)`).FindSubmatch(buf.Bytes())
+	if m == nil {
+		t.Fatal("no /MediaBox in the PDF")
+	}
+	w, _ := strconv.ParseFloat(string(m[1]), 64)
+	h, _ := strconv.ParseFloat(string(m[2]), 64)
+	if d := w - 612; d > 0.01 || d < -0.01 {
+		t.Errorf("page width %.3f, want 612 (8.5in in big points, not %.3f TeX points)", w, 8.5*72.27)
+	}
+	if d := h - 792; d > 0.01 || d < -0.01 {
+		t.Errorf("page height %.3f, want 792 (11in in big points, not %.3f TeX points)", h, 11*72.27)
+	}
+}
+
+// A class the engine EMULATES loads no class file, so nothing publishes
+// \paperwidth/\paperheight. The page must still be a page: it used to collapse onto
+// its own content — a revtex two-column paper came out on pages 356pt tall instead
+// of 792, a one-line scrartcl document on a page 151pt tall.
+func TestEmulatedClassStillHasAPaperSize(t *testing.T) {
+	for _, cls := range []string{
+		`[aps,prx,twocolumn,reprint]{revtex4-1}`,
+		`[a4paper]{scrartcl}`,
+	} {
+		var buf bytes.Buffer
+		src := []byte(`\documentclass` + cls + `\begin{document}X\par\end{document}`)
+		if _, err := CompileToPDF(src, Options{Lenient: true}, &buf); err != nil {
+			t.Errorf("%s: %v", cls, err)
+			continue
+		}
+		m := regexp.MustCompile(`/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)`).FindSubmatch(buf.Bytes())
+		if m == nil {
+			t.Errorf("%s: no /MediaBox", cls)
+			continue
+		}
+		h, _ := strconv.ParseFloat(string(m[2]), 64)
+		if h < 700 {
+			t.Errorf("%s: page height %.1f — the page collapsed onto its content", cls, h)
+		}
+	}
+}
+
+// A bare snippet — no \documentclass — keeps being sized to its own content, which
+// is what the SVG preview path depends on.
+func TestSnippetWithoutAClassIsSizedToItsContent(t *testing.T) {
+	e := New()
+	if _, _, ok := e.paperSizePt(); ok {
+		t.Error("a snippet with no \\documentclass reported a paper size")
 	}
 }

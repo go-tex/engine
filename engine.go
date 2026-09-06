@@ -155,6 +155,11 @@ type Engine struct {
 	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
 	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
 	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
+	// hasClass records that the document declared a \documentclass at all. A
+	// document has a PAPER — US letter unless something says otherwise — while a
+	// bare snippet run through the engine has none and is sized to its own content
+	// (see paperSizePt, and the SVG page in boxrender).
+	hasClass bool
 	// komaClass records that \documentclass named a KOMA-Script class, whose base
 	// size default is 11pt rather than the standard classes' 10pt (see isKomaClass).
 	komaClass bool
