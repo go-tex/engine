@@ -626,6 +626,10 @@ func (e *Engine) doUsepackageLoad() {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue
 		}
+		if name == "fullpage" {
+			e.applyFullpage(opts)
+			continue
+		}
 		if name == "hyperref" && len(opts) > 0 {
 			// hyperref routes its package options through the same keyval as
 			// \hypersetup, so \usepackage[colorlinks,urlcolor=blue]{hyperref} styles

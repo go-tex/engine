@@ -412,6 +412,33 @@ func (e *Engine) applyGeometry(opts string) {
 	e.publishGeometry(g)
 }
 
+// applyFullpage implements \usepackage[…]{fullpage}: uniform margins, no running
+// head or foot. fullpage.sty is not in the embedded tree, so it was ignored, and a
+// document that asked for a wide measure got its class's narrow one instead —
+// corpus paper 2407.18384, an 11pt book, was set 351pt wide against the
+// reference's 441 and ran to 374 pages against 333.
+//
+// The package's own rules (fullpage.sty), with its \ExecuteOptions{in,plain}:
+//
+//	\textwidth  = \paperwidth  − 2·margin
+//	\textheight = \paperheight − 2·margin − \headheight − \headsep − \footskip
+//
+// and plain/empty (the default) zero those three. That is exactly geometry's
+// margin= with no head allowance, so it is routed there rather than computed a
+// second time: same paper-size inheritance, same tested arithmetic.
+func (e *Engine) applyFullpage(opts []string) {
+	margin := "1in"
+	for _, o := range opts {
+		switch strings.TrimSpace(o) {
+		case "cm":
+			margin = "1.5cm"
+		case "in":
+			margin = "1in"
+		}
+	}
+	e.applyGeometry("margin=" + margin)
+}
+
 // applyAmsartGeometry gives the emulated amsart class its real text-block size.
 //
 // amsart (amslatex) sizes the text block itself, unlike article which the engine
