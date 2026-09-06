@@ -2046,6 +2046,7 @@ func (e *Engine) loadMore() {
 	// these mutate them (see counters.go). \@Roman is an expandable helper (an
 	// uppercase \romannumeral) used by the \Roman formatting macro in latex.go.
 	e.prim("newcounter", func(e *Engine) { e.doNewcounter() })
+	e.prim("@definecounter", func(e *Engine) { e.doDefineCounter() })
 	e.prim("setcounter", func(e *Engine) { e.doSetcounter() })
 	e.prim("addtocounter", func(e *Engine) { e.doAddtocounter() })
 	e.prim("stepcounter", func(e *Engine) { e.doStepcounter() })
