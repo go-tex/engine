@@ -514,3 +514,41 @@ func TestTextSymbolsRender(t *testing.T) {
 		}
 	}
 }
+
+// An environment a class builds on \list must be spaced like the kernel's own
+// lists. The embedded article.cls defines description as \list{}{…}, and \list was
+// a bare \@trivlist: its items sat one baseline apart (13.6pt at 11pt) where real
+// LaTeX gives 25.5 above the list, 22.5 between items and 25.5 below. itemize and
+// enumerate never showed it — the kernel macros in latex.go serve those and add
+// \topsep themselves — so the invariant to hold is that the two now AGREE.
+func TestListBuiltEnvironmentsAreSpacedLikeItemize(t *testing.T) {
+	gaps := func(src string) []int {
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\hsize=400pt ` + src); err != nil {
+			t.Fatal(err)
+		}
+		var out []int
+		for _, n := range e.mvl {
+			if g, ok := n.(glueNode); ok && g.spec.width > 0 {
+				out = append(out, g.spec.width)
+			}
+		}
+		return out
+	}
+	desc := gaps(`A\par\begin{description}\item[Un] a\item[Deux] b\end{description}\par B`)
+	item := gaps(`A\par\begin{itemize}\item a\item b\end{itemize}\par B`)
+	if len(desc) != len(item) {
+		t.Fatalf("description produced %d gaps, itemize %d: they are both lists", len(desc), len(item))
+	}
+	for i := range desc {
+		if desc[i] != item[i] {
+			t.Errorf("gap %d: description %d, itemize %d", i, desc[i], item[i])
+		}
+	}
+	// And the list must actually be separated from the surrounding text.
+	if len(desc) == 0 {
+		t.Fatal("a description produced no vertical space at all")
+	}
+}
