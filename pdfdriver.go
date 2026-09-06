@@ -62,7 +62,15 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		if paperW > 0 && paperH > 0 {
 			pw, ph = paperW, paperH
 		}
-		p := doc.AddPage(pdfkit.NewPageSize(pw, ph))
+		// A PDF unit is a BIG point, 1/72in; a TeX point is 1/72.27in, and every
+		// coordinate this driver computes is in TeX points (spToPt). Handing them
+		// over unconverted made the whole page 0.375% too large — a plain article
+		// came out 614.295 x 794.97 where the reference writes 612 x 792, which is
+		// 8.5in and 11in read as big points. The page is stated in big points and
+		// the content matrix carries the conversion, so every coordinate downstream
+		// stays in the units the layout computed.
+		p := doc.AddPage(pdfkit.NewPageSize(pw*bigPointsPerTeXPoint, ph*bigPointsPerTeXPoint))
+		p.Transform(bigPointsPerTeXPoint, 0, 0, bigPointsPerTeXPoint, 0, 0)
 		p.SetFont(face, size)
 		d := &pdfDraw{p: p, face: face, size: size, cur: size, pageH: ph}
 		if e.hasPageColor { // \pagecolor: fill the whole page behind the content
@@ -123,6 +131,10 @@ func (d *pdfDraw) setColor(c uint32) {
 	d.curColor = c
 	d.p.SetFillColor(pdfkit.RGB8(uint8(c>>16), uint8(c>>8), uint8(c)))
 }
+
+// bigPointsPerTeXPoint converts a TeX point (1/72.27in, what the layout computes
+// in) to a PDF big point (1/72in, what a PDF is measured in).
+const bigPointsPerTeXPoint = 72.0 / 72.27
 
 // y flips an engine (top-down) y coordinate into PDF (bottom-up) space.
 func (d *pdfDraw) y(engineY float64) float64 { return d.pageH - engineY }
@@ -294,11 +306,16 @@ func (d *pdfDraw) link(ln linkNode, x, baseline float64) {
 	if ln.url == "" {
 		return
 	}
+	// ⚠ An annotation rectangle is in PAGE space and the content matrix does NOT
+	// apply to it, so this one carries the TeX-point-to-big-point conversion itself.
+	// Without it a link's clickable area would sit 0.375% off the words it covers,
+	// which is a couple of points down a full page.
+	k := bigPointsPerTeXPoint
 	d.p.AddLink(pdfkit.Rect{
-		X:      x,
-		Y:      d.y(baseline + spToPt(ln.inner.depth)),
-		Width:  spToPt(ln.inner.width),
-		Height: spToPt(ln.inner.height + ln.inner.depth),
+		X:      x * k,
+		Y:      d.y(baseline+spToPt(ln.inner.depth)) * k,
+		Width:  spToPt(ln.inner.width) * k,
+		Height: spToPt(ln.inner.height+ln.inner.depth) * k,
 	}, ln.url)
 }
 

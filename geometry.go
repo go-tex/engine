@@ -780,7 +780,18 @@ func (e *Engine) paperSizePt() (w, h float64, ok bool) {
 	pw, pwOK := e.namedDimen("paperwidth")
 	ph, phOK := e.namedDimen("paperheight")
 	if !pwOK || !phOK || pw <= 0 || ph <= 0 {
-		return 0, 0, false
+		if !e.hasClass {
+			return 0, 0, false // a bare snippet: sized to its own content
+		}
+		// US letter, the size a TeX engine falls back to when nothing set one.
+		// tectonic writes 612x792 for revtex4-1, and for [a4paper]{article} too,
+		// since article.cls sets \paperwidth but never the media box.
+		//
+		// A class this engine EMULATES loads no class file, so nothing publishes
+		// these registers, and the page used to collapse onto its own CONTENT: a
+		// revtex two-column paper came out on pages 356pt tall instead of 792, and
+		// a one-line scrartcl document on a page 151pt tall.
+		return 8.5 * 72.27, 11 * 72.27, true
 	}
 	return spToPt(pw), spToPt(ph), true
 }
