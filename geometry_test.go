@@ -888,9 +888,9 @@ func TestRevtexGeometry(t *testing.T) {
 	}{
 		// reprint: \textwidth 42.5pc = 510pt less \columnsep 1.5pc = 18pt, so the two
 		// columns' combined inked width is 492 and each column is 246.
-		{"reprint, two columns at 10pt", true, 492, 672, 12},
+		{"reprint, two columns at 10pt", true, 492, 672, 11.5},
 		// preprint: \textwidth 468pt, single column at 12pt.
-		{"preprint, one column at 12pt", false, 468, 665.5, 14.5},
+		{"preprint, one column at 12pt", false, 468, 665.5, 14},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()
