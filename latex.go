@@ -524,7 +524,18 @@ const MiniLaTeXKernel = `
 \def\equation{\global\advance\c@equation by1\relax\edef\@currentlabel{\theequation}\def\@currentreftype{equation}\def\@currentlabelname{}\@equationbody}
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\def\@currentreftype{section}\def\@currentlabelname{#1}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\def\@currentreftype{subsection}\def\@currentlabelname{#1}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+% A caption is preceded by \abovecaptionskip, not by a \smallskip: article.cls
+% sets it to 10pt (l.478) and \@makecaption opens with \vskip\abovecaptionskip
+% (l.481). Ours put 3pt there, and a figure[h] with a caption cost 48.62pt against
+% tectonic's 67.81; with the real skip, 56.30.
+%
+% This still typesets the caption itself rather than calling the class's
+% \@makecaption, which is what LaTeX does and what a class redefines to style its
+% captions. Routing through it is the faithful thing and recovers the same space,
+% but measured over the corpus it dropped 49231 glyphs across 15 papers — the
+% class definitions use box and measurement primitives this engine does not carry
+% far enough yet. See the issue; the skip is the part that can be had safely now.
+\def\caption#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
@@ -648,6 +659,12 @@ const MiniLaTeXKernel = `
 \def\thesubtable{\@alph\c@subtable}
 \def\p@subtable{\the\@subparent}
 \def\fnum@subtable{(\thesubtable)}
+% article.cls:476-479 allocates and sets these; the format defines them too so a
+% class the engine EMULATES rather than reads still has them. Order makes that
+% safe: the format is loaded first, so a class's own \newlength rebinds the name
+% to its own register and its \setlength writes the one \caption then reads.
+\newlength\abovecaptionskip \setlength\abovecaptionskip{10pt}
+\newlength\belowcaptionskip \setlength\belowcaptionskip{0pt}
 \def\captionof#1#2{\def\@captype{#1}\caption{#2}}
 \def\captionsetup{\@ifnextbracket{\@captionsetupopt}{\@captionsetupnoopt}}
 \def\@captionsetupopt[#1]#2{}
