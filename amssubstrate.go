@@ -254,7 +254,11 @@ const AMSClassSubstrate = `
 \def\f@series{m}
 \def\f@family{}
 \def\fontsize#1#2{}
-\def\@setfontsize#1#2#3{}
+% \@setfontsize keeps the exact shape it always had — a macro with three
+% undelimited arguments that typesets nothing — so nothing about how a class's
+% tokens are consumed changes. It only REPORTS the pair to the engine, which takes
+% the leading when the command being (re)defined is \normalsize.
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@notefontsize{#3}\fi}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}

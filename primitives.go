@@ -1709,8 +1709,9 @@ func (e *Engine) loadMore() {
 	// arguments makes the size switch a no-op (size is left unchanged) without loop.
 	// The class's BASE point size (10/11/12pt) reaches the glyphs through the font
 	// system instead — setPtsize rescales the bound text faces — not through this
-	// token, so a size clo's \@setfontsize stays a pure, expansion-safe gobble.
-	e.prim("@setfontsize", func(e *Engine) { e.grabUndelimited(); e.grabUndelimited(); e.grabUndelimited() })
+	// token. Its THIRD argument is taken, though: a conference style that redefines
+	// \normalsize sets the body leading there and nowhere else.
+	e.prim("gotex@notefontsize", func(e *Engine) { e.doSetfontsize() })
 	e.prim("@setsize", func(e *Engine) {
 		e.grabUndelimited()
 		e.grabUndelimited()

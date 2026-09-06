@@ -125,3 +125,57 @@ func TestSpacingAffectsParagraph(t *testing.T) {
 		t.Errorf("double spacing height %d should exceed single %d", double, single)
 	}
 }
+
+// A class that redefines \normalsize states its body leading in \@setfontsize's
+// third argument and nowhere else. neurips_2024.sty is the pattern:
+// \@setfontsize\normalsize\@xpt\@xipt — 10pt on an 11pt skip, where the article
+// default is 12pt. 24 of the 157 corpus papers set their leading this way.
+func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		src  string
+		want float64
+	}{
+		{"a conference style's normalsize", `\@setfontsize\normalsize\@xpt\@xipt`, 10.95},
+		{"a plain number", `\@setfontsize\normalsize{10}{13}`, 13},
+		{"another size command is ignored", `\@setfontsize\small\@ixpt\@xpt`, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.LoadLaTeX()
+			e.SetFont(spMock{})
+			before := e.baselineskip
+			if _, err := e.Run(`\makeatletter ` + c.src); err != nil {
+				t.Fatal(err)
+			}
+			if c.want == 0 {
+				if e.baselineskip != before {
+					t.Errorf("baselineskip moved to %d for a non-normalsize switch", e.baselineskip)
+				}
+				return
+			}
+			if want := ptToSP(c.want); e.baselineskip != want {
+				t.Errorf("baselineskip = %d, want %d (%.2fpt)", e.baselineskip, want, c.want)
+			}
+		})
+	}
+}
+
+// The command name must never be EXPANDED to decide this: \normalsize expands to
+// the very \@setfontsize call being handled, so grabbing it in Go looped until the
+// runaway guard fired and took the document with it — corpus paper 2311.09365 fell
+// from 16 pages to 4, losing 26778 glyphs. The comparison is \ifx, in TeX.
+func TestSetfontsizeDoesNotRecurse(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\makeatletter\renewcommand\normalsize{\@setfontsize\normalsize\@xpt\@xipt}\normalsize\normalsize A`); err != nil {
+		t.Fatal(err)
+	}
+	if d := e.Diagnostics(); d.Runaway {
+		t.Error("the runaway guard tripped: \\normalsize re-entered its own definition")
+	}
+	if got := mvlText(e.mvl); got != "A" {
+		t.Errorf("typeset %q, want %q", got, "A")
+	}
+}
