@@ -23,6 +23,7 @@ func (e *Engine) setLineStretch(f float64) {
 	e.prevBaselineskip = e.baselineskip
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 	e.explicitStretch = true
+	e.lineStretch = f
 }
 
 // applyBaselineStretch honors LaTeX's NATIVE line-spacing mechanism at
@@ -179,15 +180,16 @@ func (e *Engine) doSetfontsize() {
 //
 // In this engine the factor is not kept in the \baselinestretch MACRO: \linespread
 // and setspace's commands are bound to setLineStretch, which writes the two skips
-// directly. So it is recovered where it actually lives, as the ratio of the current
-// skip to the single-spacing reference — and the macro is consulted only when no
-// spacing command has run, which is the case a plain
-// \renewcommand{\baselinestretch}{1.25} preamble leaves.
+// directly. So it is read where it actually lives, from what that command asked
+// for — and the macro is consulted only when no spacing command has run, which is
+// the case a plain \renewcommand{\baselinestretch}{1.25} preamble leaves.
+//
+// It is NOT recovered as the ratio of the two skips any more: every size command
+// now writes \baselineskip, so \small would read back as a stretch of 0.79 and the
+// next size would compound it.
 func (e *Engine) baselineStretchFactor() float64 {
-	if e.baseBaselineskip > 0 && e.baselineskip > 0 {
-		if f := float64(e.baselineskip) / float64(e.baseBaselineskip); f > 0 {
-			return f
-		}
+	if e.explicitStretch && e.lineStretch > 0 {
+		return e.lineStretch
 	}
 	m := e.eq["baselinestretch"]
 	if m == nil || m.kind != mMacro {

@@ -267,7 +267,7 @@ const AMSClassSubstrate = `
 % the table gives the ratios. It still REPORTS the \normalsize pair separately:
 % the leading, which is the base \baselinestretch is measured against, and the
 % size, which is the 100% the rest of the table is stated against.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\gotex@fontsizeat{#2}}
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\gotex@fontsizeat{#2}{#3}\ifx#1\normalsize\gotex@notefontsize{#3}\fi}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}

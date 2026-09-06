@@ -275,8 +275,21 @@ func (o *OpenTypeFont) atSizePx(px int) fontFace {
 // scales off it. The ratio is what the table actually states — \Large is 14.4/10
 // of the body in a 10pt class and 14.4/10.95 in an 11pt one. The switch is scoped
 // like any other, so a group restores it.
+//
+// The leading is the table's second number and follows every size, which is what
+// \selectfont does with it (latex.ltx:8540-8543: \baselineskip\f@baselineskip,
+// then \baselineskip\f@linespread\baselineskip). It is stated in the class's own
+// points and taken as such, the same way \normalsize's is, and multiplied by the
+// line stretch in force. \footnotesize on the body leading is 21% too loose in a
+// 10pt class — 12pt where the table says 9.5 — which is what footnotes, captions
+// and bibliographies were set on. The assignment is scoped, so a group restores it.
 func (e *Engine) doFontSizeAt() {
 	size, ok := e.scanPtArg()
+	lead, leadOK := e.scanPtArg()
+	if leadOK && lead > 0 {
+		e.setEngineDimen(saveBaselineskip, &e.baselineskip,
+			int(float64(ptToSP(lead))*e.baselineStretchFactor()+0.5), false)
+	}
 	if !ok || size <= 0 || e.baseFontPx == 0 {
 		return
 	}

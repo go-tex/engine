@@ -135,6 +135,11 @@ type Engine struct {
 	baselineskip     int    // baseline-to-baseline glue (sp)
 	baseBaselineskip int    // the single-spaced baseline skip, the 1.0 reference for setspace
 	explicitStretch  bool   // an explicit spacing command (setspace / \linespread / \setstretch) ran
+	// lineStretch is the factor that command asked for. It is kept rather than
+	// recovered from the ratio of the two skips, because every size command now
+	// writes \baselineskip (latex.ltx:8540-8543) and the ratio would then read the
+	// size change back as a stretch.
+	lineStretch float64
 	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
 	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
 	parindent        int    // width of the indentation box at a paragraph's start (sp)
