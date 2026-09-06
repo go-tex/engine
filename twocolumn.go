@@ -465,7 +465,28 @@ func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, page
 			break
 		}
 		if next == start && len(pending) == 0 && bi >= len(bands) {
-			break // no column progress and no bands left to place
+			// No column progress. That does NOT mean the document is finished: it
+			// happens when the bands placed atop this page leave the columns less
+			// than a tenth of the page (takeCols declines to fill a sliver), and the
+			// text after them still has to go somewhere. Breaking here DISCARDED it —
+			// on corpus paper 2403.13798 the loop stopped at node 1182 of 1702 and
+			// 229 typeset line boxes never reached a page, the document ending
+			// mid-section. Five of the 157 corpus papers lost content this way, one
+			// of them a third of its text.
+			if start >= len(list) {
+				break // genuinely nothing left
+			}
+			if len(pageBands) > 0 {
+				continue // the bands took this page; the next one has the full height
+			}
+			// Neither columns nor bands could take anything and material remains:
+			// force one item through so the loop cannot spin. An overfull column is
+			// visible and wrong in a way a reader can see; silent truncation is not.
+			left, right, next = takeCols(start+1, 0)
+			left = append([]node{list[start]}, left...)
+			pages = append(pages, e.assembleTwoColumnPage(nil, left, right, colW, fullW, pageOffset+len(pages)+1))
+			start = next
+			continue
 		}
 		start = next
 	}
