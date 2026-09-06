@@ -46,6 +46,60 @@ func (ln linkNode) depth() int  { return ln.inner.depth }
 // doURL implements \url{URL}: it reads URL literally (URLs carry catcode-active
 // characters like ~, #, %, & that must not be interpreted), typesets it in the
 // verbatim (tt) font and wraps the result in a hyperlink pointing to itself.
+// readCSNameArg reads the name of a control sequence given as an undelimited
+// argument, in either form: {\name} or the bare \name. url.sty's \urldef is
+// \def\urldef#1{…}, so a single token IS the argument — and every real use of it
+// writes the bare form (\urldef\tempurl\url{…} is what a bibliography style emits).
+// Reading only the braced form found nothing and defined nothing.
+func (e *Engine) readCSNameArg() string {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return ""
+	}
+	if t.cs_ {
+		return t.cs
+	}
+	e.back(t)
+	return e.readBraceCSName()
+}
+
+// doUrldef implements url.sty's \urldef{\name}\url{text}: it DEFINES \name to
+// typeset that URL and typesets NOTHING itself. url.sty reads the text verbatim once,
+// at definition time, so the URL survives being used later inside another macro's
+// argument — which is the whole point of the command.
+//
+// Undefined, \urldef was skipped and the \url that follows it ran on the spot: the
+// URL appeared where the DEFINITION stood (a preamble, or the head of a bibliography)
+// and the later \name, still undefined, produced nothing. Both halves are wrong, and
+// 12 of the fidelity corpus's 157 papers use it — 187 times.
+func (e *Engine) doUrldef() {
+	name := e.readCSNameArg()
+	if name == "" {
+		return
+	}
+	// The URL command that follows (\url, and \path in the same family) and the
+	// verbatim argument it would have read.
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return
+	}
+	if !t.cs_ {
+		e.back(t)
+		return
+	}
+	arg, argOK := e.readRawBracedArg()
+	if !argOK {
+		return
+	}
+	// \name := \<cmd>{<arg>}, so using it typesets exactly what the command would.
+	body := []tok{csTok(t.cs), chTok('{', catBegin)}
+	body = append(body, stringToToks(arg)...)
+	body = append(body, chTok('}', catEnd))
+	e.define(name, &meaning{kind: mMacro, body: body}, false)
+}
+
 func (e *Engine) doURL() {
 	url, _ := e.readRawBracedArg()
 	save := e.beginLinkColor(e.hyperURLColor)
