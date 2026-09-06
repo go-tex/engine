@@ -3,8 +3,13 @@ package engine
 import "testing"
 
 // A display places \abovedisplayskip glue before its box and \belowdisplayskip
-// after it — the leading TeX puts around a display rather than the ordinary
-// interline glue. The two skips carry the values in the like-named registers.
+// after it, carrying the values in the like-named registers — and the ordinary
+// interline glue stays. TeX ADDS the two skips to it rather than replacing it:
+// after appending \abovedisplayskip it contributes the display box through
+// append_to_vlist like any other (tex.web:22602), which puts
+// baselineskip-prev_depth-height(b) in front of it, and it never sets prev_depth
+// to ignore_depth around a display. So the list above the box reads
+// [\abovedisplayskip][interline][box].
 func TestDisplaySkipsAroundDisplay(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{})
@@ -30,9 +35,16 @@ func TestDisplaySkipsAroundDisplay(t *testing.T) {
 	if dispIdx <= 0 || dispIdx+1 >= len(e.mvl) {
 		t.Fatalf("display box not found with glue on both sides (idx %d of %d)", dispIdx, len(e.mvl))
 	}
-	above, ok := e.mvl[dispIdx-1].(glueNode)
+	if dispIdx < 2 {
+		t.Fatalf("no room for both glues above the display (idx %d)", dispIdx)
+	}
+	above, ok := e.mvl[dispIdx-2].(glueNode)
 	if !ok || above.spec.width != 10*unity {
-		t.Errorf("above-display glue = %+v, want width 10pt", e.mvl[dispIdx-1])
+		t.Errorf("above-display glue = %+v, want width 10pt", e.mvl[dispIdx-2])
+	}
+	// The interline glue TeX would have put there anyway, still there.
+	if _, ok := e.mvl[dispIdx-1].(glueNode); !ok {
+		t.Errorf("no interline glue between \\abovedisplayskip and the display box: %+v", e.mvl[dispIdx-1])
 	}
 	below, ok := e.mvl[dispIdx+1].(glueNode)
 	if !ok || below.spec.width != 7*unity {
