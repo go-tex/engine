@@ -620,6 +620,20 @@ var mathNoise = map[string]struct {
 	"hfil": {0, ``}, "hfill": {0, ``}, "hss": {0, ``}, "hfilneg": {0, ``},
 	"vfil": {0, ``}, "vfill": {0, ``}, "vss": {0, ``}, "vfilneg": {0, ``},
 	"qedhere": {0, ``}, "noalign": {1, ``},
+	// \tag{n} is the equation's NUMBER, not part of the formula. The equation
+	// environment reads it (equation.go) but \[ … \tag{1}\] does not go through that
+	// path, so the tag reached the maths layer and dropped the whole display: one
+	// paper writes its 69 numbered displays exactly so and lost every one. Stripping
+	// keeps the formula and loses only its number — the number is a follow-up, the
+	// formula is the content.
+	"tag": {1, ``},
+	// \intertext{…} interjects PROSE between the rows of an alignment. The maths
+	// layer cannot set prose, and left in place it costs the whole alignment; the
+	// text is a real if small loss, the alignment a larger one.
+	"intertext": {1, ``},
+	// Size switches the maths layer does not know. What they change is the size of
+	// what follows; what they cost was the formula.
+	"scriptscriptstyle": {0, ``}, "scriptstyle": {0, ``}, "textstyle": {0, ``},
 }
 
 // mathGlue are the glue primitives a class writes INTO a display: iopart.cls opens
@@ -650,6 +664,9 @@ var mathGlue = map[string]bool{
 // unicode-math-table.tex:127-128).
 var mathTextSymbol = map[string]string{
 	"dag": `\dagger`, "ddag": `\ddagger`,
+	// \bigtimes is the big cross of bigints/mathabx; the maths layer knows \times,
+	// the same glyph at text size.
+	"bigtimes": `\times`,
 }
 
 // mathPenalty are the primitives whose argument is a <number> rather than a glue.
