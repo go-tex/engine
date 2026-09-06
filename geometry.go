@@ -608,6 +608,29 @@ func (e *Engine) applyElsarticleGeometry(opts []string) bool {
 	return false
 }
 
+// applyRevtexGeometry gives the emulated revtex classes their real text block.
+// revtex is not embedded, so an unbundled paper falls to the article-shaped
+// emulation, whose block is narrower: measured on corpus paper 2407.11498 (aps,
+// prx, reprint) our columns were 226pt wide against the reference's 245.
+//
+// The values are the class's own, from aps10pt4-2.rtx and aps11pt4-2.rtx:
+//
+//	reprint   \textwidth 42.5pc = 510pt, \columnsep 1.5pc = 18pt,
+//	          \textheight 56pc = 672pt  → columns 246pt each,
+//	          \normalsize 10pt on 11.5 (aps10pt4-2.rtx \@setfontsize\normalsize\@xpt{11.5})
+//	preprint  \textwidth 468pt, \textheight 665.5pt, single column,
+//	          \normalsize 12pt on 14 (aps12pt4-2.rtx)
+//
+// inkedW follows the acmartFormats convention: for a two-column format it is
+// \textwidth minus \columnsep, the two columns' combined inked width.
+func (e *Engine) applyRevtexGeometry(reprint bool) {
+	if reprint {
+		e.applyClassGeometry(classGeometry{inkedW: 510 - 18, textH: 672, leading: 11.5})
+		return
+	}
+	e.applyClassGeometry(classGeometry{inkedW: 468, textH: 665.5, leading: 14})
+}
+
 // applyIEEEtranGeometry gives the emulated IEEEtran class its real text block and
 // base leading. Like acmart, IEEEtran is served by the article emulation when the
 // paper does not bundle IEEEtran.cls, so its compact two-column block is otherwise

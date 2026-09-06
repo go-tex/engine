@@ -875,3 +875,42 @@ func TestKomaClassesDefaultTo11pt(t *testing.T) {
 		}
 	}
 }
+
+// revtex is not embedded, so an unbundled paper falls to the article-shaped
+// emulation, whose block is narrower than the class's own. The values here are
+// revtex's, from aps10pt4-2.rtx and aps11pt4-2.rtx — not inferred from a render.
+func TestRevtexGeometry(t *testing.T) {
+	for _, c := range []struct {
+		name         string
+		reprint      bool
+		wantW, wantH float64
+		wantLead     float64
+	}{
+		// reprint: \textwidth 42.5pc = 510pt less \columnsep 1.5pc = 18pt, so the two
+		// columns' combined inked width is 492 and each column is 246.
+		{"reprint, two columns at 10pt", true, 492, 672, 11.5},
+		// preprint: \textwidth 468pt, single column at 12pt.
+		{"preprint, one column at 12pt", false, 468, 665.5, 14},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.LoadLaTeX()
+			e.SetFont(spMock{})
+			e.applyRevtexGeometry(c.reprint)
+			if want := ptToSP(c.wantW); e.hsize != want {
+				t.Errorf("hsize = %d, want %d (%.0fpt)", e.hsize, want, c.wantW)
+			}
+			if want := ptToSP(c.wantH); e.vsize != want {
+				t.Errorf("vsize = %d, want %d (%.1fpt)", e.vsize, want, c.wantH)
+			}
+			if want := ptToSP(c.wantLead); e.baselineskip != want {
+				t.Errorf("leading = %d, want %d (%.1fpt)", e.baselineskip, want, c.wantLead)
+			}
+			// The single-spacing reference follows, so a \singlespacing inside the
+			// document does not snap back to the emulation's default.
+			if e.baseBaselineskip != e.baselineskip {
+				t.Errorf("baseBaselineskip = %d, want it to follow at %d", e.baseBaselineskip, e.baselineskip)
+			}
+		})
+	}
+}

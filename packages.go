@@ -566,6 +566,7 @@ func (e *Engine) doDocumentClass() {
 		// matching the reference closely — 2601.22272: 61 vs 62), and the live standard
 		// two-column path keeps the historical inline float.
 		e.revtexReprint = twoColumnOptIn() && revtexReprintMode(opts)
+		e.applyRevtexGeometry(revtexReprintMode(opts))
 		e.loadRevtexEmulation()
 		return
 	}
