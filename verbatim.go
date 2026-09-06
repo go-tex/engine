@@ -167,6 +167,31 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 
 // mvlAppendGap adds a small vertical gap (\smallskip-ish) to the main list.
 func (e *Engine) mvlAppendGap() {
-	e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: 3 * unity}})
+	e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: e.trivlistSep()}})
 	e.prevDepth = ignoreDepth
+}
+
+// trivlistSep is the vertical space LaTeX puts above and below a verbatim block.
+// verbatim is built on \trivlist, so what surrounds it is \topsep + \partopsep —
+// about 12pt at 11pt, where this used to put a flat 3pt. Measured against real
+// LaTeX on a document of three verbatim blocks, the gap above went 25.8pt in the
+// reference against our 13.4, and below 25.2 against 10.9: the block cost us
+// 24.2pt where it costs 51.0, and a document of them came out a page short in
+// four.
+//
+// The named lengths are read rather than hard-coded because setPtsize scales
+// \topsep with the class size (8/9/10pt for 10/11/12pt) and a package may reset
+// them; the fallback is the 10pt class value, which is what the engine starts
+// from before a class runs.
+func (e *Engine) trivlistSep() int {
+	sep := 8 * unity
+	if v, ok := e.namedDimen("topsep"); ok {
+		sep = v
+	}
+	if v, ok := e.namedDimen("partopsep"); ok {
+		sep += v
+	} else {
+		sep += 2 * unity
+	}
+	return sep
 }
