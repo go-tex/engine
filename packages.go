@@ -639,6 +639,25 @@ func (e *Engine) doUsepackageLoad() {
 			e.loadTeXFile(data, name, ".sty", append(append([]string{}, opts...), e.takePassed(name)...))
 			continue
 		}
+		if name == "fullpage" {
+			// fullpage (H. Partl / P. W. Daly) is a one-line geometry: the text block is
+			// the paper less a uniform margin on every side — 1in by default, 1.5cm
+			// under [cm]. It computes \topmargin as margin − 1in − \headheight −
+			// \headsep, so the BODY starts at the margin and the running head sits
+			// INSIDE it: geometry's own box model, expressible as one option.
+			//
+			// A bundled fullpage.sty is loaded above and wins; this stands in only when
+			// the paper ships none, which is every use of it in the fidelity corpus (7
+			// of 157 papers, 270 of the 22127-paper pool). Unemulated, the document kept
+			// its class margins: a book set 38 lines a page where the reference sets
+			// 44-49, and paginated 374 pages against 333.
+			m := "1in"
+			if hasOption(opts, "cm") {
+				m = "1.5cm"
+			}
+			e.applyGeometry("margin=" + m)
+			continue
+		}
 		if name == "apacite" {
 			// apacite drives an APA-style .bbl but is often required by a journal
 			// class (agujournal, sn-jnl) without the .sty being bundled. Left
