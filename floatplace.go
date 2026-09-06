@@ -56,7 +56,7 @@ func floatsEnabled() bool { return os.Getenv("GOTEX_FLOATS") != "0" }
 // breaking later \@-name control sequences. It leaves @ a letter, exactly as the default
 // (substrate-free) end of LoadLaTeX does.
 const FloatPlacementSubstrate = `
-\long\def\gotex@inlinefloat#1{\par\medskip\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
+\long\def\gotex@inlinefloat#1{\par\addvspace\intextsep\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
 \def\@float#1{\gotex@floatbegin{#1}}
 `
 

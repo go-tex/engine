@@ -864,6 +864,12 @@ func (e *Engine) setPtsize(opts []string) {
 	case "2":
 		topsep, itemsep = 10.0, 5.0
 	}
+	// \intextsep is the space the output routine puts above and below a float it
+	// sets in the running column (latex.ltx \@addtocurcol: \vskip\intextsep,
+	// \box\@currbox, \vskip\intextsep). latex.ltx sets it to 12pt plus 2 minus 2 at
+	// EVERY class size; the register is allocated by the class kernel here and was
+	// never given that value, so it read zero.
+	e.setNamedDimen("intextsep", ptToSP(12))
 	e.setNamedDimen("topsep", ptToSP(topsep))
 	e.setNamedDimen("itemsep", ptToSP(itemsep))
 	e.setNamedDimen("parsep", ptToSP(itemsep))
