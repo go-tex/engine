@@ -137,9 +137,7 @@ func (e *Engine) collectMathUntilEnd(name string) (src string, meta eqMeta) {
 		case t.cs_ && t.cs == "tag":
 			meta.tag, meta.tagStar = e.readTag()
 		case t.cs_:
-			b.WriteByte('\\')
-			b.WriteString(t.cs)
-			b.WriteByte(' ')
+			writeMathCS(&b, t.cs)
 		default:
 			b.WriteRune(t.ch)
 		}
