@@ -664,7 +664,29 @@ func (e *Engine) doUsepackageLoad() {
 			if hasOption(opts, "cm") {
 				m = "1.5cm"
 			}
-			e.applyGeometry("margin=" + m)
+			// fullpage.sty subtracts the running-head and running-foot bands from the
+			// text height, and its DEFAULT (\ExecuteOptions{in,plain}) zeroes only the
+			// head ones:
+			//
+			//	\ifFP@plain  \headheight 0pt  \headsep 0pt  \fi
+			//	\ifFP@empty  \footskip   0pt              \fi
+			//	\textheight = \paperheight − \headheight − \headsep − \footskip − 2·margin
+			//
+			// So \footskip — 30pt in the standard classes — comes off the body unless
+			// [empty] is given, and the head bands come off under [headings] and
+			// [myheadings], which do not zero them. That is geometry's includefoot /
+			// includehead exactly, which is how it is said here.
+			//
+			// Read as a plain margin=1in, the block was 30pt too tall on every page —
+			// about 2.2 lines — and a 333-page book paginated 283.
+			opt := "margin=" + m
+			if !hasOption(opts, "empty") {
+				opt += ",includefoot"
+			}
+			if hasOption(opts, "headings") || hasOption(opts, "myheadings") {
+				opt += ",includehead"
+			}
+			e.applyGeometry(opt)
 			continue
 		}
 		if name == "apacite" {
