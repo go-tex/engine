@@ -57,8 +57,10 @@ func mrboxOf(slot *boxNode) *boxNode {
 // the box is smashed to zero height in its own row and shifted down so the free
 // space above and below it is equal, and it still renders its glyphs.
 func TestMultirowVerticalCentring(t *testing.T) {
-	// col0: X (multirow), col1: a over b. Each letter box is 7pt tall, 2pt deep,
-	// so every row is 9pt (h7,d2). Two rows ⇒ block extent V = 18pt.
+	// col0: X (multirow), col1: a over b. Each letter box is 7pt tall and 2pt deep,
+	// but a row is never shorter than \@arstrutbox — .7/.3 of \baselineskip
+	// (latex.ltx:12102-12105) — so the row dimensions are read from the strut here
+	// rather than written down: the arithmetic below is the same either way.
 	e, tb := runTab(t, `\begin{tabular}{ll}\multirow{2}{*}{X} & a \\ & b\end{tabular}`)
 
 	if got := mvlText(e.mvl); got != "Xab" {
@@ -68,9 +70,12 @@ func TestMultirowVerticalCentring(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("rows = %d, want 2", len(rows))
 	}
-	// The multirow row keeps its ordinary height (the spanning box is smashed).
-	if rows[0].height != 7*unity || rows[0].depth != 2*unity {
-		t.Errorf("multirow row = h%d d%d, want h7pt d2pt (spanning box must not inflate it)", rows[0].height, rows[0].depth)
+	// The multirow row keeps its ordinary height (the spanning box is smashed):
+	// the strut's, since the strut is taller than the 7pt letters.
+	strutH, strutD := strutDims(e)
+	if rows[0].height != strutH || rows[0].depth != strutD {
+		t.Errorf("multirow row = h%d d%d, want the strut h%d d%d (spanning box must not inflate it)",
+			rows[0].height, rows[0].depth, strutH, strutD)
 	}
 	slot := smashedSlot(rows[0])
 	if slot == nil {
@@ -87,8 +92,9 @@ func TestMultirowVerticalCentring(t *testing.T) {
 	if box.height != 7*unity || box.depth != 2*unity {
 		t.Errorf("content box = h%d d%d, want h7pt d2pt", box.height, box.depth)
 	}
-	// shift = -Hr + V/2 + (Hc-Dc)/2 = -7 + 9 + 2.5 = 4.5pt (positive = lowered).
-	wantShift := (-7*unity + 9*unity) + (7*unity-2*unity)/2
+	// shift = -Hr + V/2 + (Hc-Dc)/2, positive = lowered.
+	rowExtent := strutH + strutD
+	wantShift := -strutH + rowExtent + (7*unity-2*unity)/2
 	if box.shift != wantShift {
 		t.Errorf("shift = %d sp, want %d sp (4.5pt)", box.shift, wantShift)
 	}
@@ -104,19 +110,21 @@ func TestMultirowVerticalCentring(t *testing.T) {
 // An \hline between the two spanned rows adds its rule thickness to the block
 // extent, lowering the centred box by half a rule versus the un-ruled case.
 func TestMultirowSpansInteriorRule(t *testing.T) {
-	_, tb := runTab(t, `\begin{tabular}{ll}\multirow{2}{*}{X} & a \\ \hline & b\end{tabular}`)
+	e, tb := runTab(t, `\begin{tabular}{ll}\multirow{2}{*}{X} & a \\ \hline & b\end{tabular}`)
+	strutH, strutD := strutDims(e)
+	rowExtent := strutH + strutD
 	box := mrboxOf(smashedSlot(dataRows(tb)[0]))
 	if box == nil {
 		t.Fatal("no \\multirow content box")
 	}
-	// V = 9 + 0.4(rule) + 9 = 18.4pt ⇒ shift = -7 + V/2 + 2.5.
-	V := 9*unity + defaultRule + 9*unity
-	wantShift := -7*unity + V/2 + (7*unity-2*unity)/2
+	// V = row + 0.4(rule) + row ⇒ shift = -Hr + V/2 + 2.5.
+	V := rowExtent + defaultRule + rowExtent
+	wantShift := -strutH + V/2 + (7*unity-2*unity)/2
 	if box.shift != wantShift {
 		t.Errorf("shift with interior \\hline = %d sp, want %d sp", box.shift, wantShift)
 	}
 	// And it is exactly defaultRule/2 lower than the un-ruled table.
-	if diff := wantShift - ((-7*unity + 9*unity) + (7*unity-2*unity)/2); diff != defaultRule/2 {
+	if diff := wantShift - (-strutH + rowExtent + (7*unity-2*unity)/2); diff != defaultRule/2 {
 		t.Errorf("interior rule lowered the box by %d sp, want %d (half a rule)", diff, defaultRule/2)
 	}
 }
@@ -178,18 +186,21 @@ func TestMultirowAfterRow(t *testing.T) {
 // centres within its single row, shift 0), n=1 likewise, and an n larger than the
 // remaining rows simply spans what exists.
 func TestMultirowDegenerate(t *testing.T) {
-	// n = 1: with a sibling cell giving the row its 9pt height, the box centres in
-	// its own row ⇒ shift 0 (behaves like an ordinary cell).
-	_, tb1 := runTab(t, `\begin{tabular}{ll}\multirow{1}{*}{X} & a\end{tabular}`)
+	// n = 1: the box centres in its own row, which is the STRUT's row rather than
+	// the content's, so the shift is what centring 7pt-over-2pt inside .7/.3 of
+	// \baselineskip asks for — a tenth of a point, not zero.
+	e1, tb1 := runTab(t, `\begin{tabular}{ll}\multirow{1}{*}{X} & a\end{tabular}`)
+	sh, sd := strutDims(e1)
+	wantOwnRow := -sh + (sh+sd)/2 + (7*unity-2*unity)/2
 	if box := mrboxOf(smashedSlot(dataRows(tb1)[0])); box == nil {
 		t.Fatal("n=1: no content box")
-	} else if box.shift != 0 {
-		t.Errorf("n=1 shift = %d, want 0 (centred in its own row)", box.shift)
+	} else if box.shift != wantOwnRow {
+		t.Errorf("n=1 shift = %d, want %d (centred in its own strutted row)", box.shift, wantOwnRow)
 	}
 
 	// n = 0 clamps to 1: same as above, no panic.
-	if _, tb0 := runTab(t, `\begin{tabular}{ll}\multirow{0}{*}{X} & a\end{tabular}`); mrboxOf(smashedSlot(dataRows(tb0)[0])).shift != 0 {
-		t.Error("n=0 should clamp to 1 (shift 0)")
+	if _, tb0 := runTab(t, `\begin{tabular}{ll}\multirow{0}{*}{X} & a\end{tabular}`); mrboxOf(smashedSlot(dataRows(tb0)[0])).shift != wantOwnRow {
+		t.Errorf("n=0 should clamp to 1 (shift %d)", wantOwnRow)
 	}
 
 	// n = -3 clamps to 1: no panic.
@@ -256,5 +267,54 @@ func TestMultirowHelpers(t *testing.T) {
 	// An over-long span sums only the rows that exist.
 	if got, want := spannedExtent(built, rowBoxes, 2, 9), 18*unity; got != want {
 		t.Errorf("spannedExtent(2,9) = %d, want %d", got, want)
+	}
+}
+
+// strutDims is \@arstrutbox's height and depth for the engine's current
+// \baselineskip: .7 and .3 of it, scaled by \arraystretch (latex.ltx:12102-12105).
+// Every table row is raised to at least these, so a test that states a row's
+// geometry has to ask for them rather than assume the content's own size.
+func strutDims(e *Engine) (int, int) {
+	f := e.arrayStretch()
+	return int(0.7*f*float64(e.baselineskip) + 0.5), int(0.3*f*float64(e.baselineskip) + 0.5)
+}
+
+// Every table row carries \@arstrutbox, so a row is never shorter than the line it
+// would occupy in running text. LaTeX copies it into each row (latex.ltx:12249) and
+// builds it from \strutbox scaled by \arraystretch (l.12102-12105): .7 and .3 of
+// \baselineskip.
+//
+// Measured against tectonic before this: a row of short cells cost 7.20pt where the
+// reference gives 11.96 — \baselineskip to the hundredth — and one tabular came out
+// 5.55pt flat. The deficit halved when the cells were made 20pt tall, which is what
+// a missing MINIMUM height looks like as opposed to missing glue.
+func TestTabularRowsCarryTheArrayStrut(t *testing.T) {
+	e, tb := runTab(t, `\begin{tabular}{ll}a & b\\ c & d\end{tabular}`)
+	strutH, strutD := strutDims(e)
+	if strutH <= 7*unity {
+		t.Fatalf("the strut (%d) is not taller than the 7pt letters; the test proves nothing", strutH)
+	}
+	rows := dataRows(tb)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	for i, r := range rows {
+		if r.height != strutH || r.depth != strutD {
+			t.Errorf("row %d = h%d d%d, want the strut h%d d%d", i, r.height, r.depth, strutH, strutD)
+		}
+	}
+}
+
+// \arraystretch scales the strut, which is how a document opens a table up
+// (\renewcommand{\arraystretch}{1.5}). It is a macro holding a number, not a
+// register, so it is read and parsed.
+func TestArrayStretchScalesTheRowStrut(t *testing.T) {
+	e, tb := runTab(t, `\renewcommand{\arraystretch}{1.5}\begin{tabular}{ll}a & b\end{tabular}`)
+	if f := e.arrayStretch(); f != 1.5 {
+		t.Fatalf("\\arraystretch reads %v, want 1.5", f)
+	}
+	want := int(0.7*1.5*float64(e.baselineskip) + 0.5)
+	if got := dataRows(tb)[0].height; got != want {
+		t.Errorf("row height with \\arraystretch 1.5 = %d, want %d", got, want)
 	}
 }
