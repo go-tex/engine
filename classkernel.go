@@ -166,6 +166,12 @@ const LaTeX2eClassKernel = `
 % ── display skips ───────────────────────────────────────────────────────────
 \newskip\abovedisplayskip
 \newskip\belowdisplayskip
+% url.sty declares \newmuskip\Urlmuskip and papers set it (\Urlmuskip=0mu plus 1mu,
+% 18 of the 22127-paper pool). Undeclared, the command was skipped and its VALUE
+% stayed in the input — "=0mu plus 1mu" typeset itself, and in the preamble that
+% opened a page: one paper's first page carried those eleven characters and nothing
+% else. A skip register holds it; the mu unit has been scannable since #248.
+\newskip\Urlmuskip
 \newskip\abovedisplayshortskip
 \newskip\belowdisplayshortskip
 % ── standard vertical-space amounts (\bigskip/\medskip/\smallskip macros come
