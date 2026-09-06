@@ -179,3 +179,58 @@ func TestSetfontsizeDoesNotRecurse(t *testing.T) {
 		t.Errorf("typeset %q, want %q", got, "A")
 	}
 }
+
+// \setstretch and \linespread are the two setspace commands a document uses
+// INSIDE a group to space one piece of the page — a title block, a quotation —
+// and real LaTeX restores \baselinestretch at the closing brace. A thesis cover
+// macro whose \begin{center} ... \setstretch{1.05} ... \end{center} meant to
+// space its own page imposed 1.05 on the 198 pages after it (issue #247).
+func TestSetstretchIsRestoredWithItsGroup(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	before := e.baselineskip
+	if _, err := e.Run(`\begingroup\setstretch{2}\endgroup`); err != nil {
+		t.Fatal(err)
+	}
+	if e.baselineskip != before {
+		t.Errorf("baselineskip = %d after the group closed, want %d", e.baselineskip, before)
+	}
+	// Inside the group it must actually apply.
+	e2 := New()
+	e2.LoadLaTeX()
+	e2.SetFont(spMock{})
+	if _, err := e2.Run(`\begingroup\setstretch{2}`); err != nil {
+		t.Fatal(err)
+	}
+	if want := 2 * before; e2.baselineskip != want {
+		t.Errorf("inside the group baselineskip = %d, want %d", e2.baselineskip, want)
+	}
+	// At the top level there is no group to restore it, and it must persist.
+	e3 := New()
+	e3.LoadLaTeX()
+	e3.SetFont(spMock{})
+	if _, err := e3.Run(`\setstretch{2}`); err != nil {
+		t.Fatal(err)
+	}
+	if want := 2 * before; e3.baselineskip != want {
+		t.Errorf("at top level baselineskip = %d, want %d", e3.baselineskip, want)
+	}
+}
+
+// The named commands and the spacing environment are deliberately NOT made
+// group-local: they space stretches of a document, and restoring them with the
+// enclosing group regressed the corpus by 16 pages with one paper losing content
+// (issue #247). \end{spacing} restores its own, through spacingSaved.
+func TestNamedSpacingCommandsAreNotGroupLocal(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	before := e.baselineskip
+	if _, err := e.Run(`\begingroup\doublespacing\endgroup`); err != nil {
+		t.Fatal(err)
+	}
+	if e.baselineskip == before {
+		t.Errorf("baselineskip came back to %d: \\doublespacing must outlive its group", before)
+	}
+}

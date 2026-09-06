@@ -20,6 +20,7 @@ func (e *Engine) setLineStretch(f float64) {
 	if f <= 0 {
 		f = 1
 	}
+	e.prevBaselineskip = e.baselineskip
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 	e.explicitStretch = true
 }
@@ -96,7 +97,26 @@ func doubleStretch(ptsize int) float64 {
 func (e *Engine) doSetstretch() {
 	if f, ok := parseFloatArg(e.readBraceName()); ok {
 		e.setLineStretch(f)
+		// \setstretch / \linespread are the two setspace commands a document uses
+		// INSIDE a group to space one piece of the page — a title block, a quotation
+		// — and real LaTeX restores \baselinestretch at the closing brace. Record the
+		// old skip so the group does too. The named commands and the spacing
+		// environment are left alone: they are used for stretches of the document,
+		// and making them group-local as well regressed the corpus (issue #247).
+		e.markBaselineskipGroupLocal()
 	}
+}
+
+// markBaselineskipGroupLocal records the value \baselineskip had before the
+// caller changed it, so the enclosing group restores it. The write itself has
+// already happened, so the saved value is reconstructed from the reference and
+// the stretch in force when the group opened — which is what \baselinestretch
+// being a macro gives real LaTeX for free.
+func (e *Engine) markBaselineskipGroupLocal() {
+	if len(e.groups) == 0 {
+		return
+	}
+	e.save = append(e.save, saveItem{kind: saveBaselineskip, oldd: e.prevBaselineskip})
 }
 
 // doSpacing implements \begin{spacing}{f}: save the current \baselineskip so
