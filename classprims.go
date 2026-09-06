@@ -260,7 +260,7 @@ const LaTeX2eClassLead = `
 %
 % The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
 % run through \@trivlist directly and already match the reference.
-\def\list#1#2{\par\addvspace\topsep\@trivlist}
+\def\list#1#2{\@trivlist}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -268,7 +268,7 @@ const LaTeX2eClassLead = `
 % \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
 % \par those three stayed open past \end{itemize}, and every \end after them closed one
 % group too high.
-\def\endlist{\endtrivlist\par\addvspace\topsep}
+\def\endlist{\endtrivlist}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
@@ -279,9 +279,18 @@ const LaTeX2eClassLead = `
 % \item\relax, and a theorem's \trivlist) carries NO bullet — real \trivlist gives
 % a bare \item an empty label. Scoped by the \begingroup so \@itemlabel reverts to
 % its bullet default (for a stray \item outside any real itemize) at \endtrivlist.
-\def\@trivlist{\par\begingroup\@listfirsttrue\def\@itemlabel{}}
+% \@trivlist carries the vertical space, as latex.ltx does (l.11456): \@topsepadd
+% is \topsep, plus \partopsep when the list starts in VERTICAL mode — the test comes
+% before the \par, so a list opened mid-paragraph gets \topsep alone. \endtrivlist
+% then closes with \addvspace\@topsepadd (through \@endparenv, l.11523).
+%
+% This was first written the other way round, with \addvspace\topsep on \list and
+% nothing on \@trivlist, from measuring a description against tectonic. The
+% measurement put it within 2.9pt and the source names that 2.9pt: \partopsep.
+\def\@trivlist{\@topsepadd\topsep\ifvmode\advance\@topsepadd\partopsep\else\par\fi
+  \addvspace\@topsepadd\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
-\def\endtrivlist{\endgroup\par}
+\def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the
