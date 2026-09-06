@@ -326,14 +326,41 @@ const MiniLaTeXKernel = `
 \long\def\endquotation{\par\endgroup\smallskip}
 \long\def\verse{\par\begingroup\leftskip=20pt\smallskip}
 \long\def\endverse{\par\endgroup\smallskip}
-\def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\relax}
-\def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\relax}
-\def\center{\par\begingroup\centering}
-\def\endcenter{\par\endgroup}
-\def\flushleft{\par\begingroup\raggedright}
-\def\endflushleft{\par\endgroup}
-\def\flushright{\par\begingroup\raggedleft}
-\def\endflushright{\par\endgroup}
+% \centering and \raggedleft also zero \parfillskip, and all three alignment
+% commands zero \parindent (latex.ltx:11014-11028):
+%
+%	\DeclareRobustCommand\centering{\let\\\@centercr
+%	  \rightskip\@flushglue\leftskip\@flushglue
+%	  \finalhyphendemerits=\z@ \parindent\z@\parfillskip\z@skip}
+%
+% Without \parfillskip=0 the LAST line of a centred paragraph carries THREE
+% infinite glues — \leftskip, \rightskip and \parfillskip — so its text settles a
+% third of the way across instead of halfway. Measured against tectonic on one
+% centred word in an article: reference at x=287.6 (the page centre), ours at
+% x=238.2, which is exactly the one-third point. \raggedright is the exception
+% and keeps \parfillskip, as the reference does: its line is flush left either way.
+\def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\parindent=0pt\parfillskip=0pt\relax}
+\def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\parindent=0pt\parfillskip=0pt\relax}
+% center/flushleft/flushright are TRIVLISTS (latex.ltx:11012-11013, 11030-11033):
+%
+%	\def\center{\trivlist \centering\item\relax}
+%	\def\endcenter{\endtrivlist}
+%
+% so each one carries \topsep above and below like any list — 10pt at either end
+% at 10pt, \topsep plus \partopsep. As a bare group they carried none, and
+% \begin{center} is one of the most common environments there is: nearly every
+% figure and table body is inside one. Measured against tectonic, the vertical
+% cost of one center holding a single line: reference 31.88pt, ours 12.00pt.
+%
+% The \par is ours, and it has to be there: this engine's \endtrivlist closes the
+% group before it breaks the paragraph, so without it the last line is broken with
+% \centering already restored and comes out flush left.
+\def\center{\trivlist \centering\item\relax}
+\def\endcenter{\par\endtrivlist}
+\def\flushleft{\trivlist \raggedright\item\relax}
+\def\endflushleft{\par\endtrivlist}
+\def\flushright{\trivlist \raggedleft\item\relax}
+\def\endflushright{\par\endtrivlist}
 \def\item{\par\noindent\quad-- }
 \def\\{\penalty-10000 }
 \def\newline{\penalty-10000 }

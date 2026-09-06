@@ -54,7 +54,7 @@ const Plain = `
 \let\!\negthinspace
 \def\:{\hskip.22222em}
 \def\;{\hskip.27778em}
-\def\raggedright{\rightskip=0pt plus 1fil\relax}
+\def\raggedright{\rightskip=0pt plus 1fil\leftskip=0pt\parindent=0pt\relax}
 \def\justified{\rightskip=0pt\relax}
 \def\vfill{\vskip0pt plus 1fil\relax}
 \def\eject{\par\penalty-10000 }
