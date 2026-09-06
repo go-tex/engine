@@ -330,6 +330,9 @@ type Engine struct {
 	// processes normally instead of being swallowed.
 	argRunaway  bool
 	runawayArgs int // macro calls abandoned by a \par in an argument (tex.web §392)
+	// pkgRequested is every package name \usepackage asked for, whether or not a
+	// .sty was found. An emulated package has no file to record itself.
+	pkgRequested map[string]bool
 
 	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
 	// loop (a self-referential macro, or a peeking idiom the kernel helpers
