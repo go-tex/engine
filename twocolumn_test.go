@@ -422,3 +422,31 @@ func hasTwoColumns(page *boxNode) bool {
 	}
 	return walk(page)
 }
+
+// The two-column builder must never abandon material. When the bands placed atop
+// a page leave the columns less than a tenth of the page, takeCols declines to
+// fill the sliver and reports no progress — and the loop used to read that as
+// "the document is finished" and DISCARD everything after it. On corpus paper
+// 2403.13798 it stopped at node 1182 of 1702, dropping 229 typeset line boxes and
+// ending the document mid-section; five of the 157 corpus papers lost content
+// this way, one of them a third of its text.
+func TestTwoColumnNeverAbandonsMaterial(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\documentclass[twocolumn]{article}\begin{document}` +
+		`Before.\par` +
+		// A full-width band taller than nine tenths of the page: it takes the whole
+		// page top, and the columns beneath it are the sliver takeCols declines.
+		`\begin{figure*}\vbox to 0.95\vsize{}\caption{Band}\end{figure*}` +
+		`ZQXMARKER after the band.\par\end{document}`); err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for _, p := range e.Pages() {
+		collectChars(p.list, &b)
+	}
+	if got := b.String(); !strings.Contains(got, "ZQXMARKER") {
+		t.Errorf("material after a page-filling band never reached a page: %q", got)
+	}
+}
