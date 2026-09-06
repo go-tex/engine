@@ -332,6 +332,12 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = q
 				continue
 			}
+			// The physics package: go-tex/math knows none of its commands, and one
+			// unknown command drops the whole equation (mathphysics.go).
+			if ph, pok := e.resolvePhysics(src, name); pok {
+				src = ph
+				continue
+			}
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
 				continue

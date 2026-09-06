@@ -622,6 +622,14 @@ func (e *Engine) doUsepackageLoad() {
 		if name == "" {
 			continue
 		}
+		// Every package the document ASKS for is recorded, whether or not a .sty is
+		// found: a package the engine emulates has no file, and the emulation still
+		// needs to know it was requested. \@ifpackageloaded keeps its own registry
+		// (ver@foo.sty), which only a real load populates.
+		if e.pkgRequested == nil {
+			e.pkgRequested = map[string]bool{}
+		}
+		e.pkgRequested[name] = true
 		if name == "geometry" {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue
