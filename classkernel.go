@@ -253,7 +253,12 @@ const LaTeX2eClassKernel = `
 \def\linenumbers{}
 \def\nolinenumbers{}
 \def\runninglinenumbers{}
-\def\modulolinenumbers#1{}
+% lineno's \modulolinenumbers takes an OPTIONAL [n], not a mandatory argument.
+% Declared with #1 the stub grabbed the "[" as its argument and left "5]" in the
+% input, which was then TYPESET — in the preamble, where it opened a page of its
+% own: one paper's title moved to page 2 and its first page carried the two
+% characters "5]".
+\def\modulolinenumbers{\@ifnextbracket\@gobbleoptonly\gotex@maybegroup}
 \def\setrunninglinenumbers{}
 % \protected@write writes to an auxiliary file with fragile commands shielded.
 % This engine keeps its cross-reference and table-of-contents information in
