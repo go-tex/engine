@@ -757,6 +757,9 @@ const MiniLaTeXKernel = `
 \def\zcsetup#1{}
 \def\setdisplayskipstretch#1{}
 \def\bibpunct#1{}
+% \gotex@maybegroup eats a following {..} only if one is really there, so a stub
+% whose argument is entirely optional cannot swallow the text after it.
+\def\gotex@maybegroup{\@ifnextchar\bgroup\@gobble\relax}
 \def\thanks#1{}
 \def\address#1{}
 \def\email#1{}
