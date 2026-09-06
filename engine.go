@@ -151,7 +151,10 @@ type Engine struct {
 	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
 	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
 	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
-	geom           *geomState  // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
+	// komaClass records that \documentclass named a KOMA-Script class, whose base
+	// size default is 11pt rather than the standard classes' 10pt (see isKomaClass).
+	komaClass bool
+	geom      *geomState // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save        []saveItem

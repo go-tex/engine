@@ -846,3 +846,32 @@ func TestNamesPaperSize(t *testing.T) {
 		}
 	}
 }
+
+// KOMA-Script's classes default to 11pt where the standard classes default to
+// 10pt. They are not embedded, so a paper that does not bundle one falls to the
+// article-shaped emulation — close enough in shape, but it started from the wrong
+// base size: corpus paper 2212.13760 came out at a 12pt leading against the
+// reference's 13.6.
+func TestKomaClassesDefaultTo11pt(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want float64
+	}{
+		{`\documentclass{scrartcl}`, 13.6},
+		{`\documentclass[a4paper]{scrarticle}`, 13.6},
+		{`\documentclass{scrbook}`, 13.6},
+		{`\documentclass[12pt]{scrartcl}`, 14.5}, // a named size still wins
+		{`\documentclass[10pt]{scrartcl}`, 12},   // including back down to 10pt
+		{`\documentclass{article}`, 12},          // a standard class is unchanged
+	} {
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		if _, err := e.Run(c.src + `\begin{document}A\end{document}`); err != nil {
+			t.Fatalf("%s: %v", c.src, err)
+		}
+		if want := ptToSP(c.want); e.baseBaselineskip != want {
+			t.Errorf("%s: base leading = %d, want %d (%.1fpt)", c.src, e.baseBaselineskip, want, c.want)
+		}
+	}
+}

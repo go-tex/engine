@@ -429,6 +429,7 @@ func (e *Engine) doDocumentClass() {
 	if name == "" {
 		return
 	}
+	e.komaClass = isKomaClass(name)
 	e.setPtsize(opts)          // record 10pt/11pt/12pt for \@ptsize even without the .cls
 	e.setClassOptionList(opts) // \@classoptionslist, for packages that read them back
 	// Record a paper-size class option (a4paper/letterpaper/…). The geometry package
@@ -816,6 +817,12 @@ func setCurrentOptionToks(opt string) []tok {
 func (e *Engine) setPtsize(opts []string) {
 	pt := "0"                           // \@ptsize is (size-10): 0/1/2 for 10/11/12pt
 	permille, leading := 1000, 12*unity // class base size and \normalsize leading
+	if e.komaClass {
+		// KOMA-Script's classes default to 11pt where the standard ones default to
+		// 10pt (scrguide, \KOMAoption{fontsize}). A named size option below still
+		// wins, exactly as it does for a standard class.
+		pt, permille, leading = "1", 1100, ptToSP(13.6)
+	}
 	for _, o := range opts {
 		switch strings.TrimSpace(o) {
 		case "10pt":
@@ -841,6 +848,19 @@ func (e *Engine) setPtsize(opts []string) {
 	e.setNamedDimen("topsep", ptToSP(topsep))
 	e.setNamedDimen("itemsep", ptToSP(itemsep))
 	e.setNamedDimen("parsep", ptToSP(itemsep))
+}
+
+// isKomaClass reports whether name is one of KOMA-Script's document classes. They
+// are not embedded, so a paper that does not bundle one falls to the article-shaped
+// emulation — which is close enough in shape, but starts from the WRONG base size:
+// KOMA defaults to 11pt, the standard classes to 10pt. Corpus paper 2212.13760 came
+// out at a 12pt leading against the reference's 13.6, in 10 pages against 20.
+func isKomaClass(name string) bool {
+	switch name {
+	case "scrartcl", "scrarticle", "scrreprt", "scrreport", "scrbook", "scrlttr2":
+		return true
+	}
+	return false
 }
 
 // classManagesOwnColumns reports whether a class runs its own multi-column output
