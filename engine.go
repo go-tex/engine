@@ -328,7 +328,8 @@ type Engine struct {
 	// matchParams stops grabbing and expandMacro abandons the call, pushing the
 	// consumed tokens back so the rest of the file (and the document after it)
 	// processes normally instead of being swallowed.
-	argRunaway bool
+	argRunaway  bool
+	runawayArgs int // macro calls abandoned by a \par in an argument (tex.web §392)
 
 	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
 	// loop (a self-referential macro, or a peeking idiom the kernel helpers
@@ -1419,10 +1420,7 @@ func (e *Engine) parEndsArgument(t tok) bool {
 	}
 	e.back(t) // back_error: the \par is put back, not consumed
 	e.argRunaway = true
-	if e.skippedCS == nil {
-		e.skippedCS = map[string]int{}
-	}
-	e.skippedCS["Paragraph ended before argument was complete"]++
+	e.runawayArgs++
 	return true
 }
 
@@ -1938,6 +1936,13 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+	// RunawayArgs counts the macro calls abandoned because a \par ended an argument
+	// (tex.web §392/§396, parEndsArgument). It is an ALARM, not a feature gap: the
+	// call is dropped, so whatever it would have set is gone. It used to be tallied
+	// in Skipped under the error message itself, which the report then printed as a
+	// command NAME — "\Paragraph ended before argument was complete", 44 of them on
+	// one paper — so a corpus census read an error as the fifth most missing macro.
+	RunawayArgs int
 	// UndefinedEnvs counts \begin{env} whose environment was undefined — a silent
 	// no-op that never appears in Skipped (\csname coerces the missing \env to
 	// \relax). Aggregated over a corpus it surfaces unimplemented environments
@@ -1996,6 +2001,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		Runaway:        e.runaway,
 		OpenGroups:     len(e.groups),
 		PageCapHit:     e.skippedCS["gotex@pagelimit"] > 0,
+		RunawayArgs:    e.runawayArgs,
 		UndefinedEnvs:  undefinedEnvs,
 		MathDropped:    mathDropped,
 		FiguresDropped: figuresDropped,
