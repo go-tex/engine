@@ -148,6 +148,10 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.PageCapHit {
 		fmt.Fprintln(w, "gotex: WARNING pagination hit the page cap — a page-count explosion")
 	}
+	if d.RunawayArgs > 0 {
+		fmt.Fprintf(w, "gotex: WARNING %d macro call(s) abandoned — a \\par ended an argument "+
+			"(tex.web §392); each drops what the call would have set\n", d.RunawayArgs)
+	}
 	// Undefined environments never show up as skipped commands: \begin{env} routes
 	// through \csname, which turns a missing \env into a silent \relax. Report them
 	// on their own so an unimplemented environment (whose body was then typeset in
