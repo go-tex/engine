@@ -32,6 +32,11 @@ var texIntParams = map[string]int{
 	"adjdemerits": 10000, "doublehyphendemerits": 10000, "finalhyphendemerits": 5000,
 	"widowpenalty": 150, "clubpenalty": 150, "brokenpenalty": 100,
 	"interlinepenalty": 0, "displaywidowpenalty": 50, "predisplaypenalty": 10000,
+	// Two integer parameters the table lacked. Undefined, the command was skipped
+	// and its VALUE stayed in the input: IEEEtran writes
+	// \interdisplaylinepenalty=10000 and \interfootnotelinepenalty=2500 in its
+	// preamble, and "=10000 =2500" was typeset there — on a page of its own.
+	"interdisplaylinepenalty": 100, "interfootnotelinepenalty": 100,
 	"postdisplaypenalty": 0, "floatingpenalty": 0, "outputpenalty": 0,
 	"binoppenalty": 700, "relpenalty": 500, "delimiterfactor": 901,
 	"maxdeadcycles": 25, "deadcycles": 0, "insertpenalties": 0, "badness": 0,

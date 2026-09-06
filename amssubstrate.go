@@ -58,18 +58,44 @@ func (e *Engine) loadAMSPrims() {
 	// \accent<code>: set an accent over the next char. Used only in amsart's \dh/\dj
 	// glyphs (themselves replaced when amsfonts is absent). Consume the code number.
 	e.prim("accent", func(e *Engine) { e.scanInt() })
-	// \fontdimen<n><font>: a font parameter. Read as a value (\fontdimen2\font) in a
-	// couple of spacing macros off the critical path; consume the index and the font
-	// token and contribute nothing.
+	// \fontdimen<n><font>: a font parameter, READ as a value (\fontdimen2\font) or
+	// ASSIGNED to. tex.web §1224 gives the assignment three steps —
+	//
+	//	assign_font_dimen: begin find_font_dimen(true); k:=cur_val;
+	//	  scan_optional_equals; scan_normal_dimen; font_info[k].sc:=cur_val; end
+	//
+	// — and this took only the first. The "=" and the dimension after it stayed in
+	// the input and were TYPESET. IEEEtran sets three of them per font-size switch,
+	//
+	//	\fontdimen2\font=\@IEEEtrantmpdimenA\relax
+	//	\fontdimen3\font=-\@IEEEtrantmpdimenA\relax
+	//	\fontdimen4\font=\@IEEEtrantmpdimenA\relax
+	//
+	// leaving "=", "=-" and "=" — the "==-=" that filled a page: two corpus papers
+	// opened on one carrying nothing else, their title pushed to page 2.
+	//
+	// The equals is what tells an assignment from a read. TeX knows by context
+	// (prefixed_command against scan_something_internal) and lets the "=" be
+	// omitted; here the primitive runs in the stomach either way, so the "=" is the
+	// only signal — and a read is never followed by one. Without it, nothing is
+	// consumed, exactly as before.
 	e.prim("fontdimen", func(e *Engine) {
 		e.scanInt()
 		if t, ok := e.getXToken(); !ok {
 			return
-		} else if t.cs_ && t.cs == "font" { // \fontdimen2\font (the real \font primitive)
-			return
-		} else {
+		} else if !(t.cs_ && t.cs == "font") { // \fontdimen2\font (the real \font primitive)
 			e.back(t)
 		}
+		e.skipOptSpace()
+		t, ok := e.getXToken()
+		if !ok {
+			return
+		}
+		if t.cs_ || t.ch != '=' {
+			e.back(t)
+			return // a READ: leave the input alone
+		}
+		e.scanDimen() // an ASSIGNMENT: the value belongs to it, not to the page
 	})
 	// \insert<n>{material}: add to an insert class (footnotes, amsart's \copyins).
 	// The engine has its own footnote model; accept the register number and the
@@ -270,7 +296,14 @@ const AMSClassSubstrate = `
 % the table gives the ratios. It still REPORTS the \normalsize pair separately:
 % the leading, which is the base \baselinestretch is measured against, and the
 % size, which is the 100% the rest of the table is stated against.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\gotex@fontsizeat{#2}}
+% \f@size is NFSS's current size as a BARE NUMBER — latex.ltx:8533 sets it with
+% \edef\f@size{\strip@pt\@tempdimb}, the unit stripped, so a class can write
+% \dimen0=\f@size pt. Undefined, it was skipped and its "pt" stayed behind: six
+% corpus papers report it 80 times each, and two of them opened on a page carrying
+% nothing but "pt==-=pt==-=pt==-=…" — the leftovers of eighty such assignments.
+% \f@baselineskip is deliberately NOT set here: its argument comes in several
+% shapes (12, 11\p@, {12pt}) and nothing in the corpus asks for it.
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}
