@@ -115,3 +115,23 @@ func TestParskipBetweenParagraphs(t *testing.T) {
 		t.Errorf("explicit \\par after a display: got %d parskip glues, want 1", np)
 	}
 }
+
+// The rows of a multi-line display are set \jot further apart than ordinary
+// lines. Measured against real LaTeX on an align of 1 to 4 rows, our cost rose
+// 13.6pt per row — a plain \baselineskip — where the reference rises 16.5. With
+// \jot the slope is 16.6.
+func TestDisplayRowsAreJotApart(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if v := e.jotSkip(); v != 3*unity {
+		t.Errorf("jot = %d, want %d (3pt): \\newdimen\\jot is allocated but never set, and a zero reading is not a request for no leading", v, 3*unity)
+	}
+	// A document that sets \jot is followed.
+	if _, err := e.Run(`\jot=5pt`); err != nil {
+		t.Fatal(err)
+	}
+	if v := e.jotSkip(); v != 5*unity {
+		t.Errorf("after \\jot=5pt, jot = %d, want %d", v, 5*unity)
+	}
+}
