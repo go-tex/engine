@@ -45,11 +45,20 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 	// \abovedisplayskip replaces the interline glue above the display.
 	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("abovedisplayskip")})
 	e.prevDepth = ignoreDepth // no interline glue on top of \abovedisplayskip
+	// The rows of a multi-line display are set \jot FURTHER apart than ordinary
+	// lines (3pt by default), which LaTeX does by adding \jot to \baselineskip for
+	// the duration of the display. Without it the rows sat a plain \baselineskip
+	// apart: measured against real LaTeX on an align of 1..4 rows, our cost rose
+	// 13.6pt per row where the reference rises 16.5 — the difference is \jot to the
+	// tenth of a point. It is ADDED to the interline glue, not put in its place.
+	savedSkip := e.baselineskip
+	e.baselineskip += e.jotSkip()
 	for _, b := range boxes {
 		if b != nil {
 			e.appendToPage(b) // first box: no glue (prevDepth ignored); rows: interline glue
 		}
 	}
+	e.baselineskip = savedSkip
 	// \belowdisplayskip replaces the interline glue below the display; the next
 	// paragraph's first line then follows it with no additional interline glue.
 	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("belowdisplayskip")})
@@ -58,4 +67,16 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 	// paragraph this engine starts for it must not carry a \parskip (see
 	// beginParagraph). An explicit \par before that text clears the flag.
 	e.suppressParskip = true
+}
+
+// jotSkip is \jot, the extra leading between the rows of a multi-line display.
+// LaTeX allocates it as a \newskip and sets it to 3pt; a document may change it,
+// so it is read rather than hard-coded.
+func (e *Engine) jotSkip() int {
+	// A zero reading means \jot was allocated (\newdimen\jot in the kernel
+	// substrate) but never set, not that a document asked for no extra leading.
+	if v, ok := e.namedDimen("jot"); ok && v > 0 {
+		return v
+	}
+	return 3 * unity
 }

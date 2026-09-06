@@ -250,7 +250,17 @@ const LaTeX2eClassLead = `
 \expandafter\def\csname[ \endcsname{\relax\ifmmode\@badmath\else$$\fi}
 \expandafter\def\csname] \endcsname{\relax\ifmmode$$\else\@badmath\fi}
 % ── generic list (best-effort: each item on its own line with its label) ─────
-\def\list#1#2{\@trivlist}
+% \list carries the vertical space LaTeX's list machinery puts around it —
+% \topsep above and below — which \@trivlist alone does not. Without it every
+% environment a class builds on \list came out with no separation at all: the
+% embedded article.cls defines description as \list{}{…}, and its items sat a bare
+% baseline apart (13.6pt) where real LaTeX gives 25.5 above, 22.5 between and 25.5
+% below. itemize/enumerate never showed this because the kernel macros in latex.go
+% serve them and already add \topsep themselves.
+%
+% The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
+% run through \@trivlist directly and already match the reference.
+\def\list#1#2{\par\addvspace\topsep\@trivlist}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -258,7 +268,7 @@ const LaTeX2eClassLead = `
 % \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
 % \par those three stayed open past \end{itemize}, and every \end after them closed one
 % group too high.
-\def\endlist{\endtrivlist}
+\def\endlist{\endtrivlist\par\addvspace\topsep}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
@@ -269,10 +279,15 @@ const LaTeX2eClassLead = `
 % \item\relax, and a theorem's \trivlist) carries NO bullet — real \trivlist gives
 % a bare \item an empty label. Scoped by the \begingroup so \@itemlabel reverts to
 % its bullet default (for a stray \item outside any real itemize) at \endtrivlist.
-\def\@trivlist{\par\begingroup\def\@itemlabel{}}
+\def\@trivlist{\par\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
 \def\endtrivlist{\endgroup\par}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
-\def\@gotexitem[#1]{\par\noindent#1\ }
+% \@iteminterspace puts \itemsep between items and nothing before the first (the
+% \@listfirst flag \@trivlist raises). Without it every \list-built environment ran
+% its items a bare baseline apart: description gave 13.6pt where real LaTeX gives
+% 22.5. A trivlist with a single \item — a theorem, amsart's author block — is
+% unaffected, the flag suppressing the space on the first one.
+\def\@gotexitem[#1]{\par\@iteminterspace\noindent#1\ }
 `
