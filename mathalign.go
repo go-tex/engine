@@ -158,7 +158,7 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		}
 		rowBoxes = append(rowBoxes, hpackSP(row, packTo, e.hsize))
 	}
-	e.placeDisplay(rowBoxes)
+	e.placeAlignmentDisplay(rowBoxes)
 }
 
 // doMultline typesets a multline/multline* environment: one long equation split
@@ -214,7 +214,7 @@ func (e *Engine) doMultline(name string, numbered bool) {
 		}
 		rowBoxes = append(rowBoxes, hpackSP(row, packTo, e.hsize))
 	}
-	e.placeDisplay(rowBoxes)
+	e.placeAlignmentDisplay(rowBoxes)
 }
 
 // hfil returns an infinitely stretchable glue (first-order fil), used to centre or

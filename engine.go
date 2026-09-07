@@ -106,6 +106,10 @@ type Engine struct {
 	curFont       fontFace          // current font for measuring/rendering characters
 	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
 	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	// alignDisplay marks the display being placed as an ALIGNMENT (align, gather,
+	// multline), which TeX splices into the page rather than contributing through
+	// append_to_vlist — see placeAlignmentDisplay.
+	alignDisplay bool
 	// classNormalsizePt is the size the loaded class states for \normalsize (10,
 	// 10.95 or 12 for the standard size1x.clo). A class size table gives every
 	// other size in the same points, so this is the 100% they are read against.

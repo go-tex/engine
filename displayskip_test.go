@@ -147,3 +147,67 @@ func TestDisplayRowsAreJotApart(t *testing.T) {
 		t.Errorf("after \\jot=5pt, jot = %d, want %d", v, 5*unity)
 	}
 }
+
+// An ALIGNMENT display — align, gather, multline — carries a full \baselineskip
+// above its first row that an ordinary display does not. TeX does not contribute an
+// alignment through append_to_vlist at all: it appends \abovedisplayskip and splices
+// the alignment's own rows in directly (tex.web:22626-22631, "Finish an alignment in
+// a display": link(tail):=p), so the space above the first row is the one the
+// alignment's own vertical list carries, not the append_to_vlist glue \lineskip
+// clamps to almost nothing under a tall box.
+//
+// Measured against tectonic, ink to ink above the first row: an align holding a
+// \rule of 20pt sat 11.28pt below the preceding line where the reference puts 23.28,
+// and an align of `x = y` 14.88 against 26.64. One \baselineskip lands on the
+// reference in both, and the per-construct cost of an align goes from −11.78pt to
+// −0.00.
+func TestAlignmentDisplayCarriesABaselineskipAboveItsFirstRow(t *testing.T) {
+	// The glue widths between the last text box and the display's first box.
+	glues := func(t *testing.T, src string) (int, []int) {
+		t.Helper()
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		e.hsize = 300 * unity
+		if _, err := e.Run(src); err != nil {
+			t.Fatal(err)
+		}
+		var run []int
+		seenBox := false
+		for _, n := range e.mvl {
+			switch c := n.(type) {
+			case *boxNode:
+				if seenBox && len(run) > 0 {
+					return e.baselineskip, run
+				}
+				seenBox, run = true, nil
+			case glueNode:
+				if seenBox {
+					run = append(run, c.spec.width)
+				}
+			}
+		}
+		return e.baselineskip, run
+	}
+	has := func(v []int, want int) bool {
+		for _, x := range v {
+			if x == want {
+				return true
+			}
+		}
+		return false
+	}
+	bs, plain := glues(t, `\hsize=300pt before\par $$x$$ after\par`)
+	_, aligned := glues(t, `\hsize=300pt before\par \begin{align} x &= y \end{align} after\par`)
+	if bs <= 0 {
+		t.Fatal("no \\baselineskip to look for")
+	}
+	if !has(aligned, bs) {
+		t.Errorf("no \\baselineskip glue (%d sp) above an alignment's first row: %v", bs, aligned)
+	}
+	if has(plain, bs) {
+		t.Errorf("an ordinary display got the alignment's extra \\baselineskip: %v", plain)
+	}
+}
