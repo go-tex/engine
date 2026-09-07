@@ -153,7 +153,7 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 	var out []node
 	for _, r := range s {
 		if r == ' ' || r == '\t' {
-			out = append(out, kernNode{width: space})
+			out = append(out, kernNode{width: space, space: true})
 			continue
 		}
 		w, h, d := font.charDimsSP(r)

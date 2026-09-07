@@ -17,8 +17,17 @@ const defaultRule = 26214 // 0.4pt in sp, TeX's default_rule thickness
 // node is one item of horizontal or vertical material inside a box.
 type node interface{ isNode() }
 
-type kernNode struct{ width int } // \kern (explicit space, no stretch)
-type glueNode struct {            // \hskip/\vskip and the fil glues
+// kernNode is \kern: an explicit space with no stretch. space marks the ones that
+// stand for a SPACE THE AUTHOR TYPED — verbatim sets its spaces this way, since a
+// verbatim space must not stretch — so the text layer can write one. Left to the
+// geometric guess, a verbatim space fell just under the quarter-em threshold and
+// vanished from the text layer: a reader copying a code listing out of the output
+// got "//Findthedatapointsinthesamebucket".
+type kernNode struct {
+	width int
+	space bool
+}
+type glueNode struct { // \hskip/\vskip and the fil glues
 	spec   glueSpec
 	leader glueLeader // if set, the glue's set width is painted as a leader
 }
