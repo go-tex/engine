@@ -10,8 +10,20 @@ import (
 
 // A document that uses commands gotex does not define must, in strict mode, fail
 // with an "Undefined control sequence" error — and in lenient mode, compile: the
-// unknown commands (and their argument blocks) are skipped and the surrounding
-// prose is typeset.
+// unknown command names are skipped and the surrounding prose is typeset.
+//
+// Their ARGUMENTS are kept. tex.web's expand hands an undefined control sequence
+// to "Complain about an undefined macro" (l.7693 → l.7723-7731), which prints the
+// error and continues — "and I'll forget about whatever was undefined" — reading
+// nothing further, because an undefined cs has no parameter text to read arguments
+// by. The following {…} is an ordinary group and its contents are typeset.
+//
+// This test used to assert the opposite. Swallowing the arguments turned a missing
+// definition into missing CONTENT: a \newcommand{\wrap}[1]{\textcolor{black}{#1}}
+// around a paragraph, undefined at use, took the paragraph with it — 257 characters
+// cut out of the middle of a corpus paper with no page-count change and every later
+// page identical (go-tex/engine#302). Over the 157-paper corpus, keeping them
+// recovers 105759 glyphs for Sigma 348 → 352, and no paper loses more than 31.
 func TestLenientSkipsUndefined(t *testing.T) {
 	const src = `\documentclass{article}
 \usepackage{madeuppkg}
@@ -33,9 +45,38 @@ func TestLenientSkipsUndefined(t *testing.T) {
 		t.Fatal("lenient mode: expected at least one page")
 	}
 	svg := strings.Join(pages, "")
-	// An undefined command's {argument} must not leak into the output as text.
-	if strings.Contains(svg, "swallowed") || strings.Contains(svg, "eaten") {
-		t.Error("lenient mode: an undefined command's {argument} leaked into the output as text")
+	// An undefined command's {argument} is CONTENT and must reach the page.
+	for _, want := range []string{"swallowed", "eaten"} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("lenient mode: %q was swallowed with the undefined command that wrapped it", want)
+		}
+	}
+	// The prose around them is typeset either way.
+	for _, want := range []string{"Alpha", "Beta", "Gamma"} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("lenient mode: %q missing from the output", want)
+		}
+	}
+}
+
+// Inside a CLASS or PACKAGE body the arguments are still discarded: nothing there
+// is content, and an unimplemented package's tables would otherwise be typeset —
+// beamer's substrate types out its colour and template definitions, taking two of
+// its own tests from 3 pages to 7. Lenient recovery may discard only where nothing
+// is set.
+func TestLenientKeepsSwallowingInsidePackages(t *testing.T) {
+	const src = `\documentclass{article}
+\usepackage{madeuppkg}
+\begin{document}
+Alpha.
+\end{document}`
+	pages, err := CompileToSVGPages([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("lenient mode: unexpected error: %v", err)
+	}
+	svg := strings.Join(pages, "")
+	if !strings.Contains(svg, "Alpha") {
+		t.Error("the document's own prose is missing")
 	}
 }
 
