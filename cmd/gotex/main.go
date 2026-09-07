@@ -178,6 +178,23 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+	// A text-font package is not a skipped command — its macros are all defined —
+	// so nothing else reveals that the document is set in a face it did not ask for.
+	// Width is what decides how many words fit on a line, hence how long the document
+	// is: acmart's Linux Libertine against our substitute measured 15.8% narrower per
+	// character, two pages in eight (go-tex/engine#310).
+	if len(d.FontsSubstituted) > 0 {
+		names := make([]string, 0, len(d.FontsSubstituted))
+		for pkg := range d.FontsSubstituted {
+			names = append(names, pkg)
+		}
+		sort.Strings(names)
+		fmt.Fprintf(w, "gotex: WARNING %d text-font package(s) requested — the document is set in the "+
+			"engine's own face, of a DIFFERENT WIDTH, so its length is not the author's:\n", len(names))
+		for _, pkg := range names {
+			fmt.Fprintf(w, "        \\usepackage{%s} wanted %s\n", pkg, d.FontsSubstituted[pkg])
+		}
+	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 	} else {

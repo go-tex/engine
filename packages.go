@@ -632,6 +632,7 @@ func (e *Engine) doUsepackageLoad() {
 			e.pkgRequested = map[string]bool{}
 		}
 		e.pkgRequested[name] = true
+		e.noteFontSubstitution(name)
 		if name == "geometry" {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue

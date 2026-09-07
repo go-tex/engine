@@ -102,6 +102,13 @@ type geomState struct {
 	// headheight=12\p@, headsep=20\p@, footskip=0.5in} lost 32pt at the top and
 	// 36pt at the bottom, 44 lines a page where the reference sets 49.
 	inclHead, inclFoot bool
+	// hasHead/hasHeadsep/hasFoot record that the OPTION LIST named the band, which
+	// "the value is zero" cannot: headsep=0pt is a legitimate instruction to fold in
+	// no separation at all, and must not be refilled from the class.
+	hasHead, hasHeadsep, hasFoot bool
+	// heightRounded is geometry's `heightrounded`: bring the text height to a whole
+	// number of \baselineskip above \topskip (geometry.sty:513, 794-809).
+	heightRounded bool
 	// beamerBands keeps the old unconditional folding for beamer alone. beamer asks
 	// for head=0.5cm/foot=0.5cm WITHOUT includeheadfoot, so real geometry hands it
 	// \textheight = \paperheight and beamer's own frame machinery carves the two
@@ -274,23 +281,27 @@ func (e *Engine) applyGeometry(opts string) {
 				landscape = true
 			case "portrait":
 				landscape = false
+			case "heightrounded":
+				g.heightRounded = true
 			case "includehead", "includefoot", "includeheadfoot":
 				// By default (includehead=false) the header/footer sit in the margins and
 				// the text height is paperH−top−bottom (the engine's head/headsep/foot are
 				// zero, so its vsize formula already gives that). These flags fold the head
 				// and/or foot INTO the body, so the text height loses headheight+headsep
 				// (12pt+25pt) and/or footskip (30pt) — the standard 10–12pt class values.
+				//
+				// The band a flag folds in is the CLASS's, read from \headheight,
+				// \headsep and \footskip — \Gm@@process subtracts those very
+				// registers (geometry.sty:784-791), and a head=/headsep=/foot= key
+				// works by assigning them first. Hardcoding 12/25/30 instead billed
+				// acmart's sigconf block, which names head=13pt and nothing else,
+				// 13+0+30 = 43pt where its class asks for 13+14+12 = 39
+				// (go-tex/engine#307).
 				if key == "includehead" || key == "includeheadfoot" {
 					g.inclHead = true
-					if g.head == 0 && g.headsep == 0 { // no explicit band: the standard class values
-						g.head, g.headsep = ptToSP(12), ptToSP(25)
-					}
 				}
 				if key == "includefoot" || key == "includeheadfoot" {
 					g.inclFoot = true
-					if g.foot == 0 {
-						g.foot = ptToSP(30)
-					}
 				}
 			default:
 				if w, h, ok := e.paper(key); ok {
@@ -392,12 +403,26 @@ func (e *Engine) applyGeometry(opts string) {
 			g.paperW = d
 		case "paperheight":
 			g.paperH = d
+		case "columnsep":
+			// \define@key{Gm}{columnsep}{\Gm@setlength\columnsep{#1}} (geometry.sty:569).
+			// acmart asks for columnsep=2pc for every sigconf-family format
+			// (acmart.cls:614-620); ignoring it left the engine's 10pt default and made
+			// each column 3.5pt too wide.
+			e.columnsep = d
+			e.setNamedDimen("columnsep", d)
+		case "marginparwidth", "marginpar":
+			e.setNamedDimen("marginparwidth", d)
 		case "head", "headheight":
-			g.head = d
+			// The key works by ASSIGNING \headheight (\Gm@setlength), which the
+			// vertical arithmetic then reads back (geometry.sty:784-791).
+			g.head, g.hasHead = d, true
+			e.setNamedDimen("headheight", d)
 		case "headsep":
-			g.headsep = d
+			g.headsep, g.hasHeadsep = d, true
+			e.setNamedDimen("headsep", d)
 		case "foot", "footskip":
-			g.foot = d
+			g.foot, g.hasFoot = d, true
+			e.setNamedDimen("footskip", d)
 		default:
 			// Unknown key: ignored.
 		}
@@ -412,10 +437,31 @@ func (e *Engine) applyGeometry(opts string) {
 	} else {
 		e.hsize = g.paperW - g.left - g.right
 	}
+	// A band the option list did not name is the CLASS's, read from \headheight,
+	// \headsep and \footskip: \Gm@@process subtracts those very registers
+	// (geometry.sty:784-791), and a head=/headsep=/foot= key works by assigning them
+	// first. Filled here, once the whole list is read, because includeheadfoot may
+	// come before or after the keys. Hardcoded 12/25/30 billed acmart's sigconf
+	// block — which names head=13pt and nothing else — 13+0+30 = 43pt where its
+	// class asks for 13+14+12 = 39 (go-tex/engine#307).
+	if g.inclHead {
+		if !g.hasHead && g.head == 0 {
+			g.head = e.classDimen("headheight", ptToSP(12))
+		}
+		if !g.hasHeadsep && g.headsep == 0 {
+			g.headsep = e.classDimen("headsep", ptToSP(25))
+		}
+	}
+	if g.inclFoot && !g.hasFoot && g.foot == 0 {
+		g.foot = e.classDimen("footskip", ptToSP(30))
+	}
 	if g.hasTextH {
 		e.vsize = g.textH
 	} else {
 		e.vsize = g.paperH - g.top - g.bottom - g.bodyBands()
+	}
+	if g.heightRounded {
+		e.vsize = e.roundHeight(e.vsize)
 	}
 	e.publishGeometry(g)
 }
@@ -862,4 +908,39 @@ func (e *Engine) renderVMargin(fallback float64) float64 {
 // any earlier ones (later wins).
 func (e *Engine) doGeometry() {
 	e.applyGeometry(e.readBraceGroupString())
+}
+
+
+// classDimen reads a dimension the CLASS set, falling back to def when the class
+// declared none. geometry's own vertical arithmetic works this way: \Gm@@process
+// subtracts \headheight, \headsep and \footskip as they stand (geometry.sty:784-791).
+func (e *Engine) classDimen(name string, def int) int {
+	if v, ok := e.namedDimen(name); ok && v > 0 {
+		return v
+	}
+	return def
+}
+
+// roundHeight implements geometry's `heightrounded`: bring the text height to a
+// whole number of \baselineskip above \topskip, to the NEAREST (geometry.sty:794-809):
+//
+//	d = textheight - topskip;  n = d / baselineskip;  rem = d - n*baselineskip
+//	if 2*rem > baselineskip then n++
+//	textheight = n*baselineskip + topskip
+//
+// Without it a sigconf acmart page came out 621.97pt where the reference is 626pt.
+func (e *Engine) roundHeight(h int) int {
+	bls, top := e.baselineskip, e.classDimen("topskip", ptToSP(10))
+	if bls <= 0 {
+		return h
+	}
+	d := h - top
+	if d <= 0 {
+		return h
+	}
+	n := d / bls
+	if rem := d - n*bls; 2*rem > bls {
+		n++
+	}
+	return n*bls + top
 }
