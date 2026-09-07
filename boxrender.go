@@ -123,6 +123,12 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 	for _, n := range b.list {
 		switch c := n.(type) {
 		case kernNode:
+			if c.space {
+				// A space the author typed, held as a kern so it cannot stretch
+				// (verbatim). The text layer is told, exactly as it is for glue —
+				// the geometric guess below cannot see a space this narrow.
+				lg.text.addSpace()
+			}
 			cx += spToPt(c.width)
 		case glueNode:
 			w := spToPt(b.setWidth(c.spec))
