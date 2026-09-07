@@ -39,6 +39,30 @@ func (e *Engine) namedSkip(name string) glueSpec {
 // advances the page by the skip plus the space any box of that height would get.
 // A caller must have ended the current paragraph (endParagraph) before calling;
 // an empty box list is a no-op.
+// placeAlignmentDisplay is placeDisplay for an ALIGNMENT display — align, gather,
+// multline. TeX does not contribute those through append_to_vlist at all: it
+// appends \abovedisplayskip and then splices the alignment's own rows in directly
+// (tex.web:22626-22631, "Finish an alignment in a display": link(tail):=p), so the
+// space above the first row is the one the alignment's vertical list already
+// carries — a full \baselineskip — rather than the append_to_vlist glue an
+// ordinary display gets, which \lineskip clamps to almost nothing under a tall box.
+//
+// Measured against tectonic with a box of KNOWN height in the display, ink to ink
+// above the first row:
+//
+//	                     reference   ours   ours + \baselineskip
+//	align, \rule 20pt        23.28   11.28              23.28
+//	align, x = y             27.36   15.36              27.36
+//	\[ \rule 20pt \]         13.20   11.28                 —
+//
+// One \baselineskip lands on the reference to the hundredth in both, and the
+// ordinary display — which must NOT get it — is already within 1.9pt.
+func (e *Engine) placeAlignmentDisplay(boxes []*boxNode) {
+	e.alignDisplay = true
+	defer func() { e.alignDisplay = false }()
+	e.placeDisplay(boxes)
+}
+
 func (e *Engine) placeDisplay(boxes []*boxNode) {
 	if len(boxes) == 0 {
 		return
@@ -53,6 +77,10 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 	// measured against tectonic on one \[…\] between two lines of text, baseline
 	// to baseline across the display, reference 43.95pt against our 32.02pt.
 	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("abovedisplayskip")})
+	if e.alignDisplay {
+		// See placeAlignmentDisplay: an alignment carries its own first-row glue.
+		e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: e.baselineskip}})
+	}
 	// The rows of a multi-line display are set \jot FURTHER apart than ordinary
 	// lines (3pt by default), which LaTeX does by adding \jot to \baselineskip for
 	// the duration of the display. Without it the rows sat a plain \baselineskip
