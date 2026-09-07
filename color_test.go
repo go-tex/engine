@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // charColor records the colour stamped on the first occurrence of each character.
 func charColor(nodes []node) map[rune]uint32 {
@@ -103,5 +106,48 @@ func TestParseColorSpec(t *testing.T) {
 func TestHexColor(t *testing.T) {
 	if got := hexColor(0x1A2B3C); got != "#1a2b3c" {
 		t.Errorf("hexColor = %q, want #1a2b3c", got)
+	}
+}
+
+// xcolor's \definecolor carries TWO optional arguments:
+//
+//	\def\definecolor{\@testopt{\XC@definecolor}{}}
+//	\def\XC@definecolor[#1]#2{\@testopt{\XC@definec@lor[#1]{#2}}\colornameprefix}
+//	\def\XC@definec@lor[#1]#2[#3]#4#5{…}          xcolor.sty:473-476
+//
+// so it is \definecolor[type]{name}[prefix]{model}{spec}. Reading only the three
+// mandatory arguments left the whole call in the input and every token of it was
+// TYPESET: acmart declares its palette that way (acmart.cls:561-568), so eight lines
+// of "[named]ACMBluecmyk1,0.1,0,0.1" came out on page 1 of every acmart paper.
+func TestDefineColorOptionalArguments(t *testing.T) {
+	const src = `\documentclass{article}\usepackage{xcolor}
+\definecolor{Plain}{rgb}{1,0,0}
+\definecolor[named]{Typed}{cmyk}{1,0.1,0,0.1}
+\definecolor[named]{Both}[xc]{rgb}{0,1,0}
+\begin{document}
+A\textcolor{Plain}{r}\textcolor{Typed}{t}\textcolor{Both}{b}Z
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	var b strings.Builder
+	for _, p := range e.Pages() {
+		b.WriteString(mvlText(p.list))
+	}
+	got := b.String()
+	// The declarations set colours and leave NOTHING on the page.
+	for _, junk := range []string{"named", "cmyk", "0.1", "xc"} {
+		if strings.Contains(got, junk) {
+			t.Errorf("a \\definecolor argument was typeset (%q): %q", junk, got)
+		}
+	}
+	if !strings.Contains(got, "ArtbZ") {
+		t.Errorf("the surrounding text is wrong: %q", got)
+	}
+	for _, name := range []string{"Plain", "Typed", "Both"} {
+		if _, ok := e.colors[name]; !ok {
+			t.Errorf("colour %q was not defined", name)
+		}
 	}
 }
