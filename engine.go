@@ -99,13 +99,13 @@ type Engine struct {
 	curSrcLine    int // 1-based line of the current token (0 = unknown)
 	curSrcCol     int // 0-based column of the current token
 	count         [256]int
-	dimen         [256]int          // \dimen registers, in scaled points (1pt = 65536sp)
-	skip          [256]glueSpec     // \skip (glue) registers
-	box           [256]*boxNode     // \box registers (nil = void)
-	mvl           []node            // main vertical list (top-level contributions)
-	curFont       fontFace          // current font for measuring/rendering characters
-	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
-	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	dimen         [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
+	skip          [256]glueSpec // \skip (glue) registers
+	box           [256]*boxNode // \box registers (nil = void)
+	mvl           []node        // main vertical list (top-level contributions)
+	curFont       fontFace      // current font for measuring/rendering characters
+	baseFont      fontFace      // the \normalsize font — glyph source + size reference for scaling
+	baseFontPx    int           // \normalsize size in px/pt (the 100% for \large/\small/…)
 	// alignDisplay marks the display being placed as an ALIGNMENT (align, gather,
 	// multline), which TeX splices into the page rather than contributing through
 	// append_to_vlist — see placeAlignmentDisplay.
@@ -114,8 +114,8 @@ type Engine struct {
 	// 10.95 or 12 for the standard size1x.clo). A class size table gives every
 	// other size in the same points, so this is the 100% they are read against.
 	classNormalsizePt float64
-	curColor      uint32            // current text colour (0xRRGGBB; 0 = default black)
-	colors        map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
+	curColor          uint32            // current text colour (0xRRGGBB; 0 = default black)
+	colors            map[string]uint32 // \definecolor names → 0xRRGGBB (see color.go)
 
 	// hyperref link styling (see hyperstyle.go). When colorlinks is on the link
 	// text is painted in its colour instead of a border box being drawn.
@@ -280,6 +280,10 @@ type Engine struct {
 	// name is tallied here for reporting. nil until the first skip.
 	lenient   bool
 	skippedCS map[string]int
+	// fontSubst records the text-font packages the document asked for, by package
+	// name -> the face it wanted. The engine sets one built-in face, so each of
+	// these is a silent substitution of a DIFFERENT WIDTH — see fontsubst.go.
+	fontSubst map[string]string
 	// inPkg is set while the mouth is reading a class or package body (see
 	// pushPackageLevel): the one place lenient recovery may discard tokens.
 	inPkg bool
@@ -2020,6 +2024,15 @@ type Diagnostics struct {
 	// with a missing text macro. nil/empty when no equation was dropped.
 	MathDropped map[string]int
 
+	// FontsSubstituted names the text-font packages the document asked for, mapped to
+	// the face it wanted. The engine sets ONE built-in face, so every entry here is a
+	// silent substitution of a different WIDTH — and width is what decides how many
+	// words fit on a line, hence how long the document is. acmart's Linux Libertine
+	// against our substitute measured 15.8% narrower per character, which is two
+	// pages in eight (go-tex/engine#310). Reported because nothing else reveals it:
+	// the package's macros are all defined, so it never appears in Skipped.
+	FontsSubstituted map[string]string
+
 	// FiguresDropped tallies figures whose file could not be loaded, keyed by cause
 	// ("PDF figure, no rasteriser wired", "file not found", "unreadable or
 	// unsupported format"). The engine still reserves a placeholder box, so this is
@@ -2060,14 +2073,15 @@ func (e *Engine) Diagnostics() Diagnostics {
 		}
 	}
 	return Diagnostics{
-		Skipped:        skipped,
-		Runaway:        e.runaway,
-		OpenGroups:     len(e.groups),
-		PageCapHit:     e.skippedCS["gotex@pagelimit"] > 0,
-		RunawayArgs:    e.runawayArgs,
-		UndefinedEnvs:  undefinedEnvs,
-		MathDropped:    mathDropped,
-		FiguresDropped: figuresDropped,
+		Skipped:          skipped,
+		Runaway:          e.runaway,
+		OpenGroups:       len(e.groups),
+		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
+		RunawayArgs:      e.runawayArgs,
+		UndefinedEnvs:    undefinedEnvs,
+		MathDropped:      mathDropped,
+		FontsSubstituted: e.fontSubst,
+		FiguresDropped:   figuresDropped,
 	}
 }
 
