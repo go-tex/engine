@@ -56,7 +56,19 @@ func floatsEnabled() bool { return os.Getenv("GOTEX_FLOATS") != "0" }
 // breaking later \@-name control sequences. It leaves @ a letter, exactly as the default
 // (substrate-free) end of LoadLaTeX does.
 const FloatPlacementSubstrate = `
-\long\def\gotex@inlinefloat#1{\par\addvspace\intextsep\begingroup\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
+% \intextsep goes BOTH above and below a float the output routine sets in the running
+% column — latex.ltx:15675-15678, \@addtocurcol:
+%
+%	\vskip \intextsep  \box\@currbox  \penalty\interlinepenalty  \vskip\intextsep
+%
+% The closing half is put on \end@float HERE, inside this group, so it applies to the
+% INLINE path only: \end@float is shared with the captured-float path, where the
+% output routine supplies the space instead, and giving it \intextsep there cost 15892
+% glyphs when it was tried. The \endgroup restores the shared definition.
+%
+% Measured against tectonic, ink to ink from a figure[h]'s caption to the next line of
+% text: reference 17.28pt, ours 9.60 with the \medskip \end@float carried.
+\long\def\gotex@inlinefloat#1{\par\addvspace\intextsep\begingroup\def\end@float{\par\endgroup\addvspace\intextsep}\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
 \def\@float#1{\gotex@floatbegin{#1}}
 `
 
