@@ -112,6 +112,29 @@ const MiniLaTeXKernel = `
 \def\@date{}
 \def\@shorttitle{}
 \def\@shortauthor{}
+% authblk's \affil[n]{text} TYPESETS NOTHING where it stands: it accumulates, and
+% the class's \@maketitle sets the accumulated list through \@author, which authblk
+% redefines to "authors \\[\affilsep] affiliations" (authblk.sty:148-171). Declared
+% here as a stub taking a mandatory #1, it grabbed the "[" instead and the rest
+% LEAKED into the running text — "1,5,6]Institute for Modelling and Simulation…"
+% opened a page of its own before the title, and 708 papers of the 22127-paper pool
+% write \affil[.
+%
+% Discarding it is not the fix either: measured, that costs a page to ten documents
+% already too short, because the leaked text was filling — in the wrong place — a
+% height the reference fills in the right one. It is set here instead, under the
+% authors, where \@maketitle puts it.
+% This is authblk's own design: the affiliation is appended to \@author, separated
+% by \\, so whatever \@maketitle the class has typesets it — article.cls sets
+% \@author inside \begin{tabular}[t]{c}, whose rows are exactly \\-separated
+% (article.cls:246-248), and the engine's own generic \maketitle centres it.
+% Appending to a \@author that was never given would break, so an absent one
+% starts empty and takes no separator.
+\long\def\gotex@affiladd#1{\ifx\@author\@empty\gdef\@author{#1}\else
+  \g@addto@macro\@author{\\ #1}\fi}
+\def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
+\long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
+\long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
 \long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}
@@ -760,6 +783,11 @@ const MiniLaTeXKernel = `
 % \gotex@maybegroup eats a following {..} only if one is really there, so a stub
 % whose argument is entirely optional cannot swallow the text after it.
 \def\gotex@maybegroup{\@ifnextchar\bgroup\@gobble\relax}
+% \gotex@optone eats an optional [..] then one {..}, or just the {..} when no
+% bracket follows. It is the shape of every configuration command whose first
+% argument is optional.
+\def\gotex@optone{\@ifnextbracket\gotex@optone@a\@gobble}
+\long\def\gotex@optone@a[#1]#2{}
 \def\thanks#1{}
 \def\address#1{}
 \def\email#1{}
@@ -791,7 +819,37 @@ const MiniLaTeXKernel = `
 \def\@setlistarg#1{}
 \def\RequirePackage{\usepackage}
 \def\and{\quad}
-\def\affil#1{}
+% CONFIGURATION commands that carry no content. Since #302 an undefined control
+% sequence no longer swallows the groups after it — tex.web forgets the command and
+% the following {…} is an ordinary group, which is TYPESET — so each of these left
+% its arguments on the page. In a preamble that opens a page of its own: measured,
+% \setcellgapes{2pt} alone gave one paper a first page carrying "2pt" and pushed its
+% title to page 2.
+%
+% They are declared HERE, one by one with their real arity, rather than by putting
+% the generic swallow back: #302 removed that because it cut real content
+% (\juanggr{<a paragraph>} took the paragraph with it, 89586 glyphs over 74 papers).
+% The distinction is what these commands ARE — a length, a counter name, a hook —
+% never text to set.
+%
+%   fancyhdr   \fancyheadoffset[LE,RO]{0.5cm}     13 corpus papers leak "[LE,RO]0.5cm"
+%   manyfoot   \DeclareNewFootnote[para]{A}[ctr]  12          leak "[para]A[ctr]"
+%   etoolbox   \AtBeginEnvironment{env}{code}     10, 109 uses; the hook is lost, its
+%                                                 argument no longer printed
+%   chngcntr   \counterwithout{footnote}{section}    leaked "footnotesection"
+%   makecell   \setcellgapes{2pt}                    leaked "2pt"
+\def\fancyheadoffset{\@ifnextbracket\gotex@optone\@gobble}
+\def\fancyfootoffset{\@ifnextbracket\gotex@optone\@gobble}
+\def\DeclareNewFootnote{\@ifnextbracket\gotex@dnfopt\gotex@dnfmand}
+\long\def\gotex@dnfopt[#1]#2{\gotex@maybeopt}
+\long\def\gotex@dnfmand#1{\gotex@maybeopt}
+\def\gotex@maybeopt{\@ifnextbracket\@gobbleoptonly\relax}
+\long\def\AtBeginEnvironment#1#2{}
+\long\def\AtEndEnvironment#1#2{}
+\long\def\counterwithout#1#2{}
+\long\def\counterwithin#1#2{}
+\def\setcellgapes{\@ifnextbracket\gotex@optone\@gobble}
+\def\makegapedcells{}
 \def\crefname#1#2#3{}
 \def\Crefname#1#2#3{}
 \def\urlstyle#1{}

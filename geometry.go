@@ -910,7 +910,6 @@ func (e *Engine) doGeometry() {
 	e.applyGeometry(e.readBraceGroupString())
 }
 
-
 // classDimen reads a dimension the CLASS set, falling back to def when the class
 // declared none. geometry's own vertical arithmetic works this way: \Gm@@process
 // subtracts \headheight, \headsep and \footskip as they stand (geometry.sty:784-791).
