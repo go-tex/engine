@@ -141,11 +141,29 @@ func (e *Engine) doFcolorbox() frameNode {
 	return frameNode{inner: hpackSP(list, packNatural, 0), sep: fboxSep, rule: fboxRule, bg: bg, ruleColor: frame}
 }
 
-// doDefineColor implements \definecolor{name}{model}{spec}, adding a named colour.
+// doDefineColor implements xcolor's \definecolor, adding a named colour.
 // Models: rgb (three 0–1 floats), RGB (three 0–255 ints), gray (one 0–1 float),
-// HTML (six hex digits).
+// HTML (six hex digits), cmyk (four 0–1 floats).
+//
+// The full signature carries TWO optional arguments, and both are read here:
+//
+//	\def\definecolor{\@testopt{\XC@definecolor}{}}
+//	\def\XC@definecolor[#1]#2{\@testopt{\XC@definec@lor[#1]{#2}}\colornameprefix}
+//	\def\XC@definec@lor[#1]#2[#3]#4#5{…}          xcolor.sty:473-476
+//
+// so it is \definecolor[type]{name}[prefix]{model}{spec}, the type being `named`
+// or `ps`. Reading only the three mandatory arguments left the whole call in the
+// input, and every token of it was then TYPESET: acmart declares its palette that
+// way (acmart.cls:561-568), so eight lines of "[named]ACMBluecmyk1,0.1,0,0.1"
+// came out on page 1 of every acmart paper.
+//
+// The type and the prefix change which colour STACK a name lands on in xcolor;
+// this engine keeps one flat table, so they are consumed and dropped — the colour
+// itself is defined either way, which is what a renderer needs.
 func (e *Engine) doDefineColor() {
+	e.scanOptBracketToks() // [type]
 	name := e.readBraceName()
+	e.scanOptBracketToks() // [prefix]
 	model := e.readBraceName()
 	spec := e.readBraceName()
 	if name == "" {
