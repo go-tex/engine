@@ -107,7 +107,12 @@ func (e *Engine) LoadFormat(src string) error {
 	e.base, e.bpos = []rune(src), 0
 	e.lineStarts = nil
 	e.buildLineStarts()
+	// A format/substrate body is package code, not document content: lenient
+	// recovery may discard an undefined command's arguments here (skipUndefined).
+	oldInPkg := e.inPkg
+	e.inPkg = true
 	e.mainLoop()
+	e.inPkg = oldInPkg
 	e.base, e.bpos = oldBase, oldPos
 	e.lineStarts, e.srcPos, e.curSrcLine, e.curSrcCol = oldStarts, oldSP, oldLine, oldCol
 	return e.err

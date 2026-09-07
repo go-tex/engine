@@ -302,7 +302,7 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// \@endofpackagehook into \@ followed by the letters "endofpackagehook", and
 	// printed the name of the engine's own end-of-load marker on the page.
 	// endLoad restores the frame's saved catcode for @ immediately afterwards.
-	e.pushInputLevel(pre + body + "\\makeatletter\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
+	e.pushPackageLevel(pre + body + "\\makeatletter\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
 }
 
 // normalizeEOL converts CRLF and lone CR line endings to LF. The engine's mouth
