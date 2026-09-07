@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -975,5 +976,41 @@ func TestSnippetWithoutAClassIsSizedToItsContent(t *testing.T) {
 	e := New()
 	if _, _, ok := e.paperSizePt(); ok {
 		t.Error("a snippet with no \\documentclass reported a paper size")
+	}
+}
+
+// geometry's inner/outer are the binding-side and outside margins of a two-sided
+// layout, and geometry defines them as plain ALIASES of the left and right
+// margins: "\let\KV@Gm@inner\KV@Gm@lmargin", "\let\KV@Gm@outer\KV@Gm@rmargin"
+// (geometry.sty:521-525), with innermargin/outermargin the same again.
+//
+// They carried no meaning at all here, so acmart's per-format geometry — for
+// sigconf, "inner=54pt, outer=54pt" on 8.5x11in (acmart.cls:614-620) — left
+// \textwidth at article's letterpaper default of 469.755pt instead of the
+// 614.295 - 2*54 = 506.295pt it asks for (go-tex/engine#307).
+func TestGeometryInnerOuterAreLeftAndRight(t *testing.T) {
+	for _, tc := range []struct {
+		name, opts string
+		want       string
+	}{
+		{"inner/outer", `paperwidth=8.5in,paperheight=11in,inner=54pt,outer=54pt`, "506.295pt"},
+		{"innermargin/outermargin", `paperwidth=8.5in,paperheight=11in,innermargin=54pt,outermargin=54pt`, "506.295pt"},
+		{"left/right still work", `paperwidth=8.5in,paperheight=11in,left=54pt,right=54pt`, "506.295pt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `\documentclass{article}\usepackage[` + tc.opts + `]{geometry}
+\begin{document}tw=[\the\textwidth]\end{document}`
+			e, err := compile([]byte(src), Options{Lenient: true})
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			var b strings.Builder
+			for _, p := range e.Pages() {
+				b.WriteString(mvlText(p.list))
+			}
+			if got := b.String(); !strings.Contains(got, "tw=["+tc.want+"]") {
+				t.Errorf("want \\textwidth %s, got %q", tc.want, got)
+			}
+		})
 	}
 }
