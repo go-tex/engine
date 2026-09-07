@@ -364,10 +364,18 @@ func (e *Engine) applyGeometry(opts string) {
 		case "vmargin":
 			g.top, g.bottom = d, d
 			g.hasTextH = false
-		case "left", "lmargin":
+		// inner/outer are the binding-side and outside margins of a two-sided
+		// layout, and geometry defines them as plain ALIASES of the left and right
+		// margins — "\let\KV@Gm@inner\KV@Gm@lmargin", "\let\KV@Gm@outer\KV@Gm@rmargin"
+		// (geometry.sty:521-525), with innermargin/outermargin the same again. They
+		// carried no meaning here at all, so acmart's per-format geometry
+		// (acmart.cls:614-620 for sigconf: inner=54pt outer=54pt) left \textwidth at
+		// article's letterpaper default of 469.755pt instead of 506.3pt, and a
+		// column held 49 lines where the reference holds 57 (go-tex/engine#307).
+		case "left", "lmargin", "inner", "innermargin":
 			g.left = d
 			g.hasTextW = false
-		case "right", "rmargin":
+		case "right", "rmargin", "outer", "outermargin":
 			g.right = d
 			g.hasTextW = false
 		case "top", "tmargin":
