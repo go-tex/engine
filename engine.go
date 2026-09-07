@@ -106,6 +106,10 @@ type Engine struct {
 	curFont       fontFace          // current font for measuring/rendering characters
 	baseFont      fontFace          // the \normalsize font — glyph source + size reference for scaling
 	baseFontPx    int               // \normalsize size in px/pt (the 100% for \large/\small/…)
+	// alignDisplay marks the display being placed as an ALIGNMENT (align, gather,
+	// multline), which TeX splices into the page rather than contributing through
+	// append_to_vlist — see placeAlignmentDisplay.
+	alignDisplay bool
 	// classNormalsizePt is the size the loaded class states for \normalsize (10,
 	// 10.95 or 12 for the standard size1x.clo). A class size table gives every
 	// other size in the same points, so this is the 100% they are read against.
@@ -276,6 +280,9 @@ type Engine struct {
 	// name is tallied here for reporting. nil until the first skip.
 	lenient   bool
 	skippedCS map[string]int
+	// inPkg is set while the mouth is reading a class or package body (see
+	// pushPackageLevel): the one place lenient recovery may discard tokens.
+	inPkg bool
 
 	// undefinedEnvs tallies \begin{env} occurrences whose environment control
 	// sequence (\env) was undefined at \begin time — before \csname coerces it to
@@ -1912,7 +1919,51 @@ func (e *Engine) skipUndefined(name string) {
 			e.back(t)
 		}
 	}
-	// any run of [optional] then {mandatory} arguments, in either order
+	// Inside a class or package body the arguments ARE discarded: nothing there is
+	// content, and the alternative is a page of theme definitions (beamer's own
+	// substrate types out its colour and template tables otherwise — measured, two
+	// beamer tests went from 3 pages to 7). This is lenient recovery, not TeX; the
+	// rule for where it may discard is "only where nothing is typeset".
+	if e.inPkg {
+		e.skipUndefinedArgs()
+		return
+	}
+	// In the DOCUMENT the arguments are NOT read. tex.web's expand sends an
+	// undefined control sequence to "Complain about an undefined macro"
+	// (l.7693 → l.7723-7731): print the error, then continue — "and I'll forget
+	// about whatever was undefined". It consumes nothing further, because an
+	// undefined cs has no parameter text to read arguments by. The following {…} is
+	// then an ordinary group and its contents are TYPESET.
+	//
+	// This engine used to swallow "any run of [optional] then {mandatory}
+	// arguments" here too, which turned a missing definition into missing CONTENT:
+	// \newcommand{\juanggr}[1]{\textcolor{black}{#1}} wrapping a paragraph,
+	// undefined at use, took the paragraph with it — 257 characters cut out of the
+	// middle of corpus paper 2304.01951 with no page-count change and every later
+	// page identical, so only a glyph census could see it (go-tex/engine#302).
+	// Measured over the 157-paper corpus: Sigma 348 → 344 and 89586 glyphs
+	// recovered over 74 papers, four of which lose 3419 between them.
+	//
+	// Why \juanggr was undefined at all, and what is STILL open: the scan in
+	// skipUndefinedArgs stops at the first token that is neither [ nor {, so
+	// xkeyval's PLUS variant marker (\XKV@ifplus, xkeyval.tex:71, the twin of
+	// \XKV@ifstar on line 70) ends it early — acmart.cls's sixteen
+	// \define@boolkey+ blocks and its \define@choicekey*+ (l.49) each leave a
+	// trailing {\PackageError…} group OPEN. The preamble then runs seventeen groups
+	// deep, so every \newcommand in it is group-local and is rolled back when one
+	// of those groups closes. Teaching the scan the plus marker cures the leak and
+	// is measurably WORSE: Sigma 350 (+6) and 6269 fewer glyphs than this, because
+	// the argument runs it then eats reach further. The four papers that lose
+	// content here are all acmart, and all lose it that way. The real repair is to
+	// implement the option machinery (\define@boolkey, \define@choicekey,
+	// \DeclareOptionX, \ExecuteOptionsX — xkeyval), which 13 of the 157 corpus
+	// papers use and which is also what puts the key lists on an acmart title page.
+}
+
+// skipUndefinedArgs consumes the LaTeX-shaped argument run after an undefined
+// command name: any sequence of [optional] and {mandatory} groups, in either
+// order. Used only inside a class or package body — see skipUndefined.
+func (e *Engine) skipUndefinedArgs() {
 	for {
 		if _, ok := e.scanOptBracketToks(); ok {
 			continue

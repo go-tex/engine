@@ -115,6 +115,7 @@ type mouthLevel struct {
 	srcPos     int
 	srcLine    int
 	srcCol     int
+	inPkg      bool // the level under this one was reading a class/package
 }
 
 // pushInputLevel makes text the current input, to be read to its end before
@@ -134,11 +135,23 @@ type mouthLevel struct {
 // The no-progress guard watches e.bpos, which starts again at 0 in the new buffer,
 // so its baseline is saved and reset with the level — otherwise every level below
 // the first would look like an expansion loop making no headway.
-func (e *Engine) pushInputLevel(text string) {
+// pushInputLevel INHERITS the package/document distinction: a file \input by a
+// package is package code, one \input by the document is content.
+func (e *Engine) pushInputLevel(text string) { e.pushInputLevelKind(text, e.inPkg) }
+
+// pushPackageLevel is pushInputLevel for a CLASS or PACKAGE body. The distinction
+// is not cosmetic: lenient recovery from an undefined command may discard tokens
+// inside a package, where nothing is typeset, and must not in the document, where
+// they are the text (see skipUndefined and go-tex/engine#302).
+func (e *Engine) pushPackageLevel(text string) { e.pushInputLevelKind(text, true) }
+
+func (e *Engine) pushInputLevelKind(text string, pkg bool) {
 	e.levels = append(e.levels, mouthLevel{
 		base: e.base, bpos: e.bpos, lineStarts: e.lineStarts, lists: e.lists,
 		progBpos: e.progBpos, srcPos: e.srcPos, srcLine: e.curSrcLine, srcCol: e.curSrcCol,
+		inPkg: e.inPkg,
 	})
+	e.inPkg = pkg
 	e.base, e.bpos, e.lists = []rune(text), 0, nil
 	e.lineStarts, e.progBpos, e.noProgSteps = nil, 0, 0
 	e.buildLineStarts()
@@ -158,6 +171,7 @@ func (e *Engine) popInputLevel() bool {
 	e.lists = append(l.lists, e.lists...)
 	e.progBpos, e.noProgSteps = l.progBpos, 0
 	e.srcPos, e.curSrcLine, e.curSrcCol = l.srcPos, l.srcLine, l.srcCol
+	e.inPkg = l.inPkg
 	return true
 }
 
