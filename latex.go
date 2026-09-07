@@ -783,6 +783,11 @@ const MiniLaTeXKernel = `
 % \gotex@maybegroup eats a following {..} only if one is really there, so a stub
 % whose argument is entirely optional cannot swallow the text after it.
 \def\gotex@maybegroup{\@ifnextchar\bgroup\@gobble\relax}
+% \gotex@optone eats an optional [..] then one {..}, or just the {..} when no
+% bracket follows. It is the shape of every configuration command whose first
+% argument is optional.
+\def\gotex@optone{\@ifnextbracket\gotex@optone@a\@gobble}
+\long\def\gotex@optone@a[#1]#2{}
 \def\thanks#1{}
 \def\address#1{}
 \def\email#1{}
@@ -814,6 +819,37 @@ const MiniLaTeXKernel = `
 \def\@setlistarg#1{}
 \def\RequirePackage{\usepackage}
 \def\and{\quad}
+% CONFIGURATION commands that carry no content. Since #302 an undefined control
+% sequence no longer swallows the groups after it — tex.web forgets the command and
+% the following {…} is an ordinary group, which is TYPESET — so each of these left
+% its arguments on the page. In a preamble that opens a page of its own: measured,
+% \setcellgapes{2pt} alone gave one paper a first page carrying "2pt" and pushed its
+% title to page 2.
+%
+% They are declared HERE, one by one with their real arity, rather than by putting
+% the generic swallow back: #302 removed that because it cut real content
+% (\juanggr{<a paragraph>} took the paragraph with it, 89586 glyphs over 74 papers).
+% The distinction is what these commands ARE — a length, a counter name, a hook —
+% never text to set.
+%
+%   fancyhdr   \fancyheadoffset[LE,RO]{0.5cm}     13 corpus papers leak "[LE,RO]0.5cm"
+%   manyfoot   \DeclareNewFootnote[para]{A}[ctr]  12          leak "[para]A[ctr]"
+%   etoolbox   \AtBeginEnvironment{env}{code}     10, 109 uses; the hook is lost, its
+%                                                 argument no longer printed
+%   chngcntr   \counterwithout{footnote}{section}    leaked "footnotesection"
+%   makecell   \setcellgapes{2pt}                    leaked "2pt"
+\def\fancyheadoffset{\@ifnextbracket\gotex@optone\@gobble}
+\def\fancyfootoffset{\@ifnextbracket\gotex@optone\@gobble}
+\def\DeclareNewFootnote{\@ifnextbracket\gotex@dnfopt\gotex@dnfmand}
+\long\def\gotex@dnfopt[#1]#2{\gotex@maybeopt}
+\long\def\gotex@dnfmand#1{\gotex@maybeopt}
+\def\gotex@maybeopt{\@ifnextbracket\@gobbleoptonly\relax}
+\long\def\AtBeginEnvironment#1#2{}
+\long\def\AtEndEnvironment#1#2{}
+\long\def\counterwithout#1#2{}
+\long\def\counterwithin#1#2{}
+\def\setcellgapes{\@ifnextbracket\gotex@optone\@gobble}
+\def\makegapedcells{}
 \def\crefname#1#2#3{}
 \def\Crefname#1#2#3{}
 \def\urlstyle#1{}
