@@ -896,6 +896,11 @@ func (e *Engine) LoadLaTeX() error {
 	if err := e.LoadFormat(AMSClassSubstrate); err != nil {
 		return err
 	}
+	// The xkeyval option machinery every acmart-family class declares its options
+	// with. See xkeyval.go.
+	if err := e.LoadFormat(XKeyvalSubstrate); err != nil {
+		return err
+	}
 	// Real single-column float placement (figure/table): loaded LAST and ONLY under
 	// GOTEX_FLOATS, so it overrides the classic inline \@float from LaTeX2eClassLead. With
 	// the flag off this substrate is never loaded and \@float keeps its untouched inline

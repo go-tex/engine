@@ -1026,8 +1026,14 @@ func (e *Engine) scanBracketList() []string {
 	if !ok {
 		return nil
 	}
+	// EXPANDED, as latex.ltx does it: \@fileswith@pti@ns stores the list with an
+	// \xdef — "\xdef\@classoptionslist{\zap@space#2 \@empty}" (latex.ltx:13712).
+	// A class routinely computes its options: acmart.cls:254 is
+	// \LoadClass[\ACM@fontsize, reqno]{amsart}, and read raw that asks amsart for
+	// an option literally named "\ACM@fontsize" — so a sigconf paper, which
+	// acmart sets in 9pt, came out in amsart's default 10pt.
 	var out []string
-	for _, raw := range strings.Split(e.toksToString(toks), ",") {
+	for _, raw := range strings.Split(e.toksToString(e.expandList(toks)), ",") {
 		if s := strings.TrimSpace(raw); s != "" {
 			out = append(out, s)
 		}
