@@ -1014,3 +1014,45 @@ func TestGeometryInnerOuterAreLeftAndRight(t *testing.T) {
 		})
 	}
 }
+
+// The vertical arithmetic of \Gm@@process, checked against the value tectonic
+// itself reports for an acmart sigconf document (\textheight = 626.0pt).
+//
+// Three things had to be right at once (go-tex/engine#307):
+//
+//   - a band the option list does not name is the CLASS's, read from \headheight,
+//     \headsep and \footskip, which is what geometry.sty:784-791 subtracts. Hardcoded
+//     12/25/30 billed acmart's sigconf block — head=13pt and nothing else — 13+0+30
+//     = 43pt where its class asks for 13+14+12 = 39.
+//   - a band the list DOES name at zero stays zero: headsep=0pt is an instruction,
+//     not a missing value.
+//   - heightrounded brings the height to a whole number of \baselineskip above
+//     \topskip, to the nearest (geometry.sty:794-809).
+func TestGeometryVerticalMatchesTheReference(t *testing.T) {
+	// 11in = 794.96999pt; 794.96999 - 57 - 73 = 664.96999, minus head 13 + headsep
+	// 14 + footskip 12 = 625.96999, rounded up to 10 + 56*11 = 626pt.
+	e := runGeom(t, `\headsep=14pt\footskip=12pt\topskip=10pt\baselineskip=11pt`+
+		`\usepackage[paperwidth=8.5in,paperheight=11in,head=13pt,includeheadfoot,`+
+		`columnsep=2pc,top=57pt,bottom=73pt,inner=54pt,outer=54pt,heightrounded]{geometry}`)
+	if want := texSP(t, "626pt"); e.vsize != want {
+		t.Errorf("vsize = %d (%.3fpt), want %d (626pt, tectonic's own value)",
+			e.vsize, spToPt(e.vsize), want)
+	}
+	if want := texSP(t, "506.295pt"); e.hsize != want {
+		t.Errorf("hsize = %d (%.3fpt), want %d (506.295pt)", e.hsize, spToPt(e.hsize), want)
+	}
+	if want := texSP(t, "24pt"); e.columnsep != want {
+		t.Errorf("columnsep = %d, want %d (2pc)", e.columnsep, want)
+	}
+}
+
+// An explicit zero band is an instruction, not a missing value: headsep=0pt must
+// not be refilled from the class's \headsep.
+func TestGeometryExplicitZeroBandIsKept(t *testing.T) {
+	e := runGeom(t, `\headsep=25pt`+
+		`\usepackage[papersize={12.8cm,9.6cm},hmargin=1cm,vmargin=0cm,`+
+		`head=0.5cm,headsep=0pt,foot=0.5cm,includeheadfoot]{geometry}`)
+	if want := texSP(t, "9.6cm") - 2*texSP(t, "0.5cm"); e.vsize != want {
+		t.Errorf("vsize = %d, want %d: headsep=0pt was refilled from the class", e.vsize, want)
+	}
+}
