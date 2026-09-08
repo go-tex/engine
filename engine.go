@@ -348,8 +348,9 @@ type Engine struct {
 	// matchParams stops grabbing and expandMacro abandons the call, pushing the
 	// consumed tokens back so the rest of the file (and the document after it)
 	// processes normally instead of being swallowed.
-	argRunaway  bool
-	runawayArgs int // macro calls abandoned by a \par in an argument (tex.web §392)
+	argRunaway    bool
+	runawayArgs   int            // macro calls abandoned by a \par in an argument (tex.web §392)
+	runawayMacros map[string]int // …and which macro each abandoned call was reading for
 	// pkgRequested is every package name \usepackage asked for, whether or not a
 	// .sty was found. An emulated package has no file to record itself.
 	pkgRequested map[string]bool
@@ -1444,6 +1445,18 @@ func (e *Engine) parEndsArgument(t tok) bool {
 	e.back(t) // back_error: the \par is put back, not consumed
 	e.argRunaway = true
 	e.runawayArgs++
+	// WHICH macro was abandoned. expandingCS is set immediately before the argument
+	// scan (the mMacro case in getXToken), so it names the call being read here.
+	// Counted alone, 199 abandoned calls over 23 corpus documents were a sum with no
+	// handle on it — the same fault #262 repaired for the maths layer's "$math$".
+	name := e.expandingCS
+	if name == "" {
+		name = "(unnamed)"
+	}
+	if e.runawayMacros == nil {
+		e.runawayMacros = map[string]int{}
+	}
+	e.runawayMacros[name]++
 	return true
 }
 
@@ -2010,6 +2023,10 @@ type Diagnostics struct {
 	// command NAME — "\Paragraph ended before argument was complete", 44 of them on
 	// one paper — so a corpus census read an error as the fifth most missing macro.
 	RunawayArgs int
+	// RunawayMacros counts those abandoned calls BY MACRO. The total alone says a
+	// document lost something; the name says what, which is what makes the alarm
+	// worth acting on.
+	RunawayMacros map[string]int
 	// UndefinedEnvs counts \begin{env} whose environment was undefined — a silent
 	// no-op that never appears in Skipped (\csname coerces the missing \env to
 	// \relax). Aggregated over a corpus it surfaces unimplemented environments
@@ -2078,6 +2095,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
 		RunawayArgs:      e.runawayArgs,
+		RunawayMacros:    e.runawayMacros,
 		UndefinedEnvs:    undefinedEnvs,
 		MathDropped:      mathDropped,
 		FontsSubstituted: e.fontSubst,

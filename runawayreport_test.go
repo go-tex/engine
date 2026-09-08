@@ -45,3 +45,25 @@ func TestWellFormedArgumentIsNotARunaway(t *testing.T) {
 		t.Errorf("RunawayArgs = %d on a well-formed call, want 0", n)
 	}
 }
+
+// The count alone says a document lost something; it does not say what. Over the
+// corpus, 199 abandoned calls were a sum with no handle on it; naming them put 179
+// of them — 90% — on \@hangfrom, a defect in our own substrate rather than any
+// document's malformed macro. RunawayMacros carries that name.
+func TestRunawayArgumentNamesTheMacro(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run("\\def\\one#1{[#1]}\\def\\two#1{(#1)}\\one{A\n\n B}\\two{C\n\n D}\\one{E\n\n F}\\par"); err != nil {
+		t.Fatal(err)
+	}
+	got := e.Diagnostics().RunawayMacros
+	if got["one"] != 2 {
+		t.Errorf(`RunawayMacros["one"] = %d, want 2`, got["one"])
+	}
+	if got["two"] != 1 {
+		t.Errorf(`RunawayMacros["two"] = %d, want 1`, got["two"])
+	}
+}
