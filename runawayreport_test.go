@@ -67,3 +67,39 @@ func TestRunawayArgumentNamesTheMacro(t *testing.T) {
 		t.Errorf(`RunawayMacros["two"] = %d, want 1`, got["two"])
 	}
 }
+
+// tex.web §392 tests the COMMAND CODE, cur_cmd = par_end — not the name. Matching
+// on the name "par" was wrong in both directions, and both are pinned here.
+func TestRunawayFollowsTheCommandCodeNotTheName(t *testing.T) {
+	// A \let copy of \par carries par_end, so it ends an argument. \@@par is such a
+	// copy, and latex.ltx:12794 writes it at the end of every section heading — the
+	// name test made the whole census a floor rather than a count.
+	t.Run("alias counts", func(t *testing.T) {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\def\one#1{[#1]}\let\myp\par\one{A\myp B}\par`); err != nil {
+			t.Fatal(err)
+		}
+		if n := e.Diagnostics().RunawayArgs; n != 1 {
+			t.Errorf("RunawayArgs = %d on a \\let copy of \\par, want 1", n)
+		}
+	})
+	// A \par redefined as a MACRO is no longer par_end, so it does NOT end an
+	// argument. The name test fired here, reporting a runaway TeX would not.
+	t.Run("redefined par does not", func(t *testing.T) {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\def\one#1{[#1]}{\def\par{x}\one{A\par B}}\par`); err != nil {
+			t.Fatal(err)
+		}
+		if n := e.Diagnostics().RunawayArgs; n != 0 {
+			t.Errorf("RunawayArgs = %d on a \\par redefined as a macro, want 0", n)
+		}
+	})
+}
