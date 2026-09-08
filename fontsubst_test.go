@@ -3,7 +3,11 @@
 
 package engine
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // A text-font package is not a skipped command — its macros are all defined — so
 // nothing else in Diagnostics reveals that the document is set in a face it did not
@@ -44,5 +48,44 @@ func TestDiagnosticsReportsASubstitutedTextFont(t *testing.T) {
 				t.Errorf("%q: %s -> %q, want %q", tc.src, pkg, got[pkg], face)
 			}
 		}
+	}
+}
+
+// A font package the engine can honour swaps the text face for the real one, and is
+// then NOT reported as a substitution. WIDTH is the point: measured on this same
+// document, the built-in face sets 4.746bp per character where Linux Libertine sets
+// 4.584 — and tectonic, asked the same question, answers 4.582 (go-tex/engine#310).
+//
+// Only packages the REFERENCE itself honours are mapped. Asked what it embeds,
+// tectonic gives Latin Modern for times, mathptmx, txfonts and helvet — the old
+// PSNFSS packages set a Type1 family its XeTeX path does not resolve — and the real
+// face only for newtxtext, libertine and libertinus. A test pins that too.
+func TestATextFontPackageIsLoadedWhenAvailable(t *testing.T) {
+	tree := os.Getenv("GOTEX_TEXMF")
+	if tree == "" {
+		tree = "/Users/Shared/gotex/measure/texmf"
+	}
+	if _, err := os.Stat(filepath.Join(tree, "LinLibertine_R.otf")); err != nil {
+		t.Skip("no LinLibertine_R.otf under GOTEX_TEXMF: nothing to load")
+	}
+	t.Setenv("GOTEX_TEXMF", tree)
+
+	const body = `\begin{document}Hello world.\end{document}`
+	loaded, err := compile([]byte(`\documentclass{article}\usepackage{libertine}`+body), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if got := loaded.Diagnostics().FontsSubstituted; len(got) != 0 {
+		t.Errorf("libertine was loaded, so it must not be reported as substituted: %v", got)
+	}
+
+	// A package the reference does not honour either is left alone — and still
+	// reported, because the document did ask for it.
+	psnfss, err := compile([]byte(`\documentclass{article}\usepackage{times}`+body), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if got := psnfss.Diagnostics().FontsSubstituted; got["times"] != "Times" {
+		t.Errorf("times must still be reported as substituted, got %v", got)
 	}
 }
