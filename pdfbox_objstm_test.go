@@ -14,9 +14,19 @@ import (
 
 // deflated wraps s in a PDF stream object whose body is zlib-compressed, the shape
 // a PDF 1.5+ producer uses for an object stream.
+//
+// The filler is not decoration. deflate emits a STORED (uncompressed) block when
+// that is smaller, and for a payload this short it may: the dictionary's text then
+// survives verbatim in the "compressed" body, the literal scan finds the box, and
+// the test proves nothing. Which way flate goes CHANGED BETWEEN GO VERSIONS —
+// go1.26.4 compresses this payload, go1.27.0 stores it — so the first version of
+// this test passed locally and failed on every CI lane, which builds with
+// `go-version: stable`. Padding with several KB of one repeated byte makes a stored
+// block strictly larger than a compressed one, so the choice is forced either way.
 func deflated(s string) []byte {
 	var z bytes.Buffer
 	w := zlib.NewWriter(&z)
+	w.Write([]byte("% " + strings.Repeat("A", 8192) + "\n"))
 	w.Write([]byte(s))
 	w.Close()
 	var out bytes.Buffer
