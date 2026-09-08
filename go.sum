@@ -40,6 +40,8 @@ github.com/go-tex/pdfrender v0.1.0 h1:z/nYN7lA+Q9W3v3G+sHjhLVf8BJq1dSpxjBd7KSZCK
 github.com/go-tex/pdfrender v0.1.0/go.mod h1:xdT4ZwyIxHLL2GsgJVxOb/H7gsi/TgTI3QXuquj/q3Y=
 github.com/go-tex/texmf v0.5.0 h1:O3r0WxAIGYLZAMuYBZzfprOf+2V8s4RqXyUoHJ/wcfA=
 github.com/go-tex/texmf v0.5.0/go.mod h1:nZtEGwpAGkhH6U1hRGG9ilccZbJhMSK2Xk2omIWdq+k=
+github.com/go-tex/texmf v0.6.0 h1:6H4mBHanAVD7SMq+TF6paWeOKlIxKHrtDCP0JkmA270=
+github.com/go-tex/texmf v0.6.0/go.mod h1:nZtEGwpAGkhH6U1hRGG9ilccZbJhMSK2Xk2omIWdq+k=
 github.com/go-typeset/bidi v0.3.0 h1:4fjGjejvjE2LzLNzY4si8PkVO321NcsKIiANhWT3jF4=
 github.com/go-typeset/bidi v0.3.0/go.mod h1:ct3cmYT8Qt1FGJQ+2QaakrUxqaP4ZysgdQQg2ym5+Xo=
 github.com/go-typeset/hyphenation v1.0.0 h1:4N0gdMbLTmL+/B8D3nufrFicD02jN2RymwQzvZ5ri4I=

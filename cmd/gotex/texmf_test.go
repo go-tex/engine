@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -225,5 +226,66 @@ func TestTikzReachesPGF(t *testing.T) {
 				t.Errorf("bundlesFor(%q) = %v, attendu %v", c.src, got, c.want)
 			}
 		})
+	}
+}
+
+// A class asks for packages on the document's behalf, and those are as much a
+// fact about what the document needs as the lines its author typed. acmart.cls:255
+// is \RequirePackage{libertine}, so an acmart paper is set in Linux Libertine by
+// any reference build — and was not set in it here, because the scan read only the
+// document. That face measures 15.8% narrower per character than the engine's
+// built-in one, which is two pages in eight (go-tex/engine#310, #328).
+func TestBundlesForReadsTheClassToo(t *testing.T) {
+	cls := map[string][]byte{
+		"tiny.cls": []byte("\\ProvidesClass{tiny}\n\\LoadClass{article}\n\\RequirePackage{libertine}\n"),
+	}
+	read := func(name string) ([]byte, error) {
+		if data, ok := cls[name]; ok {
+			return data, nil
+		}
+		return nil, os.ErrNotExist
+	}
+	got := bundlesForReading([]byte("\\documentclass{tiny}\n\\begin{document}x\\end{document}"), read)
+	var names []string
+	for _, b := range got {
+		names = append(names, b.Name)
+	}
+	if len(names) != 1 || names[0] != "linuxlibertine" {
+		t.Errorf("got %v, want [linuxlibertine]: the class's own \\RequirePackage was not read", names)
+	}
+}
+
+// A class the document names but that is not beside it is simply not read: a class
+// a bundle would itself have to deliver cannot be scanned before that bundle is
+// fetched, and the scan must not fail over it.
+func TestBundlesForSurvivesAMissingClass(t *testing.T) {
+	read := func(string) ([]byte, error) { return nil, os.ErrNotExist }
+	got := bundlesForReading([]byte("\\documentclass{beamer}\n\\begin{document}x\\end{document}"), read)
+	if len(got) == 0 {
+		t.Fatal("the document's own \\documentclass stopped being read")
+	}
+	if got[len(got)-1].Name != "beamer" {
+		t.Errorf("got %v, want beamer last", got)
+	}
+}
+
+// The class is read ONE level deep. A package the class requires may itself
+// require others; following those would be a resolver, which is the engine's job
+// and runs afterwards.
+func TestBundlesForDoesNotFollowThePackageChain(t *testing.T) {
+	files := map[string][]byte{
+		"a.cls":   []byte("\\RequirePackage{zzz}\n"),
+		"zzz.sty": []byte("\\RequirePackage{libertine}\n"),
+	}
+	read := func(name string) ([]byte, error) {
+		if data, ok := files[name]; ok {
+			return data, nil
+		}
+		return nil, os.ErrNotExist
+	}
+	for _, b := range bundlesForReading([]byte("\\documentclass{a}"), read) {
+		if b.Name == "linuxlibertine" {
+			t.Error("the scan followed a package's own \\RequirePackage: that is the engine's job")
+		}
 	}
 }
