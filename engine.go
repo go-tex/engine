@@ -1439,7 +1439,12 @@ func (e *Engine) grabUndelimited() []tok {
 //
 // The call is abandoned through the same argRunaway path a delimited runaway uses.
 func (e *Engine) parEndsArgument(t tok) bool {
-	if !e.scanningNonLong || !t.cs_ || t.cs != "par" {
+	// tex.web §392 tests the COMMAND CODE, cur_cmd = par_end, not the name. A \let
+	// copy of \par carries that code — \@@par is one (classkernel.go, and
+	// latex.ltx:12794 writes it at the end of every section heading) — and a
+	// \def\par{…} does NOT, being a macro. Matching on the name "par" was wrong in
+	// both directions: it missed every alias and fired on a redefined \par.
+	if !e.scanningNonLong || !t.cs_ || !e.isPrim(t.cs, "par") {
 		return false
 	}
 	e.back(t) // back_error: the \par is put back, not consumed
