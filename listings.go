@@ -30,6 +30,13 @@ import (
 type lstOptions struct {
 	numbers bool // numbers=left (any value other than "" / "none" turns numbering on)
 	frame   bool // frame=single (any value other than "" / "none" draws a frame)
+	// listings, unlike every other block this renderer serves, does NOT build on
+	// \trivlist: listings.sty:1694 defaults aboveskip and belowskip to
+	// \medskipamount and applies them as plain \vspace (:1724, :1777). fancyvrb —
+	// which minted and the Code/CodeInput environments sit on — DOES use the list
+	// separation (fancyvrb.sty:665: \@topsepadd=\FancyVerbVspace, default \topsep,
+	// plus \partopsep). So only the lstlisting path sets this.
+	medskipSurround bool
 }
 
 // parseLstOptions parses a listings "[key=value,…]" option body into the honoured
@@ -38,7 +45,10 @@ type lstOptions struct {
 // any explicit value other than the literal "none" (so numbers=left, numbers=right
 // and frame=single all read as on, while numbers=none / frame=none read as off).
 func parseLstOptions(s string) lstOptions {
-	var o lstOptions
+	// The lstlisting path, and only it: see lstOptions.medskipSurround. Set before
+	// the empty-option early return, since \begin{lstlisting} with no [options] is
+	// the common case.
+	o := lstOptions{medskipSurround: true}
 	if strings.TrimSpace(s) == "" {
 		return o
 	}
@@ -222,7 +232,7 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 	// A right-aligned gutter wide enough for the largest line number, when numbering.
 	digits := len(strconv.Itoa(len(lines)))
 
-	e.mvlAppendGap() // a little space above the block
+	e.mvlAppendBlockGap(o.medskipSurround) // a little space above the block
 	if o.frame {
 		// Collect the line boxes into a vbox with interline glue, then wrap the vbox
 		// in a frame (reusing boxframe.go's frameNode at the \fbox defaults) and put
@@ -251,7 +261,7 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 			e.appendToPage(e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, firstLine+i))
 		}
 	}
-	e.mvlAppendGap()
+	e.mvlAppendBlockGap(o.medskipSurround)
 }
 
 // lstText returns the literal text of one listing line, optionally prefixed with a
