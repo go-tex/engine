@@ -151,6 +151,9 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.RunawayArgs > 0 {
 		fmt.Fprintf(w, "gotex: WARNING %d macro call(s) abandoned — a \\par ended an argument "+
 			"(tex.web §392); each drops what the call would have set\n", d.RunawayArgs)
+		for _, e := range sortedByCount(d.RunawayMacros) {
+			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+		}
 	}
 	// Undefined environments never show up as skipped commands: \begin{env} routes
 	// through \csname, which turns a missing \env into a silent \relax. Report them
