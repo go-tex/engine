@@ -383,7 +383,22 @@ const AMSClassSubstrate = `
 % everypar, so \@xsect runs \@svsechd itself (then clears it). This makes amsart
 % headings visible whether \@sect chose the display or the run-in path.
 \let\@svsechd\relax
-\def\@hangfrom#1#2{\global\let\@svsechd\relax\par\noindent#1#2}
+% ⚠ \long. Real LaTeX's \@hangfrom takes ONE argument — the label — and the heading
+% body that follows is ordinary material, not an argument (latex.ltx:12865):
+%
+%	\def\@hangfrom#1{\setbox\@tempboxa\hbox{{#1}}%
+%	      \hangindent \wd\@tempboxa\noindent\box\@tempboxa}
+%
+% The amsart family calls it with the body in a SECOND brace group ending in \par,
+% which real LaTeX simply typesets after the label (mathincs.cls:1177):
+%
+%	\@hangfrom{\hskip #3\relax\@svsec}{\interlinepenalty\@M #8\par}
+%
+% Ours takes that group as #2 — having no hanging indent, it has nothing else to do
+% with it — and an argument is exactly where a \par may not appear: tex.web §392
+% abandons the call, dropping THE WHOLE HEADING, number and title both. Measured,
+% this one macro is 179 of the corpus's 199 abandoned calls, 44 on a single paper.
+\long\def\@hangfrom#1#2{\global\let\@svsechd\relax\par\noindent#1#2}
 \def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
 \def\@afterheading{}
 % \@ifclasswith{class}{opt}{then}{else}: the class-file analogue of

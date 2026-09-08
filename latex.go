@@ -101,8 +101,13 @@ const MiniLaTeXKernel = `
 % document body and set every following paragraph half-size. Detect the bracket and
 % keep the short form unexpanded; with no bracket the plain one-argument form holds.
 \def\title{\@ifnextchar[{\@titleopt}{\@titlemand}}
-\def\@titleopt[#1]#2{\def\@shorttitle{#1}\def\@title{#2}}
-\def\@titlemand#1{\def\@title{#1}}
+% \long: latex.ltx:12747 declares \title with \DeclareRobustCommand (no star), and
+% \@star@or@long (latex.ltx:1173) makes the unstarred form \long. \author on the very
+% next line IS starred, so it is deliberately NOT \long here either — a \par in an
+% author block is a runaway in real LaTeX too, and the 3 in the corpus are its error,
+% not ours.
+\long\def\@titleopt[#1]#2{\def\@shorttitle{#1}\def\@title{#2}}
+\long\def\@titlemand#1{\def\@title{#1}}
 \def\author{\@ifnextchar[{\@authoropt}{\@authormand}}
 \def\@authoropt[#1]#2{\def\@shortauthor{#1}\def\@author{#2}}
 \def\@authormand#1{\def\@author{#1}}
@@ -731,10 +736,16 @@ const MiniLaTeXKernel = `
 \def\captionsetup{\@ifnextbracket{\@captionsetupopt}{\@captionsetupnoopt}}
 \def\@captionsetupopt[#1]#2{}
 \def\@captionsetupnoopt#1{}
-\def\subcaptionbox#1#2{\global\advance\c@subfigure by1\relax\@subparent=\c@figure \advance\@subparent by1\relax\edef\@currentlabel{\p@subfigure\thesubfigure}\def\@currentreftype{subfigure}\def\@currentlabelname{}\settowidth\subcaptionwidth{#2}\noindent\parbox[b]{\subcaptionwidth}{\centering #2\\{\small(\thesubfigure) #1}}\quad}
+% \long: the body reaches this through \newcommand\caption@ibox[3] (caption.sty:457,
+% unstarred, so \long) and \long\def\subcaption@@@subfloat#1#2#3 (subcaption.sty:270).
+% Ours stands in for both, and grabs the body itself.
+\long\def\subcaptionbox#1#2{\global\advance\c@subfigure by1\relax\@subparent=\c@figure \advance\@subparent by1\relax\edef\@currentlabel{\p@subfigure\thesubfigure}\def\@currentreftype{subfigure}\def\@currentlabelname{}\settowidth\subcaptionwidth{#2}\noindent\parbox[b]{\subcaptionwidth}{\centering #2\\{\small(\thesubfigure) #1}}\quad}
 \def\subfloat{\@ifnextbracket{\@subfloatopt}{\@subfloatnoopt}}
-\def\@subfloatopt[#1]#2{\subcaptionbox{#1}{#2}}
-\def\@subfloatnoopt#1{\subcaptionbox{}{#1}}
+% \long: subfig.sty:350 and :354 declare \sf@@subfloat and \sf@@@subfloat \long. A
+% subfigure body is a float's contents and routinely holds a \par; without the prefix
+% tex.web §392 abandons the call and the whole subfigure goes. 13 in the corpus.
+\long\def\@subfloatopt[#1]#2{\subcaptionbox{#1}{#2}}
+\long\def\@subfloatnoopt#1{\subcaptionbox{}{#1}}
 \long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 \long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 % ─── end sub-captions / \captionof / \captionsetup ───────────────────────────
@@ -913,7 +924,10 @@ const MiniLaTeXKernel = `
 \def\qedhere{}
 % \footnotetext[n]{text} and \newcolumntype{x}[n]{spec}: accepted and gobbled
 % whole (optional [.] plus the required group) instead of leaking their bodies.
-\def\@gobbleoptarg[#1]#2{}
+% \long: \@footnotetext is \long (latex.ltx:13187) and array.sty's column rewrites
+% are too (array.sty:273). A gobbler that refuses a \par does not gobble less — the
+% abandoned call leaks the body it was meant to swallow onto the page.
+\long\def\@gobbleoptarg[#1]#2{}
 \def\footnotetext{\@ifnextbracket\@gobbleoptarg\@gobble}
 \def\newcolumntype#1{\@ifnextbracket\@gobbleoptarg\@gobble}
 % Body-level commands seen across the corpus that, left undefined, DROP real

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"time"
 
@@ -39,11 +40,35 @@ var (
 // and without repeats. One \usepackage can name several packages at once, and a
 // bundle can require another — pgfplots does not load without pgf — so this is
 // a list rather than the single bundle a class used to imply.
-func bundlesFor(src []byte) []texmf.Bundle {
+func bundlesFor(src []byte) []texmf.Bundle { return bundlesForReading(src, os.ReadFile) }
+
+// bundlesForReading is bundlesFor with the file read as a seam, so a test can
+// supply a class without writing one to disk.
+//
+// It reads the CLASS the document names, and scans that too. A class asks for
+// packages on the document's behalf, and those are as much a fact about what the
+// document needs as the lines its author typed: acmart.cls:255 is
+// \RequirePackage{libertine}, so an acmart paper is set in Linux Libertine by any
+// reference build — and was not set in it here, because the scan never read the
+// class. That face measures 15.8% narrower per character than the engine's
+// built-in one, which is two pages in eight (go-tex/engine#310, #328).
+//
+// ONE level deep, and only a class file sitting beside the document. A class that
+// a bundle would itself have to deliver cannot be read before that bundle is
+// fetched, and following \RequirePackage through every package it names would be
+// a resolver — which is the engine's job, running afterwards, and which this scan
+// deliberately is not.
+func bundlesForReading(src []byte, readFile func(string) ([]byte, error)) []texmf.Bundle {
 	src = stripComments(src)
 	var names []string
 	if m := classRe.FindSubmatch(src); m != nil {
-		names = append(names, string(m[1]))
+		class := string(m[1])
+		names = append(names, class)
+		if data, err := readFile(trimSpace(class) + ".cls"); err == nil {
+			for _, m := range packageRe.FindAllSubmatch(stripComments(data), -1) {
+				names = append(names, commaRe.Split(string(m[1]), -1)...)
+			}
+		}
 	}
 	for _, m := range packageRe.FindAllSubmatch(src, -1) {
 		names = append(names, commaRe.Split(string(m[1]), -1)...)
