@@ -667,8 +667,12 @@ func parseDimenStr(s string) int {
 //   - PDF, in the page's /MediaBox — used when no rasteriser is wired (the browser
 //     build), since a rasterised figure carries its size in its pixels.
 //
-// Only the head of the file is read: both declarations are in it, and a figure can
-// be tens of megabytes.
+// An EPS declares its box in the head, so only the head is read for one. A PDF does
+// NOT: its page dictionary sits wherever the producer put it, and reading only the
+// first 64KB missed the box on 132 of the arXiv corpus's 1401 figure PDFs. Those
+// figures were then reserved at a DEFAULT size while the file said otherwise, so
+// the whole file is read for a PDF — bounded, because a figure can be tens of
+// megabytes and no page dictionary is that far in.
 func figureDeclaredSize(name string) (w, h int) {
 	f, err := os.Open(name)
 	if err != nil {
@@ -682,7 +686,22 @@ func figureDeclaredSize(name string) (w, h int) {
 	case bytes.HasPrefix(head, []byte("%!PS")), bytes.Contains(head, []byte("%%BoundingBox")):
 		return epsBoundingBox(head)
 	case bytes.HasPrefix(head, []byte("%PDF-")):
-		return pdfMediaBox(head)
+		const maxPDFScan = 32 << 20
+		data := head
+		if n == len(head) {
+			if _, err := f.Seek(0, io.SeekStart); err == nil {
+				if all, err := io.ReadAll(io.LimitReader(f, maxPDFScan)); err == nil && len(all) > len(data) {
+					data = all
+				}
+			}
+		}
+		// The same reader the aspect path uses: CropBox preferred over MediaBox, and
+		// the compressed-object-stream fallback behind it.
+		wPt, hPt, ok := pdfIntrinsicPoints(data)
+		if !ok {
+			return 0, 0
+		}
+		return int(wPt + 0.5), int(hPt + 0.5)
 	}
 	return 0, 0
 }
@@ -706,26 +725,6 @@ func epsBoundingBox(head []byte) (w, h int) {
 		}
 	}
 	return 0, 0
-}
-
-// pdfMediaBox reads the first /MediaBox [llx lly urx ury] in the file's head. A
-// figure PDF holds one page, so the first box is that page's.
-func pdfMediaBox(head []byte) (w, h int) {
-	i := bytes.Index(head, []byte("/MediaBox"))
-	if i < 0 {
-		return 0, 0
-	}
-	rest := head[i+len("/MediaBox"):]
-	open := bytes.IndexByte(rest, '[')
-	close := bytes.IndexByte(rest, ']')
-	if open < 0 || close < open {
-		return 0, 0
-	}
-	x, y, ok := boxExtent(strings.Fields(string(rest[open+1 : close])))
-	if !ok {
-		return 0, 0
-	}
-	return x, y
 }
 
 // boxExtent turns four numbers "llx lly urx ury" into the box's width and height,
