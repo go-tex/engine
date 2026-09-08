@@ -201,6 +201,24 @@ const MiniLaTeXKernel = `
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
 \def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}#1 }
 \def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+% xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
+% arguments after an optional occurrence number (xstring.tex:444,
+% \xs_newmacro*3\IfSubStr{1}{2}{0}). Undefined it consumed nothing, and acmart opens
+% its \author with
+%
+%	\IfSubStr{\detokenize{#2}}{,}{\ClassWarning{…}}{}      acmart.cls:1314
+%
+% so \author{A Name} in the PREAMBLE printed "A Name," as body text — the detokenized
+% name and the comma it was being tested for. On a two-column paper that text lands in
+% the main vertical list ahead of \maketitle's \twocolumn[...], which starts a new
+% column region, so it took a page of its own (go-tex/engine#319, the same shape as
+% #316 and #318).
+%
+% The test is REAL, not a guessed branch: \in@{<search>}{<in>} is the kernel's own
+% substring test and sets \ifin@. Answering "false" always would be a stub that drops
+% whichever branch it did not pick, and a branch is content.
+\long\def\IfSubStr{\@ifnextchar[{\gotex@ifsubstr}{\gotex@ifsubstr[1]}}
+\long\def\gotex@ifsubstr[#1]#2#3#4#5{\in@{#3}{#2}\ifin@#4\else#5\fi}
 % natbib's key=value parser, verbatim (natbib.sty:344-345):
 %
 %	\def\NAT@find@eq#1=#2\@nil{\def\@tempa{#1}\def\@tempc{#2}}
