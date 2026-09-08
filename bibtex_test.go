@@ -693,3 +693,40 @@ func TestPutbibMissingUnitFile(t *testing.T) {
 		t.Error("strict compile should fail on a missing bibliography unit file")
 	}
 }
+
+// natbib's key=value parser is two DELIMITED macros (natbib.sty:344-345):
+//
+//	\def\NAT@find@eq#1=#2\@nil{\def\@tempa{#1}\def\@tempc{#2}}
+//	\def\NAT@rem@eq#1={\def\@tempc{#1}}
+//
+// Undefined, \NAT@find@eq consumes nothing — it has no braced argument to swallow —
+// so the key list it was handed is typeset instead. natbib is emulated here rather
+// than loaded, but a class may bring its own \setcitestyle whose body still calls
+// these: acmart.cls:273 renews \setcitestyle and acmart.cls:347 calls it, so every
+// acmart paper opened with "numbers=sortcompress=open=[=close=]=citesep=,=" on the
+// page — one "<key>=" per iteration (go-tex/engine#316).
+func TestNatbibKeyParserConsumesItsKeys(t *testing.T) {
+	const src = `\documentclass{article}
+\makeatletter
+\begin{document}
+\makeatletter
+A\expandafter\NAT@find@eq numbers=\relax\@nil[\@tempa]B
+C\expandafter\NAT@find@eq open={[}=\relax\@nil[\@tempa]D
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	var b strings.Builder
+	for _, p := range e.Pages() {
+		b.WriteString(mvlText(p.list))
+	}
+	got := b.String()
+	// The key name is captured into \@tempa; nothing of the call reaches the page.
+	if !strings.Contains(got, "A[numbers]B") {
+		t.Errorf("the key was not parsed: %q", got)
+	}
+	if strings.Contains(got, "numbers=") {
+		t.Errorf("the key list was typeset: %q", got)
+	}
+}

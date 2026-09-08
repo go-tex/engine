@@ -201,6 +201,27 @@ const MiniLaTeXKernel = `
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
 \def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}#1 }
 \def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+% natbib's key=value parser, verbatim (natbib.sty:344-345):
+%
+%	\def\NAT@find@eq#1=#2\@nil{\def\@tempa{#1}\def\@tempc{#2}}
+%	\def\NAT@rem@eq#1={\def\@tempc{#1}}
+%
+% They are DELIMITED macros, so an undefined \NAT@find@eq consumes nothing and the
+% key list it was handed is typeset instead. natbib itself is emulated here rather
+% than loaded, but a class may bring its own \setcitestyle whose body still calls
+% these — acmart.cls:273 renews \setcitestyle and acmart.cls:347 calls it with
+%
+%	\setcitestyle{numbers,sortcompress,open={[},close={]},citesep={,},notesep={, }}
+%
+% so every acmart paper opened with "numbers=sortcompress=open=[=close=]=citesep=,="
+% on the page — one "<key>=" per iteration of the loop. On a two-column paper that
+% junk sits in the main vertical list BEFORE \maketitle's \twocolumn[...], which
+% starts a new region, so it took a page of its own and pushed the title and the
+% whole first column of text onto page 2 (go-tex/engine#316).
+%
+% \@tempa and \@tempc are the names natbib's own \setcitestyle body reads back.
+\def\NAT@find@eq#1=#2\@nil{\def\@tempa{#1}\def\@tempc{#2}}
+\def\NAT@rem@eq#1={\def\@tempc{#1}}
 % \newblock separates the logical blocks of a bibliography entry (author / title /
 % publication); in a .bbl it appears hundreds of times. It is an interword space
 % here — left undefined it was skipped, which merely lost the space between blocks.
