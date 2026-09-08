@@ -173,8 +173,25 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 // any more than it does around a display (tex.web:22602, and see placeDisplay).
 // Suppressing it cost the interline glue at BOTH ends: measured against tectonic,
 // one verbatim block of one line cost 23.86pt against the reference's 31.88.
-func (e *Engine) mvlAppendGap() {
-	e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: e.trivlistSep()}})
+func (e *Engine) mvlAppendGap() { e.mvlAppendBlockGap(false) }
+
+// mvlAppendBlockGap is mvlAppendGap for a block that may not be a \trivlist.
+// listings.sty:1694 defaults lstlisting's aboveskip/belowskip to \medskipamount
+// and applies them as plain \vspace (:1724, :1777) — 6pt, where the list
+// separation is \topsep+\partopsep, 10pt at the 10pt class. Measured against
+// tectonic on one block of six lines, the baseline-to-baseline gap into the block
+// is 17.93pt in the reference against our 22.0: exactly the 4pt difference, at
+// both ends of every listing.
+func (e *Engine) mvlAppendBlockGap(medskip bool) {
+	sep := e.trivlistSep()
+	if medskip {
+		if v, ok := e.namedDimen("medskipamount"); ok {
+			sep = v
+		} else {
+			sep = 6 * unity
+		}
+	}
+	e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: sep}})
 }
 
 // trivlistSep is the vertical space LaTeX puts above and below a verbatim block.
