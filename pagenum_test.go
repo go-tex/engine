@@ -104,3 +104,65 @@ func TestToday(t *testing.T) {
 		t.Errorf("\\today should typeset the date; got %q", b.String())
 	}
 }
+
+// \pagestyle{name} RUNS the definitions stored under \ps@name:
+//
+//	\def\pagestyle#1{\@ifundefined{ps@#1}\undefinedpagestyle{\@nameuse{ps@#1}}}
+//	                                                    latex.ltx:13326-13329
+//
+// which is how a class's own \fancypagestyle{…}{…} reaches this engine's header
+// and footer fields — when the style is SELECTED, not when it is declared.
+func TestPagestyleRunsTheStoredDefinitions(t *testing.T) {
+	const src = `\documentclass{article}
+\makeatletter
+\def\ps@mystyle{\gdef\RAN{yes}}
+\gdef\RAN{no}
+\begin{document}
+\makeatletter
+before=[\RAN]\pagestyle{mystyle}after=[\RAN]
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	var b strings.Builder
+	for _, p := range e.Pages() {
+		b.WriteString(mvlText(p.list))
+	}
+	got := b.String()
+	if !strings.Contains(got, "before=[no]") || !strings.Contains(got, "after=[yes]") {
+		t.Errorf("\\ps@mystyle did not run when the style was selected: %q", got)
+	}
+}
+
+// \fancypagestyle{name}[base]{definitions} STORES them under \ps@name
+// (fancyhdr.sty:438-450) rather than running them where it stands. Undefined it
+// consumed nothing, so a class that declares its own styles printed their NAMES
+// on the page — and on a two-column paper that text lands ahead of \maketitle's
+// \twocolumn[...], taking a page of its own (go-tex/engine#318).
+func TestFancyPageStyleStoresRatherThanPrints(t *testing.T) {
+	for _, src := range []string{
+		`\documentclass{article}\fancypagestyle{mine}{\gdef\RAN{yes}}\begin{document}` +
+			`\makeatletter A[\RAN]\pagestyle{mine}B[\RAN]\end{document}`,
+		// the [base] form takes the same path
+		`\documentclass{article}\fancypagestyle{mine}[plain]{\gdef\RAN{yes}}\begin{document}` +
+			`\makeatletter A[\RAN]\pagestyle{mine}B[\RAN]\end{document}`,
+	} {
+		full := `\makeatletter\gdef\RAN{no}\makeatother` + src[len(`\documentclass{article}`):]
+		e, err := compile([]byte(`\documentclass{article}`+full), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		var b strings.Builder
+		for _, p := range e.Pages() {
+			b.WriteString(mvlText(p.list))
+		}
+		got := b.String()
+		if !strings.Contains(got, "A[no]") || !strings.Contains(got, "B[yes]") {
+			t.Errorf("the definitions did not wait for the style to be selected: %q", got)
+		}
+		if strings.Contains(got, "mine") {
+			t.Errorf("the style NAME was typeset: %q", got)
+		}
+	}
+}

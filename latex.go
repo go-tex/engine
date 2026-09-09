@@ -224,6 +224,23 @@ const MiniLaTeXKernel = `
 % whichever branch it did not pick, and a branch is content.
 \long\def\IfSubStr{\@ifnextchar[{\gotex@ifsubstr}{\gotex@ifsubstr[1]}}
 \long\def\gotex@ifsubstr[#1]#2#3#4#5{\in@{#3}{#2}\ifin@#4\else#5\fi}
+% \fancypagestyle{name}[base]{definitions} names a page style and STORES its field
+% assignments under \ps@name (fancyhdr.sty:438-450):
+%
+%	\newcommand{\fancypagestyle}[1]{%
+%	  \@ifnextchar[{\f@nch@pagestyle{#1}}{\f@nch@pagestyle{#1}[f@nch@fancyproto]}}
+%	\long\def\f@nch@pagestyle#1[#2]#3{… \@namedef{ps@#1}{…#3\relax} …}
+%
+% \pagestyle{name} then runs them (latex.ltx:13326-13329, see doPagestyle).
+%
+% Undefined, it consumed nothing, so a class that declares its own styles printed
+% their NAMES on the page — acmart.cls:2589 declares standardpagestyle and
+% firstpagestyle — and their definitions were executed where they landed rather
+% than when the style was selected. On a two-column paper the names land in the
+% main vertical list ahead of \maketitle's \twocolumn[...], which starts a new
+% column region, so they took a page of their own (go-tex/engine#318).
+\def\fancypagestyle#1{\@ifnextchar[{\gotex@fancyps{#1}}{\gotex@fancyps{#1}[f@nch@fancyproto]}}
+\long\def\gotex@fancyps#1[#2]#3{\expandafter\def\csname ps@#1\endcsname{#3}}
 % natbib's key=value parser, verbatim (natbib.sty:344-345):
 %
 %	\def\NAT@find@eq#1=#2\@nil{\def\@tempa{#1}\def\@tempc{#2}}
