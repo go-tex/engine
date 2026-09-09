@@ -26,7 +26,8 @@ import (
 // vs no-number distinction is modelled (plain/headings/myheadings all show the
 // bottom-centred number; empty shows none).
 func (e *Engine) doPagestyle() {
-	switch e.readBraceName() {
+	name := e.readBraceName()
+	switch name {
 	case "empty":
 		e.pageStyle = "empty"
 	case "fancy":
@@ -36,6 +37,24 @@ func (e *Engine) doPagestyle() {
 		}
 	default:
 		e.pageStyle = "plain"
+	}
+	// A named style RUNS the definitions stored under \ps@name:
+	//
+	//	\def\pagestyle#1{\@ifundefined{ps@#1}\undefinedpagestyle{\@nameuse{ps@#1}}}
+	//	                                                        latex.ltx:13326-13329
+	//
+	// which is how a class's own \fancypagestyle{standardpagestyle}{…} reaches this
+	// engine's header and footer fields. Without it the definitions had nowhere to
+	// go: \fancypagestyle was undefined, so its arguments were left in the input and
+	// EXECUTED where they landed, which set the fields by accident and printed the
+	// style's name on the page (go-tex/engine#318).
+	//
+	// \thispagestyle takes the same path. LaTeX defers it through \@specialstyle to
+	// the page being shipped; this engine keeps one live set of fields, so a style
+	// asked for on one page applies from there — the simplification \thispagestyle
+	// already had here.
+	if m := e.eq["ps@"+name]; m != nil && m.kind == mMacro && len(m.body) > 0 {
+		e.push(m.body)
 	}
 }
 
