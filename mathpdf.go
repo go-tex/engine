@@ -231,6 +231,18 @@ func buildSVGPath(p *pdfkit.Page, d string, m affine, left, pdfTop float64) bool
 		case 'z':
 			lineTo(startX, startY)
 			p.ClosePath()
+		default:
+			// An unrecognised command — 'a', SVG's elliptical arc, is the one that
+			// occurs — must still CONSUME its numbers. cmd() advances past the
+			// letter but a command that reads no operand leaves them in place, and
+			// then more() is true, cmd() finds no letter and returns the same
+			// command, and nothing advances: the driver spins forever on a path it
+			// merely does not understand. Skipping the operands loses that segment
+			// and draws the rest, which is what a driver should do with an operator
+			// it lacks.
+			for pt.moreNums() {
+				pt.num()
+			}
 		}
 	}
 	return drew

@@ -1758,6 +1758,7 @@ func (e *Engine) loadMore() {
 	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
 	e.prim("parbox", func(e *Engine) { e.place(e.doParbox()) })
 	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
+	e.prim("gotex@tightframe", func(e *Engine) { e.place(e.doTightFrame()) })
 	e.prim("framebox", func(e *Engine) { e.place(e.doFramebox()) })
 	// Text decorations: a rule under (\underline), through (\sout) or over the text.
 	e.prim("underline", func(e *Engine) { e.place(e.makeDeco('u')) })
@@ -1902,6 +1903,13 @@ func (e *Engine) loadMore() {
 	// Non-renderable picture environments (TikZ / PGF / tikz-cd): the whole body is
 	// gobbled as raw source up to the matching \end{…}, so no \draw/\node/\path/
 	// \foreach can leak into the text. Reached via \begin{…}=\csname …\endcsname.
+	// picture-mode drawing (picture.go). The LaTeX macros resolve \unitlength and
+	// hand these plain <number>/<dimen> arguments.
+	e.prim("gotex@line", func(e *Engine) { e.doPictureLine(false) })
+	e.prim("gotex@vector", func(e *Engine) { e.doPictureLine(true) })
+	e.prim("gotex@circle", func(e *Engine) { e.doPictureCircle() })
+	e.prim("gotex@oval", func(e *Engine) { e.doPictureOval() })
+	e.prim("gotex@qbezier", func(e *Engine) { e.doQbezier() })
 	e.prim("tikzpicture", func(e *Engine) { e.doGobbleEnv("tikzpicture") })
 	e.prim("endtikzpicture", func(e *Engine) {}) // consumed literally by doGobbleEnv; defined for safety
 	e.prim("pgfpicture", func(e *Engine) { e.doGobbleEnv("pgfpicture") })

@@ -46,6 +46,15 @@ func (e *Engine) doFbox() frameNode {
 	return frameNode{inner: hpackSP(list, packNatural, 0), sep: fboxSep, rule: fboxRule}
 }
 
+// doTightFrame implements \gotex@tightframe{content}: \fbox with \fboxsep set to
+// zero, which is what LaTeX's \frame is ("\leavevmode\fboxsep\z@\fbox{#1}",
+// ltboxes). A picture's \framebox(60,40) must draw its rule ON the 60x40 box the
+// author declared, not 3pt outside it.
+func (e *Engine) doTightFrame() frameNode {
+	list, _ := e.grabHboxList()
+	return frameNode{inner: hpackSP(list, packNatural, 0), sep: 0, rule: fboxRule}
+}
+
 // doFramebox implements \framebox[width][pos]{content}: with no [width] it behaves
 // like \fbox; with [width] it packs the content to that width, aligned l/c/r per
 // the optional [pos] (default c) using fil glue.
