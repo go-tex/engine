@@ -27,7 +27,7 @@ func TestStarredFloatsAreFloats(t *testing.T) {
 		}
 		got := pageChars(e)
 		if strings.Contains(got, "[t]") {
-			t.Errorf("%s: la clé de placement est composée: %q", c.env, got)
+			t.Errorf("%s: the placement key is typeset: %q", c.env, got)
 		}
 		if !strings.Contains(got, c.veut) {
 			t.Errorf("%s: la page porte %q, elle doit porter %q", c.env, got, c.veut)

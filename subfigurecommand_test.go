@@ -24,7 +24,7 @@ func TestSubfigureCommandFormDoesNotSwallowTheDocument(t *testing.T) {
 	}
 	got := pageChars(e)
 	if !strings.Contains(got, "APRÈS.") {
-		t.Fatalf("le document a été avalé: la page porte %q", got)
+		t.Fatalf("the document was swallowed: the page carries %q", got)
 	}
 	for _, want := range []string{"A", "B", "Gauche", "Droite", "(a)", "(b)", "Toutesdeux"} {
 		if !strings.Contains(got, want) {
@@ -44,9 +44,9 @@ func TestSubfigureEnvironmentFormStillPanels(t *testing.T) {
 	}
 	got := pageChars(e)
 	if !strings.Contains(got, "APRÈS.") {
-		t.Fatalf("le document a été avalé: la page porte %q", got)
+		t.Fatalf("the document was swallowed: the page carries %q", got)
 	}
 	if !strings.Contains(got, "(a)") || !strings.Contains(got, "(b)") {
-		t.Errorf("les sous-légendes manquent: %q", got)
+		t.Errorf("the sub-captions are missing: %q", got)
 	}
 }

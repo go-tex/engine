@@ -48,7 +48,7 @@ func TestEscapedCharsStillTypeset(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := boxChars(e.box[0]); got != "#%&" {
-		t.Errorf("les caractères composés sont %q, attendu \"#%%&\"", got)
+		t.Errorf("the typeset characters are %q, want \"#%%&\"", got)
 	}
 }
 
@@ -65,6 +65,6 @@ func TestEscapedHashCanBeRebound(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := trimNL(out); !strings.Contains(got, `url(#pgfsh7)`) {
-		t.Errorf("le fragment développé est %s, attendu qu'il contienne url(#pgfsh7)", got)
+		t.Errorf("the expanded fragment is %s, want it to contain url(#pgfsh7)", got)
 	}
 }

@@ -32,14 +32,14 @@ APRÈS\end{document}`
 		t.Fatalf("compile: %v", err)
 	}
 	if len(e.mathDropped) != 0 {
-		t.Errorf("la couche maths a refusé une formule (%v)", e.mathDropped)
+		t.Errorf("the math layer refused a formula (%v)", e.mathDropped)
 	}
 	if got := pageChars(e); !strings.Contains(got, "APRÈS") {
-		t.Errorf("la page porte %q: le tableau a mangé ce qui le suit", got)
+		t.Errorf("the page carries %q: the table ate what follows it", got)
 	}
 	svg := strings.Join(e.RenderPages(e.renderMargin(0)), "")
 	if n := strings.Count(svg, "<path"); n < 12 {
-		t.Errorf("%d tracés: les deux matrices ne sont pas composées", n)
+		t.Errorf("%d paths: the two matrices are not typeset", n)
 	}
 }
 

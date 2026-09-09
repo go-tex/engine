@@ -50,11 +50,11 @@ func TestMathMacroWithAnOptionalArgumentTypesets(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if len(e.mathDropped) != 0 {
-		t.Errorf("la couche maths a refusé la formule (%v)", e.mathDropped)
+		t.Errorf("the math layer refused the formula (%v)", e.mathDropped)
 	}
 	svg := strings.Join(e.RenderPages(e.renderMargin(0)), "")
 	if n := strings.Count(svg, "<path"); n < 15 {
-		t.Errorf("%d tracés: le binôme et le texte qui l'entoure ne sont pas tous là", n)
+		t.Errorf("%d paths: the binomial and the text around it are not all there", n)
 	}
 }
 

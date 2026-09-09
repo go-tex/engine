@@ -26,7 +26,7 @@ func TestSIUnitxInMath(t *testing.T) {
 			t.Fatalf("%s: %v", c.nom, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: la couche maths a refusé la formule (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
 		}
 	}
 }
@@ -36,9 +36,9 @@ func TestSIUnitxInMath(t *testing.T) {
 func TestSIUnitxMathPutsUnitsUpright(t *testing.T) {
 	got := mathQuantityText("SI", []string{"9.81", `\meter \per \second \squared `})
 	if !strings.Contains(got, `\mathrm {`) {
-		t.Errorf("composé %q, il manque le \\mathrm des unités", got)
+		t.Errorf("typeset %q, the \\mathrm around the unit is missing", got)
 	}
 	if !strings.HasPrefix(got, "9.81") {
-		t.Errorf("composé %q, la valeur doit venir en tête", got)
+		t.Errorf("typeset %q, the value must come first", got)
 	}
 }

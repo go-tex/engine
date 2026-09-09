@@ -17,17 +17,17 @@ import "testing"
 func TestConditionalInsideAConditionalOperand(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{
-			"l'interne rend l, donc les opérandes diffèrent",
+			"the inner one yields l, so the operands differ",
 			`\def\zn{1}\def\zp{\if 3\zn u\else l\fi}\message{[\if u\zp EGAL\else DIFF\fi]}`,
 			"[DIFF]",
 		},
 		{
-			"l'interne rend u, donc ils sont égaux",
+			"the inner one yields u, so they are equal",
 			`\def\zn{3}\def\zp{\if 3\zn u\else l\fi}\message{[\if u\zp EGAL\else DIFF\fi]}`,
 			"[EGAL]",
 		},
 		{
-			"la même chose à travers \\csname",
+			"the same thing through \\csname",
 			`\expandafter\def\csname zn\endcsname{1}` +
 				`\expandafter\def\csname zp\endcsname{\if 3\csname zn\endcsname u\else l\fi}` +
 				`\message{[\if u\csname zp\endcsname EGAL\else DIFF\fi]}`,
@@ -40,7 +40,7 @@ func TestConditionalInsideAConditionalOperand(t *testing.T) {
 			"[EGAL]",
 		},
 		{
-			"le conditionnel interne seul, hors opérande",
+			"the inner conditional alone, outside an operand",
 			`\def\zn{1}\def\zp{\if 3\zn u\else l\fi}\message{[\zp]}`,
 			"[l]",
 		},
@@ -55,13 +55,13 @@ func TestConditionalInsideAConditionalOperand(t *testing.T) {
 			"[DIFF]",
 		},
 		{
-			"imbriqué dans la branche vraie d'un autre conditionnel",
+			"nested in the true branch of another conditional",
 			`\def\zn{3}\def\zp{\if 3\zn u\else l\fi}` +
 				`\message{[\iftrue\if u\zp OUI\else NON\fi\else RIEN\fi]}`,
 			"[OUI]",
 		},
 		{
-			"\\ifcat prend le même chemin",
+			"\\ifcat takes the same path",
 			`\def\zn{1}\def\zp{\if 3\zn u\else l\fi}\message{[\ifcat u\zp EGAL\else DIFF\fi]}`,
 			"[EGAL]",
 		},

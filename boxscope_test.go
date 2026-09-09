@@ -28,16 +28,16 @@ func TestBoxRegistersAreScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := boxContents(e.box[0]); got != "AAAA" {
-		t.Errorf("\\setbox dans un groupe : box 0 = %q, attendu \"AAAA\" (l'affectation locale doit être restaurée)", got)
+		t.Errorf("\\setbox inside a group: box 0 = %q, want \"AAAA\" (a local assignment must be restored)", got)
 	}
 	if got := boxContents(e.box[1]); got != "B" {
 		t.Errorf("\\global\\setbox : box 1 = %q, attendu \"B\" (l'affectation globale doit survivre)", got)
 	}
 	if e.box[2] != nil {
-		t.Error("\\box lu dans un groupe : box 2 devrait rester vide après le groupe")
+		t.Error("\\box read inside a group: box 2 should still be void after the group")
 	}
 	if e.box[4] != nil {
-		t.Error("\\unhbox dans un groupe : box 4 devrait rester vide après le groupe")
+		t.Error("\\unhbox inside a group: box 4 should still be void after the group")
 	}
 }
 
@@ -52,7 +52,7 @@ func TestBoxScopeRestoresOneLevel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := boxContents(e.box[1]); got != "B" {
-		t.Errorf("au niveau intérieur, box 0 = %q, attendu \"B\"", got)
+		t.Errorf("at the inner level, box 0 = %q, want \"B\"", got)
 	}
 	if got := boxContents(e.box[2]); got != "A" {
 		t.Errorf("de retour au sommet, box 0 = %q, attendu \"A\"", got)

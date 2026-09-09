@@ -13,7 +13,7 @@ import (
 // asked for the headroom.
 func TestRunawayGuardStopsARealLoop(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
-		{"macro qui s'appelle elle-même", `\def\zx{\zx}\zx`},
+		{"a macro that calls itself", `\def\zx{\zx}\zx`},
 		{"deux macros qui se renvoient", `\def\za{\zb}\def\zb{\za}\za`},
 		{"boucle par \\csname", `\def\za{\csname za\endcsname}\za`},
 	} {
@@ -23,13 +23,13 @@ func TestRunawayGuardStopsARealLoop(t *testing.T) {
 			start := time.Now()
 			e.Run(c.src)
 			if !e.runaway {
-				t.Fatalf("%s : la boucle n'a pas été arrêtée", c.src)
+				t.Fatalf("%s: the loop was not stopped", c.src)
 			}
 			// Generous on purpose: what is under test is that the guard fires at
 			// all, and both -race and a slow runner stretch this by an order of
 			// magnitude. Without -race these abort in about two seconds.
 			if d := time.Since(start); d > 60*time.Second {
-				t.Errorf("%s : arrêtée en %v, ce qui est trop long", c.src, d)
+				t.Errorf("%s: stopped after %v, which is too long", c.src, d)
 			}
 		})
 	}
@@ -52,7 +52,7 @@ func TestNoProgressLimitIsWhatMakesTheDifference(t *testing.T) {
 		limit int
 		fires bool
 	}{
-		{"par défaut", 0, true},
+		{"the default", 0, true},
 		{"avec la marge", NoProgressLimitHeavy, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -67,11 +67,11 @@ func TestNoProgressLimitIsWhatMakesTheDifference(t *testing.T) {
 				t.Fatal(err)
 			}
 			if e.runaway != c.fires {
-				t.Errorf("garde-fou déclenché = %v, attendu %v (le compteur s'est arrêté à %d)",
+				t.Errorf("guard fired = %v, want %v (the counter stopped at %d)",
 					e.runaway, c.fires, e.count[0])
 			}
 			if !c.fires && e.count[0] != 750000 {
-				t.Errorf("avec la marge, la boucle s'est arrêtée à %d au lieu de 750000", e.count[0])
+				t.Errorf("with the headroom, the loop stopped at %d instead of 750000", e.count[0])
 			}
 		})
 	}
@@ -90,6 +90,6 @@ func TestLongDocumentDoesNotTripTheGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e.runaway {
-		t.Error("un document long mais ordinaire a déclenché le garde-fou")
+		t.Error("a long but ordinary document fired the guard")
 	}
 }

@@ -73,7 +73,7 @@ func TestReadAcceptsTheFormsTeXDoes(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
 		{"espace avant le nom", `\read\zr to \zl `},
 		{"sans espace", `\read\zr to\zl `},
-		{"numéro de flux nu", `\read0 to \zl `},
+		{"a bare stream number", `\read0 to \zl `},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := withDataFile(t, "donnees.txt", "contenu\n")
@@ -153,12 +153,12 @@ func TestTwoStreamsAreIndependent(t *testing.T) {
 // and \read with no name to read into consumes the line and stops there.
 func TestReadStreamEdges(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"numéro hors des seize", `\message{[\ifeof99 FIN\else OUVERT\fi]}`, "[FIN]"},
-		{"négatif", `\message{[\ifeof-1 FIN\else OUVERT\fi]}`, "[FIN]"},
+		{"a number outside the sixteen", `\message{[\ifeof99 FIN\else OUVERT\fi]}`, "[FIN]"},
+		{"negative", `\message{[\ifeof-1 FIN\else OUVERT\fi]}`, "[FIN]"},
 		{"\\openin hors bornes", `\openin99=donnees.txt \message{[\ifeof99 FIN\else OUVERT\fi]}`, "[FIN]"},
 		{"\\openin sans nom", `\newread\zr\openin\zr= \message{[\ifeof\zr FIN\else OUVERT\fi]}`, "[FIN]"},
 		{"\\read sans nom de macro", `\newread\zr\openin\zr=donnees.txt \read\zr to {}\message{[ok]}`, "[ok]"},
-		{"les espaces d'une ligne sont gardés", `\newread\zr\openin\zr=espaces.txt \read\zr to \zl \message{[\meaning\zl]}`, `[macro:->a b c]`},
+		{"the spaces of a line are kept", `\newread\zr\openin\zr=espaces.txt \read\zr to \zl \message{[\meaning\zl]}`, `[macro:->a b c]`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := t.TempDir()

@@ -26,17 +26,17 @@ func boxChars(b *boxNode) string {
 // level is accounted for in what it expects.
 func TestCurrentGroupQueries(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"boîte seule", `\the\currentgrouplevel`, "1"},
+		{"a box alone", `\the\currentgrouplevel`, "1"},
 		{"une accolade", `{\the\currentgrouplevel}`, "2"},
 		{"deux accolades", `{{\the\currentgrouplevel}}`, "3"},
-		{"refermée", `{}\the\currentgrouplevel`, "1"},
+		{"closed again", `{}\the\currentgrouplevel`, "1"},
 		{"begingroup", `\begingroup\the\currentgrouplevel\endgroup`, "2"},
 		{"via \\number", `{\number\currentgrouplevel}`, "2"},
 		{"via \\ifnum", `{\ifnum\currentgrouplevel>1 A\else B\fi}`, "A"},
-		{"type: boîte", `\the\currentgrouptype`, "2"},
+		{"type: box", `\the\currentgrouptype`, "2"},
 		{"type: accolade", `{\the\currentgrouptype}`, "1"},
 		{"type: begingroup", `\begingroup\the\currentgrouptype\endgroup`, "14"},
-		{"type après fermeture", `{}\the\currentgrouptype`, "2"},
+		{"type after closing", `{}\the\currentgrouptype`, "2"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()
@@ -63,8 +63,8 @@ func TestCurrentGroupAtBottom(t *testing.T) {
 // a file can put the level straight into a message or into the page.
 func TestCurrentGroupWrittenDirectly(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"le niveau, écrit tel quel", `\setbox0=\hbox{{\currentgrouplevel}}`, "2"},
-		{"le type, écrit tel quel", `\setbox0=\hbox{\begingroup\currentgrouptype\endgroup}`, "14"},
+		{"the level, written out", `\setbox0=\hbox{{\currentgrouplevel}}`, "2"},
+		{"the type, written out", `\setbox0=\hbox{\begingroup\currentgrouptype\endgroup}`, "14"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

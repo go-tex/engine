@@ -22,7 +22,7 @@ func TestMathSpacingCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e.box[0] == nil {
-		t.Fatal("la boîte de référence est vide")
+		t.Fatal("the reference box is empty")
 	}
 	base := e.box[0].width
 	// 10pt text: 3mu = 1.66672pt, 4mu = 2.22214pt, 5mu = 2.77786pt.
@@ -37,7 +37,7 @@ func TestMathSpacingCommands(t *testing.T) {
 		{`\!`, 4, -109230},
 	} {
 		if e.box[c.reg] == nil {
-			t.Errorf("%s : boîte vide", c.name)
+			t.Errorf("%s: empty box", c.name)
 			continue
 		}
 		if got := e.box[c.reg].width - base; got != c.want {

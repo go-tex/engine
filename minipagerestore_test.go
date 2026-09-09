@@ -27,7 +27,7 @@ func TestAMinipageWhoseEndNeverComesDoesNotSwallowTheDocument(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if got := mvlText(e.mvl); !strings.Contains(got, "APRESTEXTE") {
-		t.Errorf("la page contient %q, want APRESTEXTE — le scanner l'a emporté dans la boîte", got)
+		t.Errorf("the page holds %q, want APRESTEXTE — the scanner took it into the box", got)
 	}
 }
 

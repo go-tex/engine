@@ -32,10 +32,10 @@ Après.
 		t.Fatalf("compile: %v", err)
 	}
 	if got := pageChars(e); got != "Après." {
-		t.Errorf("la page porte %q, want %q — la formule a débordé sur le texte", got, "Après.")
+		t.Errorf("the page carries %q, want %q — the formula spilled onto the text", got, "Après.")
 	}
 	if n := e.mathDropped["$math$"] + e.mathDropped["\\csname"] + e.mathDropped["\\hskip"]; n != 0 {
-		t.Errorf("%d formule(s) abandonnée(s) par la couche maths, want 0", n)
+		t.Errorf("%d formula(s) dropped by the math layer, want 0", n)
 	}
 }
 
@@ -44,7 +44,7 @@ func TestMathGlueIsStripped(t *testing.T) {
 	for _, c := range []struct{ nom, math string }{
 		{"registre", `\hskip\parindent x`},
 		{"dimen", `\hskip 10pt x`},
-		{"dimen élastique", `\kern -3.5pt plus 2pt minus 1pt x`},
+		{"a stretchable dimen", `\kern -3.5pt plus 2pt minus 1pt x`},
 	} {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}$`+c.math+`$\end{document}`),
 			Options{Lenient: true})
@@ -52,7 +52,7 @@ func TestMathGlueIsStripped(t *testing.T) {
 			t.Fatalf("%s: %v", c.nom, err)
 		}
 		if n := len(e.mathDropped); n != 0 {
-			t.Errorf("%s: la couche maths a abandonné la formule (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer dropped the formula (%v)", c.nom, e.mathDropped)
 		}
 	}
 }

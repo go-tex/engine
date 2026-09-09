@@ -17,13 +17,13 @@ func TestSupportPackagesBeamerNeedsAreEmbedded(t *testing.T) {
 	} {
 		data, ok := embeddedTeXFile(name)
 		if !ok {
-			t.Errorf("%s n'est pas embarqué", name)
+			t.Errorf("%s is not embedded", name)
 			continue
 		}
 		// Verbatim upstream files keep their own preamble; a stripped copy would
 		// lose the licence notice the LPPL requires to travel with them.
 		if !strings.Contains(string(data), "\\ProvidesPackage") {
-			t.Errorf("%s ne déclare pas \\ProvidesPackage — copie tronquée ?", name)
+			t.Errorf("%s does not declare \\ProvidesPackage — truncated copy?", name)
 		}
 	}
 }
@@ -46,7 +46,7 @@ func TestSearchPathStillBeatsTheEmbeddedHelpers(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if out != "[FOURNI]" {
-		t.Errorf("sortie = %q — la copie fournie par l'hôte devrait primer sur l'embarquée", out)
+		t.Errorf("output = %q — the host-supplied copy should win over the embedded one", out)
 	}
 }
 
@@ -62,6 +62,6 @@ func TestEmbeddedEtoolboxActuallyLoads(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if out != "[OUI]" {
-		t.Errorf("sortie = %q — etoolbox embarqué ne s'est pas chargé", out)
+		t.Errorf("output = %q — the embedded etoolbox did not load", out)
 	}
 }

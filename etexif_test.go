@@ -138,19 +138,19 @@ func TestScantokens(t *testing.T) {
 func TestProtectedPrefix(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"dans un \\message", `\protected\def\a{A}\message{\a}`, `\a `},
-		{"sans le préfixe, le contrôle", `\def\a{A}\message{\a}`, `A`},
+		{"without the prefix, the control", `\def\a{A}\message{\a}`, `A`},
 		{"dans un \\edef", `\protected\def\a{A}\edef\z{\a}\message{\meaning\z}`, `macro:->\a `},
-		{"protégé et non protégé côte à côte", `\protected\def\a{A}\def\b{B}\edef\z{\a\b}\message{\meaning\z}`, `macro:->\a B`},
-		{"\\meaning nomme le préfixe", `\protected\def\a{A}\message{\meaning\a}`, `\protected macro:->A`},
+		{"protected and unprotected side by side", `\protected\def\a{A}\def\b{B}\edef\z{\a\b}\message{\meaning\z}`, `macro:->\a B`},
+		{"\\meaning names the prefix", `\protected\def\a{A}\message{\meaning\a}`, `\protected macro:->A`},
 		{"\\ifx distingue les deux", `\protected\def\a{A}\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `DIFF`},
-		{"\\ifx de deux protégés identiques", `\protected\def\a{A}\protected\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `SAME`},
+		{"\\ifx of two identical protected macros", `\protected\def\a{A}\protected\def\b{A}\message{\ifx\a\b SAME\else DIFF\fi}`, `SAME`},
 		{"\\protected\\edef", `\protected\edef\a{A}\message{\meaning\a}`, `\protected macro:->A`},
 		// \long is part of the meaning too, and TeX prints \protected BEFORE it whatever
 		// order they were written in. Checked against real LaTeX: \long\protected\def and
 		// \protected\long\def both give "\protected\long macro:#1->[#1]".
 		{"\\protected\\long\\def", `\protected\long\def\a{A}\message{\meaning\a}`, `\protected\long macro:->A`},
 		{"\\protected\\gdef", `{\protected\gdef\a{A}}\message{\meaning\a}`, `\protected macro:->A`},
-		{"le préfixe ne déborde pas sur la définition suivante", `\protected\def\a{A}\def\b{B}\message{\meaning\b}`, `macro:->B`},
+		{"the prefix does not spill onto the next definition", `\protected\def\a{A}\def\b{B}\message{\meaning\b}`, `macro:->B`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := runExpr(t, c.src); got != c.want {
@@ -168,7 +168,7 @@ func TestProtectedMacroStillRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := boxChars(e.box[0]); got != "xAy" {
-		t.Errorf("une macro protégée exécutée compose %q, attendu \"xAy\"", got)
+		t.Errorf("a protected macro, executed, typesets %q, want \"xAy\"", got)
 	}
 }
 
@@ -278,8 +278,8 @@ func TestProtectedPrefixDoesNotLeak(t *testing.T) {
 		{"suivi de \\relax", `\protected\relax\def\b{B}\message{\meaning\b}`, `macro:->B`},
 		{"suivi d'une affectation", `\protected\count0=1 \def\b{B}\message{\meaning\b}`, `macro:->B`},
 		{"suivi d'un \\message", `\protected\message{}\def\b{B}\message{\meaning\b}`, `macro:->B`},
-		{"les préfixes se cumulent quand même", `\protected\global\long\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
-		{"ordre inverse des préfixes", `\long\protected\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
+		{"the prefixes still accumulate", `\protected\global\long\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
+		{"prefixes in the reverse order", `\long\protected\def\b{B}\message{\meaning\b}`, `\protected\long macro:->B`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := runExpr(t, c.src); got != c.want {

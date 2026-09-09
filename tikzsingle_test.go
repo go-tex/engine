@@ -22,7 +22,7 @@ import (
 // same geometry and leave no group open.
 func TestTikzSingleMatchesBracedForm(t *testing.T) {
 	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("sources pgf absentes : définir GOTEX_TEXMF sur un arbre qui contient tikz.code.tex")
+		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
 	}
 	t.Setenv("GOTEX_PGF", "1")
 	const preamble = `\documentclass{article}\usepackage{tikz}`
@@ -46,11 +46,11 @@ func TestTikzSingleMatchesBracedForm(t *testing.T) {
 		t.Errorf("la forme avec accolades laisse %d groupes ouverts, attendu 0", ouvertsB)
 	}
 	if sans != avec {
-		t.Errorf("les deux formes rendent différemment\n  sans accolades : %d octets\n  avec accolades : %d octets", len(sans), len(avec))
+		t.Errorf("the two forms render differently\n  without braces: %d bytes\n  with braces:    %d bytes", len(sans), len(avec))
 	}
 	// The drawing is one centimetre on each axis, and pgf converts it itself.
 	if want := "L 28.45274 28.45274"; !strings.Contains(sans, want) {
-		t.Errorf("le tracé diagonal %q est absent du rendu sans accolades", want)
+		t.Errorf("the diagonal path %q is absent from the brace-less render", want)
 	}
 }
 
@@ -62,17 +62,17 @@ func TestTikzSingleMatchesBracedForm(t *testing.T) {
 // node.
 func TestTikzAllNodesOnAPathAreDrawn(t *testing.T) {
 	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("sources pgf absentes : définir GOTEX_TEXMF sur un arbre qui contient tikz.code.tex")
+		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
 	}
 	t.Setenv("GOTEX_PGF", "1")
 	for _, c := range []struct {
 		name, body string
 		want       int
 	}{
-		{"un seul nœud", `\tikz \node {AAAA};`, 4},
-		{"deux nœuds sur un chemin", `\tikz \draw (0,0) node {AA} -- (2,0) node {BBBBBB};`, 8},
-		{"trois segments, deux nœuds", `\tikz \draw (0,0) node {AA} -- (2,0) -- (2,2) node {BBBBBB};`, 8},
-		{"nœuds dans des chemins séparés", `\tikz{\node {AA}; \node at (2,0) {BBBBBB};}`, 8},
+		{"a single node", `\tikz \node {AAAA};`, 4},
+		{"two nodes on one path", `\tikz \draw (0,0) node {AA} -- (2,0) node {BBBBBB};`, 8},
+		{"three segments, two nodes", `\tikz \draw (0,0) node {AA} -- (2,0) -- (2,2) node {BBBBBB};`, 8},
+		{"nodes in separate paths", `\tikz{\node {AA}; \node at (2,0) {BBBBBB};}`, 8},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e, err := buildEngine(Options{}, true)
