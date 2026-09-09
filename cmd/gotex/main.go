@@ -170,6 +170,22 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	// \includegraphics, which named the wrong thing: the command is defined and did
 	// reserve the box. Report the cause instead — only one of the three is a gap the
 	// engine could close.
+	// "Argument of \x has an extra }" is a RECOVERY, not a missing command: the
+	// macro exists and its argument grab was abandoned. Printed among Skipped it
+	// came out as "\Argument of \@authoropt has an extra }" — a sentence offered as
+	// an undefined command, which is the mistake RunawayArgs was split out to stop.
+	if len(d.ExtraBrace) > 0 {
+		list := sortedByCount(d.ExtraBrace)
+		n := 0
+		for _, e := range list {
+			n += e.count
+		}
+		fmt.Fprintf(w, "gotex: %d argument grab(s) abandoned on an extra } — the macro exists, "+
+			"the call was dropped:\n", n)
+		for _, e := range list {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if len(d.FiguresDropped) > 0 {
 		list := sortedByCount(d.FiguresDropped)
 		n := 0

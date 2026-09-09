@@ -1487,13 +1487,18 @@ func isFileEndSentinel(t tok) bool {
 // reader to bisect the document to find out where — hours, on a paper of any size.
 // The name is the macro currently being expanded (expandingCS), which is exactly
 // the \x of TeX's own message.
+// extraBracePrefix marks the recovery in the shared tally so Diagnostics can lift it
+// back out. A prefix rather than a second map because noteExtraBrace is called from
+// the token loop, where one map write is the whole cost.
+const extraBracePrefix = "Argument of "
+
 func (e *Engine) noteExtraBrace() {
 	if e.skippedCS == nil {
 		e.skippedCS = map[string]int{}
 	}
-	key := "Argument has an extra }"
+	key := extraBracePrefix + "(unnamed) has an extra }"
 	if e.expandingCS != "" {
-		key = "Argument of \\" + e.expandingCS + " has an extra }"
+		key = extraBracePrefix + "\\" + e.expandingCS + " has an extra }"
 	}
 	// …and WHERE. The name says which macro to look at, the line says which of its
 	// hundreds of calls: on a paper with seven of these, the name alone still left a
@@ -2061,6 +2066,14 @@ type Diagnostics struct {
 	// not lost layout — it is lost PICTURE, and the cause says whether the document
 	// is at fault or the engine is. nil/empty when every figure loaded.
 	FiguresDropped map[string]int
+
+	// ExtraBrace tallies TeX's "Argument of \x has an extra }" recoveries, keyed by
+	// the macro and the line, e.g. "\\use@pgfmodule (line 661)". It is a RECOVERY,
+	// not a missing command, and it has its own field for the reason RunawayArgs
+	// does: tallied in Skipped it was printed as a command NAME, so the report
+	// offered "\Argument of \@authoropt has an extra }" as an undefined command and
+	// a corpus census read a sentence as a macro. Same mistake, same fix.
+	ExtraBrace map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2074,7 +2087,22 @@ func (e *Engine) Diagnostics() Diagnostics {
 		if _, isMath := e.mathDropped[k]; isMath {
 			continue // math drops are surfaced under MathDropped, not conflated here
 		}
+		if strings.HasPrefix(k, extraBracePrefix) {
+			continue // a recovery, surfaced under ExtraBrace — see the field
+		}
 		skipped[k] = v
+	}
+	var extraBrace map[string]int
+	for k, v := range e.skippedCS {
+		if !strings.HasPrefix(k, extraBracePrefix) {
+			continue
+		}
+		if extraBrace == nil {
+			extraBrace = map[string]int{}
+		}
+		// Store what the reader needs to look at: the macro and the line, without
+		// the sentence that was only ever there to be printed.
+		extraBrace[strings.Replace(strings.TrimPrefix(k, extraBracePrefix), " has an extra }", "", 1)] = v
 	}
 	undefinedEnvs := map[string]int{}
 	for k, v := range e.undefinedEnvs {
@@ -2105,6 +2133,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		MathDropped:      mathDropped,
 		FontsSubstituted: e.fontSubst,
 		FiguresDropped:   figuresDropped,
+		ExtraBrace:       extraBrace,
 	}
 }
 
