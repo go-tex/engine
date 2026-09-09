@@ -674,5 +674,119 @@ const LaTeX2eClassKernel = `
 \long\def\@multiput(#1,#2)#3#4{%
   \raise\@ydim\hb@xt@\z@{\kern\@xdim #4\hss}%
   \ignorespaces}
+% The environment itself, verbatim from ltpictur (latex.ltx:12298-12318): the
+% body is an \hbox of the declared width whose height is set afterwards, so a
+% picture occupies exactly the box its author declared and \put's raises and
+% kerns land inside it. Without it \begin{picture} was an undefined environment
+% and its (60,40) was read as text.
+\newbox\@picbox
+\newdimen\@picht
+\long\def\picture#1{\pictur@#1}
+\def\pictur@(#1){\@ifnextchar({\@picture(#1)}{\@picture(#1)(0,0)}}
+\def\@picture(#1,#2)(#3,#4){%
+  \@defaultunitsset\@picht{#2}\unitlength
+  \@defaultunitsset\@tempdimc{#1}\unitlength
+  \setbox\@picbox\hb@xt@\@tempdimc\bgroup
+    \@defaultunitsset\@tempdimc{#3}\unitlength
+    \hskip -\@tempdimc
+    \@defaultunitsset\@tempdimc{#4}\unitlength
+    \lower\@tempdimc\hbox\bgroup
+      \ignorespaces}
+\def\endpicture{%
+  \egroup\hss\egroup
+    \ht\@picbox\@picht\dp\@picbox\z@
+    \mbox{\box\@picbox}}
+% \makebox and \framebox have a PICTURE form, chosen by a following "(" rather
+% than "[": \framebox(60,40){} is a box of that size in \unitlength, not a box of
+% width "(60,40)". Both are engine primitives here, so the picture form is
+% dispatched in front of them and falls back to the primitive otherwise. The
+% bodies are ltpictur's own (latex.ltx:11673-11689, 11786-11789).
+\let\gotex@origmakebox\makebox
+\let\gotex@origframebox\framebox
+\def\makebox{\@ifnextchar(\@makepicbox\gotex@origmakebox}
+\def\framebox{\@ifnextchar(\@framepicbox\gotex@origframebox}
+\def\@makepicbox(#1,#2){%
+  \@ifnextbracket{\@imakepicbox(#1,#2)}{\@imakepicbox(#1,#2)[]}}
+\long\def\@imakepicbox(#1,#2)[#3]#4{%
+  \@defaultunitsset\@tempdimc{#2}\unitlength
+  \vbox to\@tempdimc
+   {\let\mb@b\vss \let\mb@l\hss\let\mb@r\hss
+    \let\mb@t\vss
+    \@tfor\reserved@a :=#3\do{%
+      \if s\reserved@a
+        \let\mb@l\relax\let\mb@r\relax
+      \else
+        \expandafter\let\csname mb@\reserved@a\endcsname\relax
+      \fi}%
+    \mb@t
+    \@defaultunitsset\@tempdimc{#1}\unitlength
+    \hb@xt@\@tempdimc{\mb@l #4\mb@r}%
+    \mb@b
+    \kern\z@}}
+\def\@framepicbox(#1,#2){%
+  \@ifnextbracket{\@iframepicbox(#1,#2)}{\@iframepicbox(#1,#2)[]}}
+\long\def\@iframepicbox(#1,#2)[#3]#4{%
+  \frame{\@imakepicbox(#1,#2)[#3]{#4}}}
+% \frame is \fbox with NO separation — a picture's frame sits ON the declared
+% size, not 3pt around it (latex.ltx, ltboxes: "\fboxsep\z@\fbox"). \fboxsep is
+% a register here but the engine's \fbox uses its own constant, so the tight form
+% is its own primitive rather than an assignment that would not be read.
+\def\frame#1{\leavevmode\gotex@tightframe{#1}}
+% ── the drawing commands ────────────────────────────────────────────────────
+% These used to be absent, and an absent \line is worse than a silent one: it
+% leaves "(1,1)30" on the page as prose. They are drawn through the engine's
+% graphics seam (picture.go); TeX's part is only to resolve \unitlength, which
+% \@defaultunitsset already does for \put.
+%
+% \@wholewidth / \@halfwidth are LaTeX's own line thickness (ltpictur): 0.4pt
+% under \thinlines, 0.8pt under \thicklines, and whatever \linethickness says.
+\newdimen\@wholewidth \newdimen\@halfwidth
+\def\linethickness#1{\@wholewidth#1\@halfwidth.5\@wholewidth}
+\def\thinlines{\linethickness{0.4pt}}
+\def\thicklines{\linethickness{0.8pt}}
+\thinlines
+\def\line(#1,#2)#3{%
+  \@defaultunitsset\@tempdimc{#3}\unitlength
+  \gotex@line #1 #2 \@tempdimc\@wholewidth\relax}
+\def\vector(#1,#2)#3{%
+  \@defaultunitsset\@tempdimc{#3}\unitlength
+  \gotex@vector #1 #2 \@tempdimc\@wholewidth\relax}
+% \circle takes the DIAMETER; the starred form fills.
+\def\circle{\@ifstar\gotex@circleFILL\gotex@circleDRAW}
+\def\gotex@circleDRAW#1{%
+  \@defaultunitsset\@tempdimc{#1}\unitlength
+  \gotex@circle\@tempdimc\@wholewidth 0\relax}
+\def\gotex@circleFILL#1{%
+  \@defaultunitsset\@tempdimc{#1}\unitlength
+  \gotex@circle\@tempdimc\@wholewidth 1\relax}
+% \oval(w,h)[part]: the optional part keeps one half or quarter.
+% The [part] letters (t, b, l, r) are read by the engine rather than picked
+% apart here: an empty [] — or no bracket at all — is the whole oval.
+\def\oval(#1,#2){\@ifnextbracket{\gotex@ovalOPT(#1,#2)}{\gotex@ovalALL(#1,#2)}}
+\def\gotex@ovalALL(#1,#2){\gotex@oval@{#1}{#2}{}}
+\def\gotex@ovalOPT(#1,#2)[#3]{\gotex@oval@{#1}{#2}{#3}}
+\def\gotex@oval@#1#2#3{%
+  \@defaultunitsset\@xdim{#1}\unitlength
+  \@defaultunitsset\@ydim{#2}\unitlength
+  \gotex@oval\@xdim\@ydim\@wholewidth{#3}}
+% \qbezier[N](x1,y1)(x2,y2)(x3,y3): a real curve needs no dot count, so [N] is
+% read and dropped.
+\def\qbezier{\@ifnextbracket\gotex@qbezierOPT\gotex@qbezierNO}
+\def\gotex@qbezierOPT[#1]{\gotex@qbezierNO}
+% Six coordinates need six scratch dimens, and LaTeX allocates only
+% \@tempdima..c — hence six of our own rather than a \@tempdimd that does not
+% exist (that name silently ended the picture).
+\newdimen\gotex@bx@i \newdimen\gotex@by@i
+\newdimen\gotex@bx@ii \newdimen\gotex@by@ii
+\newdimen\gotex@bx@iii \newdimen\gotex@by@iii
+\def\gotex@qbezierNO(#1,#2)(#3,#4)(#5,#6){%
+  \@defaultunitsset\gotex@bx@i{#1}\unitlength
+  \@defaultunitsset\gotex@by@i{#2}\unitlength
+  \@defaultunitsset\gotex@bx@ii{#3}\unitlength
+  \@defaultunitsset\gotex@by@ii{#4}\unitlength
+  \@defaultunitsset\gotex@bx@iii{#5}\unitlength
+  \@defaultunitsset\gotex@by@iii{#6}\unitlength
+  \gotex@qbezier\gotex@bx@i\gotex@by@i\gotex@bx@ii\gotex@by@ii
+    \gotex@bx@iii\gotex@by@iii\@wholewidth\relax}
 \catcode64=11
 `

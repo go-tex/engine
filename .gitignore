@@ -3,3 +3,8 @@ page.svg
 page.png
 /gotex
 /gotex-wasm
+
+# Claude Code keeps its per-session worktrees here. They are real git
+# repositories, so a "git add -A" records nineteen gitlinks in one stroke — which
+# is how this line came to be written.
+/.claude/
