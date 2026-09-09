@@ -29,7 +29,7 @@ func TestPackageEndingWithMakeatotherLeavesNothingBehind(t *testing.T) {
 		t.Errorf("la page porte %q, want %q", got, "Bonjour")
 	}
 	if len(e.loadStack) != 0 {
-		t.Errorf("%d trame(s) de chargement encore empilée(s): \\@gotex@endload n'a pas couru",
+		t.Errorf("%d load frame(s) still stacked: \\@gotex@endload did not run",
 			len(e.loadStack))
 	}
 }

@@ -37,9 +37,9 @@ func TestTwoColumnsInAFragileFrame(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if got := len(e.Pages()); got != 3 {
-		t.Errorf("%d page(s), want 3: le cadre à deux colonnes a avalé la suite", got)
+		t.Errorf("%d page(s), want 3: the two-column frame swallowed what follows", got)
 	}
 	if got := pageChars(e); !strings.Contains(got, "C") {
-		t.Errorf("la page porte %q — le troisième cadre manque", got)
+		t.Errorf("the page carries %q — the third frame is missing", got)
 	}
 }

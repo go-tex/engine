@@ -35,7 +35,7 @@ func TestExpandListDoesNotEatWhatFollowsIt(t *testing.T) {
 		}
 	}
 	if string(got) != "APR" {
-		t.Errorf("après l'expansion il reste %q, want %q: la liste du dessous a été mangée",
+		t.Errorf("after the expansion %q is left, want %q: the list underneath was eaten",
 			string(got), "APR")
 	}
 }

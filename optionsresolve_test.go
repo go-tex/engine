@@ -39,7 +39,7 @@ func TestResolveSuppliesAPackage(t *testing.T) {
 	}}
 	out := runWithResolve(t, opt, "\\usepackage{zzhostpkg}\\message{[\\zzhostword]}")
 	if asked != "zzhostpkg.sty" {
-		t.Fatalf("le résolveur n'a pas été interrogé pour zzhostpkg.sty (reçu %q)", asked)
+		t.Fatalf("the resolver was not asked for zzhostpkg.sty (got %q)", asked)
 	}
 	if out != "[RESOLU]" {
 		t.Errorf("sortie = %q, attendu %q", out, "[RESOLU]")
@@ -60,7 +60,7 @@ func TestResolveSuppliesAnInputFile(t *testing.T) {
 	}}
 	out := runWithResolve(t, opt, "\\usepackage{zzhostmain}\\message{[\\zzhostword]}")
 	if out != "[PARTIE]" {
-		t.Errorf("sortie = %q, attendu %q — le fichier \\input'é par le paquet résolu n'a pas suivi", out, "[PARTIE]")
+		t.Errorf("output = %q, want %q — the file \\input by the resolved package did not follow", out, "[PARTIE]")
 	}
 }
 
@@ -102,7 +102,7 @@ func TestSearchPathBeatsResolve(t *testing.T) {
 // a real article.cls gets its own rather than the built-in one.
 func TestResolveBeatsTheEmbeddedSet(t *testing.T) {
 	if _, ok := embeddedTeXFile("article.cls"); !ok {
-		t.Fatal("témoin: article.cls devrait être embarqué")
+		t.Fatal("control: article.cls should be embedded")
 	}
 	opt := Options{Resolve: func(name string) ([]byte, bool) {
 		if name == "article.cls" {
@@ -112,7 +112,7 @@ func TestResolveBeatsTheEmbeddedSet(t *testing.T) {
 	}}
 	out := runWithResolve(t, opt, "\\documentclass{article}\\message{[\\zzhostword]}")
 	if out != "[ARTICLE HOTE]" {
-		t.Errorf("sortie = %q, attendu %q — le résolveur doit primer sur l'embarqué", out, "[ARTICLE HOTE]")
+		t.Errorf("output = %q, want %q — the resolver must win over the embedded copy", out, "[ARTICLE HOTE]")
 	}
 }
 
@@ -126,11 +126,11 @@ func TestResolveDecliningFallsThroughToEmbedded(t *testing.T) {
 		{},
 	} {
 		if _, err := CompileToSVGPages(src, opt); err != nil {
-			t.Fatalf("le repli sur l'embarqué a échoué: %v", err)
+			t.Fatalf("the fallback to the embedded copy failed: %v", err)
 		}
 	}
 	if called == 0 {
-		t.Error("le résolveur n'a jamais été interrogé")
+		t.Error("the resolver was never asked")
 	}
 }
 
@@ -140,7 +140,7 @@ func TestResolveDecliningFallsThroughToEmbedded(t *testing.T) {
 func TestResolveMakesAStrictCompileSucceed(t *testing.T) {
 	src := []byte("\\documentclass{article}\\usepackage{zzhoststrict}\\begin{document}\\zzhostword\\end{document}")
 	if _, err := CompileToSVGPages(src, Options{}); err == nil {
-		t.Fatal("témoin: sans résolveur, ce document devrait échouer")
+		t.Fatal("control: with no resolver this document should fail")
 	}
 	opt := Options{Resolve: func(name string) ([]byte, bool) {
 		if name == "zzhoststrict.sty" {
@@ -149,7 +149,7 @@ func TestResolveMakesAStrictCompileSucceed(t *testing.T) {
 		return nil, false
 	}}
 	if _, err := CompileToSVGPages(src, opt); err != nil {
-		t.Errorf("avec le résolveur, la compilation stricte échoue encore: %v", err)
+		t.Errorf("with the resolver, the strict compile still fails: %v", err)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestResolveMakesAStrictCompileSucceed(t *testing.T) {
 func TestHostTeXFileReportsItsOrigin(t *testing.T) {
 	e := New()
 	if _, _, ok := e.hostTeXFile("zzabsent.sty"); ok {
-		t.Error("un nom inconnu ne devrait pas se résoudre")
+		t.Error("an unknown name should not resolve")
 	}
 	if _, path, ok := e.hostTeXFile("article.cls"); !ok || path != "<embedded>/article.cls" {
 		t.Errorf("article.cls → (%q, %v), attendu <embedded>/article.cls", path, ok)

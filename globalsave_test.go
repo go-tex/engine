@@ -18,12 +18,12 @@ import "testing"
 func TestGlobalAssignmentKeepsGroupMarks(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{
-			"une entrée globale sous la marque du groupe intérieur",
+			"a global entry under the inner group's mark",
 			`\begingroup\def\g{L}\def\h{L}\begingroup\let\h\empty\global\def\g{G}\endgroup\h\endgroup`,
 			"L",
 		},
 		{
-			"plusieurs entrées supprimées d'un coup",
+			"several entries removed at once",
 			`\begingroup\def\g{L}\def\h{L}\begingroup\def\g{M}\let\h\empty\global\def\g{G}\endgroup\h\endgroup`,
 			"L",
 		},
@@ -38,7 +38,7 @@ func TestGlobalAssignmentKeepsGroupMarks(t *testing.T) {
 			"L",
 		},
 		{
-			"deux groupes intérieurs successifs",
+			"two successive inner groups",
 			`\begingroup\def\g{L}\def\h{L}\begingroup\global\def\g{G}\endgroup\begingroup\let\h\empty\global\def\g{H}\endgroup\h\endgroup`,
 			"L",
 		},
@@ -66,6 +66,6 @@ func TestGlobalAssignmentStillEscapesGroups(t *testing.T) {
 	e.SetFont(spMock{})
 	e.Run(`\def\g{D}\setbox0=\hbox{\begingroup\def\g{L}\begingroup\global\def\g{G}\endgroup\endgroup\g}`)
 	if got := boxChars(e.box[0]); got != "G" {
-		t.Errorf("valeur globale après fermeture des groupes : obtenu %q, attendu \"G\"", got)
+		t.Errorf("global value after the groups close: got %q, want \"G\"", got)
 	}
 }

@@ -32,27 +32,27 @@ func TestUnmapAnswersTheMapsInForce(t *testing.T) {
 			`scale(1.00375,-1.00375)translate(-10,-20)`,
 		},
 		{
-			"deux images imbriquées : les deux sont défaites, la plus intérieure d'abord",
+			"two nested pictures: both are un-mapped, the innermost first",
 			pic1 + pic2 + `{?unmap}`,
 			`scale(1.00375,-1.00375)translate(-30,-40)scale(1.00375,-1.00375)translate(-10,-20)`,
 		},
 		{
-			"une image refermée ne compte plus",
+			"a picture already closed no longer counts",
 			pic1 + endPic + `{?unmap}`,
 			``,
 		},
 		{
-			"l'inverse d'une boîte annule l'image qui l'entoure",
+			"a box's inverse cancels the picture around it",
 			pic1 + unmap + `{?unmap}`,
 			``,
 		},
 		{
-			"…et cesse de l'annuler une fois refermé",
+			"...and stops cancelling it once closed",
 			pic1 + unmap + endUnmap + `{?unmap}`,
 			`scale(1.00375,-1.00375)translate(-10,-20)`,
 		},
 		{
-			"une image placée par une boîte : rien à défaire devant elle",
+			"a picture placed by a box: nothing to un-map before it",
 			pic1 + unmap + pic2 + `{?unmap}`,
 			`scale(1.00375,-1.00375)translate(-30,-40)`,
 		},
@@ -76,7 +76,7 @@ func TestScopeDeclarationsAreConsumed(t *testing.T) {
 		t.Errorf("obtenu %q, attendu \"ABCDE\"", got)
 	}
 	if strings.Contains(got, "gotex:") {
-		t.Error("une déclaration a survécu dans le flux")
+		t.Error("a declaration survived in the stream")
 	}
 }
 
@@ -98,7 +98,7 @@ func TestOriginBackReferencesFollowTheStack(t *testing.T) {
 // the y-flip cancels itself and the plot then lies about its data.
 func TestNestedPictureDoesNotFlipTwice(t *testing.T) {
 	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("sources pgf absentes : définir GOTEX_TEXMF sur un arbre qui contient tikz.code.tex")
+		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
 	}
 	t.Setenv("GOTEX_PGF", "1")
 	e, err := buildEngine(Options{Lenient: true, NoProgressLimit: NoProgressLimitHeavy}, true)
@@ -114,6 +114,6 @@ func TestNestedPictureDoesNotFlipTwice(t *testing.T) {
 	// took the page map off, so nothing precedes the inner picture's transform.
 	if strings.Contains(svg, `transform="scale(1.00375,-1.00375)translate(`) &&
 		strings.Contains(svg, `stroke-miterlimit="10" transform="scale(`) {
-		t.Error("une image placée par une boîte s'est vu défaire une carte qui n'était plus en vigueur")
+		t.Error("a picture placed by a box had a map un-done that was no longer in force")
 	}
 }

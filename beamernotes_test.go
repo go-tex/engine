@@ -26,7 +26,7 @@ func TestNotesOnASecondScreenDoNotMultiplyPages(t *testing.T) {
 	}{
 		{"sans option", "", 2},
 		{"show notes", `\setbeameroption{show notes}`, 2},
-		{"second écran", `\setbeameroption{show notes on second screen}`, 2},
+		{"second screen", `\setbeameroption{show notes on second screen}`, 2},
 	} {
 		e, err := compile([]byte(`\documentclass{beamer}
 `+c.option+`

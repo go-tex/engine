@@ -16,7 +16,7 @@ import (
 // (pageChars collects glyphs, not the spaces between them, hence "Theorem1.")
 func TestTheoremHeadingKeepsItsCommands(t *testing.T) {
 	for _, c := range []struct{ nom, decl, want, absent string }{
-		{"macro dans le titre", `\newtheorem{thm}{\textbf{Théorème}}`, "Théorème1.", "{"},
+		{"a macro in the title", `\newtheorem{thm}{\textbf{Théorème}}`, "Théorème1.", "{"},
 		{"translate sans le paquet", `\newtheorem{thm}{\translate{Theorem}}`, "Theorem1.", "{"},
 		{"titre nu", `\newtheorem{thm}{Lemme}`, "Lemme1.", "{"},
 	} {

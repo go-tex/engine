@@ -28,7 +28,7 @@ func TestNewFloatTypeRendersBodyAndCaption(t *testing.T) {
 		t.Errorf("le corps du flottant est perdu: %q", got)
 	}
 	if !strings.Contains(got, "Program1:Légende") {
-		t.Errorf("la légende doit être numérotée « Program 1: Légende »: %q", got)
+		t.Errorf("the caption must be numbered \"Program 1: Légende\": %q", got)
 	}
 }
 
@@ -46,6 +46,6 @@ func TestNewFloatSecondTypeAndDefaultName(t *testing.T) {
 	}
 	got := pageChars(e)
 	if !strings.Contains(got, "listing1:Un") || !strings.Contains(got, "listing2:Deux") {
-		t.Errorf("les deux flottants doivent être numérotés 1 puis 2 avec le nom par défaut: %q", got)
+		t.Errorf("the two floats must be numbered 1 then 2 under the default name: %q", got)
 	}
 }

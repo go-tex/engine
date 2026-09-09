@@ -45,11 +45,11 @@ func TestUnboxUnpacksARegister(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"accumulation sur soi", `\setbox0=\hbox{A}\setbox0=\hbox{\unhbox0 B}\setbox1=\hbox{\unhbox0}`, "AB"},
 		{"trois fois", `\setbox0=\hbox{A}\setbox0=\hbox{\unhbox0 B}\setbox0=\hbox{\unhbox0 C}\setbox1=\hbox{\unhbox0}`, "ABC"},
-		{"le registre est vidé", `\setbox0=\hbox{A}\setbox2=\hbox{\unhbox0}\setbox1=\hbox{\unhbox0 Z}`, "Z"},
+		{"the register is emptied", `\setbox0=\hbox{A}\setbox2=\hbox{\unhbox0}\setbox1=\hbox{\unhbox0 Z}`, "Z"},
 		{"\\unhcopy ne vide pas", `\setbox0=\hbox{A}\setbox1=\hbox{\unhcopy0 \unhcopy0}`, "AA"},
 		{"registre vide : rien", `\setbox1=\hbox{\unhbox3 X}`, "X"},
 		{"une vbox ne s'ouvre pas avec \\unhbox", `\setbox0=\vbox{A}\setbox1=\hbox{\unhbox0 X}`, "X"},
-		{"contenu imbriqué conservé", `\setbox0=\hbox{\hbox{A}}\setbox1=\hbox{\unhbox0 B}`, "AB"},
+		{"nested content preserved", `\setbox0=\hbox{\hbox{A}}\setbox1=\hbox{\unhbox0 B}`, "AB"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

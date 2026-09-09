@@ -46,7 +46,7 @@ func TestAllocatedRegisterIsNotUndefined(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := trimNL(out); got != "[NON]" {
-		t.Errorf("un registre alloué se compare comme indéfini : %s", got)
+		t.Errorf("an allocated register compares as undefined: %s", got)
 	}
 }
 

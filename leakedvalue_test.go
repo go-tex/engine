@@ -16,7 +16,7 @@ func TestAValueIsNotTypeset(t *testing.T) {
 		// tex.web §1224: assign_font_dimen is find_font_dimen, scan_optional_equals,
 		// scan_normal_dimen. IEEEtran writes three of these per font-size switch.
 		{"fontdimen", `\fontdimen2\font=10pt\relax X\par`},
-		{"fontdimen négatif", `\fontdimen3\font=-5pt\relax X\par`},
+		{"a negative fontdimen", `\fontdimen3\font=-5pt\relax X\par`},
 		// url.sty:200 declares \newmuskip\Urlmuskip; papers set it.
 		{"Urlmuskip", `\Urlmuskip=0mu plus 1mu X\par`},
 		// TeX integer parameters the table lacked.

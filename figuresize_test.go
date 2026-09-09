@@ -21,10 +21,10 @@ func TestFigureDeclaredSize(t *testing.T) {
 	}{
 		{"EPS BoundingBox", "a.eps", "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 300 150\n", 300, 150},
 		{"EPS HiRes gagne", "b.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 300 150\n%%HiResBoundingBox: 0 0 200.4 100.2\n", 200, 100},
-		{"EPS décalée", "c.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 10 20 110 70\n", 100, 50},
+		{"an offset EPS", "c.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 10 20 110 70\n", 100, 50},
 		{"PDF MediaBox", "d.pdf", "%PDF-1.5\n1 0 obj<</Type/Page/MediaBox [0 0 432 288]>>endobj\n", 432, 288},
-		{"boîte dégénérée", "e.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 0 0\n", 0, 0},
-		{"boîte différée", "f.eps", "%!PS-Adobe-3.0\n%%BoundingBox: (atend)\n", 0, 0},
+		{"a degenerate box", "e.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 0 0\n", 0, 0},
+		{"a deferred box", "f.eps", "%!PS-Adobe-3.0\n%%BoundingBox: (atend)\n", 0, 0},
 	} {
 		p := filepath.Join(dir, c.fichier)
 		if err := os.WriteFile(p, []byte(c.contenu), 0o644); err != nil {

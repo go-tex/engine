@@ -12,14 +12,14 @@ import "testing"
 func TestChardefTokenTypesetsItsCharacter(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"jeton \\chardef", `\chardef\aa=65 \setbox0=\hbox{\aa}`, "A"},
-		{"\\char, le contrôle", `\setbox0=\hbox{\char65}`, "A"},
-		{"deux jetons à la suite", `\chardef\aa=65 \chardef\bb=66 \setbox0=\hbox{\aa\bb}`, "AB"},
-		{"mêlé à du texte", `\chardef\aa=65 \setbox0=\hbox{x\aa y}`, "xAy"},
+		{"\\char, the control", `\setbox0=\hbox{\char65}`, "A"},
+		{"two tokens in a row", `\chardef\aa=65 \chardef\bb=66 \setbox0=\hbox{\aa\bb}`, "AB"},
+		{"mixed into text", `\chardef\aa=65 \setbox0=\hbox{x\aa y}`, "xAy"},
 		{"toujours lisible comme nombre", `\chardef\aa=65 \count3=\aa \setbox0=\hbox{\number\count3}`, "65"},
 		// A \mathchardef token names a class and a family, not a glyph. Outside
 		// math mode TeX refuses it rather than typesetting anything, so the
 		// engine deliberately leaves it alone.
-		{"jeton \\mathchardef, laissé tel quel", `\mathchardef\alphaa="010B \setbox0=\hbox{x\alphaa y}`, "xy"},
+		{"a \\mathchardef token, left as it stands", `\mathchardef\alphaa="010B \setbox0=\hbox{x\alphaa y}`, "xy"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

@@ -18,7 +18,7 @@ import (
 
 func TestCsnameCanCarryAnEnvironmentsEnd(t *testing.T) {
 	for _, c := range []struct{ nom, ferme string }{
-		{"écrit en clair", `\end{minipage}`},
+		{"written out literally", `\end{minipage}`},
 		{"par une macro", `\mf`},
 		{"par \\csname", `\csname mf\endcsname`},
 	} {

@@ -30,11 +30,11 @@ func TestBeamerFollowsWhetherTheClassResolves(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		if out != "[VRAIE]" {
-			t.Errorf("sortie = %q — la classe résolue n'a pas été chargée", out)
+			t.Errorf("output = %q — the resolved class was not loaded", out)
 		}
 	})
 
-	t.Run("absente → l'émulation", func(t *testing.T) {
+	t.Run("absent -> the emulation", func(t *testing.T) {
 		e, err := buildEngine(Options{Lenient: true}, true)
 		if err != nil {
 			t.Fatal(err)
@@ -45,13 +45,13 @@ func TestBeamerFollowsWhetherTheClassResolves(t *testing.T) {
 		}
 		// The emulation defines no such macro, and a lenient run skips it.
 		if strings.Contains(out, "VRAIE") {
-			t.Errorf("sortie = %q — la vraie classe a été chargée alors qu'elle est absente", out)
+			t.Errorf("output = %q — the real class was loaded although it is absent", out)
 		}
 	})
 
 	// GOTEX_BEAMER=0 forces the emulation even when the class resolves, which is
 	// how the two paths are compared.
-	t.Run("GOTEX_BEAMER=0 force l'émulation", func(t *testing.T) {
+	t.Run("GOTEX_BEAMER=0 forces the emulation", func(t *testing.T) {
 		t.Setenv("GOTEX_BEAMER", "0")
 		opt := Options{Lenient: true, Resolve: func(name string) ([]byte, bool) {
 			if name == "beamer.cls" {
@@ -68,7 +68,7 @@ func TestBeamerFollowsWhetherTheClassResolves(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		if strings.Contains(out, "VRAIE") {
-			t.Errorf("sortie = %q — GOTEX_BEAMER=0 devrait forcer l'émulation", out)
+			t.Errorf("output = %q — GOTEX_BEAMER=0 should force the emulation", out)
 		}
 	})
 }

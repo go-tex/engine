@@ -28,10 +28,10 @@ func TestMathExpandsThePrimitivesAMacroBringsWithIt(t *testing.T) {
 			t.Fatalf("%s: %v", c.nom, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: la couche maths a refusé la formule (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
 		}
 		if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
-			t.Errorf("%s: aucun tracé — la formule n'est pas composée", c.nom)
+			t.Errorf("%s: no path — the formula is not typeset", c.nom)
 		}
 	}
 }

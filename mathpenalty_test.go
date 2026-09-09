@@ -12,9 +12,9 @@ import "testing"
 func TestMathPenaltyIsStripped(t *testing.T) {
 	for _, c := range []struct{ nom, math string }{
 		{"entier", `a\penalty 100 b`},
-		{"entier négatif", `a\penalty-100 b`},
+		{"a negative integer", `a\penalty-100 b`},
 		{"registre", `a\penalty\@M b`},
-		{"avant/après display", `a\postdisplaypenalty 0 b`},
+		{"before/after a display", `a\postdisplaypenalty 0 b`},
 	} {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}$`+c.math+`$\end{document}`),
 			Options{Lenient: true})
@@ -22,7 +22,7 @@ func TestMathPenaltyIsStripped(t *testing.T) {
 			t.Fatalf("%s: %v", c.nom, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: la couche maths a refusé la formule (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
 		}
 	}
 }
@@ -40,6 +40,6 @@ func TestMathDaggerAliases(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if len(e.mathDropped) != 0 {
-		t.Errorf("la couche maths a refusé la formule (%v)", e.mathDropped)
+		t.Errorf("the math layer refused the formula (%v)", e.mathDropped)
 	}
 }

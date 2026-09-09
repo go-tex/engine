@@ -31,7 +31,7 @@ import (
 func renderPicture(t *testing.T, body string) string {
 	t.Helper()
 	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("sources pgf absentes : définir GOTEX_TEXMF sur un arbre qui contient tikz.code.tex")
+		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
 	}
 	t.Setenv("GOTEX_PGF", "1")
 	e, err := buildEngine(Options{Lenient: true, NoProgressLimit: NoProgressLimitHeavy}, true)
@@ -51,11 +51,11 @@ func renderPicture(t *testing.T, body string) string {
 func TestTikzRenderStraightLine(t *testing.T) {
 	svg := renderPicture(t, `\draw (0,0) -- (2,1);`)
 	if want := `<path d="M 0.0 0.0 L 56.90549 28.45274" fill="none"/>`; !strings.Contains(svg, want) {
-		t.Errorf("le tracé rectiligne %q est absent :\n%s", want, svg)
+		t.Errorf("the straight path %q is absent:\n%s", want, svg)
 	}
 	// The picture's coordinate scope is what makes the numbers land where they mean.
 	if !strings.Contains(svg, `scale(0.996264,-0.996264)`) {
-		t.Errorf("le repère de l'image (bp→pt, y inversé) est absent :\n%s", svg)
+		t.Errorf("the picture's frame (bp->pt, y flipped) is absent:\n%s", svg)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestTikzRenderFilledColour(t *testing.T) {
 		t.Errorf("la couleur de remplissage %q est absente :\n%s", want, svg)
 	}
 	if want := `stroke="none"`; !strings.Contains(svg, want) {
-		t.Errorf("un chemin rempli doit être tracé sans contour (%q) :\n%s", want, svg)
+		t.Errorf("a filled path must be drawn with no stroke (%q):\n%s", want, svg)
 	}
 	// The corner is at 1cm on each axis.
 	if want := `L 28.45274 28.45274`; !strings.Contains(svg, want) {
@@ -104,7 +104,7 @@ func TestTikzRenderLineWidthAndColour(t *testing.T) {
 		`<path d="M 0.0 0.0 L 28.45274 0.0" fill="none"/>`,
 	} {
 		if !strings.Contains(svg, want) {
-			t.Errorf("le tracé épais bleu ne contient pas %q :\n%s", want, svg)
+			t.Errorf("the thick blue path does not carry %q:\n%s", want, svg)
 		}
 	}
 }
@@ -114,6 +114,6 @@ func TestTikzRenderLineWidthAndColour(t *testing.T) {
 func TestTikzRenderNodeText(t *testing.T) {
 	svg := renderPicture(t, `\draw (0,0) node {Hi};`)
 	if got := strings.Count(svg, `<path transform=`); got < 2 {
-		t.Errorf("le texte du nœud « Hi » a produit %d glyphes, en attendait au moins 2 :\n%s", got, svg)
+		t.Errorf("the node text \"Hi\" produced %d glyphs, want at least 2:\n%s", got, svg)
 	}
 }

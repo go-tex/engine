@@ -19,13 +19,13 @@ func TestPGFFamilyIsRecognised(t *testing.T) {
 		"pgffor", "pgfkeys", "pgfsys", "pgfrcs", "pgfcalendar", "tikz",
 	} {
 		if !isPGFFamily(name) {
-			t.Errorf("%q devrait appartenir à la famille pgf", name)
+			t.Errorf("%q should belong to the pgf family", name)
 		}
 	}
 	// Names that merely look adjacent must not be swept in.
 	for _, name := range []string{"graphicx", "xcolor", "etoolbox", "beamer", "article", "tikzscale"} {
 		if isPGFFamily(name) {
-			t.Errorf("%q ne devrait PAS être traité comme pgf", name)
+			t.Errorf("%q should NOT be treated as pgf", name)
 		}
 	}
 }
@@ -36,17 +36,17 @@ func TestPGFFamilyIsRecognised(t *testing.T) {
 func TestPGFFamilyIsEmulatedUnlessOptedIn(t *testing.T) {
 	for _, name := range []string{"pgfcore", "pgfmath", "pgfpages", "tikz"} {
 		if !emulateOnly(name) {
-			t.Errorf("%q devrait être émulé par défaut", name)
+			t.Errorf("%q should be emulated by default", name)
 		}
 	}
 	t.Setenv("GOTEX_PGF", "1")
 	for _, name := range []string{"pgfcore", "pgfmath", "pgfpages", "tikz"} {
 		if emulateOnly(name) {
-			t.Errorf("%q devrait être chargeable avec GOTEX_PGF=1", name)
+			t.Errorf("%q should be loadable with GOTEX_PGF=1", name)
 		}
 	}
 	// The unrelated never-load list is untouched by the flag.
 	if !emulateOnly("hyperref") {
-		t.Error("hyperref devrait rester sur la liste des non-chargés")
+		t.Error("hyperref should stay on the never-loaded list")
 	}
 }

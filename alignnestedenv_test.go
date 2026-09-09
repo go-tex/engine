@@ -17,7 +17,7 @@ func TestAlignKeepsNestedEnvironmentsWhole(t *testing.T) {
 	for _, c := range []struct{ nom, body string }{
 		{"bmatrix", `S &= \begin{bmatrix} a & b \\ c & d \end{bmatrix} \\ &= X`},
 		{"cases", `f(x) &= \begin{cases} 1 & x>0 \\ 0 & x\le 0 \end{cases} \\ &= g(x)`},
-		{"array imbriqué", `A &= \left(\begin{array}{cc} 1 & 2 \\ 3 & 4 \end{array}\right)`},
+		{"nested array", `A &= \left(\begin{array}{cc} 1 & 2 \\ 3 & 4 \end{array}\right)`},
 	} {
 		e, err := compile([]byte(`\documentclass{article}\usepackage{amsmath}\begin{document}`+
 			`\begin{align*}`+c.body+`\end{align*}\end{document}`), Options{Lenient: true})
@@ -25,7 +25,7 @@ func TestAlignKeepsNestedEnvironmentsWhole(t *testing.T) {
 			t.Fatalf("%s: %v", c.nom, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: la couche maths a refusé %v", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused %v", c.nom, e.mathDropped)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func TestAlignStillSeparatesItsOwnRows(t *testing.T) {
 	}
 	got := pageChars(e)
 	if got != "(1)(2)" {
-		t.Errorf("les numéros d'équation sont %q, want %q (deux lignes numérotées)", got, "(1)(2)")
+		t.Errorf("equation numbers are %q, want %q (two numbered rows)", got, "(1)(2)")
 	}
 }
 
@@ -58,7 +58,7 @@ func TestAlignCountsImplicitBraces(t *testing.T) {
 		t.Fatalf("%d ligne(s), want 2", len(rows))
 	}
 	if n := len(rows[0].cells); n != 2 {
-		t.Errorf("la première ligne a %d cellules, want 2: le & protégé par \\bgroup en a coupé une de trop", n)
+		t.Errorf("the first row has %d cells, want 2: the & protected by \\bgroup split one too many", n)
 	}
 }
 
