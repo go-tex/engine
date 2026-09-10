@@ -161,19 +161,30 @@ func (d *pdfDraw) drawChar(x, y float64, ch rune) {
 	d.p.Text(x, y, string(ch))
 }
 
-// drawCharMapped draws a character at the engine position (x, baseline), through
-// the transformation the open picture scopes impose. Outside a picture there is
-// none and the character is drawn straight, exactly as before.
-func (d *pdfDraw) drawCharMapped(x, baseline float64, ch rune) {
+// inPicture runs one drawing operation through the transformation the open
+// picture scopes impose. Outside a picture there is none and the mark is drawn
+// straight, exactly as before.
+//
+// ⛔ It wraps a LEAF, never a container. A box, a frame or a transform node
+// recurses into this walk, and every mark inside it is wrapped on its own way
+// past — wrapping the container as well would apply the picture's map twice to
+// everything under it.
+func (d *pdfDraw) inPicture(draw func()) {
 	if !d.ctm.active() {
-		d.drawChar(x, d.y(baseline), ch)
+		draw()
 		return
 	}
 	m := pdfMap(d.ctm.cur(), d.pageH)
 	d.p.Save()
 	d.p.Transform(m.a, m.b, m.c, m.d, m.e, m.f)
-	d.drawChar(x, d.y(baseline), ch)
+	draw()
 	d.p.Restore()
+}
+
+// drawCharMapped draws a character at the engine position (x, baseline), through
+// the transformation the open picture scopes impose.
+func (d *pdfDraw) drawCharMapped(x, baseline float64, ch rune) {
+	d.inPicture(func() { d.drawChar(x, d.y(baseline), ch) })
 }
 
 // box paints a box with left edge x and the given baseline (engine coordinates).
@@ -208,7 +219,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			h := spToPt(ruleHeight(c, b))
 			dp := spToPt(ruleDepth(c, b))
 			w := spToPt(c.width)
-			d.rect(cx, baseline-h, w, h+dp)
+			d.inPicture(func() { d.rect(cx, baseline-h, w, h+dp) })
 			cx += w
 		case *boxNode:
 			d.box(c, cx, baseline+spToPt(c.shift))
@@ -229,14 +240,20 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			d.transform(c, cx, baseline)
 			cx += spToPt(c.width())
 		case mathNode:
-			drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
-			d.mathText(c, cx, baseline)
+			// A FORMULA is a mark like any other: pgfplots writes every tick label
+			// through \pgfutilensuremath, so an axis's numbers are maths, and left
+			// unmapped they all landed on the picture's origin in one smudge while
+			// the plain-text nodes beside them were right (#337).
+			d.inPicture(func() {
+				drawMathSVG(d.p, c.svg, cx, d.y(baseline-spToPt(c.height)))
+				d.mathText(c, cx, baseline)
+			})
 			cx += spToPt(c.width)
 		case imageNode:
 			// The image's lower-left corner sits on the baseline; PDF user space is
 			// y-up, so the rect origin is (cx, pageH-baseline) with height upward.
 			r := pdfkit.Rect{X: cx, Y: d.y(baseline), Width: spToPt(c.width), Height: spToPt(c.height)}
-			d.drawImage(c, r)
+			d.inPicture(func() { d.drawImage(c, r) })
 			cx += spToPt(c.width)
 		case specialNode:
 			d.special(c, cx, baseline)
@@ -386,7 +403,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			d.setColor(0)
 			w := spToPt(ruleWidth(c, b))
 			hd := spToPt(c.height + c.depth)
-			d.rect(x, cy, w, hd)
+			d.inPicture(func() { d.rect(x, cy, w, hd) })
 			cy += hd
 		case *boxNode:
 			d.box(c, x+spToPt(c.shift), cy+spToPt(c.height))
@@ -407,8 +424,10 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 			d.internalLink(c, x, cy+spToPt(c.height()))
 			cy += spToPt(c.height() + c.depth())
 		case mathNode:
-			drawMathSVG(d.p, c.svg, x, d.y(cy))
-			d.mathText(c, x, cy+spToPt(c.height))
+			d.inPicture(func() {
+				drawMathSVG(d.p, c.svg, x, d.y(cy))
+				d.mathText(c, x, cy+spToPt(c.height))
+			})
 			cy += spToPt(c.height + c.depth)
 		case specialNode:
 			d.special(c, x, cy)
