@@ -29,7 +29,7 @@ type eqMeta struct {
 func (e *Engine) doEquationBody() {
 	number := e.toksToString(e.expandList([]tok{csTok("theequation")}))
 	src, meta := e.collectMathUntilEnd("equation")
-	m := e.makeMath(src, true)
+	m := e.mathOrDiagram(src, true)
 
 	// A \tag or a suppressed number does not consume an automatic number, so undo
 	// the advance the kernel's \equation macro performed.
@@ -68,7 +68,7 @@ func (e *Engine) doEquationBody() {
 func (e *Engine) doEquationStar(name string) {
 	src, meta := e.collectMathUntilEnd(name)
 	meta.numbered = false // a starred environment never prints an automatic number
-	m := e.makeMath(src, true)
+	m := e.mathOrDiagram(src, true)
 	if meta.tag != "" {
 		for _, k := range meta.labels {
 			e.setLabel(k, meta.tag)
