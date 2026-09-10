@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -184,4 +186,105 @@ func TestBoxExitLeavesAtTheEdge(t *testing.T) {
 	if x, y := boxExit(p, 1, 1); x != 13 || y != 23 {
 		t.Errorf("a diagonal left at (%g,%g), want (13,23)", x, y)
 	}
+}
+
+// An <svg> clips to its own viewport, silently. Sizing the picture from the grid
+// alone cut whatever reached past it: a label on the left of the leftmost
+// column's arrow is placed at a NEGATIVE x — the reported \ar[d]_f landed at
+// translate(-3.65, 20.12) — and half of the f was simply not there.
+func TestALabelOutsideTheGridIsNotClipped(t *testing.T) {
+	e, err := buildEngine(Options{Lenient: true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, ok := e.makeXymatrix("", `A \ar[d] & B \\ C & D`, "")
+	if !ok {
+		t.Fatal("the unlabelled diagram did not draw")
+	}
+	labelled, ok := e.makeXymatrix("", `A \ar[d]_f & B \\ C & D`, "")
+	if !ok {
+		t.Fatal("the labelled diagram did not draw")
+	}
+	if labelled.width <= plain.width {
+		t.Errorf("the label added no width: %d against %d — it is being clipped",
+			labelled.width, plain.width)
+	}
+	// And nothing is left outside the viewport: every coordinate the picture's own
+	// wrapper does not cover would be cut.
+	w, h := xyViewport(t, labelled.svg)
+	dx, dy := xyWrapperShift(t, labelled.svg)
+	if dx < 0 || dy < 0 {
+		t.Errorf("the shift is (%g,%g) — it must move marks INTO the viewport", dx, dy)
+	}
+	if w <= 0 || h <= 0 {
+		t.Errorf("the viewport is %gx%g", w, h)
+	}
+}
+
+var xySizeRe = regexp.MustCompile(`<svg[^>]*width="([\d.]+)" height="([\d.]+)"`)
+var xyShiftRe = regexp.MustCompile(`<svg[^>]*><g transform="translate\((-?[\d.]+),(-?[\d.]+)\)">`)
+
+func xyViewport(t *testing.T, svg string) (float64, float64) {
+	t.Helper()
+	m := xySizeRe.FindStringSubmatch(svg)
+	if m == nil {
+		t.Fatalf("no viewport in %.200s", svg)
+	}
+	return parseFloat(m[1]), parseFloat(m[2])
+}
+
+func xyWrapperShift(t *testing.T, svg string) (float64, float64) {
+	t.Helper()
+	m := xyShiftRe.FindStringSubmatch(svg)
+	if m == nil {
+		t.Fatalf("no shift wrapper in %.200s", svg)
+	}
+	return parseFloat(m[1]), parseFloat(m[2])
+}
+
+// The canvas is what makes that possible: every primitive says where it went.
+func TestXyCanvasRecordsWhatIsDrawn(t *testing.T) {
+	var c xyCanvas
+	if c.any {
+		t.Error("an empty canvas claims to hold something")
+	}
+	c.at(10, 20)
+	c.box(-5, 30, 15, 35)
+	if c.minX != -5 || c.minY != 20 || c.maxX != 15 || c.maxY != 35 {
+		t.Errorf("extent = (%g,%g)-(%g,%g), want (-5,20)-(15,35)", c.minX, c.minY, c.maxX, c.maxY)
+	}
+}
+
+// An equality is TWO rules with white between them. Measured off tectonic at
+// 600dpi across the middle of the reported diagram: 0.36 and 0.48bp thick with
+// 1.56bp of white, so their centres are about 2pt apart. Drawn one rule-thickness
+// apart the pair reads as a single thick line.
+func TestAnEqualityIsTwoSeparatedRules(t *testing.T) {
+	e, err := buildEngine(Options{Lenient: true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := e.makeXymatrix("", `A \ar@{=}[d] \\ C`, "")
+	if !ok {
+		t.Fatal("it did not draw")
+	}
+	xs := firstXOfEachPath(n.svg)
+	if len(xs) < 2 {
+		t.Fatalf("%d paths, want at least the two rules:\n%s", len(xs), n.svg)
+	}
+	sort.Float64s(xs)
+	gap := xs[len(xs)-1] - xs[0]
+	if gap < xyDoubleSep-0.2 || gap > xyDoubleSep+0.2 {
+		t.Errorf("the two rules are %.2f apart, want %.2f", gap, xyDoubleSep)
+	}
+}
+
+var xyPathStartRe = regexp.MustCompile(`<path d="M ([-\d.]+) `)
+
+func firstXOfEachPath(svg string) []float64 {
+	var out []float64
+	for _, m := range xyPathStartRe.FindAllStringSubmatch(svg, -1) {
+		out = append(out, parseFloat(m[1]))
+	}
+	return out
 }
