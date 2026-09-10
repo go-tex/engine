@@ -1181,14 +1181,29 @@ func (e *Engine) recordMathSkip(errMsg string) {
 // the paragraph and is centred on its own line (to \hsize with \hfil on each side).
 func (e *Engine) doMath() {
 	src, display := e.scanMathSource()
-	e.placeMath(e.makeMath(src, display), display)
+	e.placeMath(e.mathOrDiagram(src, display), display)
 }
 
 // doDelimitedMath handles LaTeX's \(…\) (inline) and \[…\] (display): it collects
 // the raw math source up to the closing control sequence and places it.
 func (e *Engine) doDelimitedMath(closeName string, display bool) {
 	src := e.collectMathUntilCS(closeName)
-	e.placeMath(e.makeMath(src, display), display)
+	e.placeMath(e.mathOrDiagram(src, display), display)
+}
+
+// mathOrDiagram renders a formula, or draws it when the formula is a diagram.
+//
+// \xymatrix is a formula by position — it sits inside \[…\] like any other — and
+// nothing else about it is. It is a grid of typeset cells with lines between
+// them, which the maths layer has no notion of and refuses whole, taking the
+// display with it. So it is recognised here, before the source is handed over.
+func (e *Engine) mathOrDiagram(src string, display bool) mathNode {
+	if opts, body, ok := xymatrixSource(src); ok {
+		if n, drawn := e.makeXymatrix(opts, body, src); drawn {
+			return n
+		}
+	}
+	return e.makeMath(src, display)
 }
 
 // collectMathUntilCS reads raw tokens (no expansion) up to a control sequence
