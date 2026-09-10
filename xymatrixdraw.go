@@ -26,6 +26,41 @@ const (
 	xyHeadWide = 1.75
 )
 
+// xyDoubleSep is the distance between the two rules of an equality (@{=}), centre
+// to centre, in points. Measured off tectonic at 600dpi across the middle of the
+// reported diagram: the two rules are 0.36 and 0.48bp thick with 1.56bp of white
+// between them, so their centres are about 2pt apart. Drawn one rule-thickness
+// apart — 0.4pt, which is what this was — the pair reads as one thick line.
+const xyDoubleSep = 2.0
+
+// xyCanvas is the picture being built, and the extent of everything actually put
+// in it.
+//
+// It exists because an <svg> CLIPS to its own viewport, silently. Sizing the
+// picture from the grid alone cut whatever reached past it: a label on the left
+// of the leftmost column's arrow is placed at a NEGATIVE x — the reported
+// \ar[d]_f landed at translate(-3.65, 20.12) — and half of the f was simply not
+// there. So every primitive records where it went, and the picture is sized and
+// shifted to hold all of it.
+type xyCanvas struct {
+	b                      strings.Builder
+	minX, minY, maxX, maxY float64
+	any                    bool
+}
+
+// at records that something was drawn at (x, y).
+func (c *xyCanvas) at(x, y float64) {
+	if !c.any {
+		c.minX, c.minY, c.maxX, c.maxY, c.any = x, y, x, y, true
+		return
+	}
+	c.minX, c.minY = math.Min(c.minX, x), math.Min(c.minY, y)
+	c.maxX, c.maxY = math.Max(c.maxX, x), math.Max(c.maxY, y)
+}
+
+// box records a rectangle by its two opposite corners.
+func (c *xyCanvas) box(x0, y0, x1, y1 float64) { c.at(x0, y0); c.at(x1, y1) }
+
 // placed is a cell after layout: its rendered maths and where the cell's BOX
 // sits, in the composed picture's coordinates (y downwards from the top).
 type placed struct {
@@ -126,9 +161,10 @@ func (e *Engine) makeXymatrix(opts, body, src string) (mathNode, bool) {
 		}
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%s" height="%s" viewBox="0 0 %s %s">`,
-		f(width), f(height), f(width), f(height))
+	cv := &xyCanvas{}
+	// The grid itself is always in the picture, even where a cell is empty: an
+	// empty row or column still holds its place.
+	cv.box(0, 0, width, height)
 	// The cells.
 	for i := range cells {
 		for j := range cells[i] {
@@ -137,8 +173,9 @@ func (e *Engine) makeXymatrix(opts, body, src string) (mathNode, bool) {
 				continue
 			}
 			w, h := spToPt(p.node.width), spToPt(p.node.height+p.node.depth)
-			fmt.Fprintf(&b, `<g transform="translate(%s,%s)">%s</g>`,
-				f(p.cx-w/2), f(p.cy-h/2), p.node.svg)
+			x, y := p.cx-w/2, p.cy-h/2
+			cv.box(x, y, x+w, y+h)
+			fmt.Fprintf(&cv.b, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(y), p.node.svg)
 		}
 	}
 	// The arrows, after the cells so a head is never hidden under a glyph.
@@ -149,22 +186,32 @@ func (e *Engine) makeXymatrix(opts, body, src string) (mathNode, bool) {
 				if ti < 0 || ti >= len(cells) || tj < 0 || tj >= cols {
 					continue // points off the grid: nothing to join
 				}
-				e.drawXyArrow(&b, cells[i][j], cellAt(cells, ti, tj, colC, rowC, colW, rowH), a)
+				e.drawXyArrow(cv, cells[i][j], cellAt(cells, ti, tj, colC, rowC, colW, rowH), a)
 			}
 		}
 	}
-	b.WriteString(`</svg>`)
 
-	// The box's baseline: a one-row diagram sits on the text baseline like any
-	// formula, and a taller one is centred on the maths axis, which is what makes
-	// a square of objects look level with the line it interrupts.
-	axis := height / 2
+	// Everything is shifted so the leftmost and topmost mark sits at the origin,
+	// and the viewport is the full extent — otherwise the <svg> would clip it.
+	w, h := cv.maxX-cv.minX, cv.maxY-cv.minY
+	var out strings.Builder
+	fmt.Fprintf(&out, `<svg xmlns="http://www.w3.org/2000/svg" width="%s" height="%s" viewBox="0 0 %s %s">`,
+		f(w), f(h), f(w), f(h))
+	fmt.Fprintf(&out, `<g transform="translate(%s,%s)">`, f(-cv.minX), f(-cv.minY))
+	out.WriteString(cv.b.String())
+	out.WriteString(`</g></svg>`)
+
+	// The box's baseline: the grid is centred on the maths axis, which is what
+	// makes a square of objects look level with the line it interrupts. The
+	// grid's centre moves with the shift, so the axis is measured in the picture's
+	// new coordinates.
+	axis := height/2 - cv.minY
 	return mathNode{
-		svg:    b.String(),
+		svg:    out.String(),
 		src:    src,
-		width:  ptToSP(width),
+		width:  ptToSP(w),
 		height: ptToSP(axis + 2.5),
-		depth:  ptToSP(height - axis - 2.5),
+		depth:  ptToSP(h - axis - 2.5),
 	}, true
 }
 
@@ -178,7 +225,7 @@ func cellAt(cells [][]placed, i, j int, colC, rowC, colW, rowH []float64) placed
 }
 
 // drawXyArrow joins two cell boxes, stopping at each box's edge.
-func (e *Engine) drawXyArrow(b *strings.Builder, from, to placed, a xyArrow) {
+func (e *Engine) drawXyArrow(c *xyCanvas, from, to placed, a xyArrow) {
 	dx, dy := to.cx-from.cx, to.cy-from.cy
 	if dx == 0 && dy == 0 {
 		return
@@ -203,25 +250,25 @@ func (e *Engine) drawXyArrow(b *strings.Builder, from, to placed, a xyArrow) {
 	}
 	switch {
 	case double:
-		// Two parallel rules, half a rule's thickness either side of the line.
-		px, py := -uy*xyRule, ux*xyRule
-		quad(b, x0+px, y0+py, sx+px, sy+py, xyRule)
-		quad(b, x0-px, y0-py, sx-px, sy-py, xyRule)
+		// Two parallel rules, xyDoubleSep apart from centre to centre.
+		px, py := -uy*xyDoubleSep/2, ux*xyDoubleSep/2
+		quad(c, x0+px, y0+py, sx+px, sy+py, xyRule)
+		quad(c, x0-px, y0-py, sx-px, sy-py, xyRule)
 	case dashed:
-		dashedQuad(b, x0, y0, sx, sy, xyRule)
+		dashedQuad(c, x0, y0, sx, sy, xyRule)
 	default:
-		quad(b, x0, y0, sx, sy, xyRule)
+		quad(c, x0, y0, sx, sy, xyRule)
 	}
 	// A second head sits a whole head-length back, so >> reads as two points and
 	// not as one thick one.
 	for i := 0; i < head; i++ {
 		back := float64(i) * xyHeadLong * 0.85
-		triangle(b, x1-ux*back, y1-uy*back, ux, uy)
+		triangle(c, x1-ux*back, y1-uy*back, ux, uy)
 	}
 	if tail != 0 {
-		hook(b, x0, y0, ux, uy, tail)
+		hook(c, x0, y0, ux, uy, tail)
 	}
-	e.drawXyLabels(b, a, (x0+x1)/2, (y0+y1)/2, ux, uy)
+	e.drawXyLabels(c, a, (x0+x1)/2, (y0+y1)/2, ux, uy)
 }
 
 // boxExit is where the line from a box's centre in direction (dx,dy) leaves it.
@@ -272,14 +319,18 @@ func readXyStyle(style string) (tail, head int, double, dashed bool) {
 }
 
 // quad fills the rectangle of width w centred on the segment (x0,y0)-(x1,y1).
-func quad(b *strings.Builder, x0, y0, x1, y1, w float64) {
+func quad(c *xyCanvas, x0, y0, x1, y1, w float64) {
 	dx, dy := x1-x0, y1-y0
 	n := math.Hypot(dx, dy)
 	if n == 0 {
 		return
 	}
 	px, py := -dy/n*w/2, dx/n*w/2
-	fmt.Fprintf(b, `<path d="M %s %s L %s %s L %s %s L %s %s Z" fill="black"/>`,
+	c.at(x0+px, y0+py)
+	c.at(x1+px, y1+py)
+	c.at(x1-px, y1-py)
+	c.at(x0-px, y0-py)
+	fmt.Fprintf(&c.b, `<path d="M %s %s L %s %s L %s %s L %s %s Z" fill="black"/>`,
 		f(x0+px), f(y0+py), f(x1+px), f(y1+py), f(x1-px), f(y1-py), f(x0-px), f(y0-py))
 }
 
@@ -287,7 +338,7 @@ func quad(b *strings.Builder, x0, y0, x1, y1, w float64) {
 // than dashed — measured against tectonic, its marks are about as long as the
 // rule is thick and sit about a rule apart — so the dash is short enough to read
 // as a dot at text size.
-func dashedQuad(b *strings.Builder, x0, y0, x1, y1, w float64) {
+func dashedQuad(c *xyCanvas, x0, y0, x1, y1, w float64) {
 	dx, dy := x1-x0, y1-y0
 	n := math.Hypot(dx, dy)
 	if n == 0 {
@@ -297,30 +348,35 @@ func dashedQuad(b *strings.Builder, x0, y0, x1, y1, w float64) {
 	dash, gap := w, w*2.5
 	for t := 0.0; t < n; t += dash + gap {
 		end := math.Min(t+dash, n)
-		quad(b, x0+ux*t, y0+uy*t, x0+ux*end, y0+uy*end, w)
+		quad(c, x0+ux*t, y0+uy*t, x0+ux*end, y0+uy*end, w)
 	}
 }
 
 // triangle fills an arrowhead whose point is at (x,y), pointing along (ux,uy).
-func triangle(b *strings.Builder, x, y, ux, uy float64) {
+func triangle(c *xyCanvas, x, y, ux, uy float64) {
 	bx, by := x-ux*xyHeadLong, y-uy*xyHeadLong
 	px, py := -uy*xyHeadWide, ux*xyHeadWide
-	fmt.Fprintf(b, `<path d="M %s %s L %s %s L %s %s Z" fill="black"/>`,
+	c.at(x, y)
+	c.at(bx+px, by+py)
+	c.at(bx-px, by-py)
+	fmt.Fprintf(&c.b, `<path d="M %s %s L %s %s L %s %s Z" fill="black"/>`,
 		f(x), f(y), f(bx+px), f(by+py), f(bx-px), f(by-py))
 }
 
 // hook draws the little curl at the tail of a monomorphism's arrow, on the side
 // given by dir (+1 or -1). It is filled, like everything else here: the curl is
 // the ring between two half circles.
-func hook(b *strings.Builder, x, y, ux, uy float64, dir int) {
+func hook(c *xyCanvas, x, y, ux, uy float64, dir int) {
 	const r = 2.2
 	// The centre of the curl sits one radius along the arrow, offset to the side.
 	px, py := -uy*float64(dir), ux*float64(dir)
 	cx, cy := x+ux*r, y+uy*r
 	outer, inner := r+xyRule/2, r-xyRule/2
+	// The curl reaches at most one outer radius from its centre in any direction.
+	c.box(cx-outer, cy-outer, cx+outer, cy+outer)
 	// A half ring: out along one side, round, and back.
 	const k = 0.5522847498307936
-	fmt.Fprintf(b, `<path d="M %s %s C %s %s %s %s %s %s L %s %s C %s %s %s %s %s %s Z" fill="black"/>`,
+	fmt.Fprintf(&c.b, `<path d="M %s %s C %s %s %s %s %s %s L %s %s C %s %s %s %s %s %s Z" fill="black"/>`,
 		f(cx-px*outer), f(cy-py*outer),
 		f(cx-px*outer-ux*outer*k), f(cy-py*outer-uy*outer*k),
 		f(cx-ux*outer-px*outer*k), f(cy-uy*outer-py*outer*k),
@@ -333,7 +389,7 @@ func hook(b *strings.Builder, x, y, ux, uy float64, dir int) {
 
 // drawXyLabels sets an arrow's annotations beside it: ^ on the left of travel,
 // _ on the right, | across it.
-func (e *Engine) drawXyLabels(b *strings.Builder, a xyArrow, mx, my, ux, uy float64) {
+func (e *Engine) drawXyLabels(c *xyCanvas, a xyArrow, mx, my, ux, uy float64) {
 	for _, l := range a.labels {
 		n := e.makeMath(l.text, false)
 		if n.svg == "" {
@@ -355,6 +411,7 @@ func (e *Engine) drawXyLabels(b *strings.Builder, a xyArrow, mx, my, ux, uy floa
 		case '^':
 			cx, cy = mx-px*off, my-py*off
 		}
-		fmt.Fprintf(b, `<g transform="translate(%s,%s)">%s</g>`, f(cx-w/2), f(cy-h/2), n.svg)
+		c.box(cx-w/2, cy-h/2, cx+w/2, cy+h/2)
+		fmt.Fprintf(&c.b, `<g transform="translate(%s,%s)">%s</g>`, f(cx-w/2), f(cy-h/2), n.svg)
 	}
 }
