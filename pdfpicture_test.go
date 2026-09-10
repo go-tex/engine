@@ -151,3 +151,69 @@ func TestOriginResolverIsIncremental(t *testing.T) {
 		t.Errorf("carried over = %q, want [-7,-8]", got)
 	}
 }
+
+// A FORMULA is a mark like any other. pgfplots writes every tick label through
+// \pgfutilensuremath, so an axis's numbers are maths — and left unmapped they all
+// landed on the picture's origin in one smudge while the plain-text nodes beside
+// them were right. Two characters of difference in the source decided it:
+//
+//	\pgftext{P}     placed correctly
+//	\pgftext{$R$}   at the picture's origin, every one of them
+//
+// Measured against tectonic on the reported chart (go-tex/engine#337), the text
+// fragments' spread on the page went from 4.6pt x 0.0pt to 152.2 x 55.9, against
+// the reference's 162.5 x 70.8.
+func TestPDFMathIsDrawnThroughPictureScopes(t *testing.T) {
+	e := New()
+	e.SetFont(testFont(t))
+	src := `\hsize=200pt \special{gotex:<g transform="translate(30,10)">}$x$\special{gotex:</g>}\par`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := e.RenderPDF(&buf, 10); err != nil {
+		t.Fatal(err)
+	}
+	ops := pdfContent(t, buf.Bytes())
+	if strings.Count(ops, " cm\n") < 2 {
+		t.Errorf("the formula was not drawn through the scope — only the page's own matrix is here:\n%s", ops)
+	}
+	if !strings.Contains(ops, "q\n") || !strings.Contains(ops, "Q\n") {
+		t.Errorf("no saved graphics state around the formula:\n%s", ops)
+	}
+}
+
+// A RULE is a mark too: \rule inside a picture scope is drawn where the picture
+// puts it, not where the box tree alone would.
+func TestPDFRuleIsDrawnThroughPictureScopes(t *testing.T) {
+	e := New()
+	e.SetFont(testFont(t))
+	src := `\hsize=200pt \special{gotex:<g transform="translate(30,10)">}\rule{10pt}{2pt}\special{gotex:</g>}\par`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := e.RenderPDF(&buf, 10); err != nil {
+		t.Fatal(err)
+	}
+	if ops := pdfContent(t, buf.Bytes()); strings.Count(ops, " cm\n") < 2 {
+		t.Errorf("the rule was not drawn through the scope:\n%s", ops)
+	}
+}
+
+// And a page with no picture still pays nothing: the guard is the same one the
+// characters use, so a formula outside a picture is drawn exactly as before.
+func TestPDFMathWithoutAPictureIsUnchanged(t *testing.T) {
+	e := New()
+	e.SetFont(testFont(t))
+	if _, err := e.Run(`\hsize=200pt $x$\par`); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := e.RenderPDF(&buf, 10); err != nil {
+		t.Fatal(err)
+	}
+	if ops := pdfContent(t, buf.Bytes()); strings.Count(ops, " cm\n") != 1 {
+		t.Errorf("a formula outside a picture gained a transform:\n%s", ops)
+	}
+}
