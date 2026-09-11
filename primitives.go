@@ -2002,6 +2002,22 @@ func (e *Engine) loadMore() {
 			e.placeHGlue(e.curFont.spaceSP())
 		}
 	})
+	// \^^M and \^^I: "control <return> = control <space>", latex.ltx:560-561
+	//
+	//	\def\^^M{\ } % control <return> = control <space>
+	//	\let\^^I\^^M % same for <tab>
+	//
+	// A line that ENDS with a backslash makes one. It is how a .bbl writes an
+	// interword space at a line break — revtex's is full of
+	// "{Sullivan}},\ and\⏎  \bibinfo {author}" — and it was the most frequent
+	// undefined command in the whole corpus: 577 of them across 25 of 157 papers,
+	// every one a space that went missing and two words that came out glued.
+	//
+	// The scanner sees the file's own terminator, so \<LF> is the same command in a
+	// file with unix line endings as \<CR> is in one with DOS endings.
+	for _, ch := range []string{"\r", "\n", "\t"} {
+		e.eq[ch] = &meaning{kind: mMacro, body: []tok{csTok(" ")}}
+	}
 	e.prim("cr", func(e *Engine) {})   // recognised structurally by \halign
 	e.prim("crcr", func(e *Engine) {}) //  "
 	e.prim("font", func(e *Engine) { e.doFont() })
