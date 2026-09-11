@@ -150,15 +150,29 @@ func twoColumnOptIn() bool { return os.Getenv("GOTEX_TWOCOLUMN") != "0" }
 // The aspect is objectively more correct — a 3:1 landscape figure is not a square —
 // and it improves a figure-heavy paper measured against tectonic (2606.18084:
 // layout divergence 16.2→14.2, a page recovered). But as the corpus DEFAULT it is
-// net-negative on the n=50 layout sample (mean 4.316→4.659): the engine places
-// figures INLINE while the reference FLOATS them, so a placeholder's height only
-// shifts the following inline text — which already over-paginates on the two-column
-// / float-heavy papers (2601.20606, 2608.10430) where the old square happened to
-// compensate. The accurate height compounds that pre-existing over-pagination. Like
-// the two-column routine, the correct behaviour therefore waits on real float
-// placement; off by default the corpus is untouched, and the browser preview (whose
-// square placeholders are a visible infidelity) or a future float-aware path can
-// opt in. See [[gotex-completion-plan]] for the float-placement finding.
+// net-negative, and re-measured 2026-09-11 on the 154 papers whose reference is a
+// valid build (three are truncated, see measure/refaudit.py): Sigma 311 → 318 (+7).
+//
+// The reason first written here — "the engine places figures INLINE while the
+// reference FLOATS them, so the correct behaviour waits on real float placement" —
+// is STALE: float placement has since become the default (GOTEX_FLOATS=0 opts out,
+// floatplace.go), and the aspect is still +7 WITH floats placed.
+//
+// What the five papers it moves actually say is the opposite of over-pagination.
+// Every one of them gets SHORTER — a true-aspect placeholder is shorter than a
+// blind square for a wide figure — and four of the five were already too short:
+//
+//	2201.02101  ref 27   30 → 29   error 3 → 2   better
+//	2206.00339  ref 34   34 → 32   error 0 → 2
+//	2301.08336  ref 22   19 → 18   error 3 → 4
+//	2406.10437  ref 41   39 → 35   error 2 → 6
+//	2407.18384  ref 333  314 → 313 error 19 → 20
+//
+// So the square was COMPENSATING for an under-pagination that has nothing to do
+// with figures, and the accurate height exposes it. The order is therefore: find
+// what makes those documents short, then open this. Off by default the corpus is
+// untouched, and the browser preview (whose square placeholders are a visible
+// infidelity) can opt in.
 func pdfAspectOptIn() bool { return os.Getenv("GOTEX_PDFASPECT") != "" }
 
 // realBeamer reports whether \documentclass{beamer} loads the REAL beamer.cls
