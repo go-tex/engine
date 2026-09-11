@@ -25,6 +25,15 @@ package engine
 // match against the reference even though every word is present (measured: 2605.12538,
 // 7 authors, went to 5.8 layout-divergence at 94.5% recall). Comma/semicolon joining
 // keeps the block height near revtex's, recovering that layout without losing content.
+// The ABSTRACT is captured, not typeset where it stands. In revtex the abstract is
+// written BEFORE \maketitle and emitted BY it, after the authors; the generic
+// \abstract (latex.go) sets it in place, so the playground and every rendered revtex
+// paper carried its abstract ABOVE its own title. It is collected into a box with
+// \global\setbox — local would be restored by the \endgroup that \end{abstract}
+// runs, and the abstract would vanish — and \maketitle places it. An abstract that
+// comes AFTER \maketitle (some papers do) is emitted as soon as it closes, so the
+// order is right either way and nothing is ever dropped.
+//
 // \author accumulates here — revtex allows several, each followed by its own
 // \affiliation — rather than overwriting as the base article \author does. It runs at
 // document time (from \documentclass), where @ is an "other" character, so it opens
@@ -47,7 +56,14 @@ const RevtexAuthorBlock = `
 \def\preprint#1{}
 \def\pacs#1{}
 \def\keywords#1{}
-\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@revtexauthors\par}\smallskip{\itshape\@revtexaffils\par}\end{center}\par\bigskip\gotex@revtexbodytwocol}
+\newbox\@revtexabsbox
+\newif\if@revtexmadetitle
+\long\def\abstract{\global\setbox\@revtexabsbox\vbox\bgroup
+  \centerline{\small\bfseries Abstract}\smallskip
+  \leftskip=20pt \rightskip=20pt \small}
+\def\endabstract{\egroup\if@revtexmadetitle\@revtexputabstract\fi}
+\def\@revtexputabstract{\par\bigskip\noindent\box\@revtexabsbox\par}
+\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@revtexauthors\par}\smallskip{\itshape\@revtexaffils\par}\end{center}\@revtexputabstract\@revtexmadetitletrue\par\bigskip\gotex@revtexbodytwocol}
 \makeatother
 `
 
