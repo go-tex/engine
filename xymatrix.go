@@ -46,6 +46,7 @@ package engine
 // anything new.
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -61,13 +62,15 @@ const xyDefaultSep = 24.0
 type xyArrow struct {
 	dr, dc int    // target offset, in rows and columns
 	style  string // the @{…} body, "" for a plain ->
+	curve  string // the @/…/ body: "^", "_", "^1pc" …; "" for a straight arrow
 	labels []xyLabel
 }
 
 // xyLabel is a _below or ^above annotation on an arrow.
 type xyLabel struct {
 	text string
-	side byte // '_' below/right of travel, '^' above/left, '|' on the line
+	side byte    // '_' below/right of travel, '^' above/left, '|' on the line
+	pos  float64 // where along the arrow, 0 at the tail and 1 at the head
 }
 
 // xyCell is one entry of the matrix.
@@ -238,25 +241,43 @@ func parseXyCell(s string) xyCell {
 	return c
 }
 
-// parseXyArrow reads what follows \ar: an optional @style, the [direction], and
-// any _below / ^above labels.
+// parseXyArrow reads what follows \ar: any number of @modifiers, the
+// [direction], and any _below / ^above / |on-the-line labels.
+//
+// A single \ar can carry SEVERAL @ groups — \ar@/^/@{.>}[r] is a dotted arrow
+// that also curves — so they are read in a loop rather than one at a time.
 func parseXyArrow(s string) (xyArrow, string, bool) {
 	var a xyArrow
-	s = strings.TrimLeft(s, " \t\n")
-	if strings.HasPrefix(s, "@") {
-		s = s[1:]
-		if strings.HasPrefix(s, "{") {
-			a.style, s = splitBrace(s)
-		} else {
-			// @^, @_, @/…/ and friends: read to the '[' and keep it as the style.
-			j := strings.IndexByte(s, '[')
+	for {
+		s = strings.TrimLeft(s, " \t\n")
+		if !strings.HasPrefix(s, "@") {
+			break
+		}
+		rest := s[1:]
+		switch {
+		case strings.HasPrefix(rest, "{"):
+			a.style, s = splitBrace(rest)
+		case strings.HasPrefix(rest, "/"):
+			// @/…/ curves the arrow. The body is a direction and an optional
+			// distance: ^, _, ^1pc, _-.5pc …
+			j := strings.IndexByte(rest[1:], '/')
 			if j < 0 {
 				return a, s, false
 			}
-			a.style, s = s[:j], s[j:]
+			a.curve, s = rest[1:1+j], rest[j+2:]
+		default:
+			// @^, @_, @2, @3, @(…): a variant this does not draw differently.
+			// Skip it, stopping at whatever comes next rather than swallowing it.
+			j := strings.IndexAny(rest, "[@")
+			if j < 0 {
+				return a, s, false
+			}
+			if a.style == "" {
+				a.style = rest[:j]
+			}
+			s = rest[j:]
 		}
 	}
-	s = strings.TrimLeft(s, " \t\n")
 	if !strings.HasPrefix(s, "[") {
 		return a, s, false
 	}
@@ -277,7 +298,8 @@ func parseXyArrow(s string) (xyArrow, string, bool) {
 		}
 	}
 	s = s[j+1:]
-	// Labels: _x, ^x, |x — a single token or a braced group.
+	// Labels: _x, ^x, |x — a single token or a braced group, each optionally
+	// preceded by a PLACE saying where along the arrow it goes.
 	for {
 		if s == "" {
 			break
@@ -287,6 +309,7 @@ func parseXyArrow(s string) (xyArrow, string, bool) {
 			break
 		}
 		rest := s[1:]
+		pos, rest := xyPlace(rest)
 		var text string
 		if strings.HasPrefix(rest, "{") {
 			text, rest = splitBrace(rest)
@@ -296,10 +319,44 @@ func parseXyArrow(s string) (xyArrow, string, bool) {
 		if text == "" {
 			break
 		}
-		a.labels = append(a.labels, xyLabel{text: text, side: side})
+		a.labels = append(a.labels, xyLabel{text: text, side: side, pos: pos})
 		s = rest
 	}
 	return a, s, true
+}
+
+// xyPlace reads the optional <place> between a label's ^_| and the label itself,
+// and returns where along the arrow the label goes.
+//
+// XY-pic's grammar (xyarrow.tex, \PATHanchor@i) treats a bare - as the place
+// <>(.5) — the middle of the connection — and (f) as the fraction f along it. The
+// middle is also where a label with no place at all goes, so - changes nothing
+// here; what matters is that it is CONSUMED. Read as a label it became the text
+// of \ar[dr]|-{(x,y)}, and the (x,y) that followed fell through into the cell.
+func xyPlace(s string) (float64, string) {
+	const middle = 0.5
+	pos := middle
+	for {
+		switch {
+		case strings.HasPrefix(s, "-"):
+			s = s[1:]
+		case strings.HasPrefix(s, "<") || strings.HasPrefix(s, ">"):
+			s = s[1:]
+		case strings.HasPrefix(s, "("):
+			j := strings.IndexByte(s, ')')
+			if j < 0 {
+				return pos, s
+			}
+			v, err := strconv.ParseFloat(strings.TrimSpace(s[1:j]), 64)
+			if err != nil || v < 0 || v > 1 {
+				return pos, s // not a place: leave it to be read as the label
+			}
+			pos = v
+			s = s[j+1:]
+		default:
+			return pos, s
+		}
+	}
 }
 
 // firstToken takes one TeX token: a control sequence or a single character.

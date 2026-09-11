@@ -224,51 +224,328 @@ func cellAt(cells [][]placed, i, j int, colC, rowC, colW, rowH []float64) placed
 	return placed{cx: colC[j], cy: rowC[i], halfW: colW[j] / 2, halfH: rowH[i] / 2}
 }
 
-// drawXyArrow joins two cell boxes, stopping at each box's edge.
-func (e *Engine) drawXyArrow(c *xyCanvas, from, to placed, a xyArrow) {
+// xyCurveDefault is how far a @/^/ or @/_/ arrow's belly leaves the straight
+// line between the two cells, in points.
+//
+// Read off XY-pic rather than guessed: \ar@/^/ is \ar@slashing{^} (xyarrow.tex),
+// which places the curve's control point at the midpoint plus TWICE the slide
+// vector, and \vfromslide@i (xy.tex) makes that vector .5pc long when — as here —
+// no distance is given. A quadratic Bézier passes half way to its control point,
+// so the arrow's middle sits .5pc = 6pt off the chord.
+const xyCurveDefault = 6.0
+
+// xyCurveSamples is how many straight pieces a curve is drawn in. At the sizes a
+// diagram uses, 32 puts the largest gap between the drawn chain and the true
+// curve under a hundredth of a point.
+const xyCurveSamples = 32
+
+// xyPt is a point in the picture.
+type xyPt struct{ x, y float64 }
+
+// xyShaft is an arrow's centre line, sampled: two points for a straight arrow, a
+// chain of short pieces for a curved one, with the distance travelled recorded
+// beside each point.
+//
+// It exists so that everything said about an arrow is said in ONE unit — how far
+// along it something is. Where the shaft stops short of its head, where a label
+// sits, where the line is broken to let a label through: all of them are a
+// distance, and none of them has to know whether the arrow is straight or bent.
+type xyShaft struct {
+	pts []xyPt
+	cum []float64 // cum[i] is the distance from pts[0] to pts[i]
+}
+
+// newXyShaft records the running length of a polyline.
+func newXyShaft(pts []xyPt) xyShaft {
+	cum := make([]float64, len(pts))
+	for i := 1; i < len(pts); i++ {
+		cum[i] = cum[i-1] + math.Hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y)
+	}
+	return xyShaft{pts: pts, cum: cum}
+}
+
+func (s xyShaft) length() float64 { return s.cum[len(s.cum)-1] }
+
+// at gives the point d along the shaft and the unit direction there.
+func (s xyShaft) at(d float64) (xyPt, float64, float64) {
+	if len(s.pts) < 2 {
+		return s.pts[0], 1, 0
+	}
+	i := 0
+	for i < len(s.cum)-2 && s.cum[i+1] < d {
+		i++
+	}
+	seg := s.cum[i+1] - s.cum[i]
+	t := 0.0
+	if seg > 0 {
+		t = (d - s.cum[i]) / seg
+	}
+	a, b := s.pts[i], s.pts[i+1]
+	ux, uy := b.x-a.x, b.y-a.y
+	n := math.Hypot(ux, uy)
+	if n == 0 {
+		return a, 1, 0
+	}
+	return xyPt{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t}, ux / n, uy / n
+}
+
+// offset returns the same shaft moved d to the RIGHT of travel — the second rule
+// of an equality, and the reason a curved @{=} stays parallel to itself.
+func (s xyShaft) offset(d float64) xyShaft {
+	out := make([]xyPt, len(s.pts))
+	for i := range s.pts {
+		_, ux, uy := s.at(s.cum[i])
+		out[i] = xyPt{s.pts[i].x - uy*d, s.pts[i].y + ux*d}
+	}
+	return newXyShaft(out)
+}
+
+// draw fills the shaft between two distances along it.
+func (s xyShaft) draw(c *xyCanvas, from, to float64, dashed bool) {
+	if to <= from {
+		return
+	}
+	for i := 0; i < len(s.pts)-1; i++ {
+		a, b := math.Max(from, s.cum[i]), math.Min(to, s.cum[i+1])
+		if b <= a {
+			continue
+		}
+		p, _, _ := s.at(a)
+		q, _, _ := s.at(b)
+		if dashed {
+			dashedQuad(c, p.x, p.y, q.x, q.y, xyRule)
+		} else {
+			quad(c, p.x, p.y, q.x, q.y, xyRule)
+		}
+	}
+}
+
+// xyShaftFor builds the centre line joining two cells, straight or curved.
+func xyShaftFor(from, to placed, a xyArrow) (xyShaft, bool) {
 	dx, dy := to.cx-from.cx, to.cy-from.cy
 	if dx == 0 && dy == 0 {
-		return
+		return xyShaft{}, false
 	}
-	// Leave each box along the line between the centres. Stopping at the BOX and
-	// not at the ink is what XY-pic does, and it is why an arrow keeps the same
-	// clearance whether the entry is an A or a fraction.
-	x0, y0 := boxExit(from, dx, dy)
-	x1, y1 := boxExit(to, -dx, -dy)
-	n := math.Hypot(x1-x0, y1-y0)
-	if n <= 0 {
-		return
+	dir, amount, curved := readXyCurve(a.curve)
+	if !curved {
+		// Leave each box along the line between the centres. Stopping at the BOX
+		// and not at the ink is what XY-pic does, and it is why an arrow keeps the
+		// same clearance whether the entry is an A or a fraction.
+		x0, y0 := boxExit(from, dx, dy)
+		x1, y1 := boxExit(to, -dx, -dy)
+		if math.Hypot(x1-x0, y1-y0) <= 0 {
+			return xyShaft{}, false
+		}
+		return newXyShaft([]xyPt{{x0, y0}, {x1, y1}}), true
 	}
-	ux, uy := (x1-x0)/n, (y1-y0)/n
+	// A curve leaves its box wherever it crosses it, which is NOT where the
+	// straight line would: the whole point of the curve is that it sets off in
+	// another direction. So the Bézier is built between the two CENTRES and then
+	// cut where it enters open air.
+	n := math.Hypot(dx, dy)
+	ux, uy := dx/n, dy/n
+	// (-uy, ux) is right of travel in a y-downward frame, and XY-pic's ^ is the
+	// left side — so ^ subtracts it, as a ^label does.
+	px, py := uy*dir*amount, -ux*dir*amount
+	p0 := xyPt{from.cx, from.cy}
+	p1 := xyPt{to.cx, to.cy}
+	ctl := xyPt{(p0.x+p1.x)/2 + 2*px, (p0.y+p1.y)/2 + 2*py}
+	const probe = 256
+	inFrom := func(p xyPt) bool {
+		return math.Abs(p.x-from.cx) <= from.halfW && math.Abs(p.y-from.cy) <= from.halfH
+	}
+	inTo := func(p xyPt) bool {
+		return math.Abs(p.x-to.cx) <= to.halfW && math.Abs(p.y-to.cy) <= to.halfH
+	}
+	t0, t1 := 0.0, 1.0
+	for i := 0; i <= probe; i++ {
+		t := float64(i) / probe
+		if inFrom(xyBezier(p0, ctl, p1, t)) {
+			t0 = t
+		} else {
+			break
+		}
+	}
+	for i := probe; i >= 0; i-- {
+		t := float64(i) / probe
+		if inTo(xyBezier(p0, ctl, p1, t)) {
+			t1 = t
+		} else {
+			break
+		}
+	}
+	if t1 <= t0 {
+		return xyShaft{}, false
+	}
+	pts := make([]xyPt, 0, xyCurveSamples+1)
+	for i := 0; i <= xyCurveSamples; i++ {
+		t := t0 + (t1-t0)*float64(i)/xyCurveSamples
+		pts = append(pts, xyBezier(p0, ctl, p1, t))
+	}
+	return newXyShaft(pts), true
+}
 
+// xyBezier evaluates the quadratic Bézier XY-pic draws a curved arrow with.
+func xyBezier(p0, c, p1 xyPt, t float64) xyPt {
+	u := 1 - t
+	return xyPt{
+		u*u*p0.x + 2*u*t*c.x + t*t*p1.x,
+		u*u*p0.y + 2*u*t*c.y + t*t*p1.y,
+	}
+}
+
+// readXyCurve reads an @/…/ body: which side the arrow bows out to, and by how
+// much. The body is a direction (^ or _) and an optional distance.
+func readXyCurve(spec string) (dir, amount float64, ok bool) {
+	s := strings.TrimSpace(spec)
+	if s == "" {
+		return 0, 0, false
+	}
+	switch s[0] {
+	case '^':
+		dir = 1
+	case '_':
+		dir = -1
+	default:
+		return 0, 0, false // @/…/ with a direction this does not read
+	}
+	amount = xyCurveDefault
+	if rest := strings.TrimSpace(s[1:]); rest != "" {
+		if v := xyDimen(rest); v != 0 {
+			amount = v
+		}
+	}
+	return dir, amount, true
+}
+
+// xyDimen reads a TeX dimension — a number and a unit — in points.
+func xyDimen(s string) float64 {
+	j := 0
+	for j < len(s) && (s[j] == '-' || s[j] == '+' || s[j] == '.' || (s[j] >= '0' && s[j] <= '9')) {
+		j++
+	}
+	v := parseFloat(s[:j])
+	switch unit := strings.TrimSpace(s[j:]); {
+	case strings.HasPrefix(unit, "pc"):
+		return v * 12
+	case strings.HasPrefix(unit, "pt"):
+		return v
+	case strings.HasPrefix(unit, "mm"):
+		return v * 72.27 / 25.4
+	case strings.HasPrefix(unit, "cm"):
+		return v * 72.27 / 2.54
+	case strings.HasPrefix(unit, "in"):
+		return v * 72.27
+	case strings.HasPrefix(unit, "ex"):
+		return v * 4.3
+	case strings.HasPrefix(unit, "em"):
+		return v * 10
+	}
+	return 0
+}
+
+// xySetLabel is a label after it has been typeset and placed: what to draw, how
+// big it is, and how far along the arrow it goes.
+type xySetLabel struct {
+	node mathNode
+	w, h float64
+	side byte
+	at   float64
+}
+
+// measureXyLabels typesets an arrow's labels. They are measured BEFORE anything
+// is drawn because a label on the line (|) breaks the line, and how wide the gap
+// is cannot be known until the label has been set.
+//
+// A label is set in SCRIPT style: XY-pic's \labelstyle is \scriptstyle
+// (xyarrow.tex), against \objectstyle = \textstyle for the entries themselves,
+// which is why the f beside an arrow is visibly smaller than the A it comes from.
+func (e *Engine) measureXyLabels(a xyArrow, total float64) []xySetLabel {
+	var out []xySetLabel
+	for _, l := range a.labels {
+		n := e.makeMath(`\scriptstyle `+l.text, false)
+		if n.svg == "" {
+			continue
+		}
+		out = append(out, xySetLabel{
+			node: n,
+			w:    spToPt(n.width),
+			h:    spToPt(n.height + n.depth),
+			side: l.side,
+			at:   l.pos * total,
+		})
+	}
+	return out
+}
+
+// xyRuns gives the stretches of [from,to] that are actually drawn: everything
+// except the gaps a label sitting ON the line leaves behind it.
+//
+// XY-pic breaks the connection there (\Cbreak@@) and widens the label's box by
+// \labelmargin@ = \jot = 3pt on each side (\droplabel@) — so the rule stops
+// clear of the label rather than running under it.
+func xyRuns(labels []xySetLabel, sh xyShaft, from, to float64) [][2]float64 {
+	runs := [][2]float64{{from, to}}
+	for _, l := range labels {
+		if l.side != '|' {
+			continue
+		}
+		_, ux, uy := sh.at(l.at)
+		half := (math.Abs(ux)*l.w+math.Abs(uy)*l.h)/2 + xyMargin
+		a, b := l.at-half, l.at+half
+		var next [][2]float64
+		for _, r := range runs {
+			if b <= r[0] || a >= r[1] {
+				next = append(next, r)
+				continue
+			}
+			if a > r[0] {
+				next = append(next, [2]float64{r[0], a})
+			}
+			if b < r[1] {
+				next = append(next, [2]float64{b, r[1]})
+			}
+		}
+		runs = next
+	}
+	return runs
+}
+
+// drawXyArrow joins two cell boxes, stopping at each box's edge.
+func (e *Engine) drawXyArrow(c *xyCanvas, from, to placed, a xyArrow) {
+	sh, ok := xyShaftFor(from, to, a)
+	if !ok {
+		return
+	}
 	tail, head, double, dashed := readXyStyle(a.style)
+	total := sh.length()
+	labels := e.measureXyLabels(a, total)
 	// The shaft stops short of the head so the two do not overlap; a head drawn
 	// on top of a shaft that runs under it thickens the point.
-	sx, sy := x1, y1
+	end := total
 	if head > 0 {
-		sx, sy = x1-ux*xyHeadLong*0.8, y1-uy*xyHeadLong*0.8
+		end -= xyHeadLong * 0.8
 	}
-	switch {
-	case double:
-		// Two parallel rules, xyDoubleSep apart from centre to centre.
-		px, py := -uy*xyDoubleSep/2, ux*xyDoubleSep/2
-		quad(c, x0+px, y0+py, sx+px, sy+py, xyRule)
-		quad(c, x0-px, y0-py, sx-px, sy-py, xyRule)
-	case dashed:
-		dashedQuad(c, x0, y0, sx, sy, xyRule)
-	default:
-		quad(c, x0, y0, sx, sy, xyRule)
+	for _, r := range xyRuns(labels, sh, 0, end) {
+		if double {
+			// Two parallel rules, xyDoubleSep apart from centre to centre.
+			sh.offset(xyDoubleSep/2).draw(c, r[0], r[1], false)
+			sh.offset(-xyDoubleSep/2).draw(c, r[0], r[1], false)
+			continue
+		}
+		sh.draw(c, r[0], r[1], dashed)
 	}
 	// A second head sits a whole head-length back, so >> reads as two points and
 	// not as one thick one.
 	for i := 0; i < head; i++ {
-		back := float64(i) * xyHeadLong * 0.85
-		triangle(c, x1-ux*back, y1-uy*back, ux, uy)
+		p, ux, uy := sh.at(total - float64(i)*xyHeadLong*0.85)
+		triangle(c, p.x, p.y, ux, uy)
 	}
 	if tail != 0 {
-		hook(c, x0, y0, ux, uy, tail)
+		p, ux, uy := sh.at(0)
+		hook(c, p.x, p.y, ux, uy, tail)
 	}
-	e.drawXyLabels(c, a, (x0+x1)/2, (y0+y1)/2, ux, uy)
+	e.drawXyLabels(c, sh, labels)
 }
 
 // boxExit is where the line from a box's centre in direction (dx,dy) leaves it.
@@ -388,30 +665,26 @@ func hook(c *xyCanvas, x, y, ux, uy float64, dir int) {
 }
 
 // drawXyLabels sets an arrow's annotations beside it: ^ on the left of travel,
-// _ on the right, | across it.
-func (e *Engine) drawXyLabels(c *xyCanvas, a xyArrow, mx, my, ux, uy float64) {
-	for _, l := range a.labels {
-		n := e.makeMath(l.text, false)
-		if n.svg == "" {
-			continue
-		}
-		w, h := spToPt(n.width), spToPt(n.height+n.depth)
+// _ on the right, | on the line itself, in the gap the shaft left for it.
+func (e *Engine) drawXyLabels(c *xyCanvas, sh xyShaft, labels []xySetLabel) {
+	for _, l := range labels {
+		p, ux, uy := sh.at(l.at)
 		// Perpendicular to travel, far enough out to clear the rule and the text.
 		//
 		// (-uy, ux) turns +90 degrees in a y-DOWNWARD frame, which is RIGHT of the
 		// direction of travel. XY-pic's _ is the right side and ^ the left — so a
 		// downward \ar[d]_f carries its f on the page's LEFT, which is where the
 		// reference puts it.
-		off := h/2 + 2
+		off := l.h/2 + 2
 		px, py := -uy, ux
-		cx, cy := mx, my
+		cx, cy := p.x, p.y
 		switch l.side {
 		case '_':
-			cx, cy = mx+px*off, my+py*off
+			cx, cy = p.x+px*off, p.y+py*off
 		case '^':
-			cx, cy = mx-px*off, my-py*off
+			cx, cy = p.x-px*off, p.y-py*off
 		}
-		c.box(cx-w/2, cy-h/2, cx+w/2, cy+h/2)
-		fmt.Fprintf(&c.b, `<g transform="translate(%s,%s)">%s</g>`, f(cx-w/2), f(cy-h/2), n.svg)
+		c.box(cx-l.w/2, cy-l.h/2, cx+l.w/2, cy+l.h/2)
+		fmt.Fprintf(&c.b, `<g transform="translate(%s,%s)">%s</g>`, f(cx-l.w/2), f(cy-l.h/2), l.node.svg)
 	}
 }
