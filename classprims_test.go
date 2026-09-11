@@ -310,16 +310,22 @@ func pageChars(e *Engine) string {
 			}
 		}
 	}
-	walk(e.mvl)
-	walk(e.parList)
-	// Column-region spans are typeset material too — revtex's frontmatter, a
-	// figure*/table* band — and they reach the page without passing through the main
-	// vertical list.
+	// In PAGE ORDER: a column region's span is typeset material that reaches the page
+	// ABOVE the region's own material — revtex's frontmatter is one, a figure*/table*
+	// band is another — and it never passes through the main vertical list. Walking
+	// the list first and the spans after put a title block AFTER the body it heads.
+	at := 0
 	for _, r := range e.colRegions {
+		if r.at > at {
+			walk(e.mvl[at:r.at])
+			at = r.at
+		}
 		if r.span != nil {
 			walk([]node{r.span})
 		}
 	}
+	walk(e.mvl[at:])
+	walk(e.parList)
 	return string(s)
 }
 

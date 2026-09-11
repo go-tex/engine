@@ -28,16 +28,21 @@ func hasRuleNode(nodes []node) bool {
 // treeText reads back every typeset character in the main vertical list.
 func treeText(e *Engine) string {
 	var b strings.Builder
-	collectChars(e.mvl, &b)
-	// A column region's SPAN is typeset material that reaches the page without ever
-	// being on the main vertical list — revtex's frontmatter is one, a figure*/table*
-	// band is another. Walking mvl alone made a revtex title block look absent when
-	// it was merely somewhere else.
+	// In PAGE ORDER: a column region's SPAN reaches the page ABOVE the region's own
+	// material and never passes through the main vertical list — revtex's frontmatter
+	// is one, a figure*/table* band is another. Walking mvl alone made a revtex title
+	// block look absent; walking it first and the spans after put it after the body.
+	at := 0
 	for _, r := range e.colRegions {
+		if r.at > at {
+			collectChars(e.mvl[at:r.at], &b)
+			at = r.at
+		}
 		if r.span != nil {
 			collectChars([]node{r.span}, &b)
 		}
 	}
+	collectChars(e.mvl[at:], &b)
 	return b.String()
 }
 
