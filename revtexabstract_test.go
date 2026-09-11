@@ -52,3 +52,20 @@ func TestRevtexAbstractAfterMaketitleIsStillSet(t *testing.T) {
 		t.Errorf("the abstract vanished: %q", got)
 	}
 }
+
+// And revtex prints no "Abstract" heading: checked against the real class through
+// tectonic, page one goes straight from the affiliations to the abstract's own
+// text. The generic \abstract centres one, which is right for article and wrong
+// here.
+func TestRevtexPrintsNoAbstractHeading(t *testing.T) {
+	src := `\documentclass[reprint,aps]{revtex4-2}\begin{document}` +
+		`\title{TITREICI}\author{AUTEURICI}` +
+		`\begin{abstract}RESUMEICI\end{abstract}\maketitle CORPSICI\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pageChars(e); strings.Contains(got, "Abstract") {
+		t.Errorf("revtex printed an \"Abstract\" heading, which the real class does not: %q", got)
+	}
+}
