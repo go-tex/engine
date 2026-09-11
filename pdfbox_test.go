@@ -77,10 +77,10 @@ func TestPDFPlaceholderKeepsAspect(t *testing.T) {
 		t.Fatal("no placeholder frameNode placed for the un-rasterisable PDF")
 	}
 	// 120pt wide, 3:1 box ⇒ 40pt tall (the old blind-square placeholder was 120pt).
-	if fr.inner.width != 120*unity {
-		t.Errorf("placeholder width = %d sp, want 120pt", fr.inner.width)
+	if placeholderW(fr) != 120*unity {
+		t.Errorf("placeholder width = %d sp, want 120pt", placeholderW(fr))
 	}
-	if got, want := fr.inner.height, 40*unity; !within(got, want, unity/2) {
+	if got, want := placeholderH(fr), 40*unity; !within(got, want, unity/2) {
 		t.Errorf("placeholder height = %d sp, want ~%d (aspect-correct, not a %d square)",
 			got, want, 120*unity)
 	}
@@ -102,9 +102,9 @@ func TestPDFPlaceholderNoBoxDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("no placeholder frameNode placed")
 	}
-	if fr.inner.width != 120*unity || fr.inner.height != 90*unity {
+	if placeholderW(fr) != 120*unity || placeholderH(fr) != 90*unity {
 		t.Errorf("default placeholder = %dx%d sp, want 120x90pt",
-			fr.inner.width, fr.inner.height)
+			placeholderW(fr), placeholderH(fr))
 	}
 }
 
@@ -126,9 +126,9 @@ func TestPDFPlaceholderAspectGatedOff(t *testing.T) {
 	if !ok {
 		t.Fatal("no placeholder frameNode placed")
 	}
-	if fr.inner.width != 120*unity || fr.inner.height != 120*unity {
+	if placeholderW(fr) != 120*unity || placeholderH(fr) != 120*unity {
 		t.Errorf("gated-off placeholder = %dx%d sp, want the 120x120 square (unchanged default)",
-			fr.inner.width, fr.inner.height)
+			placeholderW(fr), placeholderH(fr))
 	}
 }
 
@@ -139,3 +139,13 @@ func within(a, b, tol int) bool {
 	}
 	return d <= tol
 }
+
+// placeholderW / placeholderH are a figure placeholder's OUTER dimensions — what
+// the page actually gives up for it.
+//
+// The frame is drawn INSIDE the space the figure asked for (image.go), so the
+// inner box is smaller than the request by 2*(fboxSep+fboxRule) and it is the
+// outer box that answers "how much room does this figure take". These read the
+// same thing the page builder reads.
+func placeholderW(fr frameNode) int { return fr.width() }
+func placeholderH(fr frameNode) int { return fr.height() + fr.depth() }

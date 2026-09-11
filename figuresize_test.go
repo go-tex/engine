@@ -87,8 +87,10 @@ func TestEPSPlaceholderKeepsItsAspect(t *testing.T) {
 		t.Fatal("aucun cadre de remplacement sur la page")
 	}
 	// 400 × 100 bp asked for at 200pt wide is 50pt tall (the bp→pt correction is
-	// under a percent and cancels in the ratio).
-	if w, h := got.inner.width, got.inner.height; w != 200*unity || h < 49*unity || h > 51*unity {
+	// under a percent and cancels in the ratio). Mesuré sur la boîte EXTÉRIEURE :
+	// le cadre est dessiné DANS l'espace demandé (image.go), donc c'est elle qui
+	// dit ce que la figure prend à la page.
+	if w, h := got.width(), got.height()+got.depth(); w != 200*unity || h < 49*unity || h > 51*unity {
 		t.Errorf("cadre %.1fpt × %.1fpt, want 200.0pt × 50.0pt", spToPt(w), spToPt(h))
 	}
 }
