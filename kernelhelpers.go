@@ -74,6 +74,14 @@ const LaTeX2eKernelHelpers = `
 \long\def\@gobblefour#1#2#3#4{}
 \long\def\@firstoftwo#1#2{#1}
 \long\def\@secondoftwo#1#2{#2}
+% amsgen's emptiness test, verbatim (amsgen.sty:43-46). amsthm's theorem head is
+% built out of it — \@ifempty{#3}{\let\thmnote\@gobble}{\let\thmnote\@iden} is how
+% a theorem with no note drops the parentheses — and a class that styles its own
+% theorems calls it directly. Undefined, the calls were skipped and their
+% arguments typeset, so the head came out twice.
+\long\def\@ifempty#1{\@xifempty#1@@..\@nil}
+\long\def\@xifempty#1#2@#3#4#5\@nil{\ifx#3#4\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}
+\long\def\@ifnotempty#1{\@ifempty{#1}{}}
 % LaTeX kernel while-loops. \@whilenum <test> \do {<body>} repeats <body> while
 % the \ifnum test holds; \@whiledim is the \ifdim analogue; \@whilesw <switch>\fi
 % {<body>} loops on a boolean switch. Classes drive frontmatter box splitting and

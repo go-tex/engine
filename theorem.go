@@ -106,10 +106,17 @@ func (e *Engine) doNewtheorem() {
 		csTok("global"), csTok("advance"), csTok(ctr), chTok(' ', catSpace),
 		chTok('b', catLetter), chTok('y', catLetter), chTok('1', catOther), csTok("relax"),
 		csTok("edef"), csTok("@currentlabel"), chTok('{', catBegin), csTok("the" + env), chTok('}', catEnd),
+		csTok("@oparg"), chTok('{', catBegin),
 		csTok("@begintheorem"), chTok('{', catBegin),
 	}
 	body = append(body, head...)
 	body = append(body, chTok('}', catEnd), chTok('{', catBegin), csTok("the"+env), chTok('}', catEnd))
+	// Close \@oparg's argument and hand it the default empty bracket group, so the
+	// call reaches \@begintheorem WITH a [note] whether or not the document wrote
+	// one. That is what amsthm does, and what a class redefining \@begintheorem
+	// with a delimited [#3] parameter requires: called without a bracket, such a
+	// macro reads forward through the document looking for one.
+	body = append(body, chTok('}', catEnd), chTok('[', catOther), chTok(']', catOther))
 	e.define(env, &meaning{kind: mMacro, body: body}, true)
 
 	// \end<env>: the fixed closing macro (end paragraph, close group, vertical space).

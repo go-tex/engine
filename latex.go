@@ -511,7 +511,18 @@ const MiniLaTeXKernel = `
 % before the period ("Theorem." rather than "Theorem .").
 \def\@beginthmnonum#1{\noindent{\bf #1}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
 \def\@stdbegintheorem{{\bf .}\ \it }
-\def\@opargbegintheorem[#1]{{\bf\ (#1).}\ \it }
+% An EMPTY note is no note: \@oparg supplies [] when the document gave none, so
+% this arm now runs for every theorem and must not set an empty pair of
+% parentheses.
+\def\@opargbegintheorem[#1]{\def\gotex@thmnote{#1}\ifx\gotex@thmnote\@empty\@stdbegintheorem\else{\bf\ (#1).}\ \it \fi}
+% amsgen's \@oparg: call #1 with the bracket group the document supplies, or with
+% [#2] when it supplies none. \newtheorem's generated macro routes its call to
+% \@begintheorem through this, exactly as amsthm does (amsthm.sty:143), because a
+% class is allowed to redefine \@begintheorem with a DELIMITED third parameter —
+% \def\@begintheorem#1#2[#3] is amsthm's own signature and journal classes copy
+% it. Called with no bracket, such a macro scans the document for the next [ and
+% swallows everything up to it.
+\def\@oparg#1[#2]{\@ifnextbracket{#1}{#1[#2]}}
 \def\@endtheorem{\par\endgroup\medskip}
 % proof: an italic "Proof." head (overridable via \begin{proof}[Proof of …]), a
 % roman body, and a QED box flushed to the right margin at \end{proof}.
