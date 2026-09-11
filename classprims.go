@@ -187,6 +187,31 @@ const LaTeX2eClassLead = `
   \else
     \noindent{#1 #2}\par\vskip\@tempskipa
   \fi}
+% \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection
+% calls once it has read the star, the optional toc title and the title. This
+% engine's \@startsection goes through \@gxsec instead — but a CLASS may call
+% \@sect directly, and the copernicus/EGU family does:
+%
+%	\def\section{...\@dblarg{\@sect{section}{1}{\z@}{...}{...}{...}}}
+%
+% Undefined, lenient mode skipped the command WITH ITS EIGHT ARGUMENTS, so every
+% heading of such a document vanished — 2304.06058 came out with not one of its
+% fifteen section titles, against a reference that numbers them 1 to 9.
+%
+% They are defined in terms of the same helpers \@startsection uses, so a heading
+% set through them is spaced and numbered exactly like one set the other way. A
+% class that defines its own (amsart does) overrides these, since the kernel is
+% loaded first.
+\def\@sect#1#2#3#4#5#6[#7]#8{\par
+  \@tempskipa#4\relax
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \vskip\@tempskipa
+  \@gxnum{#1}{#2}{#6}{#5}{#8}}
+\def\@ssect#1#2#3#4#5{\par
+  \@tempskipa#2\relax
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \vskip\@tempskipa
+  \@gxhead{#4}{#5}{#3}}
 \def\@afterheading{}
 % \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
 % optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title
