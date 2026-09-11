@@ -550,3 +550,31 @@ func (e *Engine) assembleTwoColumnPage(bands []*boxNode, left, right []node, col
 	e.hsize = saved
 	return page
 }
+
+// startRevtexBody switches a revtex reprint document to its two-column body, with the
+// frontmatter already on the main vertical list carried across the top of the SAME page
+// as a full-width span.
+//
+// It is \twocolumn[frontmatter] in all but name, and it is not switchToTwoColumn: that
+// one leaves the material so far as its own one-column region, and regions are
+// page-aligned, so the body would start on the next page with most of page one blank.
+//
+// When the frontmatter is taller than the text block there is no page to share, so it
+// keeps its own region and the body starts below it as before — the span mechanism
+// places a band on one page and cannot break it.
+func (e *Engine) startRevtexBody() {
+	if len(e.colRegions) > 0 || len(e.mvl) == 0 {
+		e.switchToTwoColumn(nil) // nothing typeset yet, or regions already begun
+		return
+	}
+	span := vpackSP(e.mvl, packNatural, 0)
+	span.width = e.fullWidth()
+	if span.height+span.depth > e.effectiveVsize() {
+		e.switchToTwoColumn(nil) // taller than the page: no room to share
+		return
+	}
+	e.mvl = nil
+	e.enterTwoColumnMeasure()
+	e.twoColumn = true
+	e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2, span: span, colW: e.hsize})
+}

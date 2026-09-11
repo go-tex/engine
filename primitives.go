@@ -2236,11 +2236,21 @@ func (e *Engine) loadStomach() {
 	})
 	// \gotex@revtexbodytwocol is the internal hook the revtex emulation's \maketitle
 	// runs at its end in reprint / journal (two-column) mode: the frontmatter typeset
-	// so far (title, authors, affiliations, abstract) stays a full-width one-column
-	// region and the body below switches to two columns (see twocolumn.go, revtex.go).
+	// so far (title, authors, affiliations, abstract) spans both columns and the body
+	// flows in two columns BELOW IT, on the SAME page (see twocolumn.go, revtex.go).
+	//
+	// It used to leave the frontmatter as its own one-column region. Regions are
+	// page-aligned — \onecolumn and \twocolumn both \clearpage — so the body then
+	// started on page TWO and three quarters of page one stayed blank. Measured on
+	// 2203.15077: our page 1 held ink from y=70 to y=141 of 660 where the reference
+	// fills it to y=603, and the paper set in 6 pages against 5.
+	//
+	// revtex's frontmatter is exactly what \twocolumn[...] takes: a full-width block
+	// across the top of the region's first page, which paginateTwoColList already
+	// places. So it is handed over as the region's SPAN instead of a region of its own.
 	e.prim("gotex@revtexbodytwocol", func(e *Engine) {
 		if e.revtexReprint {
-			e.switchToTwoColumn(nil)
+			e.startRevtexBody()
 		}
 	})
 	// \gotex@dblfloat{figure|table} is the internal hook \begin{figure*}/\begin{table*}
