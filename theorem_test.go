@@ -29,6 +29,15 @@ func hasRuleNode(nodes []node) bool {
 func treeText(e *Engine) string {
 	var b strings.Builder
 	collectChars(e.mvl, &b)
+	// A column region's SPAN is typeset material that reaches the page without ever
+	// being on the main vertical list — revtex's frontmatter is one, a figure*/table*
+	// band is another. Walking mvl alone made a revtex title block look absent when
+	// it was merely somewhere else.
+	for _, r := range e.colRegions {
+		if r.span != nil {
+			collectChars([]node{r.span}, &b)
+		}
+	}
 	return b.String()
 }
 

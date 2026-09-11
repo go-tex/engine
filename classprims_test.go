@@ -312,6 +312,14 @@ func pageChars(e *Engine) string {
 	}
 	walk(e.mvl)
 	walk(e.parList)
+	// Column-region spans are typeset material too — revtex's frontmatter, a
+	// figure*/table* band — and they reach the page without passing through the main
+	// vertical list.
+	for _, r := range e.colRegions {
+		if r.span != nil {
+			walk([]node{r.span})
+		}
+	}
 	return string(s)
 }
 

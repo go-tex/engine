@@ -338,18 +338,18 @@ func TestRevtexReprintTwoColumn(t *testing.T) {
 	if !rep.twoColumn {
 		t.Fatal("revtex reprint did not switch the body to two-column")
 	}
-	// A one-column frontmatter region precedes a two-column body region.
-	sawFront, sawBody := false, false
-	for _, r := range rep.colRegions {
-		if r.cols == 1 {
-			sawFront = true
-		}
-		if r.cols >= 2 {
-			sawBody = true
-		}
+	// The frontmatter is the two-column region's SPAN, not a one-column region of its
+	// own. It used to be one, and regions are page-aligned — \onecolumn and
+	// \twocolumn both \clearpage — so the body started on page TWO with most of page
+	// one blank. revtex's frontmatter is \twocolumn[...] in all but name: a full-width
+	// block across the top of the SAME page the body flows on.
+	if len(rep.colRegions) != 1 {
+		t.Fatalf("%d regions, want one two-column region carrying the frontmatter: %+v",
+			len(rep.colRegions), rep.colRegions)
 	}
-	if !sawFront || !sawBody {
-		t.Fatalf("expected a one-column frontmatter and a two-column body: %+v", rep.colRegions)
+	if r := rep.colRegions[0]; r.at != 0 || r.cols < 2 || r.span == nil {
+		t.Fatalf("region = {at:%d cols:%d span:%v}, want {at:0 cols:2 span:<the frontmatter>}",
+			r.at, r.cols, r.span != nil)
 	}
 	repPages := rep.Pages()
 	twoColPages := 0
