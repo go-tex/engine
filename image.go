@@ -149,7 +149,25 @@ func (e *Engine) placeholderImage(wReq, hReq, iw, ih int, scale, dpiX, dpiY floa
 		h = 90 * unity
 	}
 	e.startImage()
-	inner := &boxNode{kind: hbox, width: w, height: h}
+	// The frame is drawn INSIDE the space the figure asked for, not around it.
+	//
+	// frameNode grows its inner box by sep+rule on every side, so a placeholder
+	// built at the requested size occupies 2*(3+0.4) = 6.8pt MORE than the figure
+	// would in both directions. Measured against tectonic on one corpus figure
+	// (1242.96x409.92pt at width=\textwidth=345pt): the reference sets it 113.8pt
+	// tall and we reserved 120.5. A width=\textwidth placeholder was also 6.8pt
+	// WIDER than the text block, which overfills the line it sits on. 84 of the
+	// corpus's 157 papers hold a figure the engine cannot rasterise, one of them
+	// 33 of them, so the surplus is a systematic drift and not a rounding.
+	pad := 2 * (fboxSep + fboxRule)
+	bw, bh := w, h
+	if bw > pad {
+		bw -= pad
+	}
+	if bh > pad {
+		bh -= pad
+	}
+	inner := &boxNode{kind: hbox, width: bw, height: bh}
 	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})
 }
 
