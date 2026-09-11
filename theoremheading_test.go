@@ -34,3 +34,71 @@ func TestTheoremHeadingKeepsItsCommands(t *testing.T) {
 		}
 	}
 }
+
+// A class may redefine \@begintheorem with amsthm's OWN signature, whose third
+// parameter is DELIMITED: \def\@begintheorem#1#2[#3]. Journal classes copy it
+// verbatim — oup's oupau.cls does.
+//
+// Called with no bracket group, such a macro reads forward through the document
+// until it finds one. In 2401.17012 a theorem ate the thirty lines that followed
+// it, up to the [X_\beta,X_\gamma] inside a formula, and that formula came back
+// from the maths layer as one dropped equation the size of the rest of the paper
+// ("texmath: unexpected \"}\"").
+//
+// amsthm never calls it bare: amsthm.sty:143 goes through \@oparg, which supplies
+// [] when the document wrote no note. Neither does this now.
+func TestATheoremDoesNotHuntForALaterBracket(t *testing.T) {
+	const src = `\documentclass{article}
+\makeatletter\def\@begintheorem#1#2[#3]{\noindent\textbf{#1 #2}\ }\makeatother
+\newtheorem{thm}{Theorem}
+\begin{document}
+\begin{thm}
+BODY
+\end{thm}
+LATER [BRACKETED] TAIL
+\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pageChars(e)
+	for _, want := range []string{"BODY", "LATER", "BRACKETED", "TAIL"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the page lost %q — the theorem read past it looking for a bracket:\n%s", want, got)
+		}
+	}
+}
+
+// And a theorem with no note still heads "Theorem 1." rather than "Theorem 1 ()":
+// the empty bracket group \@oparg supplies is not a note.
+func TestAnEmptyNoteIsNoNote(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\newtheorem{thm}{Theorem}`+
+		`\begin{document}\begin{thm}body\end{thm}\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pageChars(e); strings.Contains(got, "()") {
+		t.Errorf("the head carries an empty note: %q", got)
+	}
+}
+
+// amsgen's \@ifempty, which amsthm's head is built out of: a theorem with no note
+// drops the parentheses by \@ifempty{#3}{\let\thmnote\@gobble}{\let\thmnote\@iden}.
+// Undefined, the call was skipped and its three arguments were TYPESET — which is
+// how a class that styles its own theorems came to print its head twice.
+func TestIfEmptyChoosesByEmptiness(t *testing.T) {
+	for _, c := range []struct{ arg, want, absent string }{
+		{"", "YES", "NO"},
+		{"x", "NO", "YES"},
+	} {
+		e, err := compile([]byte(`\documentclass{article}\begin{document}\makeatletter`+
+			`\@ifempty{`+c.arg+`}{YES}{NO}\makeatother\end{document}`), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("%q: %v", c.arg, err)
+		}
+		got := pageChars(e)
+		if !strings.Contains(got, c.want) || strings.Contains(got, c.absent) {
+			t.Errorf(`\@ifempty{%s} put %q on the page, want %q and not %q`, c.arg, got, c.want, c.absent)
+		}
+	}
+}
