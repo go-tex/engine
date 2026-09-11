@@ -220,7 +220,7 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 		// Text-mode Skipped keys are the bare command name; print with a leading \.
 		fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(d.Skipped))
 		for _, e := range sortedByCount(d.Skipped) {
-			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, printableCS(e.name))
 		}
 	}
 	if len(d.MathDropped) > 0 {
@@ -231,6 +231,26 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+}
+
+// printableCS renders a command's name the way TeX shows it, so a command whose
+// name IS a control character can be read at all.
+//
+// \^^M — control <return>, which a line ending in a backslash makes — was the
+// most frequent undefined command in a 157-paper corpus, and it printed as a bare
+// "\" followed by an invisible byte. It read as noise for months. TeX's own ^^
+// notation (TeXbook, Chapter 8) names it.
+func printableCS(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			b.WriteString("^^")
+			b.WriteRune(r ^ 0x40)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // nameCount is a command name and how many times it was dropped/skipped.

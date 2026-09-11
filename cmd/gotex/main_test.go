@@ -150,3 +150,22 @@ func TestRunReportRunawayWarning(t *testing.T) {
 		t.Errorf("report did not warn about the runaway; stderr=%q", se.String())
 	}
 }
+
+// A command whose name IS a control character must be readable in the census.
+// \^^M — control <return>, which a line ending in a backslash makes — was the
+// most frequent undefined command in a 157-paper corpus and printed as a bare
+// backslash followed by an invisible byte, so it read as noise for months.
+func TestPrintableCSNamesAControlCharacter(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"\r", "^^M"},
+		{"\n", "^^J"},
+		{"\t", "^^I"},
+		{"\x7f", "^^?"},
+		{"section", "section"},
+		{" ", " "},
+	} {
+		if got := printableCS(c.in); got != c.want {
+			t.Errorf("printableCS(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
