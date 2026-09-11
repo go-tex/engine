@@ -453,6 +453,15 @@ const MiniLaTeXKernel = `
 \def\dots{...}
 \def\newpage{\par\penalty-10000 }
 \def\clearpage{\par\penalty-10000 }
+% \cleardoublepage starts a page, and in TWOSIDE also leaves a blank one when the
+% next page would be even (LaTeX: \clearpage\if@twoside\ifodd\c@page\else
+% \hbox{}\newpage\fi\fi). The engine decides page numbers in the page builder and
+% not in the mouth, so \ifodd\c@page cannot be asked here; the blank page is
+% therefore omitted and the command reduces to \clearpage, which is EXACT under
+% oneside. Undefined it was skipped entirely in lenient mode — so a book's parts
+% and chapters did not start a new page AT ALL, which is 23 missing page breaks in
+% one 333-page thesis of the corpus.
+\def\cleardoublepage{\clearpage}
 % \include{FILE}/\includeonly. LaTeX's \include starts a fresh page, reads
 % FILE.tex, then starts another fresh page (it also keeps a per-file .aux, which
 % the engine has no equivalent for), so it reduces to \clearpage\input\clearpage.
