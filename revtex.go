@@ -25,6 +25,12 @@ package engine
 // match against the reference even though every word is present (measured: 2605.12538,
 // 7 authors, went to 5.8 layout-divergence at 94.5% recall). Comma/semicolon joining
 // keeps the block height near revtex's, recovering that layout without losing content.
+// revtex prints NO "Abstract" heading — checked against the real class through
+// tectonic, on the minimal document and on a corpus paper: page one goes straight
+// from the affiliations to the abstract's own text. The generic \abstract
+// (latex.go) centres one, which is right for article and wrong here, so this does
+// not carry it over.
+//
 // The ABSTRACT is captured, not typeset where it stands. In revtex the abstract is
 // written BEFORE \maketitle and emitted BY it, after the authors; the generic
 // \abstract (latex.go) sets it in place, so the playground and every rendered revtex
@@ -59,7 +65,6 @@ const RevtexAuthorBlock = `
 \newbox\@revtexabsbox
 \newif\if@revtexmadetitle
 \long\def\abstract{\global\setbox\@revtexabsbox\vbox\bgroup
-  \centerline{\small\bfseries Abstract}\smallskip
   \leftskip=20pt \rightskip=20pt \small}
 \def\endabstract{\egroup\if@revtexmadetitle\@revtexputabstract\fi}
 \def\@revtexputabstract{\par\bigskip\noindent\box\@revtexabsbox\par}
