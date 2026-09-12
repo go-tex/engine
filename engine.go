@@ -12,6 +12,9 @@
 package engine
 
 import (
+	"fmt"
+	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -367,11 +370,13 @@ type Engine struct {
 	// (Run resets it to 0; class/package loading splices file bodies into e.base at
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
-	afterToken       *tok // token saved by \afterassignment, inserted after the next one
-	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
-	lookahead        int  // >0 inside a scan that may back its tokens out (see getXToken)
-	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
-	pendingProtected bool // a \protected prefix waiting for the \def it applies to
+	afterToken       *tok     // token saved by \afterassignment, inserted after the next one
+	expandDepth      int      // >0 while an isolated expansion (\edef/\message) is running
+	lookahead        int      // >0 inside a scan that may back its tokens out (see getXToken)
+	trace            []string // names of the last expansions, for the runaway report (GOTEX_TRACE)
+	traceHead        []string // and the first ones since the input last moved forward
+	literalActive    bool     // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
+	pendingProtected bool     // a \protected prefix waiting for the \def it applies to
 	// outStream holds the text \write has sent to each open \openout stream, and
 	// outName the file name that stream was opened with. On \closeout the text
 	// becomes an entry in writtenFile, which findTeXFile consults before the disk —
@@ -1222,6 +1227,15 @@ func (e *Engine) getXToken() (tok, bool) {
 			if e.stepOverrun() || len(e.lists) > maxInputDepth {
 				e.tripRunaway()
 				return tok{}, false
+			}
+			if traceRunaway {
+				e.trace = append(e.trace, t.cs)
+				if len(e.trace) > traceDepth {
+					e.trace = e.trace[len(e.trace)-traceDepth:]
+				}
+				if len(e.traceHead) < traceDepth {
+					e.traceHead = append(e.traceHead, t.cs)
+				}
 			}
 			saved := e.expandingCS
 			e.expandingCS = t.cs
@@ -2175,6 +2189,7 @@ func (e *Engine) stepOverrun() bool {
 	if e.bpos > e.progBpos { // the mouth consumed new base input: real forward progress
 		e.progBpos = e.bpos
 		e.noProgSteps = 0
+		e.traceHead = e.traceHead[:0] // the loop, if one starts, starts after here
 	} else {
 		e.noProgSteps++
 	}
@@ -2184,7 +2199,44 @@ func (e *Engine) stepOverrun() bool {
 // tripRunaway halts expansion when the step/depth guard fires: it discards the
 // pending input so the loop unwinds, and (in strict mode only) records the error.
 // In tolerant mode the partial document built so far is still rendered.
+// printTrace prints a trace with runs collapsed: a loop repeats one macro
+// thousands of times, and one line each would push the CALLER — the interesting
+// line — out of the report.
+func printTrace(names []string) {
+	for i := 0; i < len(names); {
+		j := i
+		for j < len(names) && names[j] == names[i] {
+			j++
+		}
+		if j-i > 1 {
+			fmt.Fprintf(traceOut, "    \\%s  x%d\n", names[i], j-i)
+		} else {
+			fmt.Fprintf(traceOut, "    \\%s\n", names[i])
+		}
+		i = j
+	}
+}
+
+// traceRunaway turns on the report below. A runaway is the hardest failure this
+// engine produces to read: the error names the line the document DIED on, which is
+// almost never the line at fault (a pgf module that loops says "\end{document}").
+// With GOTEX_TRACE=1 the last expansions are printed instead, and the loop names
+// itself — the macro that repeats is the one at the top of the report.
+var traceRunaway = os.Getenv("GOTEX_TRACE") != ""
+
+// traceOut is where that report goes. A variable so a test can read it back.
+var traceOut io.Writer = os.Stderr
+
+const traceDepth = 400
+
 func (e *Engine) tripRunaway() {
+	if traceRunaway {
+		fmt.Fprintf(traceOut, "gotex: runaway at %d:%d\n", e.curSrcLine, e.curSrcCol)
+		fmt.Fprintf(traceOut, "  FIRST expansions after the input last moved forward:\n")
+		printTrace(e.traceHead)
+		fmt.Fprintf(traceOut, "  LAST expansions:\n")
+		printTrace(e.trace)
+	}
 	e.runaway = true
 	e.lists = nil
 	e.noBase = true
