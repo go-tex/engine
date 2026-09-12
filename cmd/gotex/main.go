@@ -40,6 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	lenient := fs.Bool("lenient", false, "skip undefined commands instead of aborting (best-effort preview of third-party documents)")
 	offline := fs.Bool("offline", false, "never fetch a support tree: use only what is already on this machine (a cached bundle, TEXINPUTS/GOTEX_TEXMF, the embedded set)")
 	reportSkipped := fs.Bool("report-skipped", false, "after a lenient render, print (to stderr) the undefined commands that were skipped, most frequent first — surfaces the feature gaps a best-effort render hides")
+	showMessages := fs.Bool("messages", false, "print (to stderr) what the document said through \\message and \\typeout — a real TeX puts this on the terminal, and it is how a source reports which branch it took")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -126,6 +127,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "gotex: wrote %s (%d page%s)\n", outName, pages, plural(pages))
+	if *showMessages && diag.Messages != "" {
+		fmt.Fprintf(stderr, "gotex: the document said:\n%s\n", diag.Messages)
+	}
 	if *reportSkipped {
 		reportDiagnostics(stderr, diag)
 	}

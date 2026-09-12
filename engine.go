@@ -2064,6 +2064,14 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+	// Messages is what the document itself said: the text of every \message and
+	// \typeout, in order. A real TeX prints this to the terminal and the log, and
+	// it is how a document (or a package) reports what it decided — which branch of
+	// an \ifx it took, which driver it picked, what \the of a length says. The
+	// engine collected it and no caller could see it, so a probe written the way TeX
+	// documents it prints nothing, and a diagnosis has to typeset its answers onto a
+	// page instead. Empty unless the document said something.
+	Messages string
 	// RunawayArgs counts the macro calls abandoned because a \par ended an argument
 	// (tex.web §392/§396, parEndsArgument). It is an ALARM, not a feature gap: the
 	// call is dropped, so whatever it would have set is gone. It used to be tallied
@@ -2165,6 +2173,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		Runaway:          e.runaway,
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
+		Messages:         e.out.String(),
 		RunawayArgs:      e.runawayArgs,
 		RunawayMacros:    e.runawayMacros,
 		UndefinedEnvs:    undefinedEnvs,
