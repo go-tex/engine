@@ -3009,15 +3009,31 @@ func (e *Engine) scanBody() []tok {
 			if !ok {
 				return g
 			}
-			if n.cat == catParam && !n.cs_ {
+			switch {
+			case n.cat == catParam && !n.cs_:
 				// ## → a single #, kept as a PARAMETER character (catParam), not catOther:
 				// TeX's halving preserves the #'s parameter-ness so a nested definition
 				// scanned from this body (amsart's \def\@andlistc##1{…##1…} inside
 				// \newcommand\nxandlist) still sees #1 as a parameter. A stray # that
 				// reaches the stomach is typeset as '#' by stepToken / the box builder.
 				g = append(g, tok{ch: '#', cat: catParam}) // ## → #
-			} else {
+			case !n.cs_ && n.ch >= '1' && n.ch <= '9':
 				g = append(g, tok{ch: n.ch, cat: catParam}) // #digit → parameter
+			default:
+				// Neither ## nor a parameter number. TeX reports "Illegal parameter
+				// number in definition of \x", BACKS THE TOKEN UP (back_error) and
+				// keeps the # itself (tex.web §479). Consuming it instead is how a
+				// single # ate a document: in
+				//
+				//	\edef\r{\take#}
+				//
+				// the } was swallowed as if it were a parameter number, the body scan
+				// ran past the end of the group, and everything after it was absorbed
+				// into the definition. That line is pgf's, verbatim — the parser
+				// module reads # the same way it reads any other token — so the whole
+				// module was lost with the rest of the file.
+				e.back(n)
+				g = append(g, t)
 			}
 			continue
 		}

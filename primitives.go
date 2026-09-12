@@ -2514,12 +2514,35 @@ func (e *Engine) meaningString(t tok) string {
 	return "undefined"
 }
 
+// catName is TeX's print_cmd_chr for a character token (tex.web §298): the words
+// it prints in front of the character itself, which \meaning and \show report.
+//
+// The four it used to know were not a shortcut — the missing ones are LOAD-BEARING.
+// pgf's parser module reads a token's category by taking the first two words of its
+// \meaning:
+//
+//	\edef\pgfparser@category@vi{\pgfparser@extractmeaning#}
+//
+// and compares that against the \meaning of every token it scans. With # reported
+// as "the character" instead of "macro parameter character", the comparison equated
+// # with every other ordinary character, and svg paths (the only user of that module
+// here) parsed as nonsense.
 func catName(c cat) string {
 	switch c {
 	case catBegin:
 		return "begin-group character"
 	case catEnd:
 		return "end-group character"
+	case catMath:
+		return "math shift character"
+	case catAlign:
+		return "alignment tab character"
+	case catParam:
+		return "macro parameter character"
+	case catSup:
+		return "superscript character"
+	case catSub:
+		return "subscript character"
 	case catLetter:
 		return "the letter"
 	case catSpace:
