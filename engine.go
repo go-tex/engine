@@ -369,6 +369,7 @@ type Engine struct {
 	// signal even while a heavy .cls is loading.
 	afterToken       *tok // token saved by \afterassignment, inserted after the next one
 	expandDepth      int  // >0 while an isolated expansion (\edef/\message) is running
+	lookahead        int  // >0 inside a scan that may back its tokens out (see getXToken)
 	literalActive    bool // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
 	pendingProtected bool // a \protected prefix waiting for the \def it applies to
 	// outStream holds the text \write has sent to each open \openout stream, and
@@ -1228,6 +1229,16 @@ func (e *Engine) getXToken() (tok, bool) {
 			e.expandingCS = saved
 		case mPrim:
 			if isExpandable(m.name) {
+				if e.lookahead > 0 && stomachInGullet[m.name] {
+					// A scan that can back out expands, but never EXECUTES: TeX's
+					// get_x_token returns any command code <= max_command as it
+					// stands (tex.web §380), so scan_keyword meets \begingroup
+					// and backs it up instead of opening a group. Our \begin is
+					// expandable and reaches the same stomach work through
+					// \gotex@checkenv; held here, the token has consumed nothing
+					// and the caller backs it out unharmed.
+					return t, true
+				}
 				if e.stepOverrun() {
 					e.tripRunaway()
 					return tok{}, false
@@ -1240,6 +1251,19 @@ func (e *Engine) getXToken() (tok, bool) {
 			return t, true
 		}
 	}
+}
+
+// peekXToken is getXToken for a scan that may hand the token back: the digit after
+// a number, the "plus" after a glue. It expands as getXToken does but never lets an
+// expandable primitive that acts on the STOMACH run (see stomachInGullet), because
+// the token it would consume is one the caller is about to put back. TeX gets this
+// for free — its lookahead stops in front of any unexpandable command (tex.web §380)
+// and \begin's group is opened by \begingroup, which is one.
+func (e *Engine) peekXToken() (tok, bool) {
+	e.lookahead++
+	t, ok := e.getXToken()
+	e.lookahead--
+	return t, ok
 }
 
 // expandMacro matches the macro's parameters against the input and pushes the
@@ -2252,7 +2276,7 @@ func (e *Engine) scanInt() int {
 		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
 			n := int(t.ch - '0')
 			for {
-				u, uk := e.getXToken()
+				u, uk := e.peekXToken()
 				if uk && !u.cs_ && u.ch >= '0' && u.ch <= '9' {
 					n = n*10 + int(u.ch-'0')
 					continue
@@ -2808,10 +2832,10 @@ func (e *Engine) scanKeyword(word string) bool {
 	// space that such an expansion introduces before the first letter.
 	leading := true
 	for _, w := range word {
-		t, ok := e.getXToken()
+		t, ok := e.peekXToken()
 		for leading && ok && t.cat == catSpace && !t.cs_ {
 			buf = append(buf, t)
-			t, ok = e.getXToken()
+			t, ok = e.peekXToken()
 		}
 		leading = false
 		if !ok {

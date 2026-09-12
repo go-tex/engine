@@ -56,6 +56,17 @@ var expandableSet = map[string]bool{
 
 func isExpandable(name string) bool { return expandableSet[name] }
 
+// stomachInGullet lists the two expandable primitives that nevertheless change the
+// STOMACH's state: \gotex@checkenv opens \begin's group and sets \@currenvir,
+// \gotex@endenv closes it. In LaTeX that work is done by \begingroup, \endgroup
+// and \def inside \begin's body — all unexpandable, so a lookahead expanding
+// \begin stops in front of them (tex.web §380: get_x_token returns any command
+// code <= max_command untouched). Ours are reached through expansion instead, so a
+// scan that merely LOOKS ahead — \abovecaptionskip=40pt scanning for "plus" before
+// \begin{figure} — used to open the environment's group mid-assignment, and the
+// assignment was undone at \end. getXToken holds them back while e.lookahead > 0.
+var stomachInGullet = map[string]bool{"gotex@checkenv": true, "gotex@endenv": true}
+
 func isIfPrim(name string) bool {
 	if etexIfPrims[name] {
 		return true
