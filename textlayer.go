@@ -182,9 +182,17 @@ func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
 	if c.size > em {
 		em = c.size
 	}
-	// A quarter of an em: wider than any kern or italic correction, narrower
-	// than any inter-word space.
-	return x-c.endX > 0.25*em
+	// A fifth of an em: wider than any kern or italic correction, narrower than
+	// any interword space.
+	//
+	// It was a QUARTER, which stopped working the moment the interword space
+	// stopped being rounded to a whole point (font.go): the space is now the face's
+	// own advance, and a text face declares exactly 0.25em (Libertinus, Times) —
+	// putting the threshold ON the space instead of below it, so "mc^2 exactly"
+	// came out "mc^2exactly". The narrowest space among the faces this engine sets
+	// is STIX Two Math's 0.235em, and the widest italic correction is well under a
+	// tenth of an em, so a fifth separates them with room on both sides.
+	return x-c.endX > 0.2*em
 }
 
 // addChar extends the run with one character whose glyph origin is at x and
