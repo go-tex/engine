@@ -108,10 +108,34 @@ func (o *OpenTypeFont) glyphPath(r rune) string {
 }
 
 // Space returns TeX-like interword glue derived from the space advance.
+//
+// UNROUNDED, like charDims above and for the same reason: Face.Advance rounds to a
+// whole pixel first (roundInt(units*scale)), and a space is a single glyph whose
+// whole width IS that advance — so the rounding lands entirely on the interword
+// space, up to half a point of it, and it lands differently at every type size.
+// Libertinus Serif declares 0.25em, and the rounded path gave:
+//
+//	 9pt   2.000 against 2.250   -11%
+//	10pt   3.000 against 2.500   +20%
+//	11pt   3.000 against 2.750    +9%
+//	12pt   3.000 against 3.000     0
+//
+// With ~13 spaces to a line, +20% at 10pt — the corpus's usual size — is several
+// points of line width, which moves every line break.
+//
+// The ratios are XeTeX's own for an OpenType font, confirmed by asking it:
+// \fontdimen2/3/4 come out 3.0/1.5/1.0 for Libertinus Serif at 12pt and
+// 2.82/1.41/0.94 for STIX Two Math, i.e. stretch = space/2 and shrink = space/3
+// exactly as here. fontspec's WordSpace only MULTIPLIES those (fontspec-xetex.sty),
+// so the font supplies the value and a document may scale it — there is no
+// engine-imposed 1/3 em to match.
 func (o *OpenTypeFont) Space() (float64, float64, float64) {
-	w := float64(o.fc.Advance(' '))
+	w := 0.0
+	if gid, ok := o.f.GlyphIndex(' '); ok {
+		w = o.fc.AdvanceIndexUnits(gid) * o.fc.Scale()
+	}
 	if w == 0 {
-		w = float64(o.px) * 0.25
+		w = float64(o.px) * 0.25 // a font with no space glyph at all
 	}
 	return w, w * 0.5, w / 3
 }

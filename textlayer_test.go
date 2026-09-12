@@ -188,7 +188,13 @@ func TestTextCursorWantsSpace(t *testing.T) {
 		{"a visible gap is", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 26, 100, 10, true},
 		{"a new line, back to the margin", textCursor{live: true, baseline: 100, endX: 400, size: 10}, 70, 112, 10, true},
 		{"a superscript keeps moving right", textCursor{live: true, baseline: 100, endX: 20, size: 10}, 20, 96, 7, false},
-		{"the gap scales with the larger size", textCursor{live: true, baseline: 100, endX: 20, size: 24}, 25, 100, 10, false},
+		// The gap is measured against the LARGER of the two sizes: 2pt after 24pt
+		// text is a kern (0.08em), while after 10pt text it would be a space. The
+		// gap was 5pt here when the threshold was a quarter of an em; at a fifth
+		// (see wantsSpace) 5pt after 24pt text is 0.21em, which IS a space —
+		// justification shrinks a 6pt space that far. The case tests the scaling,
+		// and 2pt tests it without sitting on the threshold.
+		{"the gap scales with the larger size", textCursor{live: true, baseline: 100, endX: 20, size: 24}, 22, 100, 10, false},
 	}
 	for _, c := range cases {
 		if got := c.cur.wantsSpace(c.x, c.base, c.size); got != c.want {
