@@ -263,7 +263,12 @@ const AMSClassSubstrate = `
 % builder had the value hard-coded instead, so \parfillskip could not be
 % changed at all (which is what \centering does).
 \newskip\parfillskip \parfillskip=0pt plus 1fil
-\newskip\normalbaselineskip
+% latex.ltx:547. It is 12pt to begin with, and \selectfont keeps it in step with
+% \baselineskip from then on (set@fontsize, l.8543). Allocated and never set it
+% read ZERO, and a class that measures with it got nothing: IEEEtran builds every
+% \IEEEeqnarray row strut as 0.7/0.3\normalbaselineskip, and \@arrayparboxrestore
+% — which runs inside every array cell and parbox — sets \baselineskip from it.
+\newskip\normalbaselineskip \normalbaselineskip=12pt
 % \lastskip reads the last glue on the current list. The engine does not expose
 % list surgery, and every use is a spacing tweak off the critical path (amsart's
 % footnote \advance\skip@-\lastskip, and \removelastskip), so a permanently zero

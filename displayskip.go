@@ -30,6 +30,16 @@ func (e *Engine) namedSkip(name string) glueSpec {
 	return glueSpec{}
 }
 
+// setNamedSkip writes the \skip register a \newskip-defined control sequence names.
+// A name that is not a skip register is ignored: the kernel that allocates it may
+// not have been loaded (the engine runs plain-TeX documents too), and a caller
+// keeping a register in step must not care.
+func (e *Engine) setNamedSkip(name string, g glueSpec) {
+	if m := e.eq[name]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
+		e.setSkip(m.code, g, true)
+	}
+}
+
 // placeDisplay contributes the boxes of one displayed equation to the main
 // vertical list with TeX's display spacing: \abovedisplayskip above the first
 // box, ordinary interline glue between the boxes of a multi-line display
