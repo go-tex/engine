@@ -79,11 +79,23 @@ func (e *Engine) loadAMSPrims() {
 	// omitted; here the primitive runs in the stomach either way, so the "=" is the
 	// only signal — and a read is never followed by one. Without it, nothing is
 	// consumed, exactly as before.
+	// Consuming the assignment stopped the leak but DROPPED the value, so a document
+	// that sets its own interword space silently got ours. Measured against
+	// tectonic, \fontdimen2\font=8pt moves the reference's space to exactly 8pt and
+	// left ours at 2pt. The value is now kept, and spaceGlueOf reads it.
+	//
+	// Only the \font form is honoured — the current font, which is what IEEEtran and
+	// the rest of the corpus's 40 assignments use. \scriptfont/\textfont and the
+	// \the\font form need a font-register model this engine does not have; they
+	// still consume their value rather than leak it. See the issue.
 	e.prim("fontdimen", func(e *Engine) {
-		e.scanInt()
+		n := e.scanInt()
+		curFont := false
 		if t, ok := e.getXToken(); !ok {
 			return
-		} else if !(t.cs_ && t.cs == "font") { // \fontdimen2\font (the real \font primitive)
+		} else if t.cs_ && t.cs == "font" { // \fontdimen2\font (the real \font primitive)
+			curFont = true
+		} else {
 			e.back(t)
 		}
 		e.skipOptSpace()
@@ -95,7 +107,10 @@ func (e *Engine) loadAMSPrims() {
 			e.back(t)
 			return // a READ: leave the input alone
 		}
-		e.scanDimen() // an ASSIGNMENT: the value belongs to it, not to the page
+		v := e.scanDimen() // an ASSIGNMENT: the value belongs to it, not to the page
+		if curFont && n >= 2 && n <= 4 {
+			e.setFontDimen(e.curFont, n, v)
+		}
 	})
 	// \insert<n>{material}: add to an insert class (footnotes, amsart's \copyins).
 	// The engine has its own footnote model; accept the register number and the

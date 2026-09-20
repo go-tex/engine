@@ -566,7 +566,7 @@ func (e *Engine) buildBoxList() []node {
 				}
 			case catSpace:
 				if e.curFont != nil {
-					list = append(list, glueNode{spec: e.curFont.spaceSP()})
+					list = append(list, glueNode{spec: e.spaceGlue()})
 				}
 			case catMath:
 				src, display := e.scanMathSource()
@@ -658,7 +658,7 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 		return nil, true
 	case " ": // control space inside a box
 		if e.curFont != nil {
-			return glueNode{spec: e.curFont.spaceSP()}, true
+			return glueNode{spec: e.spaceGlue()}, true
 		}
 		return nil, true
 	case "hbox":

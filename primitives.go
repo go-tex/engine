@@ -2010,7 +2010,7 @@ func (e *Engine) loadMore() {
 	}
 	e.prim(" ", func(e *Engine) { // control space: an explicit interword space
 		if e.curFont != nil {
-			e.placeHGlue(e.curFont.spaceSP())
+			e.placeHGlue(e.spaceGlue())
 		}
 	})
 	// \^^M and \^^I: "control <return> = control <space>", latex.ltx:560-561
