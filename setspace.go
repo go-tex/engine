@@ -23,6 +23,16 @@ func (e *Engine) setLineStretch(f float64) {
 	e.prevBaselineskip = e.baselineskip
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 	e.explicitStretch = true
+	e.syncNormalBaselineskip()
+}
+
+// syncNormalBaselineskip keeps \normalbaselineskip equal to \baselineskip, which
+// is what \selectfont does at every size selection (latex.ltx set@fontsize,
+// l.8543: "\normalbaselineskip\baselineskip"). It is not decoration:
+// \@arrayparboxrestore sets \baselineskip FROM it inside every array cell and
+// parbox, and classes measure struts with it.
+func (e *Engine) syncNormalBaselineskip() {
+	e.setNamedSkip("normalbaselineskip", glueSpec{width: e.baselineskip})
 }
 
 // applyBaselineStretch honors LaTeX's NATIVE line-spacing mechanism at
@@ -172,6 +182,7 @@ func (e *Engine) doSetfontsize() {
 	base := ptToSP(f)
 	e.baseBaselineskip = base
 	e.setEngineDimen(saveBaselineskip, &e.baselineskip, int(float64(base)*stretch+0.5), false)
+	e.syncNormalBaselineskip()
 }
 
 // baselineStretchFactor is the line-spacing factor in force — what \selectfont
