@@ -403,7 +403,7 @@ const MiniLaTeXKernel = `
 \long\def\endalgorithmic{\par\endgroup}
 \expandafter\let\csname algpseudocode\endcsname\algorithmic
 \expandafter\let\csname endalgpseudocode\endcsname\endalgorithmic
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 \long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \long\def\endquote{\par\endgroup\smallskip}
 \long\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
@@ -550,7 +550,7 @@ const MiniLaTeXKernel = `
 \newcount\c@tocdepth
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 % ─── LaTeX counter interface (feat/counters) ─────────────────────────────────
 % Value-reading and counter-formatting commands. The mutating commands
 % (\newcounter/\setcounter/\addtocounter/\stepcounter/\refstepcounter) and the
@@ -639,7 +639,22 @@ const MiniLaTeXKernel = `
 % but measured over the corpus it dropped 49231 glyphs across 15 papers — the
 % class definitions use box and measurement primitives this engine does not carry
 % far enough yet. See the issue; the skip is the part that can be had safely now.
-\def\caption#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\small{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
+%
+% \captionfont is the SIZE, and it is empty by default because article.cls's
+% \@makecaption sets "#1: #2" at the CURRENT size (l.482) — no \small anywhere. We
+% hard-coded \small for every caption in the corpus, and a census says that is the
+% minority rule: of the 200 arXiv papers, 149 never redefine \@makecaption at all
+% (so article.cls's rule is theirs) and 19 redefine it at the current size — 168
+% against the 32 that ask for \small or smaller, plus 16 more that ask through the
+% caption package. A caption set one step too small is vertical material removed
+% from every figure-bearing page, which is the shape #356 is chasing.
+%
+% The name is caption.sty's own: its small/footnotesize/scriptsize options are
+% literally \def\captionfont{\small} and friends. So a document that loads the real
+% package, or writes \renewcommand\captionfont{\small} itself, is honoured here for
+% free, and the 48 that want a smaller caption have somewhere to say so.
+\def\captionfont{}
+\def\caption#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 \def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
