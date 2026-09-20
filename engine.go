@@ -107,8 +107,15 @@ type Engine struct {
 	box           [256]*boxNode // \box registers (nil = void)
 	mvl           []node        // main vertical list (top-level contributions)
 	curFont       fontFace      // current font for measuring/rendering characters
-	baseFont      fontFace      // the \normalsize font — glyph source + size reference for scaling
-	baseFontPx    int           // \normalsize size in px/pt (the 100% for \large/\small/…)
+	// fontDimens holds \fontdimen<n><font> values a document ASSIGNED, per face.
+	// TeX derives the interword glue from three of them — 2 nominal, 3 stretch,
+	// 4 shrink (tex.web §433, and the comment block in IEEEtran.cls l.1037-1039
+	// says the same) — so an assignment to those must reach the glue or it is a
+	// silent no-op. Absent an entry the face's own advance stands, which is where
+	// every value comes from until a document says otherwise.
+	fontDimens map[fontFace]map[int]int
+	baseFont   fontFace // the \normalsize font — glyph source + size reference for scaling
+	baseFontPx int      // \normalsize size in px/pt (the 100% for \large/\small/…)
 	// alignDisplay marks the display being placed as an ALIGNMENT (align, gather,
 	// multline), which TeX splices into the page rather than contributing through
 	// append_to_vlist — see placeAlignmentDisplay.
@@ -1784,7 +1791,7 @@ func (e *Engine) stepToken(t tok) bool {
 			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
 		case catSpace:
 			if e.inPar && e.curFont != nil {
-				e.parList = append(e.parList, glueNode{spec: e.curFont.spaceSP()})
+				e.parList = append(e.parList, glueNode{spec: e.spaceGlue()})
 			}
 		case catMath:
 			e.doMath()
@@ -2456,6 +2463,42 @@ func (e *Engine) scanSign() int {
 // scanDimen scans an optional-signed dimension and returns scaled points. It
 // accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
 // \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
+// spaceGlueOf is the interword glue for one face: the face's own advance, with any
+// \fontdimen 2/3/4 a document assigned to it taking precedence. TeX keeps these in
+// the font's parameter array and reads the glue from it (tex.web §433: the space
+// factor path uses font_info[2..4]), so an assignment is not advice — it IS the
+// glue from that point on.
+func (e *Engine) spaceGlueOf(f fontFace) glueSpec {
+	g := f.spaceSP()
+	if v, ok := e.fontDimens[f][2]; ok {
+		g.width = v
+	}
+	if v, ok := e.fontDimens[f][3]; ok {
+		g.stretch = v
+	}
+	if v, ok := e.fontDimens[f][4]; ok {
+		g.shrink = v
+	}
+	return g
+}
+
+// spaceGlue is spaceGlueOf for the current font.
+func (e *Engine) spaceGlue() glueSpec { return e.spaceGlueOf(e.curFont) }
+
+// setFontDimen records \fontdimen<n><font>=<dimen> for a face.
+func (e *Engine) setFontDimen(f fontFace, n, v int) {
+	if f == nil {
+		return
+	}
+	if e.fontDimens == nil {
+		e.fontDimens = map[fontFace]map[int]int{}
+	}
+	if e.fontDimens[f] == nil {
+		e.fontDimens[f] = map[int]int{}
+	}
+	e.fontDimens[f][n] = v
+}
+
 func (e *Engine) scanDimen() int {
 	e.skipOptSpace()
 	sign := e.scanSign()

@@ -149,7 +149,7 @@ func (e *Engine) verbatimLine(s string, font fontFace, line int) *boxNode {
 // verbNodes turns literal text into a node list: each character is a charNode in
 // the verbatim font, each space/tab a fixed kern the width of the font's space.
 func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
-	space := font.spaceSP().width
+	space := e.spaceGlueOf(font).width
 	var out []node
 	for _, r := range s {
 		if r == ' ' || r == '\t' {
