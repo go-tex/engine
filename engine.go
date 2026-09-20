@@ -133,20 +133,21 @@ type Engine struct {
 	mathR           mathRendererT // lazily-built go-tex/math renderer (see math.go)
 
 	// paragraph-builder state (horizontal mode at top level)
-	inPar            bool   // a paragraph is being accumulated
-	parList          []node // the current paragraph's horizontal list
-	everypar         []tok  // \everypar hook, fired at each paragraph start
-	inEverypar       bool   // guard: do not re-fire \everypar while it is running
-	hsize            int    // line width for breaking (sp)
-	vsize            int    // page height for the page builder (sp)
-	baselineskip     int    // baseline-to-baseline glue (sp)
-	baseBaselineskip int    // the single-spaced baseline skip, the 1.0 reference for setspace
-	explicitStretch  bool   // an explicit spacing command (setspace / \linespread / \setstretch) ran
-	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
-	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
-	parindent        int    // width of the indentation box at a paragraph's start (sp)
-	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
-	suppressParskip  bool   // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
+	inPar            bool    // a paragraph is being accumulated
+	parList          []node  // the current paragraph's horizontal list
+	everypar         []tok   // \everypar hook, fired at each paragraph start
+	inEverypar       bool    // guard: do not re-fire \everypar while it is running
+	hsize            int     // line width for breaking (sp)
+	vsize            int     // page height for the page builder (sp)
+	baselineskip     int     // baseline-to-baseline glue (sp)
+	baseBaselineskip int     // the single-spaced baseline skip, the 1.0 reference for setspace
+	explicitStretch  bool    // an explicit spacing command (setspace / \linespread / \setstretch) ran
+	lineStretch      float64 // the factor that command asked for (0 = none ran; see stableStretchFactor)
+	spacingSaved     []int   // \baselineskip stack for the setspace `spacing` environment
+	lineskip         int     // minimum interline glue when baselineskip is too small (sp)
+	parindent        int     // width of the indentation box at a paragraph's start (sp)
+	prevDepth        int     // \prevdepth for interline glue (ignoreDepth = suppress)
+	suppressParskip  bool    // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
 	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
 	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns

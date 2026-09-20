@@ -126,8 +126,8 @@ func TestSpacingAffectsParagraph(t *testing.T) {
 	}
 }
 
-// A class that redefines \normalsize states its body leading in \@setfontsize's
-// third argument and nowhere else. neurips_2024.sty is the pattern:
+// A class states the leading of each size in \@setfontsize's third argument, and
+// nowhere else. neurips_2024.sty is the pattern:
 // \@setfontsize\normalsize\@xpt\@xipt — 10pt on an 11pt skip, where the article
 // default is 12pt. 24 of the 157 corpus papers set their leading this way.
 func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
@@ -138,7 +138,15 @@ func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
 	}{
 		{"a conference style's normalsize", `\@setfontsize\normalsize\@xpt\@xipt`, 10.95},
 		{"a plain number", `\@setfontsize\normalsize{10}{13}`, 13},
-		{"another size command is ignored", `\@setfontsize\small\@ixpt\@xpt`, 0},
+		// Every OTHER size takes its leading too. This used to assert the opposite
+		// — that a non-\normalsize switch left \baselineskip alone — which left
+		// \small, \footnotesize and \large at the body leading. In article,
+		// tectonic gives 11pt, 9.5pt and 14pt where we gave 12pt throughout, so
+		// captions, footnotes, bibliographies and table bodies stood up to 26% too
+		// far apart. The values below are a real TeX's.
+		{"another size command takes its leading too", `\@setfontsize\small\@ixpt\@xpt`, 10},
+		{"a length with its unit", `\@setfontsize\small{9}{11pt}`, 11},
+		{"a number times the point register", `\@setfontsize\small{9}{11\p@}`, 11},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

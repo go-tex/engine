@@ -3,6 +3,8 @@
 
 package engine
 
+import "strings"
+
 // This file implements the setspace package (line spacing): \singlespacing,
 // \onehalfspacing and \doublespacing, plus \setstretch{factor} and LaTeX's
 // \linespread{factor}, and the spacing environment \begin{spacing}{factor}. Each
@@ -23,6 +25,79 @@ func (e *Engine) setLineStretch(f float64) {
 	e.prevBaselineskip = e.baselineskip
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 	e.explicitStretch = true
+	e.lineStretch = f
+	e.syncNormalBaselineskip()
+}
+
+// syncNormalBaselineskip keeps \normalbaselineskip equal to \baselineskip, which
+// is what \selectfont does at every size selection (latex.ltx set@fontsize,
+// l.8543: "\normalbaselineskip\baselineskip"). It is not decoration:
+// \@arrayparboxrestore sets \baselineskip FROM it inside every array cell and
+// parbox, and classes measure struts with it.
+func (e *Engine) syncNormalBaselineskip() {
+	e.setNamedSkip("normalbaselineskip", glueSpec{width: e.baselineskip})
+}
+
+// doSizeLeading is what \@setfontsize reports for a size OTHER than \normalsize:
+// the leading that size asks for. It sets the current \baselineskip — scaled by the
+// line-spacing factor in force, as \selectfont does — and nothing else. The base the
+// factor is measured against belongs to \normalsize and must not move here, or a
+// document's spacing would be redefined by every \small it passes through.
+//
+// The assignment is group-scoped, so {\small …} restores the body leading at the
+// closing brace, exactly as the size command's own grouping does in LaTeX.
+func (e *Engine) doSizeLeading() {
+	arg := e.grabUndelimited()
+	f, ok := parseLeadingArg(e.toksToString(e.expandList(arg)))
+	if !ok || f <= 0 {
+		return
+	}
+	stretch := e.stableStretchFactor()
+	e.setEngineDimen(saveBaselineskip, &e.baselineskip, int(float64(ptToSP(f))*stretch+0.5), false)
+	e.syncNormalBaselineskip()
+}
+
+// stableStretchFactor is the line-spacing factor, read from where it was DECLARED
+// rather than derived from the skip in force.
+//
+// baselineStretchFactor recovers the factor as \baselineskip / the \normalsize
+// reference, which is exact only while \baselineskip still holds a \normalsize
+// value. Once every size sets its own leading that stops being true, and deriving
+// the factor there COMPOUNDS: inside \small the ratio reads 11/12, so the next
+// size is set at 0.917 of its leading, the one after that at 0.917 again, and a
+// document ratchets tighter the more sizes it passes through. Measured before this
+// was fixed, on the 154-paper corpus: Sigma 298 -> 376, with one 198-page paper
+// losing 40 pages.
+func (e *Engine) stableStretchFactor() float64 {
+	if e.lineStretch > 0 {
+		return e.lineStretch
+	}
+	m := e.eq["baselinestretch"]
+	if m == nil || m.kind != mMacro {
+		return 1
+	}
+	f, ok := parseFloatArg(e.toksToString(m.body))
+	if !ok || f <= 0 {
+		return 1
+	}
+	return f
+}
+
+// parseLeadingArg reads \@setfontsize's third argument, which a class writes in
+// whichever of TeX's shapes it likes: a bare number (11), a number times the point
+// register (11\p@ — \p@ is a DIMEN, so it survives expansion as its own name), or
+// a length (12pt). All three mean points. latex.ltx normalises them with
+// \@defaultunits\@tempskipa#3pt\relax\@nnil; the engine has no \@defaultunits, so
+// the same three shapes are recognised here.
+func parseLeadingArg(s string) (float64, bool) {
+	s = trimSpaces(s)
+	for _, unit := range []string{`\p@`, "pt"} {
+		if strings.HasSuffix(s, unit) {
+			s = trimSpaces(strings.TrimSuffix(s, unit))
+			break
+		}
+	}
+	return parseFloatArg(s)
 }
 
 // applyBaselineStretch honors LaTeX's NATIVE line-spacing mechanism at
@@ -172,6 +247,7 @@ func (e *Engine) doSetfontsize() {
 	base := ptToSP(f)
 	e.baseBaselineskip = base
 	e.setEngineDimen(saveBaselineskip, &e.baselineskip, int(float64(base)*stretch+0.5), false)
+	e.syncNormalBaselineskip()
 }
 
 // baselineStretchFactor is the line-spacing factor in force — what \selectfont

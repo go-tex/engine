@@ -248,7 +248,12 @@ const AMSClassSubstrate = `
 % builder had the value hard-coded instead, so \parfillskip could not be
 % changed at all (which is what \centering does).
 \newskip\parfillskip \parfillskip=0pt plus 1fil
-\newskip\normalbaselineskip
+% latex.ltx:547. It is 12pt to begin with, and \selectfont keeps it in step with
+% \baselineskip from then on (set@fontsize, l.8543). Allocated and never set it
+% read ZERO, and a class that measures with it got nothing: IEEEtran builds every
+% \IEEEeqnarray row strut as 0.7/0.3\normalbaselineskip, and \@arrayparboxrestore
+% — which runs inside every array cell and parbox — sets \baselineskip from it.
+\newskip\normalbaselineskip \normalbaselineskip=12pt
 % \lastskip reads the last glue on the current list. The engine does not expose
 % list surgery, and every use is a spacing tweak off the critical path (amsart's
 % footnote \advance\skip@-\lastskip, and \removelastskip), so a permanently zero
@@ -303,7 +308,17 @@ const AMSClassSubstrate = `
 % nothing but "pt==-=pt==-=pt==-=…" — the leftovers of eighty such assignments.
 % \f@baselineskip is deliberately NOT set here: its argument comes in several
 % shapes (12, 11\p@, {12pt}) and nothing in the corpus asks for it.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}}
+% The leading (#3) is taken at EVERY size, not only \normalsize. Real LaTeX sets
+% \baselineskip from it on each selection (set@fontsize l.8540-8543); taking it for
+% \normalsize alone left \small, \footnotesize and \large at the body leading — in
+% article, 12pt where the reference gives 11pt, 9.5pt and 14pt. Captions, footnotes,
+% bibliographies and table bodies are all set at those sizes, so their lines stood
+% up to 26% too far apart and the pages they fill ran long.
+%
+% \normalsize keeps its own path (\gotex@notefontsize), which also moves the BASE
+% the \baselinestretch factor is measured against; the others only set the current
+% \baselineskip, group-scoped, so {\small …} restores the body leading at the brace.
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\else\gotex@sizeleading{#3}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}

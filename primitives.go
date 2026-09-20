@@ -1723,6 +1723,7 @@ func (e *Engine) loadMore() {
 	// token. Its THIRD argument is taken, though: a conference style that redefines
 	// \normalsize sets the body leading there and nowhere else.
 	e.prim("gotex@notefontsize", func(e *Engine) { e.doSetfontsize() })
+	e.prim("gotex@sizeleading", func(e *Engine) { e.doSizeLeading() }) // \@setfontsize's leading for a size other than \normalsize
 	e.prim("@setsize", func(e *Engine) {
 		e.grabUndelimited()
 		e.grabUndelimited()
