@@ -659,6 +659,11 @@ func (e *Engine) doUsepackageLoad() {
 			// links exactly as the \hypersetup form does (see hyperstyle.go).
 			e.applyHypersetup(strings.Join(opts, ","))
 		}
+		if name == "caption" || name == "subcaption" {
+			// Before any real load, so a caption.sty that IS found defines
+			// \captionfont itself and wins.
+			e.captionFontFromOptions(opts)
+		}
 		if emulateOnly(name) {
 			continue
 		}
@@ -1160,4 +1165,31 @@ func (e *Engine) doInputIfFileExists() {
 	}
 	e.spliceInputFile(data)
 	e.push(then)
+}
+
+// captionFontFromOptions honours the caption package's size options by defining
+// \captionfont, which is the hook \caption reads for its size.
+//
+// caption.sty declares them exactly this way — its small/footnotesize/scriptsize
+// options are \def\captionfont{\small} and friends — so the name is the package's
+// own and this is what loading the real file would have done. The texmf tree here
+// carries fonts only, so the real caption.sty never loads and our stub gobbles the
+// options; without this, a document that asks for a smaller caption gets the body
+// size that article.cls's \@makecaption prescribes for everyone else.
+//
+// 13 of the 200 corpus papers ask for a smaller caption, 11 of them through this
+// option form and 2 through \captionsetup in the body — which still needs the
+// key-value parsing filed as its own issue. Both spellings are accepted here: a bare
+// "small" and "font=small", with or without braces around the value.
+func (e *Engine) captionFontFromOptions(passed []string) {
+	for _, opt := range passed {
+		v := strings.TrimSpace(opt)
+		if k, after, ok := strings.Cut(v, "="); ok && strings.TrimSpace(k) == "font" {
+			v = strings.Trim(strings.TrimSpace(after), "{}")
+		}
+		switch v {
+		case "small", "footnotesize", "scriptsize":
+			e.define("captionfont", &meaning{kind: mMacro, body: []tok{csTok(v)}}, true)
+		}
+	}
 }
