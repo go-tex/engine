@@ -2201,9 +2201,26 @@ func (e *Engine) loadStomach() {
 		e.scanOptStar()
 		e.placeHGlue(glueSpec{width: e.readBraceDimen()})
 	})
+	// \vspace and \vspace*. The star is the whole difference: the space it asks
+	// for must survive a page break, and LaTeX gets that by putting a ZERO-HEIGHT
+	// RULE in front of the glue (\@vspacer, latex.ltx:6584):
+	//
+	//	\hrule \@height\z@  \nobreak  \vskip <amount>
+	//
+	// A rule is not discardable, so the glue is no longer at the top of the page
+	// and the page builder keeps it. Reading the star and dropping it made
+	// \vspace* identical to \vspace, and the space vanished wherever it landed at
+	// a page top — which is exactly where it is asked for. book.cls opens every
+	// chapter with \vspace*{50\p@} (\@makechapterhead), so a chapter head sat
+	// 50pt too high and the corpus's 333-page book came out 13 pages short.
 	e.prim("vspace", func(e *Engine) {
-		e.scanOptStar()
-		e.contribute(glueNode{spec: glueSpec{width: e.readBraceDimen()}})
+		star := e.scanOptStar()
+		d := e.readBraceDimen()
+		if star {
+			e.contribute(ruleNode{widthRun: true})
+			e.contribute(penaltyNode{penalty: 10000}) // \nobreak
+		}
+		e.contribute(glueNode{spec: glueSpec{width: d}})
 	})
 	e.prim("hrulefill", func(e *Engine) {
 		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderRule})
