@@ -2195,11 +2195,25 @@ func (e *Engine) loadStomach() {
 	// LaTeX spacing commands. \hspace{d}/\hspace*{d} put fixed horizontal glue of
 	// width d on the line; \vspace{d}/\vspace*{d} put fixed vertical glue on the
 	// page. \hrulefill and \dotfill are fill glue (order 2) rendered as a rule or a
-	// row of dots. The star is accepted but not distinguished (both variants space
-	// the same here). Each also has a boxNodeFor case so it works inside an \hbox.
+	// row of dots. Each also has a boxNodeFor case so it works inside an \hbox.
+	//
+	// The star is what makes the space survive a break, and LaTeX gets that with a
+	// ZERO-WIDTH RULE in front of the glue (\@hspacer, latex.ltx:6630):
+	//
+	//	\vrule \@width\z@  \nobreak  \hskip <amount>  \hskip\z@skip
+	//
+	// A rule is not discardable, so the glue is no longer at a break point. Reading
+	// the star and dropping it made \hspace* identical to \hspace: measured against
+	// tectonic, a line opening with \hspace*{50pt} was indented 50pt there and not
+	// at all here, while the unstarred form is discarded in both.
 	e.prim("hspace", func(e *Engine) {
-		e.scanOptStar()
-		e.placeHGlue(glueSpec{width: e.readBraceDimen()})
+		star := e.scanOptStar()
+		d := e.readBraceDimen()
+		if star {
+			e.place(ruleNode{heightRun: true, depthRun: true})
+			e.place(penaltyNode{penalty: 10000}) // \nobreak
+		}
+		e.placeHGlue(glueSpec{width: d})
 	})
 	// \vspace and \vspace*. The star is the whole difference: the space it asks
 	// for must survive a page break, and LaTeX gets that by putting a ZERO-HEIGHT
