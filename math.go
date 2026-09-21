@@ -228,7 +228,10 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 		return mathNode{}
 	}
 	size := e.mathSize()
-	svg, m, err := e.renderMathResolvingMacros(r, src, display, size)
+	svg, m, drawn, err := e.renderMathResolvingMacros(r, src, display, size)
+	if drawn != "" {
+		src = drawn // ce qui a été DESSINÉ, pas ce qui a été tapé: c'est la phrase du calque texte
+	}
 	if err != nil {
 		if e.tolerant() {
 			// Best-effort preview: a real document's math may use a command
@@ -274,7 +277,12 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 // specific command that failed. That makes the pass regression-free by construction:
 // anything that used to render still renders unchanged. A per-name guard (seen) and a
 // bounded try count keep a self-referential or non-shrinking macro from looping.
-func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, display bool, size int) (string, texmath.Metrics, error) {
+// It also returns the source AS RESOLVED — the string that actually rendered. The
+// caller keeps it for the text layer: a document's own \newcommand reaches the raw
+// scanner verbatim, so without this the layer said "\RealXtrain" (226 times on one
+// corpus paper) where the page shows X with a subscript. The rendering was already
+// right; only the phrase standing over it was not. See #372.
+func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, display bool, size int) (string, texmath.Metrics, string, error) {
 	var svg string
 	var m texmath.Metrics
 	var err error
@@ -290,11 +298,11 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			svg, m, err = r.RenderSVGMetrics(src, size)
 		}
 		if err == nil {
-			return svg, m, nil
+			return svg, m, src, nil
 		}
 		name := unknownMathCommand(err.Error())
 		if name == "" {
-			return svg, m, err
+			return svg, m, src, err
 		}
 		// A command whose MATHS meaning is another symbol is substituted before the
 		// macro table is consulted: \dag is a macro here (plain.tex's \mathhexbox
@@ -353,16 +361,16 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = pen
 				continue
 			}
-			return svg, m, err
+			return svg, m, src, err
 		}
 		if next == src {
 			// A self-referential macro (\def\x{\x}) expands to itself: no progress,
 			// so stop rather than spin. The equation is dropped and recorded.
-			return svg, m, err
+			return svg, m, src, err
 		}
 		src = next
 	}
-	return svg, m, err
+	return svg, m, src, err
 }
 
 // expandMacroInMathSource substitutes the user/kernel macro \name in a go-tex/math
