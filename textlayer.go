@@ -354,7 +354,7 @@ func (l *textLayer) addPhrase(s string, x, width, baseline, size float64) {
 // and drops the spaces the math tokeniser INSERTED rather than the ones the
 // author typed — see [dropSyntheticSpaces].
 func collapseSpace(s string) string {
-	return dropSyntheticSpaces(squeezeSpace(s))
+	return dropSyntheticSpaces(squeezeSpace(unwrapMathAlphabets(s)))
 }
 
 // dropSyntheticSpaces removes the space the math tokeniser writes after every
@@ -405,4 +405,85 @@ func squeezeSpace(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// mathAlphabetWrappers are the commands that only CHOOSE A FACE for what they
+// enclose: on the page the reader sees the argument and nothing of the command.
+// \operatorname is here for the same reason — \operatorname{argmax} sets "argmax".
+var mathAlphabetWrappers = map[string]bool{
+	"mathrm": true, "mathbf": true, "mathit": true, "mathbb": true,
+	"mathcal": true, "mathsf": true, "mathtt": true, "mathfrak": true,
+	"mathnormal": true, "boldsymbol": true, "operatorname": true,
+	"text": true, "textrm": true, "textbf": true, "textit": true, "textsf": true,
+	"mbox": true, "hbox": true,
+}
+
+// unwrapMathAlphabets replaces \mathrm{abc} by abc in the phrase that stands for a
+// formula in the text layer.
+//
+// The phrase is the formula's SOURCE on purpose — a reader searching for an
+// equation types what the author typed (see the comment on pdfDraw.mathText). These
+// commands are the case where that reasoning inverts: the page shows "abc", so "abc"
+// is what a reader would search for, and \mathrm{abc} is the one string that finds
+// nothing. Measured over the corpus, the text layer carried 612 \mathrm, 410
+// \mathbb and 296 \mathcal on a single paper, and 63 of the 200 papers had a text
+// layer more than 10% larger than the ink actually drawn (#372).
+//
+// Only these wrappers are unwrapped, and only when a brace group follows. Symbol
+// commands (\alpha, \Omega) keep their name: their character lives in the maths
+// package's own table, and duplicating it here would put one truth in two places.
+func unwrapMathAlphabets(s string) string {
+	if !strings.Contains(s, "\\") {
+		return s
+	}
+	var b strings.Builder
+	r := []rune(s)
+	for i := 0; i < len(r); {
+		if r[i] != '\\' || i+1 >= len(r) || !isLetterRune(r[i+1]) {
+			b.WriteRune(r[i])
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(r) && isLetterRune(r[j]) {
+			j++
+		}
+		name := string(r[i+1 : j])
+		k := j
+		for k < len(r) && r[k] == ' ' {
+			k++
+		}
+		if !mathAlphabetWrappers[name] || k >= len(r) || r[k] != '{' {
+			b.WriteString(string(r[i:j]))
+			i = j
+			continue
+		}
+		end, ok := matchBrace(r, k)
+		if !ok {
+			b.WriteString(string(r[i:j]))
+			i = j
+			continue
+		}
+		// the group's CONTENTS, themselves unwrapped: \mathbf{\mathrm{x}} is "x"
+		b.WriteString(unwrapMathAlphabets(string(r[k+1 : end])))
+		i = end + 1
+	}
+	return b.String()
+}
+
+// matchBrace returns the index of the '}' closing the '{' at open, honouring nesting.
+func matchBrace(r []rune, open int) (int, bool) {
+	depth := 0
+	for i := open; i < len(r); i++ {
+		switch r[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+	}
+	return 0, false
 }
