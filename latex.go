@@ -915,7 +915,29 @@ const MiniLaTeXKernel = `
 % \left…\right already matches what the starred form asks for.
 \def\DeclarePairedDelimiter#1#2#3{\newcommand#1[1]{\left#2 ##1\right#3}}
 \def\SetKwInput#1#2{}
-\def\algnewcommand#1#2{}
+% \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
+% keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
+% is skipped and its braced argument is ORDINARY MATERIAL, so the keyword is TYPESET —
+% 2406.02421 opens on a page carrying nothing but "While For Do If Then Else End
+% Return", 38 characters, and runs a page long (#293).
+%
+% The real pair routes through \ALG@defbasecmd, which binds the name into a
+% per-LANGUAGE slot (\ALG@cmd@<lang>@<name>) so algorithmicx can carry several
+% pseudocode languages at once. No corpus document uses more than one, so the
+% visible behaviour is \newcommand/\renewcommand on the name itself — including the
+% [n]-argument form algorithmicx's own \algnewcommand\algorithmiccomment[1]{…} uses.
+%
+% The definition is KEPT rather than gobbled: a document that writes
+% \algorithmicwhile itself then gets what it asked for. Our own keyword output does
+% not consult these yet — \@algkw prints its word directly — so a document's
+% capitalisation is still ours. That is a smaller gap than a page of leaked keywords.
+%
+% This REPLACES a \def\algnewcommand#1#2{} further down the same format, which took
+% exactly two arguments: on \algnewcommand\algorithmiccomment[1]{…} — the form
+% algorithmicx uses itself — #2 grabbed the "[1]" and the body leaked. The pair lives
+% beside that former gobbler so a later line of this format cannot shadow it again.
+\let\algnewcommand\newcommand
+\let\algrenewcommand\renewcommand
 \def\setlist{\@ifnextbracket\@setlistopt\@setlistarg}
 \def\@setlistopt[#1]#2{}
 \def\@setlistarg#1{}
