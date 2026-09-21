@@ -1154,6 +1154,8 @@ func (e *Engine) endGroup() {
 			e.parindent = s.oldd
 		case saveBaselineskip:
 			e.baselineskip = s.oldd
+		case saveTextWidth:
+			e.textWidth = s.oldd
 		}
 	}
 	// \aftergroup's tokens are put back once the group is closed and its values

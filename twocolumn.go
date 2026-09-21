@@ -174,7 +174,9 @@ func (e *Engine) setTextWidth(v int, global bool) {
 	// oupau.cls does exactly that, and every document it sets came out 236.9pt wide
 	// against the reference's 483.3pt — half measure, twice the lines, seven pages
 	// too many on a thirteen-page paper.
-	e.textWidth = v
+	// Scoped like the measure it travels with: {\textwidth=500pt …} must leave
+	// \textwidth where it found it, which a plain field assignment does not.
+	e.setEngineDimen(saveTextWidth, &e.textWidth, v, global)
 	e.setEngineDimen(saveHsize, &e.hsize, v, global)
 }
 

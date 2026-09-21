@@ -707,6 +707,7 @@ const (
 	saveVsize        = 12
 	saveParindent    = 13
 	saveBaselineskip = 14
+	saveTextWidth    = 15
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
