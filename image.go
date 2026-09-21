@@ -167,7 +167,19 @@ func (e *Engine) placeholderImage(wReq, hReq, iw, ih int, scale, dpiX, dpiY floa
 	if bh > pad {
 		bh -= pad
 	}
-	inner := &boxNode{kind: hbox, width: bw, height: bh}
+	// The frame adds sep+rule on EVERY side, so a frame around a depth-0 box has
+	// that much DEPTH — and #350 made the total right while leaving it below the
+	// baseline. A real \includegraphics box has depth 0: the figure sits ON the
+	// baseline, entirely above it. Measured against tectonic, \includegraphics
+	// [height=50pt] gives h=50 d=0 there and gave h=46.6 d=3.4 here, so a document
+	// asking for a 50pt figure got a 46.6pt height even though the total was right.
+	//
+	// Giving the inner box the frame's own sep+rule as NEGATIVE depth cancels it:
+	// frameNode.depth() is inner.depth+sep+rule, which is then 0, and height() takes
+	// the same amount back, so the total is untouched and the box sits on the
+	// baseline. See #366.
+	edge := fboxSep + fboxRule
+	inner := &boxNode{kind: hbox, width: bw, height: bh + edge, depth: -edge}
 	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})
 }
 
