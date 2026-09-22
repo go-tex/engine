@@ -876,6 +876,29 @@ const MiniLaTeXKernel = `
 \def\usetikzlibrary#1{}
 \def\pgfplotsset#1{}
 \def\tikzset#1{}
+% \lstdefinelanguage and \lstdefinestyle (listings). Undefined, the command is
+% skipped and everything it was given is ORDINARY MATERIAL, so a language
+% definition is TYPESET — the name, then the whole key=value body:
+%
+%	MonLangage morekeywords=MOTCLEFUITE, AUTREFUITE, sensitive=false, …
+%
+% where the reference sets nothing at all. 13 corpus papers define a language.
+%
+% The manual's full shape is
+%   \lstdefinelanguage[<dialect>]{<language>}[<base dialect>]{<base>}{<keys>}[<list>]
+% and every corpus use is the bare {name}{keys}. Taking a FIXED two arguments would
+% still be wrong the first time a document writes the dialect form — a gobbler of the
+% wrong arity fails silently, which is worse than being undefined, because an
+% undefined command at least shows up in the report (that is what \algnewcommand#1#2
+% did to \algnewcommand\algorithmiccomment[1]{…}, #378). So the optional parts are
+% scanned, not assumed away.
+\def\lstdefinelanguage{\@ifnextbracket\@lstdeflopt\@lstdeflname}
+\def\@lstdeflopt[#1]{\@lstdeflname}
+\def\@lstdeflname#1{\@ifnextbracket\@lstdeflbase\@lstdeflbody}
+\def\@lstdeflbase[#1]#2{\@lstdeflbody}
+\long\def\@lstdeflbody#1{\@ifnextbracket\@lstdeflkeys\relax}
+\def\@lstdeflkeys[#1]{}
+\def\lstdefinestyle#1#2{}
 \def\lstset#1{}
 \def\microtypesetup#1{}
 \def\microtypecontext#1{}
