@@ -21,11 +21,12 @@ func TestLineBreakingParametersMatchTeX(t *testing.T) {
 	}
 	e.SetFont(spMock{})
 	src := `\message{[\the\tolerance][\the\pretolerance][\the\hyphenpenalty]` +
-		`[\the\exhyphenpenalty][\the\lefthyphenmin][\the\righthyphenmin]}`
+		`[\the\exhyphenpenalty][\the\lefthyphenmin][\the\righthyphenmin]` +
+		`[\the\finalhyphendemerits]}`
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := trimNL(e.out.String()), "[200][100][50][50][2][3]"; got != want {
+	if got, want := trimNL(e.out.String()), "[200][100][50][50][2][3][5000]"; got != want {
 		t.Errorf("= %s, want %s", got, want)
 	}
 }

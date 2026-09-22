@@ -246,7 +246,9 @@ const AMSClassSubstrate = `
 \newcount\hbadness
 \newcount\vbadness
 \newcount\hyphenpenalty \hyphenpenalty=50
-\newcount\finalhyphendemerits
+% Read by breakSegment (paragraph.go) like the two above, and zero here meant a
+% hyphen on the second-to-last line of a paragraph cost nothing extra. TeX: 5000.
+\newcount\finalhyphendemerits \finalhyphendemerits=5000
 \newdimen\hfuzz
 \newdimen\vfuzz
 \newdimen\emergencystretch
