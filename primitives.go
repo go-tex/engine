@@ -1991,6 +1991,7 @@ func (e *Engine) loadMore() {
 	// \gotex@classnormalsize{size}: the size the class states for \normalsize.
 	e.prim("gotex@classnormalsize", func(e *Engine) { e.doClassNormalsize() })
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
+	e.prim("includepdf", func(e *Engine) { e.doIncludepdf() })      // pdfpages (includepdf.go)
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
 	// natbib's variants, \bibliographystyle is accepted, and \bibliography reads the

@@ -35,6 +35,23 @@ func init() {
 	if os.Getenv("GOTEX_PDFRENDER") == "" {
 		return
 	}
+	// \includepdf needs a page number; the figure seam always takes page 1.
+	engine.RasterizePDFPage = func(data []byte, page int, dpi float64) (img image.Image, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				img, err = nil, fmt.Errorf("pdfrender: %v", r)
+			}
+		}()
+		return pdfrender.RasterizePage(data, page, dpi)
+	}
+	engine.PDFPageCount = func(data []byte) (n int) {
+		defer func() {
+			if recover() != nil {
+				n = 0
+			}
+		}()
+		return pdfrender.NumPages(data)
+	}
 	engine.RasterizePDF = func(data []byte, dpi float64) (img image.Image, err error) {
 		defer func() {
 			if r := recover(); r != nil {
