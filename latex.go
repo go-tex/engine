@@ -1048,6 +1048,22 @@ const MiniLaTeXKernel = `
 \def\defaultbibliographystyle#1{}
 % \phantomsection — hyperref's anchor, no arguments and nothing to draw.
 \def\phantomsection{}
+% titletoc's partial tables of contents. Each takes an optional list NAME
+% (titletoc.sty:455, 465, 472, 497), and \printcontents takes three more groups —
+% prefix, start level, and the toc code. Undefined, 2406.13839's
+%
+%	\startcontents[sections] \printcontents[sections]{l}{1}{…}
+%
+% printed "[sections] [sections]l1" on a page of its own.
+\def\startcontents{\@ifnextbracket\@gtxstartcontso\relax}
+\def\@gtxstartcontso[#1]{}
+\def\stopcontents{\@ifnextbracket\@gtxstopcontso\relax}
+\def\@gtxstopcontso[#1]{}
+\def\resumecontents{\@ifnextbracket\@gtxresumecontso\relax}
+\def\@gtxresumecontso[#1]{}
+\def\printcontents{\@ifnextbracket\@gtxprintcontso\@gtxprintcont}
+\def\@gtxprintcontso[#1]{\@gtxprintcont}
+\def\@gtxprintcont#1#2#3{}
 \def\SetKwInput#1#2{}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
