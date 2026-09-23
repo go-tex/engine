@@ -957,6 +957,41 @@ const MiniLaTeXKernel = `
 \def\@gtxdefcolset#1#2#3#4{}
 % \mprset{<keys>} — mathpartir's layout options, one argument.
 \def\mprset#1{}
+% \DeclareCaptionLabelFormat{<name>}{<code>} — caption3.sty:725 is \newcommand*[2].
+% 2408.02845 declares two of them in its preamble, and undefined they printed their
+% own names and bodies on page 1: "adja-page", then "#1 #2 (previous page)" with the
+% \hrulefill drawn across the sheet, pushing the title to page 2.
+\def\DeclareCaptionLabelFormat#1#2{}
+% \DeclareVoidOption{<name>}{<code>} — kvoptions.sty:370, \newcommand*[2].
+\def\DeclareVoidOption#1#2{}
+% \ProcessKeyvalOptions — kvoptions.sty:619 is \@ifstar then the family name, so
+% \ProcessKeyvalOptions* takes nothing and the plain form takes one group.
+\def\ProcessKeyvalOptions{\@ifstar{}\@gtxprockvopt}
+\def\@gtxprockvopt#1{}
+% \define@key{<family>}{<key>}[<default>]{<code>} — keyval.sty:81-86: two groups,
+% then \@ifnextchar[ for the default, then the code.
+\def\define@key#1#2{\@ifnextbracket\@gtxdefkeyopt\@gtxdefkey}
+\def\@gtxdefkeyopt[#1]#2{}
+\def\@gtxdefkey#1{}
+% \contentsmargin[<corr>]{<width>} — titletoc.sty:188. The body ENDS with a bare
+% "\def\@pnumwidth", which swallows the following group as that macro's body, so
+% the command really takes an optional bracket AND a group.
+\def\contentsmargin{\@ifnextbracket\@gtxcontmargo\@gtxcontmarg}
+\def\@gtxcontmargo[#1]#2{}
+\def\@gtxcontmarg#1{}
+% \titlecontents[*]{<sec>}[<left>]{<above>}{<numbered>}{<numberless>}{<filler>}
+% [<below>][<extra>] — titletoc.sty:203-238: \@ifstar, one group, a bracket, four
+% groups, then up to two trailing brackets. wlscirep.cls declares three of them.
+\def\titlecontents{\@ifstar\@gtxtitlecont\@gtxtitlecont}
+\def\@gtxtitlecont#1[#2]#3#4#5#6{\@ifnextbracket\@gtxtitlecontb\relax}
+\def\@gtxtitlecontb[#1]{\@ifnextbracket\@gtxtitlecontc\relax}
+\def\@gtxtitlecontc[#1]{}
+% \defaultbibliography{<files>} / \defaultbibliographystyle{<style>} — the
+% "default" pair a journal class offers so a document can name its .bib once.
+\def\defaultbibliography#1{}
+\def\defaultbibliographystyle#1{}
+% \phantomsection — hyperref's anchor, no arguments and nothing to draw.
+\def\phantomsection{}
 \def\SetKwInput#1#2{}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
