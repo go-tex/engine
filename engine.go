@@ -558,6 +558,7 @@ func New() *Engine {
 	e.loadClassPrims()
 	e.loadToksPrims()
 	e.loadAMSPrims()
+	e.loadIfthen()
 	return e
 }
 
