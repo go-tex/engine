@@ -937,6 +937,26 @@ const MiniLaTeXKernel = `
 % \@ifstar for the * variant cannot survive that string substitution). The auto-size
 % \left…\right already matches what the starred form asks for.
 \def\DeclarePairedDelimiter#1#2#3{\newcommand#1[1]{\left#2 ##1\right#3}}
+% \DeclareMathSizes{<text>}{<math>}{<script>}{<scriptscript>} sets the maths sizes
+% a text size selects. latex.ltx:7523-7527 is \@ifstar then FOUR arguments, and it
+% is preamble-only. 11 corpus papers, 53 occurrences: each left "1010 7 5" behind.
+\def\DeclareMathSizes{\@ifstar\@gtxdeclmathsizes\@gtxdeclmathsizes}
+\def\@gtxdeclmathsizes#1#2#3#4{}
+% \newtheoremstyle takes NINE arguments (amsthm.sty: \newcommand{...}[9]) — name,
+% above/below skip, body font, indent, head font, punctuation, head space, head
+% spec. 3 corpus papers; undefined, most of the nine landed on the page.
+\def\newtheoremstyle#1#2#3#4#5#6#7#8#9{}
+% \setcitestyle{<keys>} — natbib, one argument. acmart's own \setcitestyle is served
+% by the \NAT@find@eq pair above, but a document that calls natbib's directly (we
+% emulate natbib rather than loading it) had its key list typeset. 4 papers.
+\def\setcitestyle#1{}
+% \definecolorset[<type>]{<model>}{<head>}{<tail>}{<set>} — xcolor.sty:616-618 is
+% \@testopt then four. 2 papers.
+\def\definecolorset{\@ifnextbracket\@gtxdefcolsetopt\@gtxdefcolset}
+\def\@gtxdefcolsetopt[#1]{\@gtxdefcolset}
+\def\@gtxdefcolset#1#2#3#4{}
+% \mprset{<keys>} — mathpartir's layout options, one argument.
+\def\mprset#1{}
 \def\SetKwInput#1#2{}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command

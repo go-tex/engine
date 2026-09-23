@@ -22,6 +22,18 @@ func TestConfigurationCommandsLeaveNothingOnThePage(t *testing.T) {
 		{"counterwithin", `\counterwithin{equation}{section}X\par`},
 		{"setcellgapes", `\setcellgapes{2pt}X\par`},
 		{"makegapedcells", `\makegapedcells X\par`},
+		// latex.ltx:7523-7527 — \@ifstar then four. 11 corpus papers, 53 occurrences.
+		{"DeclareMathSizes", `\DeclareMathSizes{10}{10}{7}{5}X\par`},
+		{"DeclareMathSizes étoilé", `\DeclareMathSizes*{10}{10}{7}{5}X\par`},
+		// amsthm.sty — \newcommand{\newtheoremstyle}[9].
+		{"newtheoremstyle", `\newtheoremstyle{n}{3pt}{3pt}{}{}{\bfseries}{.}{.5em}{}X\par`},
+		// natbib, one argument.
+		{"setcitestyle", `\setcitestyle{authoryear}X\par`},
+		// xcolor.sty:616-618 — \@testopt then four.
+		{"definecolorset", `\definecolorset{rgb}{a}{b}{x,1,0,0}X\par`},
+		{"definecolorset crochet", `\definecolorset[named]{rgb}{a}{b}{x,1,0,0}X\par`},
+		// mathpartir's layout options.
+		{"mprset", `\mprset{flushleft}X\par`},
 	} {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
