@@ -566,16 +566,6 @@ var acmartFormats = map[string]classGeometry{
 	"sigchi-a": {inkedW: 480, textH: 644, leading: 11},
 }
 
-// applyAcmartGeometry gives the emulated acmart class its real text block and
-// base leading. acmart is neither embedded nor (for the papers that need this)
-// bundled, so \documentclass{acmart} falls to the article-shaped emulation, which
-// keeps the plain-TeX 6.5in×8.9in block and the 12pt size-default leading — the
-// wrong geometry for every acmart format, and the measured driver of acmart's
-// page-count divergence. The format is selected by a bare option keyword
-// (manuscript, sigconf, …); acmart's own default when none is given is manuscript.
-// Two-column formats are still rendered single-column (columns are separately
-// scoped), but the single-column-equivalent block above makes the page count
-// right regardless.
 // acmartTwoColumnFormat reports whether any acmart format option selects a
 // two-column format (as opposed to the single-column manuscript/acmsmall/…). The
 // format is given bare ([sigconf]) or as format=… ([format=sigconf]).
@@ -590,6 +580,16 @@ func acmartTwoColumnFormat(opts []string) bool {
 	return false
 }
 
+// applyAcmartGeometry gives the emulated acmart class its real text block and
+// base leading. acmart is neither embedded nor (for the papers that need this)
+// bundled, so \documentclass{acmart} falls to the article-shaped emulation, which
+// keeps the plain-TeX 6.5in×8.9in block and the 12pt size-default leading — the
+// wrong geometry for every acmart format, and the measured driver of acmart's
+// page-count divergence. The format is selected by a bare option keyword
+// (manuscript, sigconf, …); acmart's own default when none is given is manuscript.
+// Two-column formats are still rendered single-column (columns are separately
+// scoped), but the single-column-equivalent block above makes the page count
+// right regardless.
 func (e *Engine) applyAcmartGeometry(opts []string) {
 	g := acmartFormats["manuscript"] // acmart.cls's default format
 	for _, o := range opts {
@@ -719,7 +719,7 @@ func (e *Engine) classFileResolvable(name string) bool {
 	return ok
 }
 
-// publish writes the layout back into the LaTeX length registers a class reads.
+// publishGeometry writes the layout back into the LaTeX length registers a class reads.
 //
 // \hsize and \vsize are engine parameters (\textwidth and \textheight are \let to
 // them), so those follow from the assignments above. \paperwidth and \paperheight

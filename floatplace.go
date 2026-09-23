@@ -223,7 +223,7 @@ type floatClass struct {
 	allowTop, allowBot, allowPage bool
 }
 
-// classify resolves a float's placement bits (default "tbp") into the areas it may go.
+// classifyFloat resolves a float's placement bits (default "tbp") into the areas it may go.
 func classifyFloat(place string) floatClass {
 	if place == "" {
 		place = "tbp"
