@@ -92,7 +92,6 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 	return seg
 }
 
-// hasBadLine reports whether any line is overfull or badly underfull (a ratio
 // breakSegment runs TeX's line-breaking passes over one paragraph fragment and
 // returns the node list its line indices refer to (tex.web §16986-16999). The
 // FIRST pass tries the paragraph with no hyphenation at all, at \pretolerance:
@@ -156,6 +155,7 @@ func (e *Engine) withParFill(list []node) []node {
 		penaltyNode{penalty: -int(InfPenalty)})
 }
 
+// hasBadLine reports whether any line is overfull or badly underfull (a ratio
 // well outside the normal [-1, small] range — the capped/infinite bad values).
 func hasBadLine(lines []Line) bool {
 	for _, ln := range lines {

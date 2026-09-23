@@ -246,11 +246,14 @@ type Engine struct {
 	buildingFootnote bool
 	levels           []mouthLevel // the input levels below this one (see pushInputLevel)
 	noBase           bool         // when true, getNext does not fall through to the base string
-	negateNextIf     int          // pending \unless prefixes (e-TeX): reverse the next conditional
-	allocCnt         int          // next free \count register handed out by \newcount
-	allocDim         int          // next free \dimen register handed out by \newdimen
-	allocSkp         int          // next free \skip register handed out by \newskip
-	allocBox         int          // next free \box register handed out by \newsavebox
+	// boxLists is the stack of lists being built by buildBoxList, innermost last.
+	// Only \lastskip reads it: TeX's "current list" is the box's when one is open.
+	boxLists     []*[]node
+	negateNextIf int // pending \unless prefixes (e-TeX): reverse the next conditional
+	allocCnt     int // next free \count register handed out by \newcount
+	allocDim     int // next free \dimen register handed out by \newdimen
+	allocSkp     int // next free \skip register handed out by \newskip
+	allocBox     int // next free \box register handed out by \newsavebox
 
 	// token registers (see toks.go): \toks<n> / \newtoks-allocated registers store
 	// a token list each. A class's title/mark machinery (amsart's \andify, \toks@,
@@ -556,6 +559,7 @@ func New() *Engine {
 	e.loadClassPrims()
 	e.loadToksPrims()
 	e.loadAMSPrims()
+	e.loadIfthen()
 	return e
 }
 
@@ -831,8 +835,6 @@ func (e *Engine) rawAt(i int) (rune, int) {
 	return c - 64, i + 3
 }
 
-// endlinechar is the character TeX appends to every input line — 13 (^^M) unless
-// a package changes it. A value outside 0..255 means "append nothing".
 // escapechar is the character TeX prints in front of a control-sequence name —
 // 92 ("\") unless a package changes it. Outside 0..255 it prints nothing.
 func (e *Engine) escapechar() int {
@@ -842,6 +844,8 @@ func (e *Engine) escapechar() int {
 	return e.count[e.escapeReg]
 }
 
+// endlinechar is the character TeX appends to every input line — 13 (^^M) unless
+// a package changes it. A value outside 0..255 means "append nothing".
 func (e *Engine) endlinechar() int {
 	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
 		return '\r'
@@ -2215,9 +2219,6 @@ func (e *Engine) stepOverrun() bool {
 	return e.steps > e.stepLimit || e.noProgSteps > e.tightLimit
 }
 
-// tripRunaway halts expansion when the step/depth guard fires: it discards the
-// pending input so the loop unwinds, and (in strict mode only) records the error.
-// In tolerant mode the partial document built so far is still rendered.
 // printTrace prints a trace with runs collapsed: a loop repeats one macro
 // thousands of times, and one line each would push the CALLER — the interesting
 // line — out of the report.
@@ -2248,6 +2249,9 @@ var traceOut io.Writer = os.Stderr
 
 const traceDepth = 400
 
+// tripRunaway halts expansion when the step/depth guard fires: it discards the
+// pending input so the loop unwinds, and (in strict mode only) records the error.
+// In tolerant mode the partial document built so far is still rendered.
 func (e *Engine) tripRunaway() {
 	if traceRunaway {
 		fmt.Fprintf(traceOut, "gotex: runaway at %d:%d\n", e.curSrcLine, e.curSrcCol)
@@ -2463,9 +2467,6 @@ func (e *Engine) scanSign() int {
 	}
 }
 
-// scanDimen scans an optional-signed dimension and returns scaled points. It
-// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
-// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
 // spaceGlueOf is the interword glue for one face: the face's own advance, with any
 // \fontdimen 2/3/4 a document assigned to it taking precedence. TeX keeps these in
 // the font's parameter array and reads the glue from it (tex.web §433: the space
@@ -2502,6 +2503,9 @@ func (e *Engine) setFontDimen(f fontFace, n, v int) {
 	e.fontDimens[f][n] = v
 }
 
+// scanDimen scans an optional-signed dimension and returns scaled points. It
+// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
+// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
 func (e *Engine) scanDimen() int {
 	e.skipOptSpace()
 	sign := e.scanSign()
@@ -2564,6 +2568,8 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.leftskip.width, 0
 			case m.kind == mPrim && m.name == "rightskip":
 				return e.rightskip.width, 0
+			case m.kind == mPrim && m.name == "lastskip":
+				return e.lastSkip().width, 0
 			}
 			// An internal INTEGER here is the FACTOR of the dimension, not the
 			// dimension itself: TeX's <dimen> is <factor><unit of measure>, and the
@@ -2914,6 +2920,8 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 				return e.leftskip.width, true
 			case m.kind == mPrim && m.name == "rightskip":
 				return e.rightskip.width, true
+			case m.kind == mPrim && m.name == "lastskip":
+				return e.lastSkip().width, true
 			case m.kind == mPrim && m.name == "dimexpr":
 				return e.scanExpr(true), true
 			}

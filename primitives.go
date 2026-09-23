@@ -129,6 +129,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("relax", func(e *Engine) {})
 	// The end-of-isolated-run marker is \relax wherever it escapes: see sentinel.
 	e.eq[sentinel.cs] = &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}
+	// \lastskip is READ-ONLY (tex.web §424): scanDimen and scanGlue answer it,
+	// and executing it on its own does nothing. It is not a register.
+	e.prim("lastskip", func(e *Engine) {})
 	// beamer hides what an overlay has not reached by wrapping it in pgf's
 	// invisibility pair (beamerbaseoverlay.sty:316, \beamer@startcovered). The pair
 	// lives in a pgfsys driver this engine does not load, so without these it was
@@ -940,6 +943,26 @@ func (e *Engine) doCheckEnv() {
 	}
 }
 
+// pendingHoldsEnd reports whether the pending token lists already carry the
+// environment's own \end — which says the body was CAPTURED rather than still
+// being in the file.
+//
+// undefinedEnvAsCode may only read ahead in the file. Inside a captured body (a
+// minipage, a float, a beamer column) the character cursor is already past it and
+// reading there would copy the document that follows — the mistake #214 fixed. The
+// tell is where the \end lives: a captured body carries its own \end in the pending
+// token lists, while an ordinary \begin leaves only the tail of its own expansion.
+func pendingHoldsEnd(lists [][]tok) bool {
+	for _, l := range lists {
+		for _, t := range l {
+			if t.cs_ && t.cs == "end" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // undefinedEnvAsCode rescues the body of an undefined environment that is plainly
 // CODE, by setting it verbatim instead of executing it as prose.
 //
@@ -955,23 +978,6 @@ func (e *Engine) doCheckEnv() {
 // shifts, code does. When the body between here and \end{name} has one, it is read
 // raw and set as a verbatim block, and the \end is consumed with it. Everything
 // else keeps the behaviour it had.
-//
-// Only when the body is still in the FILE. Inside a captured body (a minipage, a
-// float, a beamer column) the character cursor is already past it and reading there
-// would copy the document that follows — the mistake #214 fixed. The tell is where
-// the \end lives: a captured body carries its own \end in the pending token lists,
-// while an ordinary \begin leaves only the tail of its own expansion there.
-func pendingHoldsEnd(lists [][]tok) bool {
-	for _, l := range lists {
-		for _, t := range l {
-			if t.cs_ && t.cs == "end" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func (e *Engine) undefinedEnvAsCode(name string) {
 	if pendingHoldsEnd(e.lists) {
 		return
@@ -1160,6 +1166,9 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "rightskip":
 				e.pushString(formatGlue(e.rightskip))
+				return
+			case m.kind == mPrim && m.name == "lastskip":
+				e.pushString(formatGlue(e.lastSkip()))
 				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
@@ -1606,7 +1615,8 @@ func (e *Engine) theToks(ts []tok) []tok {
 // It MEANS \relax (defined in loadPrimitives), and that is not decoration. Every
 // TeX scanner that reads a number, a dimension or a keyword looks one token PAST
 // what it consumed to learn where it ended, and hands that token back (tex.web
-// §442 back_input); a list that ends in a number therefore puts the sentinel back
+// §325 back_input, read to check this comment rather than recalled); a list that
+// ends in a number therefore puts the sentinel back
 // as a fresh list, after which the run's own depth guard declines to read it and
 // it survives into the document. Measured at 44 occurrences over 8 of the 200
 // corpus papers, 14 of them on one, every one backed out by scanInt.
@@ -1984,6 +1994,7 @@ func (e *Engine) loadMore() {
 	// \gotex@classnormalsize{size}: the size the class states for \normalsize.
 	e.prim("gotex@classnormalsize", func(e *Engine) { e.doClassNormalsize() })
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
+	e.prim("includepdf", func(e *Engine) { e.doIncludepdf() })      // pdfpages (includepdf.go)
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
 	// natbib's variants, \bibliographystyle is accepted, and \bibliography reads the
@@ -2372,6 +2383,32 @@ func (e *Engine) shiftAndPlace(shift int, vertical bool) {
 	}
 }
 
+// lastSkip is TeX's \lastskip (tex.web §424): the glue at the END of the list
+// being built, or zero when the last item is not glue. TeX looks at the current
+// list — the paragraph in horizontal mode, the main vertical list otherwise —
+// and NOT inside a box that was already packed.
+//
+// LaTeX's \@bsphack/\@esphack read it to remember the space before a command
+// that writes but typesets nothing (\label, \index), so the space around the
+// call survives as exactly one. See go-tex/engine#385.
+func (e *Engine) lastSkip() glueSpec {
+	list := e.mvl
+	if e.inPar {
+		list = e.parList
+	}
+	// A box being built has its own list, and it is the current one.
+	if n := len(e.boxLists); n > 0 {
+		list = *e.boxLists[n-1]
+	}
+	if len(list) == 0 {
+		return glueSpec{}
+	}
+	if g, ok := list[len(list)-1].(glueNode); ok {
+		return g.spec
+	}
+	return glueSpec{}
+}
+
 // place adds material that is legal in both modes: inside a paragraph
 // (horizontal mode) it becomes an inline node on the current line; in vertical
 // mode it is contributed to the main vertical list. A nil box is dropped.
@@ -2412,9 +2449,6 @@ func (e *Engine) scanOptStar() bool {
 	return false
 }
 
-// doIfstar implements LaTeX's \@ifstar#1#2: it grabs the two branch arguments,
-// then peeks the next token — if it is a '*' the star is swallowed and #1 is
-// pushed for execution, otherwise #2 is. This is what makes \section* work.
 // halveParamHashes applies TeX's ## → # halving to a token list re-inserted as a
 // macro body. See the note at \@ifnextchar.
 func halveParamHashes(ts []tok) []tok {

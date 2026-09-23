@@ -63,6 +63,37 @@ const MiniLaTeXKernel = `
 \def\textrm#1{{\rmfamily #1}}
 \def\emph#1{{\itshape #1}}
 \def\textcolor#1#2{{\color{#1}#2}}
+% colortbl's cell/row/column backgrounds. The engine paints no cell background,
+% so these typeset nothing — but they MUST still eat their arguments, or the
+% colour name reaches the page. Measured against tectonic:
+%
+%   reference   A C EF        B D
+%   ours        lightgray A B gray C D E[rgb]1,0,0F
+%
+% 166 \cellcolor and 77 \rowcolor over 9 of the 200 corpus papers.
+%
+% The signatures are NOT the same, and the difference was taken from the
+% reference rather than assumed. \rowcolor and \columncolor accept the two
+% overhang arguments; \cellcolor does not, and tectonic proves it by SETTING
+% them — inside a tabular as well as outside:
+%
+%   \cellcolor{gray}[1pt][2pt] X   ->   reference prints "[1pt][2pt] X"
+%   \rowcolor{blue}[1pt][2pt] P    ->   reference prints "P"
+%
+% So eating the overhangs everywhere would have swallowed text the reference
+% keeps. Consuming what a command HAS is required; consuming more is a new
+% defect, silent because an unread argument raises nothing in the census.
+\def\gotex@eatcolor#1{\@ifnextchar[{\gotex@eatcolor@m{#1}}{\gotex@eatcolor@c{#1}}}
+\def\gotex@eatcolor@m#1[#2]#3{#1}
+\def\gotex@eatcolor@c#1#2{#1}
+% \relax after the colour: nothing more to eat (\cellcolor).
+% \gotex@eatover: also eat [left] and then [right] (\rowcolor, \columncolor).
+\def\gotex@eatover{\@ifnextchar[\gotex@eatover@i{}}
+\def\gotex@eatover@i[#1]{\@ifnextchar[\gotex@eatover@ii{}}
+\def\gotex@eatover@ii[#1]{}
+\def\cellcolor{\gotex@eatcolor\relax}
+\def\rowcolor{\gotex@eatcolor\gotex@eatover}
+\def\columncolor{\gotex@eatcolor\gotex@eatover}
 \def\tiny{\gotexsize500\relax}
 \def\scriptsize{\gotexsize700\relax}
 \def\footnotesize{\gotexsize800\relax}
@@ -423,6 +454,15 @@ const MiniLaTeXKernel = `
 % centred word in an article: reference at x=287.6 (the page centre), ours at
 % x=238.2, which is exactly the one-third point. \raggedright is the exception
 % and keeps \parfillskip, as the reference does: its line is flush left either way.
+% \@rightskip and \@flushglue are the kernel's own registers behind those three:
+% "\newskip\@rightskip \@rightskip \z@skip" (latex.ltx:11029) and \@flushglue =
+% 0pt plus 1fil. \raggedright sets \@rightskip and copies it to \rightskip
+% (l.11020), \@arrayparboxrestore zeroes it (l.11831), and \list reads it back
+% (l.11474) — so a class that goes through the kernel's own alignment code needs
+% it to EXIST. acmart does: 38 uses of \@rightskip surface as undefined the moment
+% its real option machinery runs (#306).
+\newskip\@rightskip \@rightskip=0pt
+\newskip\@flushglue \@flushglue=0pt plus 1fil
 \def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\parindent=0pt\parfillskip=0pt\relax}
 \def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\parindent=0pt\parfillskip=0pt\relax}
 % center/flushleft/flushright are TRIVLISTS (latex.ltx:11012-11013, 11030-11033):
@@ -541,6 +581,31 @@ const MiniLaTeXKernel = `
 \def\@stdproof{\noindent{\it Proof.}\ }
 \def\@opargproof[#1]{\noindent{\it #1.}\ }
 \def\endproof{\qed\endgroup\medskip}
+% amsthm's QED stack and \proofname, verbatim (amsthm.sty:280-289, :441). A paper
+% that REDEFINES the proof environment — three of the 200 corpus papers do, to add
+% an optional title or a diamond QED — writes amsthm's own internals, and without
+% them the head is lost:
+%
+%   reference   AVANT Proof. Le corps de la preuve. APRES
+%   ours        AVANT .     Le corps de la preuve. APRES
+%
+% \proofname vanished and only \@addpunct's argument survived. 148 \pushQED, 148
+% \popQED and 112 \proofname over the corpus.
+%
+% The stack exists so nested proofs each get their own symbol; \qedhere is not
+% here, since no corpus paper writes it and it needs \mathqed.
+\let\QED@stack\@empty
+\let\qed@elt\relax
+\def\pushQED#1{%
+  \toks@{\qed@elt{#1}}\@temptokena\expandafter{\QED@stack}%
+  \xdef\QED@stack{\the\toks@\the\@temptokena}}
+\def\popQED{%
+  \begingroup\let\qed@elt\popQED@elt \QED@stack\relax\relax\endgroup}
+\def\popQED@elt#1#2\relax{#1\gdef\QED@stack{#2}}
+\providecommand\proofname{Proof}
+% \@addpunct adds punctuation unless the space factor says the text already ended
+% with some (amsthm.sty:49, which overrides amsgen's by also testing \ifhmode).
+\def\@addpunct#1{\relax\ifhmode\ifnum\spacefactor>\@m \else#1\fi\fi}
 % ─── table of contents (feat/toc) ───────────────────────────────────────────
 % \@tocentry{kind}{level}{number}{title} (a Go primitive) records one contents
 % line on the auxiliary pass. The numbered sectioning and caption macros are
@@ -957,6 +1022,57 @@ const MiniLaTeXKernel = `
 \def\@gtxdefcolset#1#2#3#4{}
 % \mprset{<keys>} — mathpartir's layout options, one argument.
 \def\mprset#1{}
+% \DeclareCaptionLabelFormat{<name>}{<code>} — caption3.sty:725 is \newcommand*[2].
+% 2408.02845 declares two of them in its preamble, and undefined they printed their
+% own names and bodies on page 1: "adja-page", then "#1 #2 (previous page)" with the
+% \hrulefill drawn across the sheet, pushing the title to page 2.
+\def\DeclareCaptionLabelFormat#1#2{}
+% \DeclareVoidOption{<name>}{<code>} — kvoptions.sty:370, \newcommand*[2].
+\def\DeclareVoidOption#1#2{}
+% \ProcessKeyvalOptions — kvoptions.sty:619 is \@ifstar then the family name, so
+% \ProcessKeyvalOptions* takes nothing and the plain form takes one group.
+\def\ProcessKeyvalOptions{\@ifstar{}\@gtxprockvopt}
+\def\@gtxprockvopt#1{}
+% \define@key{<family>}{<key>}[<default>]{<code>} — keyval.sty:81-86: two groups,
+% then \@ifnextchar[ for the default, then the code.
+\def\define@key#1#2{\@ifnextbracket\@gtxdefkeyopt\@gtxdefkey}
+\def\@gtxdefkeyopt[#1]#2{}
+\def\@gtxdefkey#1{}
+% \contentsmargin[<corr>]{<width>} — titletoc.sty:188. The body ENDS with a bare
+% "\def\@pnumwidth", which swallows the following group as that macro's body, so
+% the command really takes an optional bracket AND a group.
+\def\contentsmargin{\@ifnextbracket\@gtxcontmargo\@gtxcontmarg}
+\def\@gtxcontmargo[#1]#2{}
+\def\@gtxcontmarg#1{}
+% \titlecontents[*]{<sec>}[<left>]{<above>}{<numbered>}{<numberless>}{<filler>}
+% [<below>][<extra>] — titletoc.sty:203-238: \@ifstar, one group, a bracket, four
+% groups, then up to two trailing brackets. wlscirep.cls declares three of them.
+\def\titlecontents{\@ifstar\@gtxtitlecont\@gtxtitlecont}
+\def\@gtxtitlecont#1[#2]#3#4#5#6{\@ifnextbracket\@gtxtitlecontb\relax}
+\def\@gtxtitlecontb[#1]{\@ifnextbracket\@gtxtitlecontc\relax}
+\def\@gtxtitlecontc[#1]{}
+% \defaultbibliography{<files>} / \defaultbibliographystyle{<style>} — the
+% "default" pair a journal class offers so a document can name its .bib once.
+\def\defaultbibliography#1{}
+\def\defaultbibliographystyle#1{}
+% \phantomsection — hyperref's anchor, no arguments and nothing to draw.
+\def\phantomsection{}
+% titletoc's partial tables of contents. Each takes an optional list NAME
+% (titletoc.sty:455, 465, 472, 497), and \printcontents takes three more groups —
+% prefix, start level, and the toc code. Undefined, 2406.13839's
+%
+%	\startcontents[sections] \printcontents[sections]{l}{1}{…}
+%
+% printed "[sections] [sections]l1" on a page of its own.
+\def\startcontents{\@ifnextbracket\@gtxstartcontso\relax}
+\def\@gtxstartcontso[#1]{}
+\def\stopcontents{\@ifnextbracket\@gtxstopcontso\relax}
+\def\@gtxstopcontso[#1]{}
+\def\resumecontents{\@ifnextbracket\@gtxresumecontso\relax}
+\def\@gtxresumecontso[#1]{}
+\def\printcontents{\@ifnextbracket\@gtxprintcontso\@gtxprintcont}
+\def\@gtxprintcontso[#1]{\@gtxprintcont}
+\def\@gtxprintcont#1#2#3{}
 \def\SetKwInput#1#2{}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
@@ -1430,8 +1546,8 @@ func stripOuterGroup(toks []tok) []tok {
 	return toks
 }
 
-// doDocumentClass gobbles \documentclass[options]{class} (both parts optional in
-// practice); it selects no behaviour yet — the class is ignored.
+// doGobbleOptAndGroup swallows an [options]{group} pair, both optional in
+// practice, without acting on either.
 func (e *Engine) doGobbleOptAndGroup() {
 	e.skipOptSpace()
 	// optional [options]

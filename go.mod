@@ -5,10 +5,10 @@ go 1.26.4
 require github.com/go-opentype/opentype v0.12.0
 
 require (
-	github.com/go-gfx/gfx v0.24.0
+	github.com/go-gfx/gfx v0.26.0
 	github.com/go-pdfkit/pdfkit v0.12.0
 	github.com/go-tex/math v0.31.0
-	github.com/go-tex/pdfrender v0.1.0
+	github.com/go-tex/pdfrender v0.2.0
 	golang.org/x/text v0.42.0
 )
 
@@ -22,6 +22,7 @@ require (
 	github.com/go-crdt/crdt v0.46.0 // indirect
 	github.com/go-icons/iconoir v0.2.0 // indirect
 	github.com/go-images/images v0.0.0-20260831115433-23d959d868e3 // indirect
+	github.com/go-images/jpeg2000 v0.1.0 // indirect
 	github.com/go-opentype/shape v0.5.0 // indirect
 	github.com/go-richdoc/richdoc v0.3.0 // indirect
 	github.com/go-widgets/mvvm v0.9.0 // indirect

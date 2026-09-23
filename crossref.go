@@ -17,7 +17,7 @@ import "strconv"
 // left behind, fully expanded to a string. A \ref pushes that string back into the
 // input so it typesets in place; an unresolved key yields "??" (as in LaTeX).
 
-// setLabel stores key → the fully-expanded \@currentlabel.
+// doLabel stores key → the fully-expanded \@currentlabel (via setLabel).
 func (e *Engine) doLabel() {
 	key := e.readBraceName()
 	if key == "" {

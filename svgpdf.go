@@ -260,7 +260,7 @@ func (s *svgStack) reset(st svgState) {
 	}
 }
 
-// map transforms an SVG point into PDF user space.
+// pt transforms an SVG point into PDF user space.
 func (s *svgStack) pt(x, y float64, m affine) (float64, float64) {
 	vx, vy := m.apply(x, y)
 	return vx, s.pageH - vy

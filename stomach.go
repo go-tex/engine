@@ -111,7 +111,7 @@ const (
 
 // ── packing ─────────────────────────────────────────────────────────────────
 
-// hpack packs a horizontal list into an hbox, setting the width per mode and the
+// hpackSP packs a horizontal list into an hbox, setting the width per mode and the
 // height/depth to the extremes of the contents (TeX §649). Glue-set computation
 // for rendering is deferred; dimensions are exact.
 func hpackSP(list []node, mode packMode, target int) *boxNode {
@@ -211,7 +211,7 @@ func hpackSP(list []node, mode packMode, target int) *boxNode {
 	return b
 }
 
-// vpack packs a vertical list into a vbox: the width is the widest item, and the
+// vpackSP packs a vertical list into a vbox: the width is the widest item, and the
 // height accumulates each item's size carrying the running depth (TeX §668). The
 // height is set per mode; the depth is the last box/rule's depth.
 func vpackSP(list []node, mode packMode, target int) *boxNode {
@@ -537,8 +537,15 @@ func (e *Engine) buildBoxList() []node {
 	// list rather than opening a fresh paragraph with a \parindent box.
 	savedInPar := e.inPar
 	e.inPar = true
-	defer func() { e.inPar = savedInPar }()
 	var list []node
+	// The box's list is local, so \lastskip would otherwise read the list of
+	// whatever encloses the box — the wrong one, and silently. Publish it while it
+	// is being built; see Engine.lastSkip.
+	e.boxLists = append(e.boxLists, &list)
+	defer func() {
+		e.inPar = savedInPar
+		e.boxLists = e.boxLists[:len(e.boxLists)-1]
+	}()
 	depth := 0
 	for e.err == nil {
 		t, ok := e.getXToken()

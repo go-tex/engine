@@ -117,7 +117,6 @@ var siPowers = map[string]string{
 	"cubed":   "³", // ³
 }
 
-// isASCIILetter reports whether r is an ASCII letter (a control word constituent).
 // isCtrlLetter reports whether r may appear in a control WORD. TeX reads one as a
 // run of category-11 letters, and LaTeX makes @ a letter in package and class code
 // (\makeatletter): \c@inst and \the@inst are ONE control sequence each. Split at
@@ -126,6 +125,7 @@ var siPowers = map[string]string{
 // trailing space, so a name never bleeds into what follows it.
 func isCtrlLetter(r rune) bool { return isASCIILetter(r) || r == '@' }
 
+// isASCIILetter reports whether r is an ASCII letter (a control word constituent).
 func isASCIILetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }

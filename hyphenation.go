@@ -108,9 +108,6 @@ func (e *Engine) doPatterns() {
 	flush()
 }
 
-// hyphenateList returns a copy of a paragraph's horizontal list with discretionary
-// hyphen nodes inserted at every legal break inside each word. A word is a maximal
-// run of characters (font kerns between them are kept as interior material).
 // hyphenPenalty is what a discretionary hyphen costs. It reads the REGISTER, so a
 // document that writes \hyphenpenalty=10000 to suppress hyphenation is obeyed —
 // the field alone could only ever hold the default, since \hyphenpenalty resolves
@@ -122,6 +119,9 @@ func (e *Engine) hyphenPenalty() int {
 	return e.hyphenpenalty
 }
 
+// hyphenateList returns a copy of a paragraph's horizontal list with discretionary
+// hyphen nodes inserted at every legal break inside each word. A word is a maximal
+// run of characters (font kerns between them are kept as interior material).
 func (e *Engine) hyphenateList(list []node) []node {
 	h := e.activeHyphenator()
 	if h == nil {

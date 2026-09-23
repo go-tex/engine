@@ -61,9 +61,6 @@ func (e *Engine) mathSize() int {
 	return 10
 }
 
-// scanMathSource reads raw (unexpanded) tokens up to the closing math shift,
-// reconstructing the math source string for go-tex/math. It returns the source
-// and whether the math was display style ($$…$$).
 // writeMathCS encodes a control sequence into go-tex/math source, as backslash-name
 // followed by a space. It is the ONE place that does so: scanMathSource,
 // substituteMathBody, collectMathUntilCS, the equation body and the alignment cells
@@ -86,6 +83,9 @@ func writeMathCS(b *strings.Builder, cs string) {
 	b.WriteByte(' ')
 }
 
+// scanMathSource reads raw (unexpanded) tokens up to the closing math shift,
+// reconstructing the math source string for go-tex/math. It returns the source
+// and whether the math was display style ($$…$$).
 func (e *Engine) scanMathSource() (string, bool) {
 	display := false
 	if t, ok := e.getNext(); ok {
@@ -1085,9 +1085,6 @@ func (e *Engine) isCharStandIn(name string) bool {
 	return m.body[0].cs_ && m.body[0].cs == "char"
 }
 
-// unknownMathCommand extracts the command name X from a go-tex/math "unknown command
-// \X" error, or "" when the message is a different failure. The name runs over letters
-// and @ (a LaTeX-internal control word), matching a TeX control-word token.
 // mathErrorClass reduces a go-tex/math error that names no unknown command to a
 // BOUNDED key, so a corpus census counts reasons instead of occurrences. Every such
 // refusal used to be tallied under the single opaque "$math$": 19 documents and 52
@@ -1132,6 +1129,9 @@ func mathErrorClass(msg string) string {
 	return out
 }
 
+// unknownMathCommand extracts the command name X from a go-tex/math "unknown command
+// \X" error, or "" when the message is a different failure. The name runs over letters
+// and @ (a LaTeX-internal control word), matching a TeX control-word token.
 func unknownMathCommand(errMsg string) string {
 	const marker = "unknown command \\"
 	i := strings.Index(errMsg, marker)

@@ -40,15 +40,6 @@ func (e *Engine) setNamedSkip(name string, g glueSpec) {
 	}
 }
 
-// placeDisplay contributes the boxes of one displayed equation to the main
-// vertical list with TeX's display spacing: \abovedisplayskip above the first
-// box, ordinary interline glue between the boxes of a multi-line display
-// (align/gather/multline rows), and \belowdisplayskip below the last box. The
-// display skips are ADDED to the ordinary interline glue, not put in its place —
-// that is what after_math does (tex.web:22602 and 22614-22615) — so a display
-// advances the page by the skip plus the space any box of that height would get.
-// A caller must have ended the current paragraph (endParagraph) before calling;
-// an empty box list is a no-op.
 // placeAlignmentDisplay is placeDisplay for an ALIGNMENT display — align, gather,
 // multline. TeX does not contribute those through append_to_vlist at all: it
 // appends \abovedisplayskip and then splices the alignment's own rows in directly
@@ -73,6 +64,15 @@ func (e *Engine) placeAlignmentDisplay(boxes []*boxNode) {
 	e.placeDisplay(boxes)
 }
 
+// placeDisplay contributes the boxes of one displayed equation to the main
+// vertical list with TeX's display spacing: \abovedisplayskip above the first
+// box, ordinary interline glue between the boxes of a multi-line display
+// (align/gather/multline rows), and \belowdisplayskip below the last box. The
+// display skips are ADDED to the ordinary interline glue, not put in its place —
+// that is what after_math does (tex.web:22602 and 22614-22615) — so a display
+// advances the page by the skip plus the space any box of that height would get.
+// A caller must have ended the current paragraph (endParagraph) before calling;
+// an empty box list is a no-op.
 func (e *Engine) placeDisplay(boxes []*boxNode) {
 	if len(boxes) == 0 {
 		return
