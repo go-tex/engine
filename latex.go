@@ -63,6 +63,37 @@ const MiniLaTeXKernel = `
 \def\textrm#1{{\rmfamily #1}}
 \def\emph#1{{\itshape #1}}
 \def\textcolor#1#2{{\color{#1}#2}}
+% colortbl's cell/row/column backgrounds. The engine paints no cell background,
+% so these typeset nothing — but they MUST still eat their arguments, or the
+% colour name reaches the page. Measured against tectonic:
+%
+%   reference   A C EF        B D
+%   ours        lightgray A B gray C D E[rgb]1,0,0F
+%
+% 166 \cellcolor and 77 \rowcolor over 9 of the 200 corpus papers.
+%
+% The signatures are NOT the same, and the difference was taken from the
+% reference rather than assumed. \rowcolor and \columncolor accept the two
+% overhang arguments; \cellcolor does not, and tectonic proves it by SETTING
+% them — inside a tabular as well as outside:
+%
+%   \cellcolor{gray}[1pt][2pt] X   ->   reference prints "[1pt][2pt] X"
+%   \rowcolor{blue}[1pt][2pt] P    ->   reference prints "P"
+%
+% So eating the overhangs everywhere would have swallowed text the reference
+% keeps. Consuming what a command HAS is required; consuming more is a new
+% defect, silent because an unread argument raises nothing in the census.
+\def\gotex@eatcolor#1{\@ifnextchar[{\gotex@eatcolor@m{#1}}{\gotex@eatcolor@c{#1}}}
+\def\gotex@eatcolor@m#1[#2]#3{#1}
+\def\gotex@eatcolor@c#1#2{#1}
+% \relax after the colour: nothing more to eat (\cellcolor).
+% \gotex@eatover: also eat [left] and then [right] (\rowcolor, \columncolor).
+\def\gotex@eatover{\@ifnextchar[\gotex@eatover@i{}}
+\def\gotex@eatover@i[#1]{\@ifnextchar[\gotex@eatover@ii{}}
+\def\gotex@eatover@ii[#1]{}
+\def\cellcolor{\gotex@eatcolor\relax}
+\def\rowcolor{\gotex@eatcolor\gotex@eatover}
+\def\columncolor{\gotex@eatcolor\gotex@eatover}
 \def\tiny{\gotexsize500\relax}
 \def\scriptsize{\gotexsize700\relax}
 \def\footnotesize{\gotexsize800\relax}
