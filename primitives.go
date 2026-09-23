@@ -127,6 +127,8 @@ func (e *Engine) loadPrimitives() {
 	e.define("bgroup", &meaning{kind: mLetChar, ch: '{', cat: catBegin}, true)
 	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
 	e.prim("relax", func(e *Engine) {})
+	// The end-of-isolated-run marker is \relax wherever it escapes: see sentinel.
+	e.eq[sentinel.cs] = &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}
 	// beamer hides what an overlay has not reached by wrapping it in pgf's
 	// invisibility pair (beamerbaseoverlay.sty:316, \beamer@startcovered). The pair
 	// lives in a pgfsys driver this engine does not load, so without these it was
@@ -1597,9 +1599,25 @@ func (e *Engine) theToks(ts []tok) []tok {
 	return out
 }
 
-// sentinel marks the end of an isolated expansion (getXToken returns it
-// literally since it has no meaning, so expandList can stop reliably regardless
-// of what is already on the input stack).
+// sentinel marks the end of an isolated run — \edef's body, \everypar, a
+// footnote, a running head. Its name holds a NUL, so no source can write it.
+//
+// It MEANS \relax (defined in loadPrimitives), and that is not decoration. Every
+// TeX scanner that reads a number, a dimension or a keyword looks one token PAST
+// what it consumed to learn where it ended, and hands that token back (tex.web
+// §442 back_input); a list that ends in a number therefore puts the sentinel back
+// as a fresh list, after which the run's own depth guard declines to read it and
+// it survives into the document. Measured at 44 occurrences over 8 of the 200
+// corpus papers, 14 of them on one, every one backed out by scanInt.
+//
+// Given a meaning it is \relax where it lands: it terminates a number the way
+// \relax does, typesets nothing, and closes nothing. Undefined, it was reported as
+// a skipped command \^^@end-expand, and in strict mode it is an error.
+//
+// A fence on the input stack — "below this depth is not yours" — looks like the
+// cleaner answer and is not: it makes the mouth report END OF INPUT to those same
+// lookaheads, and a { opened inside the list is then never closed. Measured on
+// this corpus: 34 pages to 1, 63939 paths of ink to 106.
 var sentinel = tok{cs: "\x00end-expand", cs_: true}
 
 // expandList fully expands a token list in isolation (for \edef / \message),
