@@ -354,7 +354,7 @@ func (l *textLayer) addPhrase(s string, x, width, baseline, size float64) {
 // and drops the spaces the math tokeniser INSERTED rather than the ones the
 // author typed — see [dropSyntheticSpaces].
 func collapseSpace(s string) string {
-	return dropSyntheticSpaces(squeezeSpace(unwrapMathAlphabets(s)))
+	return dropSyntheticSpaces(squeezeSpace(stripMathLayout(unwrapMathAlphabets(s))))
 }
 
 // dropSyntheticSpaces removes the space the math tokeniser writes after every
@@ -467,6 +467,79 @@ func unwrapMathAlphabets(s string) string {
 		// the group's CONTENTS, themselves unwrapped: \mathbf{\mathrm{x}} is "x"
 		b.WriteString(unwrapMathAlphabets(string(r[k+1 : end])))
 		i = end + 1
+	}
+	return b.String()
+}
+
+// mathInvisibleCommands take no argument and draw nothing: they choose a style
+// for what follows. The page shows their effect, never their name.
+var mathInvisibleCommands = map[string]bool{
+	"displaystyle": true, "textstyle": true, "scriptstyle": true, "scriptscriptstyle": true,
+	"normalfont": true, "rmfamily": true, "sffamily": true, "ttfamily": true,
+	"bfseries": true, "mdseries": true, "itshape": true, "upshape": true, "scshape": true,
+	"limits": true, "nolimits": true,
+}
+
+// stripMathLayout removes from a formula's phrase the two things that are neither
+// drawn NOR typed by the author: a style switch that takes no argument, and the
+// backslash of an escaped brace (\{ draws a brace, so the brace stays).
+//
+// It deliberately does NOT remove the grouping braces, ^ or _. Those ARE what the
+// author typed, and TestFormulaSourceIsSearchable states the rule they follow: the
+// layer carries the formula's source, so a reader who typed \sum_{i=1}^{n} can find
+// it again. The reference makes the opposite choice — pdftotext on tectonic's PDF
+// gives "x2" for $x^{2}$ — and which of the two a page should offer is a decision
+// about this engine, not a defect. It is measured and posed on go-tex/engine#372.
+//
+// What is uncontested is everything below: no one searches for \displaystyle, and
+// nothing draws it.
+//
+//	source      D $\displaystyle z$ E $\text{\normalfont q}$ F
+//	reference   D z E q F
+//	before      D \sdzip aleyts E \n qrof
+//
+// (The scrambling is pdftotext reading characters placed at odd positions; it goes
+// with the characters.)
+//
+// Symbol commands (\alpha, \Omega) are untouched, for the reason given on
+// unwrapMathAlphabets: their character lives in the maths package's table, and a
+// second copy of that table is a second truth.
+func stripMathLayout(s string) string {
+	if !strings.ContainsAny(s, `\{}^_`) {
+		return s
+	}
+	var b strings.Builder
+	r := []rune(s)
+	for i := 0; i < len(r); {
+		switch {
+		case r[i] == '\\' && i+1 < len(r) && (r[i+1] == '{' || r[i+1] == '}'):
+			b.WriteRune(r[i+1]) // \{ and \} ARE drawn
+			i += 2
+			// and the space the tokeniser wrote to END that control sequence goes
+			// with it: dropSyntheticSpaces only knows control WORDS, so once the
+			// backslash is gone nothing else would remove it. Without this the
+			// layer says "{ a}" where the reference says "{a}".
+			for i < len(r) && r[i] == ' ' {
+				i++
+			}
+		case r[i] == '\\' && i+1 < len(r) && isLetterRune(r[i+1]):
+			j := i + 1
+			for j < len(r) && isLetterRune(r[j]) {
+				j++
+			}
+			if mathInvisibleCommands[string(r[i+1:j])] {
+				for j < len(r) && r[j] == ' ' { // the space that ends a control word
+					j++
+				}
+				i = j
+				continue
+			}
+			b.WriteString(string(r[i:j]))
+			i = j
+		default:
+			b.WriteRune(r[i])
+			i++
+		}
 	}
 	return b.String()
 }
