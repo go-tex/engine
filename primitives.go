@@ -2245,6 +2245,34 @@ func (e *Engine) loadStomach() {
 	e.prim("@ifstar", func(e *Engine) { e.doIfstar() })
 	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
 	e.prim("vrule", func(e *Engine) { e.place(e.scanRule(false)) })
+	// \discretionary{<pre-break>}{<post-break>}{<no-break>} (tex.web §1117): a break
+	// OPPORTUNITY. TeX sets the third list when no break is taken there, the first at
+	// the end of the line when one is, and the second at the start of the next.
+	//
+	// It was undefined, so all THREE lists were typeset — tex.web forgets the command
+	// and the groups after it are ordinary material. Every corpus use comes from a
+	// .bbl or .bst and is \discretionary{}{}{}, the idiom that lets a long DOI break
+	// without adding anything, so nothing was visible; what was lost is the break.
+	//
+	// The post-break list is dropped: discNode has no place to put material that
+	// appears at the START of the next line, and no corpus use has one. The pre-break
+	// list is kept as TEXT, which is what makes {}{}{} break WITHOUT the hyphen a
+	// Liang break carries.
+	e.prim("discretionary", func(e *Engine) {
+		pre := e.grabUndelimited()
+		e.grabUndelimited() // post-break: see above
+		nobreak := e.grabUndelimited()
+		var b strings.Builder
+		for _, t := range pre {
+			if !t.cs_ {
+				b.WriteRune(t.ch)
+			}
+		}
+		e.place(discNode{penalty: e.hyphenPenalty(), pre: b.String()})
+		if len(nobreak) > 0 {
+			e.push(nobreak) // typeset by the ordinary path, not rebuilt here
+		}
+	})
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
 	// Box shifting: \raise/\lower move an hbox/vbox off the baseline (horizontal
 	// mode); \moveleft/\moveright shift a box horizontally (vertical mode). TeX's

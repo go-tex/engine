@@ -63,7 +63,15 @@ type charNode struct { // a set character from the current font (metrics in sp)
 	// has arrived — and draws no ink. See doBeginInvisible.
 	covered bool
 }
-type discNode struct{ penalty int } // a discretionary hyphen point (Liang)
+
+// discNode is a break OPPORTUNITY. pre is what TeX's \discretionary calls the
+// pre-break text — what appears at the end of the line when the break is taken.
+// Liang hyphenation sets it to "-"; \discretionary{}{}{}, which is what a .bbl
+// writes to let a long DOI break, sets it EMPTY and must not grow a hyphen.
+type discNode struct {
+	penalty int
+	pre     string
+}
 
 func (kernNode) isNode()    {}
 func (glueNode) isNode()    {}

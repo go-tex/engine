@@ -67,9 +67,12 @@ func (e *Engine) layoutSegment(hlist []node) {
 		// segment first: it aliases list's backing array, so appending in place
 		// would overwrite the next line's first node.
 		if ln.End < len(list) {
-			if _, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil {
-				w, h, dd := e.curFont.charDimsSP('-')
-				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd})
+			if d, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil && d.pre != "" {
+				seg = append([]node{}, seg...)
+				for _, r := range d.pre {
+					w, h, dd := e.curFont.charDimsSP(r)
+					seg = append(seg, charNode{ch: r, width: w, height: h, depth: dd})
+				}
 			}
 		}
 		seg = e.applyLineSkips(seg)
