@@ -28,6 +28,13 @@ func TestConfigurationCommandsConsumeTheirArguments(t *testing.T) {
 		`\defaultbibliography{main}`,
 		`\defaultbibliographystyle{naturemag}`,
 		`\phantomsection`,
+		// titletoc's partial tables of contents (titletoc.sty:455, 465, 472, 497).
+		`\startcontents[sections]`,
+		`\startcontents`,
+		`\stopcontents[sections]`,
+		`\resumecontents[sections]`,
+		`\printcontents[sections]{l}{1}{\setcounter{tocdepth}{2}}`,
+		`\printcontents{l}{1}{}`,
 	} {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
