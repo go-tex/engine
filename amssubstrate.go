@@ -235,11 +235,20 @@ const AMSClassSubstrate = `
 \skipdef\skip@=0
 % ── penalty / spacing parameters a class assigns ────────────────────────────
 \newcount\brokenpenalty
-\newcount\tolerance \tolerance=10000
+% TeX's own defaults (tex.web §240, and LaTeX leaves both alone). They were a
+% fresh \newcount each, so the register read 0 or an arbitrary 10000 and SHADOWED
+% the engine's correct values (texparams.go has tolerance 200, engine.go
+% hyphenpenalty 50) — and the line breaker reads the REGISTER. With tolerance at
+% 10000 no line is ever too loose or too tight to accept, so the breaker packs
+% where TeX would rebreak or hyphenate; with \hyphenpenalty at 0 a hyphen costs
+% nothing, so it hyphenates where TeX would not.
+\newcount\tolerance \tolerance=200
 \newcount\hbadness
 \newcount\vbadness
-\newcount\hyphenpenalty
-\newcount\finalhyphendemerits
+\newcount\hyphenpenalty \hyphenpenalty=50
+% Read by breakSegment (paragraph.go) like the two above, and zero here meant a
+% hyphen on the second-to-last line of a paragraph cost nothing extra. TeX: 5000.
+\newcount\finalhyphendemerits \finalhyphendemerits=5000
 \newdimen\hfuzz
 \newdimen\vfuzz
 \newdimen\emergencystretch
