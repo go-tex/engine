@@ -69,3 +69,31 @@ func TestIfthenelseNamesATestItCannotEvaluate(t *testing.T) {
 		t.Errorf("the report says %q, which does not name the test", found)
 	}
 }
+
+// \setboolean lowercases its value before using it (ifthen.sty:125,
+// \lowercase{\def\@tempa{#2}}). Without that, \setboolean{b}{True} names an
+// undefined \bTrue and the assignment silently does nothing. Checked against
+// tectonic: "B VRAI C FAUX"; before the fix we said "B FAUX C FAUX".
+//
+// No corpus paper writes a capitalised value — this came from reading the
+// package, not from measuring.
+func TestSetBooleanLowercasesItsValue(t *testing.T) {
+	for _, tc := range []struct{ name, val, want string }{
+		{"minuscule", "true", "VRAI"},
+		{"capitale initiale", "True", "VRAI"},
+		{"tout en capitales", "TRUE", "VRAI"},
+		{"faux", "False", "FAUX"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := compile([]byte(`\documentclass{article}\usepackage{ifthen}`+
+				`\newboolean{b}\setboolean{b}{`+tc.val+`}\begin{document}`+
+				`\ifthenelse{\boolean{b}}{VRAI}{FAUX}\end{document}`), Options{Lenient: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := pageChars(e); got != tc.want {
+				t.Errorf("\\setboolean{b}{%s} -> page %q, want %q", tc.val, got, tc.want)
+			}
+		})
+	}
+}

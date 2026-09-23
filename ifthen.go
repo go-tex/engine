@@ -17,9 +17,25 @@ import "strings"
 //
 // Only the tests the corpus actually writes are evaluated — \equal, \boolean, and
 // a numeric comparison of \value against a number. \isodd, \lengthtest and the
-// \AND/\OR/\NOT combinators are NOT here: implementing a grammar nothing exercises
-// buys untested paths, and the census names any test that turns up (see
-// evalIfthenTest's default). The same reasoning as \discretionary in #384.
+// combinators are NOT here: implementing a grammar nothing exercises buys untested
+// paths, and the census names any test that turns up (see evalIfthenTest's
+// default). The same reasoning as \discretionary in #384.
+//
+// Read from ifthen.sty afterwards (which is the wrong order, and cost the
+// \setboolean defect in kernelhelpers.go), two things that differ from this in
+// PRINCIPLE though no corpus paper exercises either:
+//
+//   - the combinators exist in LOWERCASE too. ifthen.sty:75-81 rewrites or/and/not
+//     as well as OR/AND/NOT, through \TE@repl, before evaluating anything.
+//   - \equal compares TOKEN LISTS, not text. \TE@equal (:122) is
+//     \def\@tempa{#1}\def\@tempb{#2}\ifx\@tempa\@tempb inside an \xdef, so both
+//     sides are fully expanded and then compared with catcodes. expandToString
+//     below compares the rendered characters, which agrees on every corpus case
+//     and would diverge where catcodes differ.
+//
+// ifthen.sty builds the whole test as \iftrue\ifnum <test> \relax and has each
+// test primitive CLOSE that \ifnum (\TE@throw, :54). That is a different
+// architecture from the switch below, not a detail of it.
 func (e *Engine) loadIfthen() {
 	e.prim("ifthenelse", func(e *Engine) {
 		test, yes, no := e.grabUndelimited(), e.grabUndelimited(), e.grabUndelimited()
