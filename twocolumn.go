@@ -96,6 +96,13 @@ func placementBits(toks []tok) string {
 				c = 'h'
 			}
 			b = append(b, byte(c))
+		case '!':
+			// LaTeX keeps it: \@fpstype carries the placement with 16 ADDED when
+			// there is NO "!" (latex.ltx:12990), and every fraction test is guarded
+			// by \ifnum\@fpstype<\sixt@@n. Dropping it here made [!t] identical to
+			// [t], so \topfraction and \textfraction applied to a float whose author
+			// asked for them to be ignored.
+			b = append(b, '!')
 		}
 	}
 	return string(b)

@@ -221,6 +221,16 @@ func (e *Engine) mvlHasFloats() bool {
 // floatClass is a float's resolved placement preference, derived once from its bits.
 type floatClass struct {
 	allowTop, allowBot, allowPage bool
+	// urgent is the "!" of [!t]: LaTeX records the placement in \@fpstype with 16
+	// ADDED when there is no "!" (latex.ltx:12990), and every fraction test is
+	// guarded by \ifnum\@fpstype<\sixt@@n. \@flsettextmin (l.15929) is the plainest
+	// of them:
+	//
+	//	\ifnum \@fpstype<\sixt@@n  \@textmin \z@  \else  \@textmin \textfraction\@colht  \fi
+	//
+	// So "!" means: ignore \textfraction, \topfraction, \bottomfraction and the
+	// per-area counts — place it here if it fits the page at all.
+	urgent bool
 }
 
 // classifyFloat resolves a float's placement bits (default "tbp") into the areas it may go.
@@ -232,7 +242,20 @@ func classifyFloat(place string) floatClass {
 		allowTop:  strings.ContainsRune(place, 't'),
 		allowBot:  strings.ContainsRune(place, 'b'),
 		allowPage: strings.ContainsRune(place, 'p'),
+		urgent:    strings.ContainsRune(place, '!'),
 	}
+}
+
+// allUrgent reports whether every float in the list carries "!". An empty list is
+// vacuously urgent, which is what makes a page of only-urgent tops keep no text
+// minimum while a page mixing them with an ordinary float still does.
+func allUrgent(fs []anchoredFloat) bool {
+	for _, af := range fs {
+		if !af.c.urgent {
+			return false
+		}
+	}
+	return true
 }
 
 // anchoredFloat pairs a captured float with the text position it was written at.
@@ -291,8 +314,10 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			fi++
 		}
 
-		// A float taller than any top/bottom area gets its own float page immediately.
-		if len(deferred) > 0 && fh(deferred[0]) > topCap && fh(deferred[0]) > botCap {
+		// A float taller than any top/bottom area gets its own float page immediately —
+		// unless it was asked for with "!", which suppresses those fractions.
+		if len(deferred) > 0 && !deferred[0].c.urgent &&
+			fh(deferred[0]) > topCap && fh(deferred[0]) > botCap {
 			emitFloatPage(deferred[:1])
 			deferred = deferred[1:]
 			if len(pages) >= maxPages {
@@ -346,7 +371,11 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			if len(top) > 0 {
 				need += e.floatSep()
 			}
-			if topH+need > topCap {
+			cap := topCap
+			if af.c.urgent {
+				cap = vsize // "!" drops \topfraction; it must still fit the page
+			}
+			if topH+need > cap {
 				break
 			}
 			topH += need
@@ -383,8 +412,14 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 
 		// Keep at least \textfraction of the page for text: if the floats leave too little
 		// room, push the last-added top float (then bottom) back to the queue for a later
-		// page rather than starving the text or forcing an overfull page.
-		for reserve > vsize-textMin && (len(top) > 0 || len(bottom) > 0) {
+		// page rather than starving the text or forcing an overfull page. A float asked
+		// for with "!" sets \@textmin to zero (latex.ltx:15929), so a page carrying only
+		// urgent floats keeps no text minimum.
+		keep := textMin
+		if allUrgent(top) && allUrgent(bottom) {
+			keep = 0
+		}
+		for reserve > vsize-keep && (len(top) > 0 || len(bottom) > 0) {
 			if len(top) > 0 {
 				af := top[len(top)-1]
 				top = top[:len(top)-1]
@@ -405,6 +440,11 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			}
 			if botH > 0 {
 				reserve += e.textFloatSep()
+			}
+			if allUrgent(top) && allUrgent(bottom) {
+				keep = 0
+			} else {
+				keep = textMin
 			}
 		}
 
