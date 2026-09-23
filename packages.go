@@ -633,6 +633,15 @@ func namesPaperSize(opts []string) bool {
 func (e *Engine) doUsepackageLoad() {
 	opts := e.scanBracketList()
 	names := e.readBraceNameX()
+	// A file spec takes TWO optional arguments, options and a DATE:
+	// \@onefilewithoptions#1[#2][#3]#4 (latex.ltx:13735). The date is how a package
+	// states the version it needs, and jabbrv.sty writes
+	//
+	//	\RequirePackage{kvoptions}[2006/08/17]
+	//
+	// Left unread it was typeset, and "[2006/08/17]" opened the first page of every
+	// document that loads jabbrv — pushing the title to page 2.
+	e.skipOptDateBracket()
 	for _, raw := range strings.Split(names, ",") {
 		name := strings.TrimSpace(raw)
 		if name == "" {
@@ -808,6 +817,32 @@ func (e *Engine) doExecuteOptions() {
 	}
 	if len(run) > 0 {
 		e.push(run)
+	}
+}
+
+// skipOptDateBracket consumes the trailing [<date>] of a file spec, and NOTHING
+// else. It looks with getNext rather than getXToken: LaTeX's own lookahead here is
+// \@ifnextchar, which is \futurelet and expands nothing, and expanding would run
+// whatever follows the load BEFORE the package is registered — measured, that made
+// \usepackage{p}\@ifpackageloaded{p}{…} answer "not loaded".
+func (e *Engine) skipOptDateBracket() {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return
+	}
+	if t.cs_ || t.ch != '[' {
+		e.back(t)
+		return
+	}
+	for {
+		u, ok := e.getNext()
+		if !ok {
+			return
+		}
+		if !u.cs_ && u.ch == ']' {
+			return
+		}
 	}
 }
 
