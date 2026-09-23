@@ -1614,7 +1614,8 @@ func (e *Engine) theToks(ts []tok) []tok {
 // It MEANS \relax (defined in loadPrimitives), and that is not decoration. Every
 // TeX scanner that reads a number, a dimension or a keyword looks one token PAST
 // what it consumed to learn where it ended, and hands that token back (tex.web
-// §442 back_input); a list that ends in a number therefore puts the sentinel back
+// §325 back_input, read to check this comment rather than recalled); a list that
+// ends in a number therefore puts the sentinel back
 // as a fresh list, after which the run's own depth guard declines to read it and
 // it survives into the document. Measured at 44 occurrences over 8 of the 200
 // corpus papers, 14 of them on one, every one backed out by scanInt.
