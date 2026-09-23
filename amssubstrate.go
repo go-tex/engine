@@ -278,11 +278,10 @@ const AMSClassSubstrate = `
 % \IEEEeqnarray row strut as 0.7/0.3\normalbaselineskip, and \@arrayparboxrestore
 % — which runs inside every array cell and parbox — sets \baselineskip from it.
 \newskip\normalbaselineskip \normalbaselineskip=12pt
-% \lastskip reads the last glue on the current list. The engine does not expose
-% list surgery, and every use is a spacing tweak off the critical path (amsart's
-% footnote \advance\skip@-\lastskip, and \removelastskip), so a permanently zero
-% skip register is a safe stand-in — reads yield 0, the subtraction a no-op.
-\newskip\lastskip
+% \lastskip is a real primitive now (tex.web §424, see Engine.lastSkip): it reads
+% the glue at the end of the list being built. The stand-in that used to sit here
+% was a \newskip — a register, permanently zero — and a register SHADOWS the
+% primitive, so defining the primitive alone changed nothing until this went.
 \newtoks\everydisplay
 \newtoks\everymath
 % list / equation scratch counters and skips amsart references directly

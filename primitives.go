@@ -129,6 +129,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("relax", func(e *Engine) {})
 	// The end-of-isolated-run marker is \relax wherever it escapes: see sentinel.
 	e.eq[sentinel.cs] = &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}
+	// \lastskip is READ-ONLY (tex.web §424): scanDimen and scanGlue answer it,
+	// and executing it on its own does nothing. It is not a register.
+	e.prim("lastskip", func(e *Engine) {})
 	// beamer hides what an overlay has not reached by wrapping it in pgf's
 	// invisibility pair (beamerbaseoverlay.sty:316, \beamer@startcovered). The pair
 	// lives in a pgfsys driver this engine does not load, so without these it was
@@ -1159,6 +1162,9 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "rightskip":
 				e.pushString(formatGlue(e.rightskip))
+				return
+			case m.kind == mPrim && m.name == "lastskip":
+				e.pushString(formatGlue(e.lastSkip()))
 				return
 			case m.kind == mSkipRef:
 				e.pushString(formatGlue(e.skip[m.code]))
@@ -2373,6 +2379,32 @@ func (e *Engine) shiftAndPlace(shift int, vertical bool) {
 // place adds material that is legal in both modes: inside a paragraph
 // (horizontal mode) it becomes an inline node on the current line; in vertical
 // mode it is contributed to the main vertical list. A nil box is dropped.
+// lastSkip is TeX's \lastskip (tex.web §424): the glue at the END of the list
+// being built, or zero when the last item is not glue. TeX looks at the current
+// list — the paragraph in horizontal mode, the main vertical list otherwise —
+// and NOT inside a box that was already packed.
+//
+// LaTeX's \@bsphack/\@esphack read it to remember the space before a command
+// that writes but typesets nothing (\label, \index), so the space around the
+// call survives as exactly one. See go-tex/engine#385.
+func (e *Engine) lastSkip() glueSpec {
+	list := e.mvl
+	if e.inPar {
+		list = e.parList
+	}
+	// A box being built has its own list, and it is the current one.
+	if n := len(e.boxLists); n > 0 {
+		list = *e.boxLists[n-1]
+	}
+	if len(list) == 0 {
+		return glueSpec{}
+	}
+	if g, ok := list[len(list)-1].(glueNode); ok {
+		return g.spec
+	}
+	return glueSpec{}
+}
+
 func (e *Engine) place(n node) {
 	if b, ok := n.(*boxNode); ok && b == nil {
 		return

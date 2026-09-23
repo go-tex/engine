@@ -657,6 +657,43 @@ const LaTeX2eClassKernel = `
 \newdimen\unitlength \unitlength=1pt
 \newdimen\@xdim
 \newdimen\@ydim
+% \@bsphack / \@esphack, verbatim from latex.ltx:6482-6502. They wrap a command
+% that WRITES but typesets nothing — \label, \index, \glossary — so the space
+% around the call survives as exactly one instead of two. Undefined, they were
+% 111 skipped commands each over 4 of the 200 corpus papers, and
+% "word \label{x} word" was 2.00pt wider than the reference (go-tex/engine#385).
+%
+% \ignorespaces fires only when there WAS a skip before the call, which is what
+% makes the unspaced form "word\label{x} word" keep its one space.
+\newskip\@savsk
+\newcount\@savsf
+\def\@bsphack{%
+  \relax
+  \ifhmode
+    \@savsk\lastskip
+    \@savsf\spacefactor
+  \fi}
+\def\@esphack{%
+  \relax
+  \ifhmode
+    \spacefactor\@savsf
+    \ifdim\@savsk>\z@
+      \ifdim\lastskip=\z@
+        \nobreak \hskip\z@skip
+      \fi
+      \ignorespaces
+    \fi
+  \else
+    \ifvmode
+      \if@nobreak\nobreak\else\if@noskipsec\nobreak\fi\fi
+    \fi
+  \fi}
+% \label is a primitive here (doLabel), so it cannot wrap ITSELF in the pair the
+% way latex.ltx does (\def\label#1{\@bsphack ... \@esphack}). Wrap it once, here,
+% rather than reimplementing \@esphack's rule inside doLabel: the rule then has a
+% single home. Same for \index, which latex.ltx guards identically.
+\let\gotex@rawlabel\label
+\def\label#1{\@bsphack\gotex@rawlabel{#1}\@esphack}
 \def\@nnil{\@nil}
 \def\remove@to@nnil#1\@nnil{}
 \def\@defaultunits{\afterassignment\remove@to@nnil}

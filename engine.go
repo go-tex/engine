@@ -246,11 +246,14 @@ type Engine struct {
 	buildingFootnote bool
 	levels           []mouthLevel // the input levels below this one (see pushInputLevel)
 	noBase           bool         // when true, getNext does not fall through to the base string
-	negateNextIf     int          // pending \unless prefixes (e-TeX): reverse the next conditional
-	allocCnt         int          // next free \count register handed out by \newcount
-	allocDim         int          // next free \dimen register handed out by \newdimen
-	allocSkp         int          // next free \skip register handed out by \newskip
-	allocBox         int          // next free \box register handed out by \newsavebox
+	// boxLists is the stack of lists being built by buildBoxList, innermost last.
+	// Only \lastskip reads it: TeX's "current list" is the box's when one is open.
+	boxLists     []*[]node
+	negateNextIf int // pending \unless prefixes (e-TeX): reverse the next conditional
+	allocCnt     int // next free \count register handed out by \newcount
+	allocDim     int // next free \dimen register handed out by \newdimen
+	allocSkp     int // next free \skip register handed out by \newskip
+	allocBox     int // next free \box register handed out by \newsavebox
 
 	// token registers (see toks.go): \toks<n> / \newtoks-allocated registers store
 	// a token list each. A class's title/mark machinery (amsart's \andify, \toks@,
@@ -2561,6 +2564,8 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.leftskip.width, 0
 			case m.kind == mPrim && m.name == "rightskip":
 				return e.rightskip.width, 0
+			case m.kind == mPrim && m.name == "lastskip":
+				return e.lastSkip().width, 0
 			}
 			// An internal INTEGER here is the FACTOR of the dimension, not the
 			// dimension itself: TeX's <dimen> is <factor><unit of measure>, and the
@@ -2911,6 +2916,8 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 				return e.leftskip.width, true
 			case m.kind == mPrim && m.name == "rightskip":
 				return e.rightskip.width, true
+			case m.kind == mPrim && m.name == "lastskip":
+				return e.lastSkip().width, true
 			case m.kind == mPrim && m.name == "dimexpr":
 				return e.scanExpr(true), true
 			}
