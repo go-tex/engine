@@ -454,6 +454,15 @@ const MiniLaTeXKernel = `
 % centred word in an article: reference at x=287.6 (the page centre), ours at
 % x=238.2, which is exactly the one-third point. \raggedright is the exception
 % and keeps \parfillskip, as the reference does: its line is flush left either way.
+% \@rightskip and \@flushglue are the kernel's own registers behind those three:
+% "\newskip\@rightskip \@rightskip \z@skip" (latex.ltx:11029) and \@flushglue =
+% 0pt plus 1fil. \raggedright sets \@rightskip and copies it to \rightskip
+% (l.11020), \@arrayparboxrestore zeroes it (l.11831), and \list reads it back
+% (l.11474) — so a class that goes through the kernel's own alignment code needs
+% it to EXIST. acmart does: 38 uses of \@rightskip surface as undefined the moment
+% its real option machinery runs (#306).
+\newskip\@rightskip \@rightskip=0pt
+\newskip\@flushglue \@flushglue=0pt plus 1fil
 \def\centering{\leftskip=0pt plus 1fil\rightskip=0pt plus 1fil\parindent=0pt\parfillskip=0pt\relax}
 \def\raggedleft{\leftskip=0pt plus 1fil\rightskip=0pt\parindent=0pt\parfillskip=0pt\relax}
 % center/flushleft/flushright are TRIVLISTS (latex.ltx:11012-11013, 11030-11033):
