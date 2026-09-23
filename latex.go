@@ -1430,8 +1430,8 @@ func stripOuterGroup(toks []tok) []tok {
 	return toks
 }
 
-// doDocumentClass gobbles \documentclass[options]{class} (both parts optional in
-// practice); it selects no behaviour yet — the class is ignored.
+// doGobbleOptAndGroup swallows an [options]{group} pair, both optional in
+// practice, without acting on either.
 func (e *Engine) doGobbleOptAndGroup() {
 	e.skipOptSpace()
 	// optional [options]

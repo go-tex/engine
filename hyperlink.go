@@ -43,9 +43,6 @@ func (ln linkNode) width() int  { return ln.inner.width }
 func (ln linkNode) height() int { return ln.inner.height }
 func (ln linkNode) depth() int  { return ln.inner.depth }
 
-// doURL implements \url{URL}: it reads URL literally (URLs carry catcode-active
-// characters like ~, #, %, & that must not be interpreted), typesets it in the
-// verbatim (tt) font and wraps the result in a hyperlink pointing to itself.
 // readCSNameArg reads the name of a control sequence given as an undelimited
 // argument, in either form: {\name} or the bare \name. url.sty's \urldef is
 // \def\urldef#1{…}, so a single token IS the argument — and every real use of it
@@ -100,6 +97,9 @@ func (e *Engine) doUrldef() {
 	e.define(name, &meaning{kind: mMacro, body: body}, false)
 }
 
+// doURL implements \url{URL}: it reads URL literally (URLs carry catcode-active
+// characters like ~, #, %, & that must not be interpreted), typesets it in the
+// verbatim (tt) font and wraps the result in a hyperlink pointing to itself.
 func (e *Engine) doURL() {
 	url, _ := e.readRawBracedArg()
 	save := e.beginLinkColor(e.hyperURLColor)

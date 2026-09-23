@@ -833,8 +833,6 @@ func (e *Engine) rawAt(i int) (rune, int) {
 	return c - 64, i + 3
 }
 
-// endlinechar is the character TeX appends to every input line — 13 (^^M) unless
-// a package changes it. A value outside 0..255 means "append nothing".
 // escapechar is the character TeX prints in front of a control-sequence name —
 // 92 ("\") unless a package changes it. Outside 0..255 it prints nothing.
 func (e *Engine) escapechar() int {
@@ -844,6 +842,8 @@ func (e *Engine) escapechar() int {
 	return e.count[e.escapeReg]
 }
 
+// endlinechar is the character TeX appends to every input line — 13 (^^M) unless
+// a package changes it. A value outside 0..255 means "append nothing".
 func (e *Engine) endlinechar() int {
 	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
 		return '\r'
@@ -2215,9 +2215,6 @@ func (e *Engine) stepOverrun() bool {
 	return e.steps > e.stepLimit || e.noProgSteps > e.tightLimit
 }
 
-// tripRunaway halts expansion when the step/depth guard fires: it discards the
-// pending input so the loop unwinds, and (in strict mode only) records the error.
-// In tolerant mode the partial document built so far is still rendered.
 // printTrace prints a trace with runs collapsed: a loop repeats one macro
 // thousands of times, and one line each would push the CALLER — the interesting
 // line — out of the report.
@@ -2248,6 +2245,9 @@ var traceOut io.Writer = os.Stderr
 
 const traceDepth = 400
 
+// tripRunaway halts expansion when the step/depth guard fires: it discards the
+// pending input so the loop unwinds, and (in strict mode only) records the error.
+// In tolerant mode the partial document built so far is still rendered.
 func (e *Engine) tripRunaway() {
 	if traceRunaway {
 		fmt.Fprintf(traceOut, "gotex: runaway at %d:%d\n", e.curSrcLine, e.curSrcCol)
@@ -2463,9 +2463,6 @@ func (e *Engine) scanSign() int {
 	}
 }
 
-// scanDimen scans an optional-signed dimension and returns scaled points. It
-// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
-// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
 // spaceGlueOf is the interword glue for one face: the face's own advance, with any
 // \fontdimen 2/3/4 a document assigned to it taking precedence. TeX keeps these in
 // the font's parameter array and reads the glue from it (tex.web §433: the space
@@ -2502,6 +2499,9 @@ func (e *Engine) setFontDimen(f fontFace, n, v int) {
 	e.fontDimens[f][n] = v
 }
 
+// scanDimen scans an optional-signed dimension and returns scaled points. It
+// accepts a decimal factor plus a unit (pt, pc, in, bp, cm, mm, dd, cc, sp), a
+// \dimen register, or a \dimendef'd alias — using TeX's exact sp arithmetic.
 func (e *Engine) scanDimen() int {
 	e.skipOptSpace()
 	sign := e.scanSign()

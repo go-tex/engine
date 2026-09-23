@@ -942,6 +942,26 @@ func (e *Engine) doCheckEnv() {
 	}
 }
 
+// pendingHoldsEnd reports whether the pending token lists already carry the
+// environment's own \end — which says the body was CAPTURED rather than still
+// being in the file.
+//
+// undefinedEnvAsCode may only read ahead in the file. Inside a captured body (a
+// minipage, a float, a beamer column) the character cursor is already past it and
+// reading there would copy the document that follows — the mistake #214 fixed. The
+// tell is where the \end lives: a captured body carries its own \end in the pending
+// token lists, while an ordinary \begin leaves only the tail of its own expansion.
+func pendingHoldsEnd(lists [][]tok) bool {
+	for _, l := range lists {
+		for _, t := range l {
+			if t.cs_ && t.cs == "end" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // undefinedEnvAsCode rescues the body of an undefined environment that is plainly
 // CODE, by setting it verbatim instead of executing it as prose.
 //
@@ -957,23 +977,6 @@ func (e *Engine) doCheckEnv() {
 // shifts, code does. When the body between here and \end{name} has one, it is read
 // raw and set as a verbatim block, and the \end is consumed with it. Everything
 // else keeps the behaviour it had.
-//
-// Only when the body is still in the FILE. Inside a captured body (a minipage, a
-// float, a beamer column) the character cursor is already past it and reading there
-// would copy the document that follows — the mistake #214 fixed. The tell is where
-// the \end lives: a captured body carries its own \end in the pending token lists,
-// while an ordinary \begin leaves only the tail of its own expansion there.
-func pendingHoldsEnd(lists [][]tok) bool {
-	for _, l := range lists {
-		for _, t := range l {
-			if t.cs_ && t.cs == "end" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func (e *Engine) undefinedEnvAsCode(name string) {
 	if pendingHoldsEnd(e.lists) {
 		return
@@ -2376,9 +2379,6 @@ func (e *Engine) shiftAndPlace(shift int, vertical bool) {
 	}
 }
 
-// place adds material that is legal in both modes: inside a paragraph
-// (horizontal mode) it becomes an inline node on the current line; in vertical
-// mode it is contributed to the main vertical list. A nil box is dropped.
 // lastSkip is TeX's \lastskip (tex.web §424): the glue at the END of the list
 // being built, or zero when the last item is not glue. TeX looks at the current
 // list — the paragraph in horizontal mode, the main vertical list otherwise —
@@ -2405,6 +2405,9 @@ func (e *Engine) lastSkip() glueSpec {
 	return glueSpec{}
 }
 
+// place adds material that is legal in both modes: inside a paragraph
+// (horizontal mode) it becomes an inline node on the current line; in vertical
+// mode it is contributed to the main vertical list. A nil box is dropped.
 func (e *Engine) place(n node) {
 	if b, ok := n.(*boxNode); ok && b == nil {
 		return
@@ -2442,9 +2445,6 @@ func (e *Engine) scanOptStar() bool {
 	return false
 }
 
-// doIfstar implements LaTeX's \@ifstar#1#2: it grabs the two branch arguments,
-// then peeks the next token — if it is a '*' the star is swallowed and #1 is
-// pushed for execution, otherwise #2 is. This is what makes \section* work.
 // halveParamHashes applies TeX's ## → # halving to a token list re-inserted as a
 // macro body. See the note at \@ifnextchar.
 func halveParamHashes(ts []tok) []tok {
