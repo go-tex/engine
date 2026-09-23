@@ -132,6 +132,12 @@ const LaTeX2eKernelHelpers = `
 % colour layer — toggles \ifglobalcolors around every colour it sets.
 \newif\ifglobalcolors
 \newif\ifXC@keepwhite
+% ── ifthen's booleans ───────────────────────────────────────────────────────
+% \newboolean{b} is \newif\ifb, and \setboolean{b}{true} is \btrue. ifthen.sty
+% writes exactly this; \ifthenelse{\boolean{b}} then reads the switch's meaning.
+\def\newboolean#1{\expandafter\newif\csname if#1\endcsname}
+\def\provideboolean#1{\@ifundefined{if#1}{\newboolean{#1}}{}}
+\def\setboolean#1#2{\csname #1#2\endcsname}
 % ── definability / undefined tests ──────────────────────────────────────────
 % \@ifundefined{name}{then}{else}: \csname name\endcsname is \relax when the name
 % is undefined (doCsname), so \ifx…\relax selects the branch. NOTE the standard
