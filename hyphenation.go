@@ -165,7 +165,7 @@ func (e *Engine) hyphenateList(list []node) []node {
 			if _, ok := wn.(charNode); ok {
 				seen++
 				if breakAfter[seen] {
-					out = append(out, discNode{penalty: e.hyphenPenalty()})
+					out = append(out, discNode{penalty: e.hyphenPenalty(), pre: "-"})
 				}
 			}
 		}
