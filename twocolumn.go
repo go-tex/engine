@@ -143,6 +143,16 @@ func (e *Engine) fullWidth() int {
 	if e.oneColHsize > 0 {
 		return e.oneColHsize
 	}
+	// A class that states both \textwidth and \columnwidth states the BLOCK and the
+	// COLUMN, and the block is never the narrower of the two — it contains the
+	// column. So a remembered \textwidth wins only while it is wider than the
+	// current measure; anything that legitimately widens the measure afterwards
+	// (geometry's own options, a class geometry, \onecolumn) takes precedence
+	// again, which is what keeps this from going stale against the several paths
+	// that set e.hsize directly.
+	if e.textWidth > e.hsize {
+		return e.textWidth
+	}
 	return e.hsize
 }
 
@@ -159,7 +169,49 @@ func (e *Engine) setTextWidth(v int, global bool) {
 		e.oneColHsize = v
 		return
 	}
+	// Remember it as \textwidth's OWN value as well as setting the measure. The two
+	// are not the same register in LaTeX, and a two-column class states both while
+	// the engine is still one-column:
+	//
+	//	\textwidth 170.5mm      % the block: both columns and the gutter
+	//	\columnwidth 83.25mm    % one column
+	//
+	// \columnwidth is \let to \hsize here, so with \textwidth writing only e.hsize
+	// the second line overwrote the first and \the\textwidth read back the COLUMN.
+	// oupau.cls does exactly that, and every document it sets came out 236.9pt wide
+	// against the reference's 483.3pt — half measure, twice the lines, seven pages
+	// too many on a thirteen-page paper.
+	// Scoped like the measure it travels with: {\textwidth=500pt …} must leave
+	// \textwidth where it found it, which a plain field assignment does not.
+	e.setEngineDimen(saveTextWidth, &e.textWidth, v, global)
 	e.setEngineDimen(saveHsize, &e.hsize, v, global)
+}
+
+// setMeasureFromTextWidth is the width half of LaTeX's \document (latex.ltx:6682):
+//
+//	\columnwidth\textwidth
+//	\if@twocolumn \advance\columnwidth -\columnsep \divide\columnwidth\tw@ \fi
+//	\hsize\columnwidth  \linewidth\hsize
+//
+// The class's own \columnwidth is DISCARDED there — the measure is recomputed from
+// \textwidth at \begin{document}, every time. oupau.cls states
+//
+//	\textwidth 170.5mm
+//	\columnwidth 83.25mm
+//
+// and without this the stray column width stayed the paragraph measure: the body
+// was set 236.9pt wide against the reference's 483.3pt — twice the lines, and seven
+// pages too many on a thirteen-page paper.
+//
+// Two-column mode is left to the two-column machinery, which owns the split and has
+// already entered it by the time this runs.
+func (e *Engine) setMeasureFromTextWidth() {
+	if e.oneColHsize > 0 {
+		return
+	}
+	if w := e.fullWidth(); w > 0 && w != e.hsize {
+		e.setEngineDimen(saveHsize, &e.hsize, w, true)
+	}
 }
 
 // dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the columns

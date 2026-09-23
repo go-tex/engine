@@ -710,6 +710,7 @@ const (
 	saveVsize        = 12
 	saveParindent    = 13
 	saveBaselineskip = 14
+	saveTextWidth    = 15
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -1838,6 +1839,7 @@ func (e *Engine) loadMore() {
 	// Applied once at \begin{document} (see kernelhelpers.go) to honor a native
 	// \renewcommand{\baselinestretch}{f} the way \@setfontsize would.
 	e.prim("gotex@applybaselinestretch", func(e *Engine) { e.applyBaselineStretch() })
+	e.prim("gotex@setmeasure", func(e *Engine) { e.setMeasureFromTextWidth() }) // latex.ltx:6682
 	// graphicx box transformations: scale, mirror, resize and rotate the content,
 	// which the SVG/PDF drivers realise with native affine transforms.
 	e.prim("scalebox", func(e *Engine) { e.place(e.doScalebox()) })
