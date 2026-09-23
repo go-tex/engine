@@ -537,8 +537,15 @@ func (e *Engine) buildBoxList() []node {
 	// list rather than opening a fresh paragraph with a \parindent box.
 	savedInPar := e.inPar
 	e.inPar = true
-	defer func() { e.inPar = savedInPar }()
 	var list []node
+	// The box's list is local, so \lastskip would otherwise read the list of
+	// whatever encloses the box — the wrong one, and silently. Publish it while it
+	// is being built; see Engine.lastSkip.
+	e.boxLists = append(e.boxLists, &list)
+	defer func() {
+		e.inPar = savedInPar
+		e.boxLists = e.boxLists[:len(e.boxLists)-1]
+	}()
 	depth := 0
 	for e.err == nil {
 		t, ok := e.getXToken()
