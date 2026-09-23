@@ -8,7 +8,7 @@ require (
 	github.com/go-gfx/gfx v0.24.0
 	github.com/go-pdfkit/pdfkit v0.12.0
 	github.com/go-tex/math v0.31.0
-	github.com/go-tex/pdfrender v0.1.0
+	github.com/go-tex/pdfrender v0.2.0
 	golang.org/x/text v0.42.0
 )
 
