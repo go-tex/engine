@@ -296,8 +296,14 @@ func TestFloatPlacementBits(t *testing.T) {
 	}{
 		{`t`, "t", false},
 		{`htbp`, "htbp", false},
-		{`!p`, "p", true},
 		{`p`, "p", true},
+		// "!" is KEPT: LaTeX records it (\@fpstype carries the placement with 16
+		// added when it is ABSENT, latex.ltx:12990) and every fraction test is
+		// guarded by \ifnum\@fpstype<\sixt@@n. Dropping it made [!t] identical to
+		// [t], so \topfraction applied to a float whose author asked it not to.
+		{`!t`, "!t", false},
+		{`!p`, "!p", true},
+		{`!tb`, "!tb", false},
 		{`tp`, "tp", false},
 		{`b`, "b", false},
 		{``, "", false},
@@ -374,5 +380,40 @@ func TestOneColumnRegionsDoNotSwallowFloats(t *testing.T) {
 	}
 	if !strings.Contains(all.String(), "Figure1:Plot") {
 		t.Errorf("the float was dropped by the region pager: %q", all.String())
+	}
+}
+
+// [!t] is not [t]. LaTeX records the "!" in \@fpstype — the placement carries 16
+// ADDED when there is NO "!" (latex.ltx:12990) — and every fraction test is guarded
+// by \ifnum\@fpstype<\sixt@@n. The plainest is \@flsettextmin (l.15929):
+//
+//	\ifnum \@fpstype<\sixt@@n  \@textmin \z@  \else  \@textmin \textfraction\@colht  \fi
+//
+// So "!" means: ignore \textfraction, \topfraction and \bottomfraction — place it
+// here if it fits the page at all.
+//
+// 2408.02845 opens \begin{figure}[!t] on a float 563.2pt tall in a 666.9pt column.
+// With the "!" dropped at parse time, \topfraction (466.9pt) sent it to a page of
+// its own and no text could share it; honouring the "!" puts it at the top with the
+// text below, which is where the reference has it.
+func TestUrgentFloatIgnoresTheFractions(t *testing.T) {
+	tall := floatClass{allowTop: true, urgent: true}
+	if !tall.urgent {
+		t.Fatal("classifyFloat must carry the bang")
+	}
+	for _, c := range []struct {
+		place string
+		want  bool
+	}{
+		{"!t", true}, {"!tb", true}, {"!p", true},
+		{"t", false}, {"tb", false}, {"p", false}, {"", false},
+	} {
+		if got := classifyFloat(c.place).urgent; got != c.want {
+			t.Errorf("classifyFloat(%q).urgent = %v, want %v", c.place, got, c.want)
+		}
+	}
+	// The default placement is still tbp, and it is not urgent.
+	if cl := classifyFloat(""); !cl.allowTop || !cl.allowBot || !cl.allowPage || cl.urgent {
+		t.Errorf("default placement = %+v", cl)
 	}
 }
