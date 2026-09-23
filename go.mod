@@ -5,7 +5,7 @@ go 1.26.4
 require github.com/go-opentype/opentype v0.12.0
 
 require (
-	github.com/go-gfx/gfx v0.26.0
+	github.com/go-gfx/gfx v0.29.0
 	github.com/go-pdfkit/pdfkit v0.12.0
 	github.com/go-tex/math v0.31.0
 	github.com/go-tex/pdfrender v0.2.0
