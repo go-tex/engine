@@ -572,6 +572,31 @@ const MiniLaTeXKernel = `
 \def\@stdproof{\noindent{\it Proof.}\ }
 \def\@opargproof[#1]{\noindent{\it #1.}\ }
 \def\endproof{\qed\endgroup\medskip}
+% amsthm's QED stack and \proofname, verbatim (amsthm.sty:280-289, :441). A paper
+% that REDEFINES the proof environment — three of the 200 corpus papers do, to add
+% an optional title or a diamond QED — writes amsthm's own internals, and without
+% them the head is lost:
+%
+%   reference   AVANT Proof. Le corps de la preuve. APRES
+%   ours        AVANT .     Le corps de la preuve. APRES
+%
+% \proofname vanished and only \@addpunct's argument survived. 148 \pushQED, 148
+% \popQED and 112 \proofname over the corpus.
+%
+% The stack exists so nested proofs each get their own symbol; \qedhere is not
+% here, since no corpus paper writes it and it needs \mathqed.
+\let\QED@stack\@empty
+\let\qed@elt\relax
+\def\pushQED#1{%
+  \toks@{\qed@elt{#1}}\@temptokena\expandafter{\QED@stack}%
+  \xdef\QED@stack{\the\toks@\the\@temptokena}}
+\def\popQED{%
+  \begingroup\let\qed@elt\popQED@elt \QED@stack\relax\relax\endgroup}
+\def\popQED@elt#1#2\relax{#1\gdef\QED@stack{#2}}
+\providecommand\proofname{Proof}
+% \@addpunct adds punctuation unless the space factor says the text already ended
+% with some (amsthm.sty:49, which overrides amsgen's by also testing \ifhmode).
+\def\@addpunct#1{\relax\ifhmode\ifnum\spacefactor>\@m \else#1\fi\fi}
 % ─── table of contents (feat/toc) ───────────────────────────────────────────
 % \@tocentry{kind}{level}{number}{title} (a Go primitive) records one contents
 % line on the auxiliary pass. The numbered sectioning and caption macros are
