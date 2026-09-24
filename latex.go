@@ -1346,6 +1346,25 @@ func (e *Engine) doNewenvironment() {
 
 // doRuleNode builds a node for LaTeX's \rule[lift]{width}{height}: a filled
 // rectangle of the given width and height, raised by the optional lift.
+//
+// The lift moves the rule ACROSS the baseline; it does not make it taller.
+// latex.ltx:11900-11907 is explicit about which dimension takes it:
+//
+//	\def\@rule[#1]#2#3{%
+//	  \leavevmode
+//	  \hbox{%
+//	    \setlength\@tempdima{#1}%   lift
+//	    \setlength\@tempdimb{#2}%   width
+//	    \setlength\@tempdimc{#3}%   height
+//	    \advance\@tempdimc\@tempdima
+//	    \vrule\@width\@tempdimb\@height\@tempdimc\@depth-\@tempdima}}
+//
+// so height = #3 + lift and depth = -lift. Both signs were the wrong way round
+// here, which for a NEGATIVE lift — the only kind that does anything visible —
+// added the lift to the height and asked for a negative depth that the packer
+// clamped to zero: \rule[-2mm]{3mm}{6mm} packed 8mm tall and 0mm deep where TeX
+// makes it 4mm above the baseline and 2mm below. A lift of zero, which is what
+// \rule{w}{h} supplies, is unaffected either way.
 func (e *Engine) doRuleNode() ruleNode {
 	lift := 0
 	e.skipOptSpace()
@@ -1361,7 +1380,7 @@ func (e *Engine) doRuleNode() ruleNode {
 	}
 	w := e.readBraceDimen()
 	h := e.readBraceDimen()
-	return ruleNode{width: w, height: h - lift, depth: lift}
+	return ruleNode{width: w, height: h + lift, depth: -lift}
 }
 
 // readBraceDimen reads a {dimen} group and returns the dimension in sp.

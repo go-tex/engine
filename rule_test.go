@@ -27,14 +27,24 @@ func TestRuleCommand(t *testing.T) {
 	}
 }
 
-// \rule[lift]{w}{h} lifts the rule (depth = lift).
+// \rule[lift]{w}{h} moves the rule ACROSS the baseline: latex.ltx:11900-11907
+// makes the height #3+lift and the depth -lift, so a POSITIVE lift RAISES it.
+//
+// This test used to demand the opposite — height 4pt, depth 2pt for a +2pt lift —
+// and so pinned the engine's own inversion in place. Asked directly, tectonic
+// answers \ht=8.0pt \dp=0.0pt for exactly this box (the hbox clamps the negative
+// depth to zero, as TeX's hpack does, tex.web §649).
 func TestRuleLift(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
 	e.Run(`\setbox0=\hbox{\rule[2pt]{3pt}{6pt}}`)
 	r := e.box[0].list[0].(ruleNode)
-	if r.depth != 2*unity || r.height != 4*unity {
-		t.Errorf("\\rule[2pt]{3pt}{6pt}: h%d d%d want height 4pt depth 2pt", r.height, r.depth)
+	if r.height != 8*unity || r.depth != -2*unity {
+		t.Errorf("\\rule[2pt]{3pt}{6pt}: h%d d%d want height 8pt depth -2pt", r.height, r.depth)
+	}
+	if e.box[0].height != 8*unity || e.box[0].depth != 0 {
+		t.Errorf("hbox = h%d d%d, want 8pt/0 (tectonic: \\ht=8.0pt \\dp=0.0pt)",
+			e.box[0].height, e.box[0].depth)
 	}
 }
