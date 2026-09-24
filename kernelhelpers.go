@@ -132,6 +132,21 @@ const LaTeX2eKernelHelpers = `
 % colour layer — toggles \ifglobalcolors around every colour it sets.
 \newif\ifglobalcolors
 \newif\ifXC@keepwhite
+% …and the two that say WHEN xcolor converts a colour to the target model — at
+% definition time or at use time (xcolor.sty:73-74). Both are false unless xcolor
+% is given a target model, which this engine never is: it keeps every colour in
+% RGB and converts nothing, so false is the truthful answer as well as the one
+% \newif gives.
+%
+% They matter because a package loaded FOR REAL reads them. pgfplots.sty:110-121
+% tests them nested —
+%
+%	\ifconvertcolorsD … \else \ifconvertcolorsU … \fi \fi
+%
+% and an UNDEFINED conditional is the one thing a TeX engine cannot skip past: the
+% \else and both \fi are lost with it and the groups never close.
+\newif\ifconvertcolorsD
+\newif\ifconvertcolorsU
 % ── ifthen's booleans ───────────────────────────────────────────────────────
 % \newboolean{b} is \newif\ifb, and \setboolean{b}{true} is \btrue. ifthen.sty
 % writes exactly this; \ifthenelse{\boolean{b}} then reads the switch's meaning.
