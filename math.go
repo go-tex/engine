@@ -313,6 +313,18 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			src = replaceMathCS(src, name, sym)
 			continue
 		}
+		// A text size switch is a MACRO, so the retry below would expand it — and
+		// its replacement is \@setfontsize plus a run of glue assignments, none of
+		// which the maths layer can take. Expanding one turned a single unknown
+		// command into an unrenderable source and dropped the formula whole (31
+		// displays over two corpus papers, every one of them reported against
+		// \edef, a primitive the document never wrote). Strip it first.
+		if mathFontSwitch[name] {
+			if stripped, sok := stripMathNoise(src, name); sok {
+				src = stripped
+				continue
+			}
+		}
 		next, ok := e.expandMacroInMathSource(src, name)
 		if !ok {
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
@@ -642,6 +654,57 @@ var mathNoise = map[string]struct {
 	// Size switches the maths layer does not know. What they change is the size of
 	// what follows; what they cost was the formula.
 	"scriptscriptstyle": {0, ``}, "scriptstyle": {0, ``}, "textstyle": {0, ``},
+	// The TEXT size switches, for the same reason and a worse failure. These are
+	// macros, not primitives (size10.clo:58 declares \small as \@setfontsize plus
+	// four display-skip assignments and a \def\@listi{…}), so the macro-retry below
+	// EXPANDS one instead of leaving it unknown — and the maths layer is then handed
+	// \edef, \abovedisplayskip and \parsep, which it can never render. Expansion
+	// turned one unknown command into a pile of them. They are stripped BEFORE the
+	// retry can expand them (mathTextSize, consulted in renderMathResolvingMacros).
+	"tiny": {0, ``}, "scriptsize": {0, ``}, "footnotesize": {0, ``},
+	"small": {0, ``}, "normalsize": {0, ``}, "large": {0, ``},
+	"Large": {0, ``}, "LARGE": {0, ``}, "huge": {0, ``}, "Huge": {0, ``},
+	// The font DECLARATIONS, which reach a formula the same way and expand just as
+	// badly (\ttfamily is \fontfamily{…}\selectfont, and \selectfont is where the
+	// \edef lives). A document writes them into maths through \mbox: one paper's
+	// \newcommand*{\codefont}{\ttfamily\small} is used inside every \codify{…},
+	// and each of its 30 displays was dropped whole.
+	"rmfamily": {0, ``}, "sffamily": {0, ``}, "ttfamily": {0, ``},
+	"mdseries": {0, ``}, "bfseries": {0, ``}, "upshape": {0, ``},
+	"itshape": {0, ``}, "slshape": {0, ``}, "scshape": {0, ``},
+	"normalfont": {0, ``}, "selectfont": {0, ``},
+	// …and their one-letter ancestors, which \DeclareOldFontCommand keeps alive.
+	"rm": {0, ``}, "sf": {0, ``}, "tt": {0, ``}, "bf": {0, ``},
+	"it": {0, ``}, "sl": {0, ``}, "sc": {0, ``},
+}
+
+// mathFontSwitch are the text size and font switches of the standard classes
+// (size10.clo:58 declares \small; latex.ltx declares \ttfamily and the old
+// \DeclareOldFontCommand names). They are the mathNoise entries that need TWO
+// guards the others do not, because unlike every other entry there they are DEFINED
+// macros:
+//
+//   - they must be stripped BEFORE the macro-retry runs, or it expands them instead
+//     of reporting them, and
+//   - they must not be expanded when a macro BODY is flattened either
+//     (flattenMathBody), which is how they actually arrive: nothing in the source
+//     says \small, but \codify{x} → \mbox{\codefontify{x}} → {\codefont x} →
+//     {\ttfamily\small x}, and the gullet then walks into \small's body and hands
+//     the maths layer \edef, \abovedisplayskip and \parsep. The formula was
+//     dropped against \edef — a primitive the document never wrote.
+//
+// The formula then sets at the surrounding size and face. The size is lost; the
+// content is not, and the content is the larger of the two.
+var mathFontSwitch = map[string]bool{
+	"tiny": true, "scriptsize": true, "footnotesize": true, "small": true,
+	"normalsize": true, "large": true, "Large": true, "LARGE": true,
+	"huge": true, "Huge": true,
+	"rmfamily": true, "sffamily": true, "ttfamily": true,
+	"mdseries": true, "bfseries": true, "upshape": true,
+	"itshape": true, "slshape": true, "scshape": true,
+	"normalfont": true, "selectfont": true,
+	"rm": true, "sf": true, "tt": true, "bf": true,
+	"it": true, "sl": true, "sc": true,
 }
 
 // mathGlue are the glue primitives a class writes INTO a display: iopart.cls opens
@@ -1056,11 +1119,15 @@ func (e *Engine) substituteMathBody(body []tok, args []string) string {
 func (e *Engine) flattenMathBody(body string) string {
 	ts := tokenizeTeX(body)
 	for i, t := range ts {
-		if t.cs_ && (t.cs == "begin" || t.cs == "end" || e.isCharStandIn(t.cs)) {
+		if t.cs_ && (t.cs == "begin" || t.cs == "end" || e.isCharStandIn(t.cs) || mathFontSwitch[t.cs]) {
 			ts[i].noexp = true
 		}
 	}
-	if flat := e.toksToString(e.expandList(ts)); flat != "" {
+	saved := e.mathFlatten
+	e.mathFlatten = true
+	flat := e.toksToString(e.expandList(ts))
+	e.mathFlatten = saved
+	if flat != "" {
 		return flat
 	}
 	return body

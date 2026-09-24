@@ -313,6 +313,10 @@ type Engine struct {
 	// into their own MathDropped view. nil until the first math drop. See
 	// recordMathSkip; the raw entries also remain in skippedCS for SkippedCommands.
 	mathDropped map[string]int
+
+	// mathFlatten is set only while flattenMathBody runs a macro body through the
+	// gullet, and suspends the expansion of a font or size switch there.
+	mathFlatten bool
 	// figuresDropped tallies \includegraphics calls whose FILE could not be loaded,
 	// keyed by cause (see figureDropReason). Separate from skippedCS because the
 	// command is defined and ran — it reserved a placeholder box — so reporting it
@@ -1217,6 +1221,17 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		if t.noexp {
 			t.noexp = false
+			return t, true
+		}
+		// While a macro body is being flattened for the maths layer, a font or size
+		// switch is left UNEXPANDED, the way \protected leaves a macro alone inside
+		// an \edef. Its replacement text is \@setfontsize and a run of glue
+		// assignments that the maths layer can only refuse, and it reaches a formula
+		// through an indirection — \codify{x} → {\codefont x} → {\ttfamily\small x}
+		// — so marking the body's own tokens beforehand cannot catch it: nothing in
+		// that body says \small. Left standing as a name, the retry strips it
+		// (mathFontSwitch, math.go) and the formula keeps its content.
+		if e.mathFlatten && t.cs_ && mathFontSwitch[t.cs] {
 			return t, true
 		}
 		if e.literalActive && t.cat == catActive && !t.cs_ {
