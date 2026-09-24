@@ -102,12 +102,31 @@ func (e *Engine) doReflectbox() transformNode {
 // doResizebox implements \resizebox{width}{height}{content}: it scales the content
 // so its natural box becomes the requested width and height. A '!' for either
 // dimension keeps the aspect ratio derived from the other (both '!' leaves the
-// content unscaled). The height refers to the box height above the baseline.
+// content unscaled).
+//
+// The STAR is the whole difference between the two forms, and it is one word of
+// graphics.sty:539-541:
+//
+//	\protected\def\resizebox{%
+//	  \leavevmode
+//	  \@ifstar{\Gscale@@box\totalheight}{\Gscale@@box\height}}
+//
+// so \resizebox sizes the box by its HEIGHT above the baseline and \resizebox* by
+// its TOTAL height, depth included. Everything else is shared.
+//
+// Unstarred, the star was not consumed and neither dimension parsed, so the source
+// reached the page as text: one corpus paper printed "*45mm!" and "*100mm!" into
+// its figures, each one wrapping a tikzpicture that then went unscaled.
 func (e *Engine) doResizebox() transformNode {
+	total := e.scanOptStar()
 	wLen, wBang := e.scanDimenOrBang()
 	hLen, hBang := e.scanDimenOrBang()
 	inner := e.grabInnerHbox()
-	sx, sy := resizeFactors(inner.width, inner.height, wLen, wBang, hLen, hBang)
+	natV := inner.height
+	if total {
+		natV += inner.depth
+	}
+	sx, sy := resizeFactors(inner.width, natV, wLen, wBang, hLen, hBang)
 	return newTransform(inner, sx, 0, 0, sy, 0)
 }
 
