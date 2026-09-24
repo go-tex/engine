@@ -5,7 +5,7 @@ go 1.26.4
 require github.com/go-opentype/opentype v0.12.0
 
 require (
-	github.com/go-gfx/gfx v0.29.0
+	github.com/go-gfx/gfx v0.31.0
 	github.com/go-pdfkit/pdfkit v0.12.0
 	github.com/go-tex/math v0.32.0
 	github.com/go-tex/pdfrender v0.2.0
@@ -31,7 +31,7 @@ require (
 	github.com/hhrutter/tiff v1.0.2 // indirect
 	github.com/pdfcpu/pdfcpu v0.11.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/tannevaled/gobig2 v0.1.0 // indirect
+	github.com/tannevaled/gobig2 v0.2.0 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
