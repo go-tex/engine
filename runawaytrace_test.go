@@ -53,3 +53,36 @@ func TestRunawayTraceSilentByDefault(t *testing.T) {
 		t.Errorf("recorded a trace with the trace off")
 	}
 }
+
+// The expansion trace says WHICH macros were spinning; it does not say what they
+// were spinning ON, and a loop in a lookahead is decided entirely by the token in
+// front of it. On a corpus paper whose TikZ \matrix truncated the document, the
+// expansion list showed \pgfutil@ifnextchar cycling and nothing else — reading
+// the input stack named the site in one run: pgfmath's unit test on top, three
+// pending \fi below it, and the base buffer sitting on the space before
+// \tapeblock inside the \matrix (go-tex/engine#410).
+func TestRunawayTraceShowsWhatTheMouthWasReading(t *testing.T) {
+	saveOn, saveOut := traceRunaway, traceOut
+	defer func() { traceRunaway, traceOut = saveOn, saveOut }()
+	var buf bytes.Buffer
+	traceRunaway, traceOut = true, &buf
+
+	e := New()
+	e.SetFont(spMock{})
+	// The loop reads nothing, so the source pointer stays where it started and the
+	// report must still show the text sitting in front of it.
+	e.Run(`\def\loopy{\loopy}\loopy MARKERTEXT`)
+
+	got := buf.String()
+	if !strings.Contains(got, "INPUT the mouth was about to read") {
+		t.Errorf("report does not show the input stack:\n%s", got)
+	}
+	if !strings.Contains(got, "MARKERTEXT") {
+		t.Errorf("report does not show the source the reader is stopped on:\n%s", got)
+	}
+	// It must stay readable: the whole report, both halves and the stack, short
+	// enough to look at without scrolling.
+	if n := strings.Count(got, "\n"); n > 30 {
+		t.Errorf("report is %d lines, too long to read:\n%s", n, got)
+	}
+}
