@@ -2274,6 +2274,7 @@ func (e *Engine) tripRunaway() {
 		printTrace(e.traceHead)
 		fmt.Fprintf(traceOut, "  LAST expansions:\n")
 		printTrace(e.trace)
+		e.printInputStack()
 	}
 	e.runaway = true
 	e.lists = nil
@@ -2281,6 +2282,47 @@ func (e *Engine) tripRunaway() {
 	if !e.tolerant() {
 		e.fail("runaway expansion: aborted after too many macro expansions (possible infinite loop)")
 	}
+}
+
+// printInputStack prints what the mouth was about to READ when the guard fired.
+//
+// The expansion trace says which macros were spinning; it does not say what they
+// were spinning ON, and a loop in a lookahead like \pgfutil@ifnextchar is decided
+// entirely by the token in front of it. Reading the stack named the site of a
+// corpus truncation in one run: the top frame held pgfmath's unit test, the frame
+// below it three pending \fi, and the base buffer sat on the space before
+// \tapeblock inside a TikZ \matrix — which is the construct to look at
+// (go-tex/engine#410). Nothing in the expansion list said any of that.
+//
+// Each frame prints its length and its first tokens, deepest (innermost) first,
+// with the base buffer last because that is where a scan that never advances
+// leaves the reader.
+func (e *Engine) printInputStack() {
+	fmt.Fprintf(traceOut, "  INPUT the mouth was about to read (depth %d):\n", len(e.lists))
+	const frames, toks = 5, 12
+	for i := len(e.lists) - 1; i >= 0 && i > len(e.lists)-1-frames; i-- {
+		l := e.lists[i]
+		n := len(l)
+		if n > toks {
+			n = toks
+		}
+		fmt.Fprintf(traceOut, "    [%d] %d token(s): %s\n", i, len(l), e.toksToString(l[:n]))
+	}
+	if len(e.lists) > frames {
+		fmt.Fprintf(traceOut, "    … %d deeper frame(s)\n", len(e.lists)-frames)
+	}
+	b := e.bpos
+	if b < 0 {
+		b = 0
+	}
+	if b > len(e.base) {
+		b = len(e.base)
+	}
+	end := b + 60
+	if end > len(e.base) {
+		end = len(e.base)
+	}
+	fmt.Fprintf(traceOut, "    source at %d: %q\n", b, string(e.base[b:end]))
 }
 
 func (e *Engine) fail(msg string) {
