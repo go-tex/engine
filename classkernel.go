@@ -517,8 +517,12 @@ const LaTeX2eClassKernel = `
 % can be shifted. Skipping this both left cs arguments un-shifted and, via amsart's
 % \altucnm idiom (\MakeTextUppercase{\toks@{#1}}\edef#1{\the\toks@}), made
 % \shorttitle self-referential — an infinite loop when the running head expanded it.
-\def\MakeUppercase#1{\edef\@MakeCase@a{#1}\uppercase\expandafter{\@MakeCase@a}}
-\def\MakeLowercase#1{\edef\@MakeCase@a{#1}\lowercase\expandafter{\@MakeCase@a}}
+% \protected, as latex.ltx declares them (\DeclareRobustCommand): \uppercase is
+% not expandable, so an unprotected \MakeUppercase inside an \edef/\xdef breaks
+% the expansion. \ps@headings puts one in a mark — \markright{\MakeUppercase{…}} —
+% and \markright stores it with \protected@xdef, which is exactly that case.
+\protected\def\MakeUppercase#1{\edef\@MakeCase@a{#1}\uppercase\expandafter{\@MakeCase@a}}
+\protected\def\MakeLowercase#1{\edef\@MakeCase@a{#1}\lowercase\expandafter{\@MakeCase@a}}
 % ── running heads / marks ───────────────────────────────────────────────────
 % \markboth{left}{right} and \markright{right} record the running marks, which a
 % page style reads back as \leftmark / \rightmark (latex.ltx:13340-13362). They

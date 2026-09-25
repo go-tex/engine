@@ -172,7 +172,18 @@ const LaTeX2eClassLead = `
 \def\@gxsecopt#1#2#3#4#5[#6]#7{#5{#1}{#2}{#3}{#4}{#7}}
 \def\@gxsecplain#1#2#3#4#5#6{#5{#1}{#2}{#3}{#4}{#6}}
 \def\@gxstar#1#2#3#4#5{\@gxhead{#3}{#5}{#4}}
-\def\@gxnum#1#2#3#4#5{\ifnum#2>\c@secnumdepth\@gxhead{#3}{#5}{#4}\else\refstepcounter{#1}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#5}\@gxhead{#3}{\csname the#1\endcsname\quad#5}{#4}\fi}
+% A sectioning command sets the running MARK, which is how a head shows the
+% section it is on: \@sect runs \csname #1mark\endcsname{#7} (latex.ltx:12796 and
+% :12806, both the display and the run-in heading). An unnumbered-but-not-starred
+% heading marks too, so the call sits in BOTH branches of the secnumdepth test —
+% and in the numbered one it comes AFTER \refstepcounter, since the mark carries
+% \the<name> and must see the section it names. The starred form does not mark, and
+% \@gxstar accordingly leaves it alone.
+%
+% The marks default to \@gobble (latex.ltx:12870-12872), so this costs nothing
+% until a page style redefines them; \ps@headings does
+% \def\sectionmark##1{\markright{\MakeUppercase{…##1}}}.
+\def\@gxnum#1#2#3#4#5{\ifnum#2>\c@secnumdepth\csname #1mark\endcsname{#5}\@gxhead{#3}{#5}{#4}\else\refstepcounter{#1}\csname #1mark\endcsname{#5}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#5}\@gxhead{#3}{\csname the#1\endcsname\quad#5}{#4}\fi}
 % \@gxhead{style}{title}{afterskip}: set the heading, then its trailing space. A
 % positive afterskip is a display heading — end the line and skip that far down; a
 % negative one is a run-in heading — leave horizontal space and let the body text

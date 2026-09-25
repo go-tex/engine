@@ -151,9 +151,42 @@ func (e *Engine) fancyLine(l, c, r int) *boxNode {
 // when all three of the respective fields are empty.
 func (e *Engine) fancyHeader() *boxNode {
 	if len(e.fancyHF[fldHL])+len(e.fancyHF[fldHC])+len(e.fancyHF[fldHR]) == 0 {
-		return nil
+		return e.latexHead() // no fancyhdr field: LaTeX's own \@oddhead, if any
 	}
 	return e.fancyLine(fldHL, fldHC, fldHR)
+}
+
+// latexHead is the running head LaTeX's OWN page styles declare, as opposed to
+// fancyhdr's six fields. \ps@headings and every class that writes its own style
+// define \@oddhead — article.cls:
+//
+//	\def\ps@headings{%
+//	  \let\@oddfoot\@empty
+//	  \def\@oddhead{{\slshape\rightmark}\hfil\thepage}%
+//	  \let\@mkboth\markboth
+//	  …
+//
+// doPagestyle already RUNS \ps@name, so those \def's take effect; nothing read
+// them back, and 22 of the 128 corpus papers with a reference draw a head this way
+// and drew none here (#426). The line is one hbox to \hsize and the \hfil's inside
+// it place the pieces, which is exactly how LaTeX sets \@oddhead.
+//
+// \@evenhead is not read: this engine has no two-sided page model, so every page
+// takes the odd head — which is what a one-sided class declares anyway.
+func (e *Engine) latexHead() *boxNode {
+	m := e.eq["@oddhead"]
+	if m == nil || m.kind != mMacro || len(m.body) == 0 {
+		return nil
+	}
+	return hpackSP([]node{e.typesetFieldToHbox(m.body)}, packTo, e.hsize)
+}
+
+// hasLatexHead reports whether \@oddhead would draw something, WITHOUT typesetting
+// it: headBand is read before pagination (pdfdriver.go), so it must not run the
+// typesetter.
+func (e *Engine) hasLatexHead() bool {
+	m := e.eq["@oddhead"]
+	return m != nil && m.kind == mMacro && len(m.body) > 0
 }
 
 func (e *Engine) fancyFooter() *boxNode {

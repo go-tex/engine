@@ -187,7 +187,10 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	}
 	e.curPageNum = pageNum // so \thepage in a header/footer field is this page
 
-	if style == "fancy" {
+	// "fancy" always assembles head and foot; a LaTeX page style that declared
+	// \@oddhead takes the same path, since the only difference is where the fields
+	// came from (see latexHead). \pagestyle{headings} lands here.
+	if style == "fancy" || e.hasLatexHead() {
 		return e.assembleFancyPage(vlist)
 	}
 	// "plain": a centred page number pushed to the foot with vertical fil, filling

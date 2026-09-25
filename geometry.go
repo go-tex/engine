@@ -985,8 +985,11 @@ func (e *Engine) headBand() int {
 	// The FIELDS are tested, never fancyHeader(): that one TYPESETS the line, and a
 	// margin accessor must not. Calling it here moved a corpus paper from 55 pages
 	// to 60 — a geometry question answered by running the typesetter.
-	if e.pageStyle != "fancy" ||
-		len(e.fancyHF[fldHL])+len(e.fancyHF[fldHC])+len(e.fancyHF[fldHR]) == 0 {
+	fancy := len(e.fancyHF[fldHL])+len(e.fancyHF[fldHC])+len(e.fancyHF[fldHR]) > 0
+	if !fancy && !e.hasLatexHead() {
+		return 0
+	}
+	if e.pageStyle == "empty" {
 		return 0
 	}
 	return e.classDimen("headheight", 12*unity) + e.classDimen("headsep", 25*unity)
