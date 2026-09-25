@@ -13,6 +13,10 @@ package engine
 // paragraph builder at the requested \hsize (saved/restored around the build) and
 // packed into a vbox whose width is fixed to the requested measure.
 func (e *Engine) doParbox() *boxNode {
+	// latex.ltx:\@iiiparbox opens with \leavevmode, so a \parbox met in VERTICAL
+	// mode starts a paragraph and the next one joins it on the same line. Without
+	// it each box became its own paragraph and two panels stacked (#398).
+	e.leaveVMode()
 	pos := e.scanOptBracketPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	// \noindent prefix: a parbox's paragraph has no \parindent box (which would
@@ -25,13 +29,26 @@ func (e *Engine) doParbox() *boxNode {
 	e.hsize = savedHsize
 
 	body.width = width
-	return alignParbox(body, pos)
+	return alignParbox(body, pos, e.axisHeight())
+}
+
+// axisHeight is TeX's math axis, the line \vcenter centres a box on. tex.web
+// §1200 centres by axis_height(cur_size), which is \fontdimen22 of the symbol
+// family; in Computer Modern that is a QUARTER of the design size. Measured
+// against tectonic on a 40pt panel: at 10pt the box comes back 22.5pt/17.5pt, at
+// 12pt 23.0pt/17.0pt, at 24.88pt 26.22pt/13.78pt — 2.5, 3.0 and 6.22, exactly a
+// quarter of each size.
+func (e *Engine) axisHeight() int {
+	if e.curFont == nil {
+		return 0
+	}
+	return e.curFont.sizePt() * unity / 4
 }
 
 // alignParbox re-anchors a parbox's vertical reference point per [pos]. vpack
 // leaves the reference at the last line's baseline (that is [b]); [t] moves it to
-// the first line's baseline, [c] centres the box on its own height.
-func alignParbox(body *boxNode, pos byte) *boxNode {
+// the first line's baseline, [c] centres the box on the MATH AXIS.
+func alignParbox(body *boxNode, pos byte, axis int) *boxNode {
 	total := body.height + body.depth
 	switch pos {
 	case 't':
@@ -46,8 +63,14 @@ func alignParbox(body *boxNode, pos byte) *boxNode {
 		body.depth = total - firstH
 	case 'b':
 		// leave as packed: reference at the last line's baseline
-	default: // 'c' — centre the box vertically about its reference point
-		body.height = total / 2
+	default: // 'c'
+		// latex.ltx's \@iiiparbox sets [c] with `\@pboxswtrue $\vcenter`, so the
+		// box is centred on the math axis and not on the baseline: half of it sits
+		// ABOVE the axis, which is itself above the baseline. Centring on the
+		// baseline instead split a 40pt panel 20/20 where TeX gives 22.5/17.5 —
+		// the same total, the wrong reference point, and every side-by-side panel
+		// sat 2.5pt low against its neighbours' text.
+		body.height = total/2 + axis
 		body.depth = total - body.height
 	}
 	return body

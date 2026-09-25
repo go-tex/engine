@@ -65,10 +65,8 @@ func (e *Engine) doSubfigure(captype string) {
 	// Panels flow inline: enter horizontal mode so consecutive \begin{subfigure}…
 	// \end{subfigure} sit side by side (as \subcaptionbox's do) rather than stacking
 	// on the figure's vertical list.
-	if !e.inPar {
-		e.beginParagraph(false)
-	}
-	e.place(alignParbox(vbox, pos))
+	e.leaveVMode()
+	e.place(alignParbox(vbox, pos, e.axisHeight()))
 }
 
 // inEnvironment reports whether \@currenvir names env, i.e. whether the macro now

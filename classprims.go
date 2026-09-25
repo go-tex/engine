@@ -31,11 +31,7 @@ func (e *Engine) loadClassPrims() {
 	})
 	// \leavevmode: switch to horizontal mode (start a paragraph) if in vertical mode,
 	// so a following \hbox/\rule/box attaches to a line.
-	e.prim("leavevmode", func(e *Engine) {
-		if !e.inPar {
-			e.beginParagraph(false)
-		}
-	})
+	e.prim("leavevmode", func(e *Engine) { e.leaveVMode() })
 	// \everypar{toks} / \everypar=<toks|\toksreg>: the paragraph-start token list,
 	// fired by beginParagraph. The value may be a braced group or another toks
 	// register (amsart uses \everypar\dth@everypar), so read it like any toks
@@ -325,3 +321,13 @@ const LaTeX2eClassLead = `
 % unaffected, the flag suppressing the space on the first one.
 \def\@gotexitem[#1]{\par\@iteminterspace\noindent#1\ }
 `
+
+// leaveVMode is \leavevmode: in vertical mode it starts a paragraph, so the box
+// that follows attaches to a line instead of becoming a paragraph of its own.
+// latex.ltx opens both \@iiiminipage (11853) and \@iiiparbox with it, which is
+// what makes two side-by-side panels share a line.
+func (e *Engine) leaveVMode() {
+	if !e.inPar {
+		e.beginParagraph(false)
+	}
+}

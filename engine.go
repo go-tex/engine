@@ -780,7 +780,19 @@ func (e *Engine) scanCS() tok {
 		name = append(name, rr)
 		e.bpos = nx
 	}
-	// a control word absorbs following spaces
+	// A control word absorbs following spaces AND the line's own end, but only that
+	// one end. tex.web §354 leaves the tokenizer in state S (skip blanks) after a
+	// control word; §348 has an end-of-line in state S finish the line and start the
+	// next one in state N — where a blank line is \par, not an interword space.
+	//
+	// Absorbing every end-of-line instead swallowed the paragraph break: `X\relax`
+	// followed by a blank line left the paragraph OPEN, where tectonic ends it.
+	// Ending a paragraph with a macro is ordinary (\noindent, \ldots, a document's
+	// own \ack, an \end{...} reached through a macro), so this reached real text.
+	//
+	// The comment branch in scan() states the same rule for %: the line's own end is
+	// consumed and NOT counted, so one further end-of-line is an empty line.
+	sawEOL := false
 	for e.bpos < len(e.base) {
 		rr, nx, ok := e.mouthChar(e.bpos)
 		if !ok {
@@ -788,10 +800,42 @@ func (e *Engine) scanCS() tok {
 			continue
 		}
 		cc := e.catOf(rr)
-		if cc != catSpace && cc != catEOL {
+		if cc == catSpace {
+			e.bpos = nx
+			continue
+		}
+		if cc == catEOL && !sawEOL {
+			sawEOL, e.bpos = true, nx
+			continue
+		}
+		break
+	}
+	if sawEOL {
+		// State N: one more end-of-line is an empty line. Consume the run and leave
+		// \par behind the control word, the way the space/end-of-line branch does.
+		p, more := e.bpos, 0
+		for p < len(e.base) {
+			rr, nx, ok := e.mouthChar(p)
+			if !ok {
+				p = nx
+				continue
+			}
+			cc := e.catOf(rr)
+			if cc == catEOL {
+				more++
+				p = nx
+				continue
+			}
+			if cc == catSpace {
+				p = nx
+				continue
+			}
 			break
 		}
-		e.bpos = nx
+		if more >= 1 {
+			e.bpos = p
+			e.push([]tok{csTok("par")})
+		}
 	}
 	return csTok(string(name))
 }
