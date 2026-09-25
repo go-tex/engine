@@ -14,8 +14,8 @@ github.com/go-crdt/collab v0.45.0 h1:O3HVbnPu1CknSO5IcSKki3xS6C4eJc9s7kijGy1UZp8
 github.com/go-crdt/collab v0.45.0/go.mod h1:d3gQSA54/HSs2Xwh0Mo9ViVOpQPa4hlbOhSnFEhidDI=
 github.com/go-crdt/crdt v0.46.0 h1:Ppup+K/zLvM1trmBz83ENvEVcOTi3fFGnihvJMRL2yc=
 github.com/go-crdt/crdt v0.46.0/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
-github.com/go-gfx/gfx v0.29.0 h1:pzA3jeQKbM6T1dTxOoGdGre9QOp4PExg8J2tYO2rxAI=
-github.com/go-gfx/gfx v0.29.0/go.mod h1:AySK9I+Z6L2kKVhCg7jmsWsGM2lDRmdAJV2gagvKgH8=
+github.com/go-gfx/gfx v0.31.0 h1:mZgJhkrroaxnTTCll8KnOGxB67GwN/In/KkQt4p68LE=
+github.com/go-gfx/gfx v0.31.0/go.mod h1:TC2X+3GMXm8mYZPmp/v7bFrRa69p+k0xz0Nabbd9sII=
 github.com/go-icons/iconoir v0.2.0 h1:I5AnDEIPgYfawTmwzemDRJjlYCUbFHuS8GJXrjADhXc=
 github.com/go-icons/iconoir v0.2.0/go.mod h1:Td/M2vy4xdVv4aOudAskV0nXR9Wv0MlhWvyRIzPBz5U=
 github.com/go-images/images v0.0.0-20260831115433-23d959d868e3 h1:SinmtXWpA4a30ZQ5A9QI9YrsYvytmLGeTRVbXqqEezw=
@@ -76,8 +76,8 @@ github.com/sergeymakinen/go-bmp v1.0.0 h1:SdGTzp9WvCV0A1V0mBeaS7kQAwNLdVJbmHlqNW
 github.com/sergeymakinen/go-bmp v1.0.0/go.mod h1:/mxlAQZRLxSvJFNIEGGLBE/m40f3ZnUifpgVDlcUIEY=
 github.com/sergeymakinen/go-ico v1.0.0 h1:uL3khgvKkY6WfAetA+RqsguClBuu7HpvBB/nq/Jvr80=
 github.com/sergeymakinen/go-ico v1.0.0/go.mod h1:wQ47mTczswBO5F0NoDt7O0IXgnV4Xy3ojrroMQzyhUk=
-github.com/tannevaled/gobig2 v0.1.0 h1:9PdMvmnmYQURlUF40zt8t35Wnrz3KhZrwfxgCMvQc04=
-github.com/tannevaled/gobig2 v0.1.0/go.mod h1:X0S1H+N35kg6zYgVYRqGMsGj3C35zs+iA2r1MXyPcV4=
+github.com/tannevaled/gobig2 v0.2.0 h1:yx97/ltljALrIWDFVqHjPUIjAp3bfUUhH8Z8UROvNLc=
+github.com/tannevaled/gobig2 v0.2.0/go.mod h1:X0S1H+N35kg6zYgVYRqGMsGj3C35zs+iA2r1MXyPcV4=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
