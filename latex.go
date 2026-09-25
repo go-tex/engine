@@ -235,7 +235,7 @@ const MiniLaTeXKernel = `
 % (apsrev's \bibinfo{author}{…}) this kernel renders only in part. \bibitem{⟨key⟩}
 % (no bracket) is unchanged.
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
-\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}#1 }
+\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}}
 \def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
 % arguments after an optional occurrence number (xstring.tex:444,
