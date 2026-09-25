@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // \strutbox was allocated and never set, and \strut was \def'd EMPTY, so a strut —
 // the idiom for forcing a line to its full height — set nothing. latex.ltx:613-614
@@ -100,5 +103,24 @@ func TestStrutBoxFollowsEveryLeadingChange(t *testing.T) {
 		if d := v - c.want; d > 0.01 || d < -0.01 {
 			t.Errorf("\\ht\\strutbox sous %s = %.2fpt, la référence donne %.2fpt", c.what, v, c.want)
 		}
+	}
+}
+
+// A strut is a rule wanted for its METRICS alone — width\z@ — and the renderer was
+// emitting a <rect width="0"> for it. Filled, not stroked, so it paints nothing;
+// but it is one element per strut, and one corpus paper went from 1 such rect to 20
+// the moment \strut started working.
+//
+// Both directions, because a renderer that draws nothing is also wrong:
+// zero-area rules must vanish and real ones must survive.
+func TestZeroAreaRulesAreNotEmitted(t *testing.T) {
+	svg := onePage(t, `\documentclass{article}\begin{document}`+
+		`\noindent A\strut\vrule height 8pt depth 3pt width 0pt B\par`+
+		`\noindent C\rule{40pt}{3pt}D\par\end{document}`)
+	if n := strings.Count(svg, `width="0"`); n != 0 {
+		t.Errorf(`%d rectangle(s) d'aire nulle émis, attendu 0`, n)
+	}
+	if !strings.Contains(svg, `width="40" height="3"`) {
+		t.Error(`la \rule{40pt}{3pt} VISIBLE n'est plus dessinée: le garde est trop large`)
 	}
 }

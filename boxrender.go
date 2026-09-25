@@ -431,7 +431,19 @@ func ruleDepth(r ruleNode, b *boxNode) int {
 	return r.depth
 }
 
-// rect writes one filled rectangle (points).
+// rect writes one filled rectangle (points). A rectangle with no area is skipped:
+// it is filled, not stroked, so it paints nothing, and TeX asks for one routinely —
+// \strut is \vrule height.7\baselineskip depth.3\baselineskip width\z@, a rule
+// wanted for its METRICS alone (latex.ltx:8544). Emitting it put a
+// <rect width="0"> in the page for every strut: one corpus paper went from 1 to 20
+// the moment \strut started working, and it would be one per row and per footnote
+// once anything else measures with \strutbox.
+//
+// The metrics are unaffected — this is the renderer, and the node keeps its height
+// and depth in the box either way.
 func rect(sb *strings.Builder, x, y, w, h float64) {
+	if w <= 0 || h <= 0 {
+		return
+	}
 	fmt.Fprintf(sb, `<rect x="%s" y="%s" width="%s" height="%s"/>`, f(x), f(y), f(w), f(h))
 }
