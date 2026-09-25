@@ -708,12 +708,44 @@ func (e *Engine) applyElsarticleGeometry(opts []string) bool {
 //
 // inkedW follows the acmartFormats convention: for a two-column format it is
 // \textwidth minus \columnsep, the two columns' combined inked width.
-func (e *Engine) applyRevtexGeometry(reprint bool) {
+func (e *Engine) applyRevtexGeometry(reprint bool, opts []string) {
+	g := classGeometry{inkedW: 468, textH: 665.5, leading: 14}
 	if reprint {
-		e.applyClassGeometry(classGeometry{inkedW: 510 - 18, textH: 672, leading: 11.5})
-		return
+		g = classGeometry{inkedW: 510 - 18, textH: 672, leading: 11.5}
 	}
-	e.applyClassGeometry(classGeometry{inkedW: 468, textH: 665.5, leading: 14})
+	g.paperW, g.paperH = revtexPaper(opts)
+	e.applyClassGeometry(g)
+}
+
+// revtexPaper reads the sheet from revtex's paper option. The class declares the
+// five standard ones and executes NONE of them (revtex4-2.cls:5928-5951), so the
+// sheet is letter unless the document asks, which is why only the papers that
+// write a4paper come out wrong:
+//
+//	\DeclareOption{a4paper}{\setlength\paperheight{297mm}\setlength\paperwidth{210mm}}
+//
+// Measured on corpus paper 2308.02700, \documentclass[a4paper,twocolumn]{revtex4-2}:
+// the reference sheet is 595.28x841.89 and ours was 612x792. Both engines set it
+// on 12 pages, so this is the OUTPUT being wrong, not the pagination (#419).
+//
+// Zero leaves the engine's letter default, so letterpaper needs no entry.
+func revtexPaper(opts []string) (w, h float64) {
+	const inch = 72.27
+	for _, o := range opts {
+		switch strings.TrimSpace(o) {
+		case "a4paper":
+			return a4W, a4H
+		case "a5paper":
+			return 148 / 25.4 * inch, 210 / 25.4 * inch
+		case "b5paper":
+			return 176 / 25.4 * inch, 250 / 25.4 * inch
+		case "legalpaper":
+			return 8.5 * inch, 14 * inch
+		case "executivepaper":
+			return 7.25 * inch, 10.5 * inch
+		}
+	}
+	return 0, 0
 }
 
 // applyIEEEtranGeometry gives the emulated IEEEtran class its real text block and

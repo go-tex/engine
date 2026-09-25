@@ -900,7 +900,7 @@ func TestRevtexGeometry(t *testing.T) {
 			e := New()
 			e.LoadLaTeX()
 			e.SetFont(spMock{})
-			e.applyRevtexGeometry(c.reprint)
+			e.applyRevtexGeometry(c.reprint, nil)
 			if want := ptToSP(c.wantW); e.hsize != want {
 				t.Errorf("hsize = %d, want %d (%.0fpt)", e.hsize, want, c.wantW)
 			}
