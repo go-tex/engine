@@ -55,7 +55,14 @@ var texDimenParams = []string{
 	"displaywidth", "displayindent", "overfullrule", "hangindent",
 	"emergencystretch", "lineskiplimit", "hoffset", "voffset",
 	"pagegoal", "pagetotal", "pagestretch", "pagefilstretch", "pagefillstretch",
-	"pagefilllstretch", "pageshrink", "pagedepth", "prevdepth",
+	"pagefilllstretch", "pageshrink", "pagedepth",
+	// \prevdepth was here and is NOT a parameter to accept-and-ignore any more: it
+	// is bound to e.prevDepth, the field appendToPage measures interline glue
+	// against. Leaving it listed re-armed the very defect that binding fixed —
+	// loadTeXParams runs BEFORE the primitive is registered (primitives.go), so the
+	// primitive won only by ordering, and moving one call would have turned
+	// \prevdepth back into a dead register with nothing to say so.
+	// TestNoParameterIsBothAPrimitiveAndAListedParam asserts the whole set now.
 }
 
 // texGlueParams are TeX's glue parameters. Inter-word spacing comes from the font
