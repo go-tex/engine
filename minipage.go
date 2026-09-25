@@ -26,10 +26,29 @@ func (e *Engine) doMinipage() {
 	// box (which would overflow a narrow box and defeat line breaking).
 	content := append([]tok{csTok("noindent")}, body...)
 
-	savedHsize := e.hsize
-	e.hsize = width
+	// A minipage is the one place where \textwidth legitimately stops being the page
+	// measure. latex.ltx:11855-11861, \@iiiminipage:
+	//
+	//	\setbox\@tempboxa\vbox\bgroup
+	//	  \color@begingroup
+	//	    \hsize\@tempdima
+	//	    \textwidth\hsize \columnwidth\hsize
+	//	    \@parboxrestore
+	//
+	// All three on consecutive lines. \parbox does NOT do this — \@iiiparbox sets
+	// \hsize and nothing else — and tectonic agrees: inside a 0.33\textwidth
+	// minipage \the\textwidth reads 113.85063pt, inside the same-width \parbox it
+	// still reads 345.0pt.
+	//
+	// Setting only the measure left \textwidth reporting the OUTER block, so
+	// \includegraphics[width=\textwidth] in a 0.32\textwidth panel scaled to the
+	// full measure — three times too wide, and its proportional height three times
+	// too tall (#406). oneColHsize goes with it: inside the box there is no
+	// two-column split for \textwidth to span.
+	savedHsize, savedTW, savedOne := e.hsize, e.textWidth, e.oneColHsize
+	e.hsize, e.textWidth, e.oneColHsize = width, width, 0
 	vbox := e.typesetGroupToVbox(content) // breaks the paragraphs to e.hsize == width
-	e.hsize = savedHsize
+	e.hsize, e.textWidth, e.oneColHsize = savedHsize, savedTW, savedOne
 
 	vbox.width = width
 	e.place(alignParbox(vbox, pos))
