@@ -25,6 +25,39 @@ import (
 // doPagestyle implements \pagestyle{name} and \thispagestyle{name}: only the number
 // vs no-number distinction is modelled (plain/headings/myheadings all show the
 // bottom-centred number; empty shows none).
+// pageStyleNode carries \thispagestyle's override through page breaking. The page
+// builder runs AFTER the document has been read, so at the moment \thispagestyle
+// is called nothing knows which page it falls on; a node contributed to the
+// vertical list lands on that page by construction, which is how TeX gets the same
+// answer (its output routine reads \@specialstyle for the page it is shipping).
+type pageStyleNode struct{ style string }
+
+func (pageStyleNode) isNode() {}
+
+// doThisPagestyle implements \thispagestyle{name}: the style applies to THIS page
+// and the document's own \pagestyle resumes on the next.
+//
+// It used to take doPagestyle's path, which set the style permanently. Since
+// \maketitle issues \thispagestyle{plain} (or {empty}) on nearly every paper, one
+// title page silently turned the running head off for the whole document: on the
+// 128 corpus papers with a reference, 23 draw a running head and this engine drew
+// NONE. Beside tectonic on a three-page document with \thispagestyle{empty} on
+// page 1, the reference heads pages 2 and 3 and this engine headed nothing.
+//
+// The style's \ps@name definitions are deliberately NOT run here: they set the
+// header and footer FIELDS, which are global, so running \ps@empty for one page
+// would clear them for the rest of the document. LaTeX avoids the same trap by
+// running them inside a group in the output routine.
+func (e *Engine) doThisPagestyle() {
+	name := e.readBraceName()
+	switch name {
+	case "empty", "fancy":
+	default:
+		name = "plain"
+	}
+	e.contribute(pageStyleNode{style: name})
+}
+
 func (e *Engine) doPagestyle() {
 	name := e.readBraceName()
 	switch name {

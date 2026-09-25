@@ -277,8 +277,17 @@ func TestClassKernelDeclarations(t *testing.T) {
 		// \rm/\bf/… (real LaTeX's article.cls rebinds \rm to \normalfont\rmfamily,
 		// which with our aliases would loop). It completes without looping.
 		{"oldfontcmd", `\DeclareOldFontCommand{\rm}{\normalfont\rmfamily}{\mathrm}\message{OK}`, "OK"},
-		// running-head marks are accepted and their \...mark macros stay empty
-		{"marks", `\markboth{L}{R}\markright{r}\@mkboth{a}{b}\message{[\leftmark|\rightmark]}`, "[|]"},
+		// The running marks are RECORDED now, and read back by a page style as
+		// \leftmark/\rightmark. \markright replaces only the right one, and
+		// \@mkboth stays inert — latex.ltx:13335 leaves it \@gobbletwo and a page
+		// style enables it, so sectioning must not set marks on its own.
+		//
+		// This diverges from LaTeX in one way worth naming: there the pair travels
+		// through \mark/\firstmark/\botmark, so \leftmark read before any page has
+		// shipped is EMPTY. Here it reads the current pair. The two agree where it
+		// matters — a head typeset at shipout — and the difference needs marks to
+		// travel with page breaking, which this page builder does not do yet.
+		{"marks", `\markboth{L}{R}\markright{r}\@mkboth{a}{b}\message{[\leftmark|\rightmark]}`, "[L|r]"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
