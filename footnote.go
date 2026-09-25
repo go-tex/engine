@@ -176,12 +176,18 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 			vlist = append(vlist, b)
 		}
 	}
-	if e.pageStyle == "empty" {
+	// \thispagestyle's override rides the vertical list and applies to the page it
+	// landed on, then goes with it (see pageStyleNode).
+	style := e.pageStyle
+	if s, rest, found := takePageStyle(vlist); found {
+		style, vlist = s, rest
+	}
+	if style == "empty" {
 		return vpackSP(vlist, packNatural, 0)
 	}
 	e.curPageNum = pageNum // so \thepage in a header/footer field is this page
 
-	if e.pageStyle == "fancy" {
+	if style == "fancy" {
 		return e.assembleFancyPage(vlist)
 	}
 	// "plain": a centred page number pushed to the foot with vertical fil, filling
@@ -234,3 +240,19 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 // and it pushed the pitch from 10.41 to 11.06 against a reference of 9.63. What is
 // left of that 0.78 is the note being set on the BODY leading rather than
 // \footnotesize's 9.5pt, which is a different change (the held one).
+
+// takePageStyle lifts a \thispagestyle override out of a page's vertical list and
+// returns the list without it. The node carries no dimension, but it is removed
+// rather than left for vpack to walk past: a page's list is measured and shipped,
+// and a marker that survives into either is one more thing to explain.
+func takePageStyle(vlist []node) (style string, rest []node, found bool) {
+	for i, n := range vlist {
+		if ps, ok := n.(pageStyleNode); ok {
+			out := make([]node, 0, len(vlist)-1)
+			out = append(out, vlist[:i]...)
+			out = append(out, vlist[i+1:]...)
+			return ps.style, out, true
+		}
+	}
+	return "", vlist, false
+}

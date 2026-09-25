@@ -519,12 +519,36 @@ const LaTeX2eClassKernel = `
 % \shorttitle self-referential — an infinite loop when the running head expanded it.
 \def\MakeUppercase#1{\edef\@MakeCase@a{#1}\uppercase\expandafter{\@MakeCase@a}}
 \def\MakeLowercase#1{\edef\@MakeCase@a{#1}\lowercase\expandafter{\@MakeCase@a}}
-% ── running heads / marks (no page-head machinery here: accept and drop) ─────
-\def\markboth#1#2{}
-\def\markright#1{}
+% ── running heads / marks ───────────────────────────────────────────────────
+% \markboth{left}{right} and \markright{right} record the running marks, which a
+% page style reads back as \leftmark / \rightmark (latex.ltx:13340-13362). They
+% were accepted and dropped, so every head that shows one came out EMPTY: 23 of the
+% 128 corpus papers with a reference draw a running head there and none here, and
+% on one of them we drew the RULE under the head and nothing above it (#426).
+%
+% The arguments are expanded when the mark is set, as \unrestored@protected@xdef
+% does in latex.ltx:13345, so \thesection inside a mark is the section at MARK
+% time and not at use time.
+%
+% What this does NOT do: real LaTeX carries the pair through TeX's \mark /
+% \firstmark / \botmark, so a head shows the mark that applies to THAT page. This
+% keeps the current pair instead. A head set once — a title, a preprint banner,
+% which is what the corpus papers use — is identical; a head tracking sections
+% shows the section current at shipout rather than at the page's first line. The
+% difference needs marks to travel with page breaking, which this page builder
+% does not do yet.
+\gdef\gotex@leftmark{}
+\gdef\gotex@rightmark{}
+\def\markboth#1#2{%
+  \protected@xdef\gotex@leftmark{#1}\protected@xdef\gotex@rightmark{#2}}
+\def\markright#1{\protected@xdef\gotex@rightmark{#1}}
+% \@mkboth stays inert, as latex.ltx leaves it (\let\@mkboth\@gobbletwo at
+% :13335): it is the hook a PAGE STYLE enables, article.cls's \ps@headings doing
+% \let\@mkboth\markboth. A document whose style never asks for marks must not get
+% them from its sectioning.
 \long\def\@mkboth#1#2{}
-\def\leftmark{}
-\def\rightmark{}
+\def\leftmark{\gotex@leftmark}
+\def\rightmark{\gotex@rightmark}
 % ── contents recording (the engine owns its own TOC; accept and drop) ────────
 \def\addcontentsline#1#2#3{}
 \long\def\addtocontents#1#2{}

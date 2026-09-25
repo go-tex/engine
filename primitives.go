@@ -1811,7 +1811,7 @@ func (e *Engine) loadMore() {
 	e.prim("smash", func(e *Engine) { e.place(e.makeSmash()) })
 	// Page style and numbering (see pagenum.go): a centred foot number per page.
 	e.prim("pagestyle", func(e *Engine) { e.doPagestyle() })
-	e.prim("thispagestyle", func(e *Engine) { e.doPagestyle() })
+	e.prim("thispagestyle", func(e *Engine) { e.doThisPagestyle() })
 	e.prim("pagenumbering", func(e *Engine) { e.doPagenumbering() })
 	e.prim("today", func(e *Engine) { e.pushString(e.today) })
 	// \thepage in running text is best-effort (this single-pass engine cannot know
