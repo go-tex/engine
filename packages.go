@@ -456,6 +456,21 @@ func (e *Engine) doDocumentClass() {
 			e.classPaperSize = strings.TrimSpace(o)
 		}
 	}
+	// …and PUBLISH it. The standard classes set \paperwidth/\paperheight from that
+	// option, and a document that loads anything pulling in the graphics driver —
+	// graphicx, color, xcolor, tikz, siunitx, mathtools — then gets it written to the
+	// media box, which is every real paper. An EMULATED class loads no .cls, so
+	// nothing did it: \documentclass[a4paper,twocolumn]{revtex4-2} with graphicx came
+	// out 612x792 where tectonic gives 595x842, while the same document without
+	// a4paper agrees at letter on both.
+	//
+	// A class that states its OWN sheet still wins, because applyAcmartGeometry and
+	// the rest run after this — which is the class's own precedence: acmart.cls
+	// forces 6.75in x 10in for acmsmall whatever paper option the document passed.
+	if w, h, ok := e.paper(e.classPaperSize); ok {
+		e.setNamedDimen("paperwidth", w)
+		e.setNamedDimen("paperheight", h)
+	}
 	if hasOption(opts, "twocolumn") && !classManagesOwnColumns(name) {
 		// \documentclass[twocolumn]{…}: two-column page layout (twocolumn.go). Live for
 		// the standard classes whose \twocolumn is LaTeX's own (article/report/book),
