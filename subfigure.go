@@ -92,6 +92,24 @@ func (e *Engine) inEnvironment(env string) bool {
 // the command states none — so consecutive panels flow as the figure's own
 // \centering arranges them.
 func (e *Engine) doSubfigureCommand(captype string) {
+	// A sub-panel is HORIZONTAL material, so met in vertical mode it starts a
+	// paragraph and the next panel joins the SAME line — the same reason
+	// doMinipage calls this (latex.ltx:11853, #398/#417). Without it each panel
+	// took a line of its own and a three-panel figure was three rules tall.
+	//
+	// Witness, \subfigure{\rule{0.2\textwidth}{40pt}} repeated, reading the y of
+	// the first word AFTER the figure (reference and subject compiled in SEPARATE
+	// directories — subfigure.sty put where tectonic can see it is also read by
+	// this engine, which is how this was first mis-measured):
+	//
+	//	panels   tectonic   before
+	//	1          210.48    202.64
+	//	2          215.46    242.49
+	//	3          215.46    282.34
+	//
+	// The reference does not move between two panels and three; we grew 39.85pt
+	// each time, which is the rule.
+	e.leaveVMode()
 	capToks, hasCap := e.scanOptBracketToks()
 	body := e.readBraceToks()
 	if len(body) == 0 && !hasCap {
