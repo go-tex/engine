@@ -596,13 +596,26 @@ func (e *Engine) doDocumentClass() {
 		if e.applyElsarticleGeometry(opts) {
 			return // a journal type: the class sizes it with geometry, not article's
 		}
-		// The preprint default. elsarticle's own \ExecuteOptions makes A4 the
-		// default paper, where article.cls would assume US letter, so name it
-		// unless the paper already chose.
+		// The preprint default, on US LETTER.
+		//
+		// elsarticle.cls:109 writes \ExecuteOptions{a4paper,10pt,…} and this used to
+		// take it at its word. It does nothing: \ExecuteOptions runs the code of
+		// DECLARED options, elsarticle never declares a4paper (its \DeclareOption* on
+		// the NEXT line forwards user options to article, which is a different
+		// mechanism and does not apply to \ExecuteOptions), so the name is silently
+		// skipped and the sheet stays article's letter.
+		//
+		// tectonic settles it — \documentclass[final,12pt]{elsarticle}, nothing else:
+		//
+		//	                reference   with a4paper   without
+		//	\textwidth        390.0pt       390.0pt     390.0pt
+		//	\textheight       548.5pt       592.0pt     548.5pt
+		//	\paperwidth     614.295pt      597.51pt   614.295pt
+		//	\paperheight     794.97pt      845.05pt    794.97pt
+		//
+		// All four match once it goes. The source was quoted correctly and its
+		// SEMANTICS assumed.
 		aopts := append([]string{}, opts...)
-		if !namesPaperSize(opts) {
-			aopts = append(aopts, "a4paper")
-		}
 		if data, _, ok := e.findTeXFile("article", []string{".cls"}); ok {
 			e.loadTeXFile(data, "article", ".cls", append(aopts, e.takePassed(name)...))
 			return
