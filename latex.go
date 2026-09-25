@@ -115,7 +115,7 @@ const MiniLaTeXKernel = `
 \long\def\thesection{\the\c@section}
 \long\def\thesubsection{\the\c@section.\the\c@subsection}
 \long\def\section{\@ifstar\@ssection\@nsection}
-\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\sectionmark{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@ssection#1{\par\medskip\noindent{\Large\bf#1}\par\nobreak\smallskip}
 \long\def\subsection{\@ifstar\@ssubsection\@nsubsection}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
@@ -613,8 +613,39 @@ const MiniLaTeXKernel = `
 % they emit an entry in addition to typesetting their heading. Starred forms
 % (\@ssection/\@ssubsection) are untouched and never record, matching LaTeX.
 \newcount\c@tocdepth
-\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
-\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
+% A sectioning command sets the running MARK, which is how a head shows the
+% section it is on: \@sect runs \csname #1mark\endcsname{#7} (latex.ltx:12796),
+% and the marks default to \@gobble (:12870-12872) so they cost nothing until a
+% page style redefines them — \ps@headings does
+% \def\sectionmark##1{\markboth{\MakeUppercase{…##1}}{}}.
+\let\sectionmark\@gobble
+\let\subsectionmark\@gobble
+\let\subsubsectionmark\@gobble
+% The two page styles the standard classes declare, verbatim from article.cls's
+% one-sided branch (\ps@headings) and latex.ltx (\ps@myheadings). doPagestyle
+% RUNS \ps@name, so defining them here is all a document needs: \@oddhead is read
+% back at page assembly (latexHead, fancyhdr.go).
+%
+% \ps@headings is the one that tracks the document — it \let's \@mkboth to
+% \markboth and redefines \sectionmark, so each \section sets the mark its head
+% shows. \ps@myheadings leaves the marks to the author's own \markboth/\markright.
+\def\ps@headings{%
+  \let\@oddfoot\@empty
+  \def\@oddhead{{\slshape\rightmark}\hfil\thepage}%
+  \let\@mkboth\markboth
+  \def\sectionmark##1{\markright{\MakeUppercase{\thesection\quad##1}}}%
+  \def\subsectionmark##1{}}
+\def\ps@myheadings{%
+  \let\@oddfoot\@empty
+  \def\@oddhead{{\slshape\rightmark}\hfil\thepage}%
+  \let\@mkboth\@gobbletwo
+  \let\sectionmark\@gobble
+  \let\subsectionmark\@gobble}
+% …and the two that have no head, which must CLEAR one a previous style set.
+\def\ps@empty{\let\@oddhead\@empty\let\@oddfoot\@empty\let\@mkboth\@gobbletwo}
+\def\ps@plain{\let\@oddhead\@empty\let\@mkboth\@gobbletwo}
+\def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\sectionmark{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
+\def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\subsectionmark{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par}
 % ─── LaTeX counter interface (feat/counters) ─────────────────────────────────
 % Value-reading and counter-formatting commands. The mutating commands
