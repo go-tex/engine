@@ -508,7 +508,15 @@ func (e *Engine) applyAmsartGeometry(opts []string) {
 // gutter, since that is the width the same amount of body text would occupy in
 // one column and so drives the per-page character budget. textH is the text
 // height and leading the baseline-to-baseline body skip. All three are in points.
-type classGeometry struct{ inkedW, textH, leading float64 }
+type classGeometry struct {
+	inkedW, textH, leading float64
+	// paperW/paperH are the class's PAPER, in TeX points, when it is not US letter.
+	// Zero leaves the engine's default. A class that sets its own sheet does it
+	// through geometry — acmart.cls:670-672 gives acmsmall
+	// \geometry{…, paperwidth=6.75in, paperheight=10in, …} — and this emulation
+	// loads no class file, so nothing else publishes it.
+	paperW, paperH float64
+}
 
 // applyClassGeometry installs a single-column-equivalent text block and base
 // leading as a persistent floor on the engine, the way applyAmsartGeometry does
@@ -526,6 +534,10 @@ func (e *Engine) applyClassGeometry(g classGeometry) {
 	e.vsize = ptToSP(g.textH)
 	e.baselineskip = ptToSP(g.leading)
 	e.baseBaselineskip = e.baselineskip
+	if g.paperW > 0 && g.paperH > 0 {
+		e.setNamedDimen("paperwidth", ptToSP(g.paperW))
+		e.setNamedDimen("paperheight", ptToSP(g.paperH))
+	}
 }
 
 // acmartFormats maps each acmart format option to its single-column-equivalent
@@ -550,8 +562,8 @@ var acmartFormats = map[string]classGeometry{
 	"manuscript": {inkedW: 465, textH: 585, leading: 13.5},
 	// Single-column journal formats. acmsmall/acmcp: 6.75in×10in paper,
 	// \textwidth=486−2·46=394pt. acmlarge: letter, \textwidth=612−2·81=450pt. 10pt.
-	"acmsmall": {inkedW: 394, textH: 588, leading: 12},
-	"acmcp":    {inkedW: 394, textH: 588, leading: 12},
+	"acmsmall": {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27},
+	"acmcp":    {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27},
 	"acmlarge": {inkedW: 450, textH: 600, leading: 12},
 	// Two-column formats: inkedW = \textwidth−\columnsep. sigconf/siggraph/sigchi/
 	// acmtog set a 9pt body (11pt leading); sigplan/acmengage a 10pt body (12pt).
