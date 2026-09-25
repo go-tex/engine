@@ -581,12 +581,8 @@ func (e *Engine) breakToVbox(hlist []node, width int) *boxNode {
 			}
 		}
 		line := hpackSP(seg, packTo, width)
-		if prevDepth > ignoreDepth {
-			gap := e.baselineskip - prevDepth - line.height
-			if gap < e.lineskip {
-				gap = e.lineskip
-			}
-			vlist = append(vlist, glueNode{spec: glueSpec{width: gap}})
+		if g, ok := e.interlineGlue(prevDepth, line.height); ok {
+			vlist = append(vlist, g)
 		}
 		vlist = append(vlist, line)
 		prevDepth = line.depth

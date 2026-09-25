@@ -241,12 +241,8 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 		prevDepth := ignoreDepth
 		for i, ln := range lines {
 			b := e.verbatimLine(e.lstText(ln, i+1, digits, o.numbers), font, firstLine+i)
-			if prevDepth > ignoreDepth {
-				gap := e.baselineskip - prevDepth - b.height
-				if gap < e.lineskip {
-					gap = e.lineskip
-				}
-				vlist = append(vlist, glueNode{spec: glueSpec{width: gap}})
+			if g, ok := e.interlineGlue(prevDepth, b.height); ok {
+				vlist = append(vlist, g)
 			}
 			vlist = append(vlist, b)
 			prevDepth = b.depth

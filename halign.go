@@ -159,6 +159,17 @@ func (e *Engine) assembleAlignment(cols []colTemplate, rows [][][]node) *boxNode
 		}
 	}
 	var vlist []node
+	// The rows are a vertical list, so they take interline glue like any other
+	// (tex.web §679, interlineGlue in paragraph.go). Stacked at their natural
+	// height they grew 6.63pt per row against the reference's 12.00pt — the
+	// height of a line of text rather than \baselineskip.
+	//
+	// No paper in the 200-document arXiv reference corpus exercises this: all 282
+	// of its \halign occurrences sit in .sty/.cls files, which this engine
+	// substitutes rather than executes, and none in a document body. The fix rests
+	// on the direct witness above, not on a corpus measurement, which is 0 pages,
+	// 0 PDFs and 0 ink changed.
+	prevDepth := ignoreDepth
 	for _, row := range rows {
 		var rowNodes []node
 		for j, cell := range row {
@@ -168,7 +179,12 @@ func (e *Engine) assembleAlignment(cols []colTemplate, rows [][][]node) *boxNode
 			}
 			rowNodes = append(rowNodes, hpackSP(cell, packTo, width))
 		}
-		vlist = append(vlist, hpackSP(rowNodes, packNatural, 0))
+		b := hpackSP(rowNodes, packNatural, 0)
+		if g, ok := e.interlineGlue(prevDepth, b.height); ok {
+			vlist = append(vlist, g)
+		}
+		vlist = append(vlist, b)
+		prevDepth = b.depth
 	}
 	return vpackSP(vlist, packNatural, 0)
 }

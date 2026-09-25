@@ -166,15 +166,45 @@ func hasBadLine(lines []Line) bool {
 	return false
 }
 
+// interlineGlue is tex.web §679 append_to_vlist, the rule that puts a box's
+// baseline \baselineskip below the previous one:
+//
+//	if prev_depth>ignore_depth then
+//	  begin d:=width(baseline_skip)-prev_depth-height(b);
+//	  if d<line_skip_limit then p:=new_param_glue(line_skip_code)
+//	  else  begin p:=new_skip_param(baseline_skip_code);
+//	    width(temp_ptr):=d;
+//
+// It is one function because it was FOUR copies. appendToPage had it,
+// tabular.go's cell stacker had it, listings.go's line stacker had it, and
+// halign.go — which stacks the rows of every \halign — did not: a three-row
+// alignment grew 6.63pt per row where the reference grows 12.00pt, because the
+// rows were butted together at their natural height with no glue at all. Three
+// sites implementing a rule and a fourth ignoring it is not a rule.
+//
+// ⚠ One divergence from §679 is preserved here deliberately rather than fixed in
+// the same breath, and it is recorded with this quote in go-tex/engine#441: TeX tests
+// d < \lineskiplimit, and this tests d < \lineskip, using \lineskip's width as
+// both the limit and the replacement. With the usual defaults (\lineskiplimit 0pt,
+// \lineskip 1pt) the two differ for d in [0pt, 1pt), where TeX keeps a
+// \baselineskip of width d and we substitute 1pt. Correcting it changes three
+// working sites and wants its own measurement.
+func (e *Engine) interlineGlue(prevDepth, height int) (glueNode, bool) {
+	if prevDepth <= ignoreDepth {
+		return glueNode{}, false
+	}
+	gap := e.baselineskip - prevDepth - height
+	if gap < e.lineskip {
+		gap = e.lineskip
+	}
+	return glueNode{spec: glueSpec{width: gap}}, true
+}
+
 // appendToPage adds a box to the main vertical list, inserting interline glue so
 // the baseline sits \baselineskip below the previous one (at least \lineskip).
 func (e *Engine) appendToPage(b *boxNode) {
-	if e.prevDepth > ignoreDepth {
-		gap := e.baselineskip - e.prevDepth - b.height
-		if gap < e.lineskip {
-			gap = e.lineskip
-		}
-		e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: gap}})
+	if g, ok := e.interlineGlue(e.prevDepth, b.height); ok {
+		e.mvl = append(e.mvl, g)
 	}
 	e.mvl = append(e.mvl, b)
 	e.prevDepth = b.depth
