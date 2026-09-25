@@ -24,6 +24,24 @@ func (e *Engine) setLineStretch(f float64) {
 	e.baselineskip = int(float64(e.baseBaselineskip)*f + 0.5)
 	e.explicitStretch = true
 	e.syncNormalBaselineskip()
+	e.refreshStrutBox()
+}
+
+// refreshStrutBox re-runs the substrate's \gotex@setstrutbox, which rebuilds
+// \strutbox from the leading now in force. The reference does the same thing from
+// the same place: latex.ltx keeps the \setbox inside size@update (l.8544) and runs
+// it from \selectfont, so \linespread — which goes through \set@fontsize — resets
+// the strut too, and \ht\strutbox is .7 x 18 = 12.59995pt under \linespread{1.5}.
+//
+// The rule lives in ONE place, the substrate macro, and this pushes a call to it
+// rather than rebuilding the box in Go: a second copy of the .7/.3 arithmetic here
+// would be a copy to keep in step, and \@setfontsize already calls the same macro.
+//
+// Every caller is a primitive handler (\linespread, \setstretch, \singlespacing,
+// \onehalfspacing, \doublespacing), so the token is read by the main loop as if
+// the command had expanded to it.
+func (e *Engine) refreshStrutBox() {
+	e.push([]tok{csTok("gotex@setstrutbox")})
 }
 
 // syncNormalBaselineskip keeps \normalbaselineskip equal to \baselineskip, which

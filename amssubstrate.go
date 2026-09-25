@@ -315,9 +315,30 @@ const AMSClassSubstrate = `
 % \newinsert allocates an insert class; a count register is a sufficient stand-in
 % (its number then indexes \skip/\dimen/\box scratch, as in \skip\copyins=1.5pc).
 \let\newinsert\newcount
-% \strutbox: a (here empty) box a class measures; \strut/\lastbox are best-effort.
+% \strut and \strutbox, verbatim from latex.ltx:613-614 and the \setbox inside
+% \set@fontsize's size@update (l.8544). \strutbox was allocated and never set and
+% \strut was \def'd EMPTY, so a strut — the idiom for forcing a line to its full
+% height — set nothing: \ht\strutbox read 0pt against the reference's 8.39996pt,
+% and \vbox{\hbox{\strut x}} was 4.73pt where the reference gives 8.39996, a line
+% the strut nearly doubles. 130 occurrences in 42 of the 200 arXiv reference
+% papers.
+%
+% Every brick of the real definition already worked, checked value by value
+% against tectonic before any of this was written: \vrule with height/depth/width
+% keywords, the .7\baselineskip arithmetic (8.39996pt, to the last digit in both
+% engines), \copy, \unhcopy and \ifmmode.
+%
+% It has to be re-set wherever the leading moves, which is why it lives in
+% \@setfontsize below rather than being set once: the reference re-sets it in
+% size@update, run from \selectfont, and \ht\strutbox is .7 x 9.5 = 6.64996pt
+% inside \footnotesize and .7 x 18 = 12.59995pt under \linespread{1.5}.
+%
+% width 0pt rather than \@width\z@: same dimension, no dependency on the order the
+% kernel's scratch macros are loaded in here.
 \newbox\strutbox
-\def\strut{}
+\def\gotex@setstrutbox{\setbox\strutbox\hbox{\vrule height .7\baselineskip depth .3\baselineskip width 0pt}}
+\gotex@setstrutbox
+\def\strut{\relax\ifmmode\copy\strutbox\else\unhcopy\strutbox\fi}
 \def\lastbox{\hbox{}}
 \def\vrulefil{}
 % ── NFSS font selection: no real series/shape machinery, accept and drop ────
@@ -356,7 +377,7 @@ const AMSClassSubstrate = `
 % nothing but "pt==-=pt==-=pt==-=…" — the leftovers of eighty such assignments.
 % \f@baselineskip is deliberately NOT set here: its argument comes in several
 % shapes (12, 11\p@, {12pt}) and nothing in the corpus asks for it.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}\gotex@notefontsize{#3}}
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}\gotex@notefontsize{#3}\gotex@setstrutbox}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}
