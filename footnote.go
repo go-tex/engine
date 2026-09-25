@@ -215,7 +215,14 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 				ruleNode{width: e.hsize, height: e.headRule},
 			)
 		}
-		top = append(top, glueNode{spec: glueSpec{width: 6 * unity}}) // gap below header
+		// \headsep separates the head from the text block (25pt in the standard
+		// classes), not a fixed 6pt. classes.dtx, "Page Layout": the text starts at
+		// 1in + \voffset + \topmargin + \headheight + \headsep, so the band above it
+		// is exactly those two lengths — which is also why renderVMargin lifts the
+		// page by them when a head is drawn (geometry.go). Measured against the
+		// reference on 2405.18549 page 3, our head sat 72pt from the top with 10pt
+		// under it where the reference has 37pt and 31pt.
+		top = append(top, glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}})
 	}
 	page := append(top, body...)
 	page = append(page, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}) // vfil
@@ -229,7 +236,12 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 		page = append(page, f)
 	}
 	if e.vsize > 0 {
-		return vpackSP(page, packTo, e.vsize)
+		// \vsize is the TEXT block. The head band sits above it — the page is lifted
+		// by exactly that much (renderVMargin/headBand) — so the assembled box is
+		// taller by the band and the body still gets its full \textheight. Packing
+		// the whole thing to \vsize instead took the band out of the text, three
+		// lines a page on a document with a running head.
+		return vpackSP(page, packTo, e.vsize+e.headBand())
 	}
 	return vpackSP(page, packNatural, 0)
 }

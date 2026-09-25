@@ -959,12 +959,37 @@ func (e *Engine) renderVMargin(fallback float64) float64 {
 		if e.geom.inclHead || e.geom.beamerBands {
 			m += e.geom.head + e.geom.headsep
 		}
-		return spToPt(m)
+		return spToPt(m - e.headBand())
 	}
 	if d, ok := e.classTopMargin(); ok {
-		return spToPt(d)
+		return spToPt(d - e.headBand())
 	}
-	return fallback
+	return fallback - spToPt(e.headBand())
+}
+
+// headBand is the height a running head takes ABOVE the text block: \headheight
+// plus \headsep, or zero when no head is drawn.
+//
+// Both margins above answer where the TEXT starts — classes.dtx, "Page Layout":
+// 1in + \voffset + \topmargin + \headheight + \headsep. A page assembled with a
+// head begins with the head, so positioned at that margin the head sat where the
+// text belongs and everything went down with it: measured against the reference on
+// 2405.18549 page 3, our first ink was at 72pt where the reference has 37, and the
+// gap under the head 10pt against 31.
+//
+// The page is therefore lifted by the band it carries. The decision is per
+// DOCUMENT rather than per page, which is what the renderer can see; a fancy page
+// style draws its head on every page it governs, so the two coincide wherever this
+// applies.
+func (e *Engine) headBand() int {
+	// The FIELDS are tested, never fancyHeader(): that one TYPESETS the line, and a
+	// margin accessor must not. Calling it here moved a corpus paper from 55 pages
+	// to 60 — a geometry question answered by running the typesetter.
+	if e.pageStyle != "fancy" ||
+		len(e.fancyHF[fldHL])+len(e.fancyHF[fldHC])+len(e.fancyHF[fldHR]) == 0 {
+		return 0
+	}
+	return e.classDimen("headheight", 12*unity) + e.classDimen("headsep", 25*unity)
 }
 
 // doGeometry handles \geometry{options}, re-applying geometry settings on top of
