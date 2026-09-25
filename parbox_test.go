@@ -44,7 +44,12 @@ func TestParbox(t *testing.T) {
 }
 
 // alignParbox anchors the vertical reference point per [pos]: t at the first
-// line, b at the last (as packed), c centred.
+// line, b at the last (as packed), c centred ON THE MATH AXIS.
+//
+// [c] used to be centred on the BASELINE — 20pt/20pt for a 40pt box. latex.ltx's
+// \@iiiparbox sets it with `\@pboxswtrue $\vcenter`, and tectonic answers
+// 22.5pt/17.5pt for exactly that box at 10pt: the same total, half of it above
+// the AXIS, which itself sits a quarter of the design size above the baseline.
 func TestAlignParbox(t *testing.T) {
 	mk := func() *boxNode {
 		return &boxNode{
@@ -55,13 +60,19 @@ func TestAlignParbox(t *testing.T) {
 			},
 		}
 	}
-	if b := alignParbox(mk(), 'c'); b.height != 20*unity || b.depth != 20*unity {
-		t.Errorf("[c] = %d/%d, want 20pt/20pt", b.height, b.depth)
+	const axis = 5 * unity / 2 // 2.5pt, the axis at a 10pt design size
+	if b := alignParbox(mk(), 'c', axis); b.height != 45*unity/2 || b.depth != 35*unity/2 {
+		t.Errorf("[c] = %d/%d, want 22.5pt/17.5pt (as tectonic sets it)", b.height, b.depth)
 	}
-	if b := alignParbox(mk(), 't'); b.height != 7*unity || b.depth != 33*unity {
+	// With no font loaded there is no axis, and [c] falls back to the baseline.
+	if b := alignParbox(mk(), 'c', 0); b.height != 20*unity || b.depth != 20*unity {
+		t.Errorf("[c] axis 0 = %d/%d, want 20pt/20pt", b.height, b.depth)
+	}
+	// [t] and [b] do not consult the axis.
+	if b := alignParbox(mk(), 't', axis); b.height != 7*unity || b.depth != 33*unity {
 		t.Errorf("[t] = %d/%d, want 7pt/33pt", b.height, b.depth)
 	}
-	if b := alignParbox(mk(), 'b'); b.height != 40*unity || b.depth != 0 {
+	if b := alignParbox(mk(), 'b', axis); b.height != 40*unity || b.depth != 0 {
 		t.Errorf("[b] = %d/%d, want 40pt/0", b.height, b.depth)
 	}
 }

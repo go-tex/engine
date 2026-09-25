@@ -18,6 +18,13 @@ package engine
 // build), fixes the resulting vbox to that width, re-anchors it per [pos] and places
 // it inline.
 func (e *Engine) doMinipage() {
+	// latex.ltx:11853 opens \@iiiminipage with \leavevmode, so a minipage met in
+	// VERTICAL mode starts a paragraph and the next one joins it on the same line.
+	// Without it each minipage became its own paragraph: two side-by-side panels
+	// took two lines, and a \vbox holding two 40pt panels measured 61pt where
+	// tectonic gives 22.5pt (#398). 12 of the corpus papers set their figures this
+	// way, 54 times.
+	e.leaveVMode()
 	pos := e.scanOptBracketPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	body := e.collectEnvBody("minipage")
@@ -51,7 +58,7 @@ func (e *Engine) doMinipage() {
 	e.hsize, e.textWidth, e.oneColHsize = savedHsize, savedTW, savedOne
 
 	vbox.width = width
-	e.place(alignParbox(vbox, pos))
+	e.place(alignParbox(vbox, pos, e.axisHeight()))
 }
 
 // honourColClose takes the \end{minipage} off the front of \beamer@colclose and
