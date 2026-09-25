@@ -33,7 +33,7 @@ func (e *Engine) doSubfigure(captype string) {
 		e.doSubfigureCommand(captype)
 		return
 	}
-	pos := e.scanOptBracketPos() // t / c / b (default c)
+	pos := e.scanOptBracketVPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	body := e.collectEnvBody(captype)
 

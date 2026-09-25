@@ -17,7 +17,7 @@ func (e *Engine) doParbox() *boxNode {
 	// mode starts a paragraph and the next one joins it on the same line. Without
 	// it each box became its own paragraph and two panels stacked (#398).
 	e.leaveVMode()
-	pos := e.scanOptBracketPos() // t / c / b (default c)
+	pos := e.scanOptBracketVPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	// \noindent prefix: a parbox's paragraph has no \parindent box (which would
 	// overflow a narrow box and defeat line breaking).
