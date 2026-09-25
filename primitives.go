@@ -2392,14 +2392,7 @@ func (e *Engine) shiftAndPlace(shift int, vertical bool) {
 // that writes but typesets nothing (\label, \index), so the space around the
 // call survives as exactly one. See go-tex/engine#385.
 func (e *Engine) lastSkip() glueSpec {
-	list := e.mvl
-	if e.inPar {
-		list = e.parList
-	}
-	// A box being built has its own list, and it is the current one.
-	if n := len(e.boxLists); n > 0 {
-		list = *e.boxLists[n-1]
-	}
+	list := *e.currentList()
 	if len(list) == 0 {
 		return glueSpec{}
 	}
@@ -2407,6 +2400,55 @@ func (e *Engine) lastSkip() glueSpec {
 		return g.spec
 	}
 	return glueSpec{}
+}
+
+// currentList is TeX's "current list" (tex.web §212): the list the next node
+// would be appended to. It is returned as a POINTER because delete_last removes
+// from it, not merely reads it.
+func (e *Engine) currentList() *[]node {
+	// A box being built has its own list, and it is the current one.
+	if n := len(e.boxLists); n > 0 {
+		return e.boxLists[n-1]
+	}
+	if e.inPar {
+		return &e.parList
+	}
+	return &e.mvl
+}
+
+// deleteLast is tex.web §1105, the action behind \unskip, \unkern and
+// \unpenalty (§1104 remove_item): drop the last node of the current list IF it
+// is of the requested kind. want reports that for one node, so the three
+// primitives differ only in the predicate they pass.
+//
+// Two things the SOURCE settles that the prose does not:
+//
+//   - The type guard is real, not decoration. \unskip met with a kern at the
+//     tail removes NOTHING ("if type(tail)=cur_chr"), and tectonic agrees:
+//     \hbox{x\kern10pt\unskip y} is 10pt wider than \hbox{xy}, exactly as
+//     \hbox{x\kern10pt y} is.
+//   - §1104's prose says the operation "is not allowed in vertical mode (except
+//     internal vertical mode)", but the CODE refuses only when the contribution
+//     list is empty as well ("(mode=vmode)and(tail=head)"), because the reason is
+//     that the page builder has already taken the material. Implementing the
+//     prose would have been wrong: in a document, \par\vskip40pt\unskip moves
+//     the following line up by 39.85pt under tectonic — the \vskip IS removed.
+//     What saves the other case is the type guard again, not a mode test: after
+//     \par the tail of the vertical list is the paragraph's last LINE, so
+//     \par\unskip removes nothing (measured: four identical 11.955pt gaps), and
+//     TeX prints no error either (§1106 suppresses it when the page does not end
+//     with glue).
+//
+// tex.web walks the list from the head to find the tail's predecessor, and
+// returns without deleting if the tail turns out to belong to a discretionary's
+// replace list. Our discNode carries its pre-break text as a string rather than
+// as following nodes (see stomach.go), so no node in our lists can be owned by a
+// discretionary and that guard has nothing to test here.
+func (e *Engine) deleteLast(want func(node) bool) {
+	list := e.currentList()
+	if n := len(*list); n > 0 && want((*list)[n-1]) {
+		*list = (*list)[:n-1]
+	}
 }
 
 // place adds material that is legal in both modes: inside a paragraph

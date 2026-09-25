@@ -37,12 +37,29 @@ func (e *Engine) loadAMSPrims() {
 			}
 		}
 	})
-	// \unskip / \unpenalty / \unkern: remove the last glue/penalty/kern from the
-	// current list. The engine does not expose list surgery here; used only to trim
-	// trailing space, so an accepted no-op is close enough.
-	e.prim("unskip", func(e *Engine) {})
-	e.prim("unpenalty", func(e *Engine) {})
-	e.prim("unkern", func(e *Engine) {})
+	// \unskip / \unpenalty / \unkern: remove the last glue / penalty / kern from
+	// the current list (tex.web §1104 remove_item, §1105 delete_last; the algorithm
+	// and what the type guard is for are written up at deleteLast).
+	//
+	// These were no-ops, on the ground that they were "used only to trim trailing
+	// space, so an accepted no-op is close enough". Two things were wrong with
+	// that. The trailing space is not incidental: \unskip is the idiom for pulling
+	// punctuation back against the word before it, and our OWN apacite substrate
+	// writes \unskip, and \unskip: and \unskip; a dozen times (apacite.go:101
+	// onwards), so every bibliography entry that took those branches printed
+	// "Journal , 12" with the space still in. 79 of the 200 arXiv reference papers
+	// write one of the three, 1355 times between them. And the list surgery the
+	// comment says is unavailable has been available since \lastskip needed the
+	// current list (#387): deleteLast reuses exactly that resolution.
+	e.prim("unskip", func(e *Engine) {
+		e.deleteLast(func(n node) bool { _, ok := n.(glueNode); return ok })
+	})
+	e.prim("unpenalty", func(e *Engine) {
+		e.deleteLast(func(n node) bool { _, ok := n.(penaltyNode); return ok })
+	})
+	e.prim("unkern", func(e *Engine) {
+		e.deleteLast(func(n node) bool { _, ok := n.(kernNode); return ok })
+	})
 	e.prim("nointerlineskip", func(e *Engine) {})
 	e.prim("removelastskip", func(e *Engine) {})
 	// \immediate: a prefix to \write/\openout/\closeout; a no-op on its own.
