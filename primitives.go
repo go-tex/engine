@@ -711,6 +711,13 @@ const (
 	saveParindent    = 13
 	saveBaselineskip = 14
 	saveTextWidth    = 15
+	// \f@baselineskip, the UNSTRETCHED skip the current size states, is scoped in
+	// LaTeX too: \set@fontsize \edef's it inside whatever group is open
+	// (latex.ltx:8537). It needs its own kind because baselineStretchFactor
+	// recovers the line-spacing factor as the RATIO of the two skips, so a
+	// baseBaselineskip that outlived its group would be read as a \linespread the
+	// document never asked for.
+	saveBaseBaselineskip = 16
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the

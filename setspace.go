@@ -180,7 +180,13 @@ func (e *Engine) doSetfontsize() {
 	// The factor must be read BEFORE the reference it is computed from is replaced.
 	stretch := e.baselineStretchFactor()
 	base := ptToSP(f)
-	e.baseBaselineskip = base
+	// Scoped, like \baselineskip beside it. While this ran for \normalsize only,
+	// a raw assignment was harmless — the value it wrote was the body leading
+	// anyway. Called for every size it must come back at the closing brace, or
+	// baselineStretchFactor (which recovers the factor as baselineskip /
+	// baseBaselineskip) reads 12/9.5 after a \footnotesize group and concludes the
+	// document asked for 1.26 line spacing, compounding at every later switch.
+	e.setEngineDimen(saveBaseBaselineskip, &e.baseBaselineskip, base, false)
 	e.setEngineDimen(saveBaselineskip, &e.baselineskip, int(float64(base)*stretch+0.5), false)
 	e.syncNormalBaselineskip()
 }

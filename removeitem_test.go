@@ -162,7 +162,11 @@ func TestUnskipInVerticalModeTakesTheTailAndOnlyTheTail(t *testing.T) {
 	}
 }
 
-var printedDimenRE = regexp.MustCompile(`([A-F])\s*=\s*([0-9.]+)\s*pt`)
+// [A-Z], not [A-F]: the labels are per-test, and a helper whose alphabet is
+// narrower than its callers' reports a missing value as a missing PRINT. The
+// leading tests use N/L/X/Y and read as an engine failure until this was widened.
+// Callers look up the keys they asked for, so a wider alphabet costs nothing.
+var printedDimenRE = regexp.MustCompile(`\b([A-Z])\s*=\s*([0-9.]+)\s*pt`)
 
 // printedDimens reads the "A=19.87001pt" that \the\wd wrote into the page.
 func printedDimens(t *testing.T, svg string) map[string]float64 {

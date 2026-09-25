@@ -138,7 +138,12 @@ func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
 	}{
 		{"a conference style's normalsize", `\@setfontsize\normalsize\@xpt\@xipt`, 10.95},
 		{"a plain number", `\@setfontsize\normalsize{10}{13}`, 13},
-		{"another size command is ignored", `\@setfontsize\small\@ixpt\@xpt`, 0},
+		// This case used to assert the opposite — that a non-\normalsize switch left
+		// \baselineskip alone — and that was the defect, not a requirement: the
+		// reference gives \small an 11pt skip in a 10pt article, and this call
+		// states 9pt on 10pt. What the \ifx guard legitimately protects is
+		// \gotex@classnormalsize, asserted separately below.
+		{"any size command states its own leading", `\@setfontsize\small\@ixpt\@xpt`, 10},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()
@@ -158,6 +163,35 @@ func TestSetfontsizeTakesTheNormalsizeLeading(t *testing.T) {
 				t.Errorf("baselineskip = %d, want %d (%.2fpt)", e.baselineskip, want, c.want)
 			}
 		})
+	}
+}
+
+// What the \ifx#1\normalsize guard is FOR, now that the leading no longer sits
+// under it: only \normalsize may restate what the class calls normal. That value
+// is the denominator every other size is scaled against (doFontSizeAt), so a
+// \small that moved it would put the whole ladder on a 9pt base.
+//
+// This was unasserted while the guard also held the leading back — the test that
+// covered the guard was asserting that a \small leading is ignored, which the
+// reference contradicts. Removing one half of a guard's job leaves the other half
+// naked unless it is written down.
+func TestSetfontsizeOnlyNormalsizeRestatesTheClassSize(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\makeatletter\@setfontsize\normalsize\@xpt\@xipt`); err != nil {
+		t.Fatal(err)
+	}
+	norm := e.classNormalsizePt
+	if norm <= 0 {
+		t.Fatalf("\\normalsize n'a pas fixé la taille de référence de la classe (%v)", norm)
+	}
+	if _, err := e.Run(`\@setfontsize\small\@ixpt\@xpt`); err != nil {
+		t.Fatal(err)
+	}
+	if e.classNormalsizePt != norm {
+		t.Errorf("un \\small a déplacé la taille de référence de la classe: %v -> %v; "+
+			"toute l'échelle des tailles se mesure contre elle", norm, e.classNormalsizePt)
 	}
 }
 

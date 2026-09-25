@@ -1206,6 +1206,8 @@ func (e *Engine) endGroup() {
 			e.parindent = s.oldd
 		case saveBaselineskip:
 			e.baselineskip = s.oldd
+		case saveBaseBaselineskip:
+			e.baseBaselineskip = s.oldd
 		case saveTextWidth:
 			e.textWidth = s.oldd
 		}

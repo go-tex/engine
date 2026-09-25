@@ -249,9 +249,14 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 // NOTE on \footnotesep: LaTeX puts a \rule\z@\footnotesep at the HEAD of every
 // note (latex.ltx:13199). It is a strut — it sets a minimum height for the note's
 // own box — not glue between notes, so adding it here as a gap is wrong: tried,
-// and it pushed the pitch from 10.41 to 11.06 against a reference of 9.63. What is
-// left of that 0.78 is the note being set on the BODY leading rather than
-// \footnotesize's 9.5pt, which is a different change (the held one).
+// and it pushed the pitch from 10.41 to 11.06 against a reference of 9.63. What
+// was left of that 0.78 was the note being set on the BODY leading rather than
+// \footnotesize's 9.5pt.
+//
+// That held change has landed: \@setfontsize now applies the leading for every
+// size, not only \normalsize. Measured on a note long enough to wrap, the pitch
+// between two of its lines goes 12.0 -> 9.5 against a reference of 9.5, so the
+// residual this note described is gone and \footnotesep stays out of here.
 
 // takePageStyle lifts a \thispagestyle override out of a page's vertical list and
 // returns the list without it. The node carries no dimension, but it is removed

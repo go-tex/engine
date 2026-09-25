@@ -335,7 +335,15 @@ const AMSClassSubstrate = `
 \def\fontsize#1#2{}
 % \@setfontsize keeps the exact shape it always had — a macro with three
 % undelimited arguments — so nothing about how a class's tokens are consumed
-% changes. It now puts the font at the size the class states (\gotex@fontsizeat),
+% changes. It puts the font at the size the class states (\gotex@fontsizeat) AND
+% the leading at the skip it states (\gotex@notefontsize, third argument). That
+% second call used to sit INSIDE the \ifx#1\normalsize guard, so nine sizes out of
+% ten stated a leading that went nowhere and line spacing never followed the font:
+% \footnotesize was 2.54pt too loose PER LINE and \Large 5.93pt too tight, while
+% \normalsize — the one case the guard let through, and so the natural thing to
+% test — was right to 0.04pt. latex.ltx:8533 \set@fontsize sets both from the same
+% call; only \gotex@classnormalsize, which records what the class calls normal,
+% belongs under the guard.
 % which is how a size table drives \tiny…\Huge; the size is read against the one
 % the class states for \normalsize, so Options.Size still picks the body size and
 % the table gives the ratios. It still REPORTS the \normalsize pair separately:
@@ -348,7 +356,7 @@ const AMSClassSubstrate = `
 % nothing but "pt==-=pt==-=pt==-=…" — the leftovers of eighty such assignments.
 % \f@baselineskip is deliberately NOT set here: its argument comes in several
 % shapes (12, 11\p@, {12pt}) and nothing in the corpus asks for it.
-\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\gotex@notefontsize{#3}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}}
+\def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}\gotex@notefontsize{#3}}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
 \def\fontseries#1{}
