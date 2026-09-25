@@ -60,8 +60,6 @@ func (e *Engine) loadAMSPrims() {
 	e.prim("unkern", func(e *Engine) {
 		e.deleteLast(func(n node) bool { _, ok := n.(kernNode); return ok })
 	})
-	e.prim("nointerlineskip", func(e *Engine) {})
-	e.prim("removelastskip", func(e *Engine) {})
 	// \immediate: a prefix to \write/\openout/\closeout; a no-op on its own.
 	e.prim("immediate", func(e *Engine) {})
 	// \aftergroup<token>: hold the token back until the current group closes, then
@@ -311,7 +309,14 @@ const AMSClassSubstrate = `
 % a plain count seeded at 1000. \@addpunct only reads \ifnum\spacefactor>\@m, which
 % stays false — punctuation is added normally.
 \newcount\spacefactor \spacefactor=1000
-\newdimen\prevdepth
+% \prevdepth is a real parameter now (see its prim and prevdepthParam): a
+% \newdimen here would SHADOW it, which is what kept it reading 0pt — the same
+% trap the \lastskip comment above documents.
+% \nointerlineskip and \removelastskip are plain TeX macros, not primitives, and
+% both were accepted no-ops. They work as written once \prevdepth and \lastskip
+% are real.
+\def\nointerlineskip{\prevdepth-1000pt}
+\def\removelastskip{\ifdim\lastskip=\z@\else\vskip-\lastskip\fi}
 % \newinsert allocates an insert class; a count register is a sufficient stand-in
 % (its number then indexes \skip/\dimen/\box scratch, as in \skip\copyins=1.5pc).
 \let\newinsert\newcount

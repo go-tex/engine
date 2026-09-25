@@ -698,6 +698,23 @@ func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(
 		return func() int { return e.parindent }, func(v int) { e.setEngineDimen(saveParindent, &e.parindent, v, global) }, true
 	case "baselineskip":
 		return func() int { return e.baselineskip }, func(v int) { e.setEngineDimen(saveBaselineskip, &e.baselineskip, v, global) }, true
+	case "prevdepth":
+		// NOT setEngineDimen, and that is the one thing not to take by analogy with
+		// the four above. tex.web §213:
+		//
+		//	@d aux==cur_list.aux_field {auxiliary data about the current list}
+		//	@d prev_depth==aux.sc {the name of |aux| in vertical mode}
+		//
+		// prev_depth lives in the semantic NEST, not the save stack, so an assignment
+		// inside {…} is not undone at the closing brace — it is undone when a LIST
+		// ends, which the existing save/restore at list boundaries already does
+		// (stomach.go buildBoxList, footnote.go, fancyhdr.go). A savePrevdepth case
+		// would break \nointerlineskip the moment it appeared inside a group.
+		//
+		// That same @d block is why two probes of this died before measuring
+		// anything: prev_depth and space_factor are the SAME field, so \the\prevdepth
+		// in horizontal mode is an error and tectonic produced no PDF at all.
+		return func() int { return e.prevDepth }, func(v int) { e.prevDepth = v }, true
 	}
 	return nil, nil, false
 }
@@ -1188,6 +1205,19 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mCharDef:
 				e.pushString(strconv.Itoa(m.code))
+				return
+			}
+			// Fallback for the engine's dimension parameters, AFTER every explicit
+			// case above, so none of them changes behaviour.
+			//
+			// This switch and engineDimenParam are two lists of the same parameters,
+			// and they drift: \prevdepth was registered as a primitive and given an
+			// engineDimenParam case, and \the\prevdepth still printed NOTHING —
+			// doThe fell off the end of the switch and emitted nothing at all, which
+			// reads as "the value is 0" rather than as a missing case. Reaching for
+			// engineDimenParam here means one registration is enough for the next one.
+			if get, _, isParam := e.engineDimenParam(t, false); isParam {
+				e.pushString(formatPt(get()))
 				return
 			}
 		}
@@ -2106,6 +2136,12 @@ func (e *Engine) loadMore() {
 		e.rightskip = g
 	})
 	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveParindent, &e.parindent, e.scanDimen(), false) })
+	// \prevdepth is the depth of the last box on the current vertical list, and the
+	// value appendToPage measures the next interline glue against. It was a
+	// \newdimen register in the substrate with no connection to e.prevDepth, so it
+	// read 0pt always and an assignment to it did nothing — see prevdepthParam for
+	// the measurements and for why it takes no save-stack entry.
+	e.prim("prevdepth", func(e *Engine) { e.scanEquals(); e.prevDepth = e.scanDimen() })
 	e.prim("indent", func(e *Engine) {
 		if !e.inPar {
 			e.beginParagraph(true)
