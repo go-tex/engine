@@ -532,8 +532,13 @@ type classGeometry struct {
 func (e *Engine) applyClassGeometry(g classGeometry) {
 	e.hsize = ptToSP(g.inkedW)
 	e.vsize = ptToSP(g.textH)
-	e.baselineskip = ptToSP(g.leading)
-	e.baseBaselineskip = e.baselineskip
+	// leading 0 means "the class states none": elsarticle's journal types keep
+	// \baselinestretch at 1, so the size option's own leading is already right and
+	// overwriting it with zero would collapse every page.
+	if g.leading > 0 {
+		e.baselineskip = ptToSP(g.leading)
+		e.baseBaselineskip = e.baselineskip
+	}
 	if g.paperW > 0 && g.paperH > 0 {
 		e.setNamedDimen("paperwidth", ptToSP(g.paperW))
 		e.setNamedDimen("paperheight", ptToSP(g.paperH))
@@ -646,15 +651,30 @@ func achemsoManuscript(opts []string) bool {
 	return false
 }
 
-// elsarticleFormats maps elsarticle's journal types to the text block the class
-// installs for them. The values are elsarticle.cls's own, read from its
-// \ifnum\jtype geometry blocks; all three are A4 and single-column unless the
-// paper also asks for [twocolumn].
+// elsarticleFormats maps elsarticle's journal types to the geometry the class
+// installs for them, read from elsarticle.cls's \ifnum\jtype blocks (1222-1270).
+// Each of the three requires geometry and states its own sheet:
+//
+//	\RequirePackage{geometry}
+//	\geometry{twoside, paperwidth=210mm, paperheight=297mm,
+//	          textheight=622pt, textwidth=468pt, …}          % jtype=3
+//
+// so the paper is A4 and geometry writes it to the media box. WITHOUT one of
+// 1p/3p/5p the class requires geometry at all, nothing writes a media box, and
+// tectonic leaves the sheet at US letter even though \paperwidth is A4 —
+// `elsarticle[final,12pt]` comes out 612x792 and `elsarticle[preprint,11pt,3p]`
+// 595x842, which is the pair this table now tells apart.
 var elsarticleFormats = map[string]classGeometry{
-	"1p": {inkedW: 384, textH: 562},
-	"3p": {inkedW: 468, textH: 622},
-	"5p": {inkedW: 522, textH: 682},
+	"1p": {inkedW: 384, textH: 562, paperW: a4W, paperH: a4H},
+	"3p": {inkedW: 468, textH: 622, paperW: a4W, paperH: a4H},
+	"5p": {inkedW: 522, textH: 682, paperW: a4W, paperH: a4H},
 }
+
+// a4W/a4H are A4 in TeX points: 210mm x 297mm at 72.27pt to the inch.
+const (
+	a4W = 210 / 25.4 * 72.27
+	a4H = 297 / 25.4 * 72.27
+)
 
 // applyElsarticleGeometry installs the text block for an elsarticle JOURNAL type
 // (1p/3p/5p) and reports whether it did. The leading is left alone: those types
@@ -666,8 +686,7 @@ var elsarticleFormats = map[string]classGeometry{
 func (e *Engine) applyElsarticleGeometry(opts []string) bool {
 	for _, o := range opts {
 		if g, ok := elsarticleFormats[strings.TrimSpace(o)]; ok {
-			e.hsize = ptToSP(g.inkedW)
-			e.vsize = ptToSP(g.textH)
+			e.applyClassGeometry(g)
 			return true
 		}
 	}
