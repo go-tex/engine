@@ -179,6 +179,10 @@ type Engine struct {
 	// bare snippet run through the engine has none and is sized to its own content
 	// (see paperSizePt, and the SVG page in boxrender).
 	hasClass bool
+	// inBody is set by \document (\begin{document}). Before it, nothing is
+	// typeset, so lenient recovery may discard an undefined command's arguments —
+	// see skipUndefined.
+	inBody bool
 	// komaClass records that \documentclass named a KOMA-Script class, whose base
 	// size default is 11pt rather than the standard classes' 10pt (see isKomaClass).
 	komaClass bool
@@ -2076,7 +2080,26 @@ func (e *Engine) skipUndefined(name string) {
 	// substrate types out its colour and template tables otherwise — measured, two
 	// beamer tests went from 3 pages to 7). This is lenient recovery, not TeX; the
 	// rule for where it may discard is "only where nothing is typeset".
-	if e.inPkg {
+	// …and the PREAMBLE is such a place too, which this missed. Nothing between
+	// \documentclass and \begin{document} is typeset — LaTeX itself refuses text
+	// there ("Missing \begin{document}") — so an undefined command's arguments are
+	// as discardable as they are inside a package.
+	//
+	// Left standing they made a SPURIOUS FIRST PAGE. Corpus paper 2304.01951
+	// \input{macros.tex} from its preamble, and macros.tex carries
+	//
+	//	\pgfdeclarelayer{background}
+	//	\pgfsetlayers{background,main}
+	//
+	// which are undefined with GOTEX_PGF off. Their arguments were typeset, that text
+	// opened a page, and the paper's real title page became page 2 — a page 1 holding
+	// the words "background" and "background,main" and nothing else of the document.
+	//
+	// The e.hasClass guard is what keeps a FRAGMENT safe: a file with no
+	// \documentclass (a body someone \inputs) has no preamble, so nothing there may
+	// be discarded — that mistake reads as a smaller corpus (measure/TOOLS.md,
+	// go-tex/engine#395).
+	if e.inPkg || (e.hasClass && !e.inBody) {
 		e.skipUndefinedArgs()
 		return
 	}
