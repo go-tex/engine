@@ -245,3 +245,35 @@ func TestSkipMathOptArg(t *testing.T) {
 		}
 	}
 }
+
+// A mathNoise entry that is a DEFINED macro must be stripped BEFORE the retry can
+// expand it. classkernel.go redefines \label as \@bsphack\gotex@rawlabel{…}\@esphack,
+// so the retry expanded it and handed the maths layer \@savsk — or our own internal
+// \gotex@rawlabel, which is how the corpus census found this: five equations over
+// three papers, reported against a name no document ever wrote.
+//
+// The guard existed for the text size switches only (mathFontSwitch) and was not
+// widened when \label became a macro. The rule is the general one: a mathNoise entry
+// carries no maths by definition, so expanding one can never help.
+func TestMathNoiseStrippedBeforeExpansion(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{`\label in a display`,
+			`\documentclass{article}\begin{document}\[ E = mc^2 \label{eq:a} \]\end{document}`},
+		{`\label in inline maths`,
+			`\documentclass{article}\begin{document}$x+y \label{eq:b}$\end{document}`},
+		{`\label inside a macro body the flatten expands`,
+			`\documentclass{article}\newcommand{\lab}{\label{eq:c}}` +
+				`\begin{document}\[ a = b \lab \]\end{document}`},
+	} {
+		e, err := compile([]byte(c.src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: compile: %v", c.name, err)
+		}
+		if len(e.mathDropped) != 0 {
+			t.Errorf("%s: equation dropped: %v", c.name, e.mathDropped)
+		}
+		if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
+			t.Errorf("%s: rendered no glyph paths", c.name)
+		}
+	}
+}

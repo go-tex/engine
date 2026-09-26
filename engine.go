@@ -1286,7 +1286,10 @@ func (e *Engine) getXToken() (tok, bool) {
 		// — so marking the body's own tokens beforehand cannot catch it: nothing in
 		// that body says \small. Left standing as a name, the retry strips it
 		// (mathFontSwitch, math.go) and the formula keeps its content.
-		if e.mathFlatten && t.cs_ && mathFontSwitch[t.cs] {
+		// Every mathNoise entry, not only the font switches: a macro body that
+		// carries \label expands it here, before the retry can strip it, and the
+		// maths layer is handed \@bsphack's innards instead (math.go).
+		if e.mathFlatten && t.cs_ && (mathFontSwitch[t.cs] || mathNoiseCS(t.cs)) {
 			return t, true
 		}
 		if e.literalActive && t.cat == catActive && !t.cs_ {

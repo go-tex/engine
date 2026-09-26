@@ -313,13 +313,20 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			src = replaceMathCS(src, name, sym)
 			continue
 		}
-		// A text size switch is a MACRO, so the retry below would expand it — and
-		// its replacement is \@setfontsize plus a run of glue assignments, none of
-		// which the maths layer can take. Expanding one turned a single unknown
-		// command into an unrenderable source and dropped the formula whole (31
-		// displays over two corpus papers, every one of them reported against
-		// \edef, a primitive the document never wrote). Strip it first.
-		if mathFontSwitch[name] {
+		// A mathNoise entry carries no maths BY DEFINITION, so expanding one can
+		// never help — and when the entry is a defined MACRO the retry below expands
+		// it instead, turning one unknown command into an unrenderable source and
+		// dropping the formula whole. Strip every one of them first.
+		//
+		// This began as a guard for the text size switches alone (31 displays over
+		// two corpus papers, every one reported against \edef, a primitive the
+		// document never wrote — \small is \@setfontsize plus a run of glue
+		// assignments). \label then joined them without the guard being widened:
+		// classkernel.go redefines it as \@bsphack\gotex@rawlabel{…}\@esphack, so
+		// the retry expanded it and the maths layer was handed \@savsk, or our own
+		// internal \gotex@rawlabel. Witness: \[ E = mc^2 \label{eq:a} \].
+		// Five equations over three corpus papers (census 2026-09-26).
+		if _, isNoise := mathNoise[name]; isNoise {
 			if stripped, sok := stripMathNoise(src, name); sok {
 				src = stripped
 				continue
@@ -676,6 +683,14 @@ var mathNoise = map[string]struct {
 	// …and their one-letter ancestors, which \DeclareOldFontCommand keeps alive.
 	"rm": {0, ``}, "sf": {0, ``}, "tt": {0, ``}, "bf": {0, ``},
 	"it": {0, ``}, "sl": {0, ``}, "sc": {0, ``},
+}
+
+// mathNoiseCS reports whether a control sequence names a mathNoise entry. The
+// flatten guard needs the question asked of a token's cs name, where the retry
+// loop asks it of a command name reported in an error.
+func mathNoiseCS(cs string) bool {
+	_, ok := mathNoise[cs]
+	return ok
 }
 
 // mathFontSwitch are the text size and font switches of the standard classes
