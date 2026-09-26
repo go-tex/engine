@@ -2028,6 +2028,9 @@ func (e *Engine) loadMore() {
 		}
 		e.push(halveParamHashes(chosen))
 	})
+	// \gotex@bodybegins marks the end of the preamble; \document calls it. See
+	// skipUndefined, which discards an undefined command's arguments before it.
+	e.prim("gotex@bodybegins", func(e *Engine) { e.inBody = true })
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	// Non-renderable picture environments (TikZ / PGF / tikz-cd): the whole body is
