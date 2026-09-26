@@ -85,7 +85,12 @@ const AcmartMetadata = `
 \def\streetaddress#1{#1 }
 \def\postcode#1{#1 }
 \def\position#1{#1 }
-\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@acmauthors\par}\smallskip{\itshape\@acmaffils\par}\end{center}\par\bigskip}
+% \global\let\maketitle\relax at the end is the standard classes' own practice
+% (article.cls:192 and :225, in the embedded copy and in the reference bundle alike,
+% NOT latex.ltx — I checked): a title is
+% emitted ONCE. It is what lets a class fire \maketitle at \begin{document} — which
+% achemso does — without doubling the block for a document that also calls it.
+\long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@acmauthors\par}\smallskip{\itshape\@acmaffils\par}\end{center}\par\bigskip\global\let\maketitle\relax}
 \makeatother
 `
 

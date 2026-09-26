@@ -535,6 +535,24 @@ func (e *Engine) doDocumentClass() {
 	// and would keep the size-default leading, fitting twice the text per page.
 	if name == "achemso" && !e.classFileResolvable(name) {
 		e.applyAchemsoGeometry(opts)
+		// achemso's author block has the same SHAPE as acmart's — \author plus
+		// \affiliation wrapping \institution / \city / \country sub-fields — and the
+		// article emulation knows none of it. Undefined, \affiliation's argument is
+		// not discarded in the document, so the affiliations were typeset as BODY
+		// TEXT: corpus paper 2209.13121 has twelve of them, and "Measurement",
+		// "Gaithersburg," and "(NIST)," landed in the running prose. They are in its
+		// reference, so dropping them instead would be a content loss; the substrate
+		// accumulates them into the title block where they belong.
+		//
+		// The substrate is named for acmart because that is where it was written, not
+		// because it is acmart-specific. revtex has its own (revtex.go).
+		e.loadAcmartMetadata()
+		// achemso emits the title block ITSELF at \begin{document}; the paper never
+		// writes \maketitle. Without this the accumulated authors and affiliations
+		// are stored and never typeset, which loses the same words the leak used to
+		// show in the wrong place. \maketitle disarms itself, so a document that does
+		// call it is unaffected.
+		e.pushPackageLevel(`\AtBeginDocument{\maketitle}`)
 	}
 	if (name == "acmart" || name == "IEEEtran") && !e.classFileResolvable(name) {
 		// acmart and IEEEtran are not embedded, and when the paper does not bundle
