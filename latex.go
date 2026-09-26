@@ -73,8 +73,8 @@ const MiniLaTeXKernel = `
 % TEXT unconsumed. \leavevmode is deliberately NOT copied here: the two-argument
 % form never had it, and adding it in the same change would make the measurement
 % unreadable.
-\protected\def\textcolor#1#{\@gotextextcolor{#1}}
-\def\@gotextextcolor#1#2#3{{\color#1{#2}#3}}
+% \textcolor is a Go PRIMITIVE (color.go): see doTextcolor for why neither the
+% reference's "#1#" parameter text nor an \@ifnextbracket dispatcher can live here.
 % colortbl's cell/row/column backgrounds. The engine paints no cell background,
 % so these typeset nothing — but they MUST still eat their arguments, or the
 % colour name reaches the page. Measured against tectonic:

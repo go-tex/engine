@@ -150,6 +150,52 @@ func (e *Engine) tellDriverColor(name string) {
 	e.push(append(out, chTok('}', catEnd)))
 }
 
+// doTextcolor implements \textcolor[<model>]{<colour>}{<text>}.
+//
+// It is a PRIMITIVE, and that is the whole point. The maths layer works on a SOURCE
+// STRING: renderMathResolvingMacros expands a MACRO by matching its parameter text
+// against text, and it cannot match either of the two shapes that express an optional
+// argument in TeX —
+//
+//   - the reference's own \protected\def\textcolor#1#{\@textcolor{#1}}
+//     (color.sty:103, xcolor.sty:758), whose parameter is delimited by the next brace;
+//   - an \@ifnextbracket dispatcher, which needs to LOOK at the next token.
+//
+// Both were tried. The first expanded
+// \newcommand{\W}{\ensuremath{\textcolor{darkgreen}{w}}} to "{arkgreen{" and
+// go-tex/math refused it with "missing }" — 52 equations on corpus paper 2405.18549
+// and 86 over five papers. The second reached the maths layer as \@ifnextbracket and
+// dropped the equation under that name instead.
+//
+// A primitive is not a macro, so expandMacroInMathSource declines it and the source
+// falls through to stripMathColor, which already knows the command and its optional
+// model (math.go: "textcolor": {2, 1}) and strips it while KEEPING the content. That
+// is what the maths path wants: an equation set in the surrounding colour rather than
+// dropped.
+//
+// In text it is \@textcolor's own body, minus the \protect and \leavevmode the
+// two-argument form never had: a group, the colour, the text.
+func (e *Engine) doTextcolor() {
+	model, hasModel := e.scanOptBracketToks()
+	name := e.grabUndelimited()
+	text := e.grabUndelimited()
+	// Rebuilt as the reference's own body, {\color#1{#2}#3} (color.sty:104), and
+	// pushed for the mouth to read: the GROUP is TeX's, not this primitive's.
+	// Opening it with e.beginGroup and closing it by pushing \endgroup instead left
+	// the brace bookkeeping one deep and every \textcolor raised "Missing } inserted".
+	out := []tok{chTok('{', catBegin), csTok("color")}
+	if hasModel {
+		out = append(out, chTok('[', catOther))
+		out = append(out, model...)
+		out = append(out, chTok(']', catOther))
+	}
+	out = append(out, chTok('{', catBegin))
+	out = append(out, name...)
+	out = append(out, chTok('}', catEnd))
+	out = append(out, text...)
+	e.push(append(out, chTok('}', catEnd)))
+}
+
 // doColorbox implements \colorbox{name}{content}: content on a filled background
 // (with \fboxsep padding, no border).
 func (e *Engine) doColorbox() frameNode {

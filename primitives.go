@@ -1912,6 +1912,7 @@ func (e *Engine) loadMore() {
 	e.prim("resizebox", func(e *Engine) { e.place(e.doResizebox()) })
 	e.prim("rotatebox", func(e *Engine) { e.place(e.doRotatebox()) })
 	e.prim("color", func(e *Engine) { e.doColor() })
+	e.prim("textcolor", func(e *Engine) { e.doTextcolor() })
 	e.prim("definecolor", func(e *Engine) { e.doDefineColor() })
 	e.prim("colorlet", func(e *Engine) { e.doColorlet() })
 	e.prim("pagecolor", func(e *Engine) { e.doPagecolor() })
