@@ -79,3 +79,56 @@ preamble intact — do not strip it.
 pre-built copy; it is taken from the TeX Live tlnet archive, which ships the
 generated runtime file. `ifetex`/`ifvtex` are not loaded by any document in the
 corpus, but the `iftex` package is embedded whole rather than cherry-picked.
+
+## xkeyval, the option machinery (added 2026-09-26)
+
+`acmart.cls:46` is `\RequirePackage{xkeyval}`, and so are the preambles of several
+other classes in the corpus. Without it every `\DeclareOptionX`, `\define@boolkey`,
+`\define@choicekey`, `\ExecuteOptionsX` and `\ProcessOptionsX` is undefined, and the
+whole `\if@ACM@*` cascade downstream of them with it — 45 skipped commands on one
+paper.
+
+Measured over the 154-paper corpus with these four files embedded, against
+`go-tex/engine` at `d5c1729`:
+
+| | |
+|---|---|
+| Σ&#124;page error&#124; | 328 → 335 (**+7**) |
+| glyphs | **+19336** |
+| papers moved | 10 |
+
+Σ gets WORSE while the documents get closer to their reference, and the word counts
+say why. On `2311.07602` (reference 31 pages, 15463 words):
+
+| | pages | words |
+|---|---|---|
+| reference | 31 | 15463 |
+| without xkeyval | **31** | 12683 (−2780) |
+| with xkeyval | 35 | 14306 (−1157) |
+
+The engine was **exactly right on the page count while missing 2780 words** — exact
+by cancellation. Embedding xkeyval recovers 1623 of them and the length error moves
+from hidden to visible.
+
+One paper over-produces and is not yet explained: `2304.01951` goes from 10356 words
+(−574) to 11805 (**+875**) against a 10930-word reference, and from 11 pages to 17.
+See go-tex/engine#306.
+
+| File | Provides | Version | Upstream source |
+|------|----------|---------|-----------------|
+| `xkeyval.sty` | `\ProvidesPackage{xkeyval}` | `2020/11/20 v2.8` | the tectonic bundle this engine is measured against, `sha256:6ffe055852f8faf66c0acbe1a7fb27f87b869a90bad1204f3bf4d9683f597c7c` (a TeX Live-derived bundle) |
+| `xkeyval.tex` | `\ProvidesFile{xkeyval.tex}` | `2014/12/03 v2.7a` | idem — `xkeyval.sty` loads it with `\input xkeyval` |
+| `xkvutils.tex` | — | generated from `xkeyval.dtx`, shipped with v2.8 | idem — `xkeyval.tex:49` inputs it unconditionally |
+| `keyval.tex` | — | generated from `keyval.dtx` | idem — `xkvutils.tex:67-70` inputs it when `\ver@keyval.sty` is undefined |
+
+All four are **verbatim**, LPPL 1.3c or later, with their LPPL preamble intact — do
+not strip it. `xkvutils.tex` and `keyval.tex` carry no version line of their own;
+they are docstrip products of their parent `.dtx`.
+
+`xkvtxhdr.tex` is deliberately NOT embedded: `xkeyval.tex:59-64` inputs it only under
+`\ifx\ProvidesFile\@undefined`, which is the **plain TeX** branch. Under LaTeX the
+`\else` runs and the file is never wanted.
+
+Embedding these needs `//go:embed texmf/*.tex` as well as `*.sty` (see `texmf.go`),
+and the kernel's `\@filelist` / `\@addtofilelist` / `\filename@parse`, which
+`xkeyval.sty` walks at load time to find the document class.
