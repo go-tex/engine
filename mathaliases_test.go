@@ -361,3 +361,41 @@ func TestColorIgnoresFollowingSpaces(t *testing.T) {
 		t.Fatal("the control failed: this measure cannot see a space at all")
 	}
 }
+
+// \textcolor inside MATHS, through a macro — the shape #452 broke and this repairs.
+//
+// The maths layer works on a SOURCE STRING, and renderMathResolvingMacros cannot match
+// a brace-delimited parameter text ("#1#", which is what color.sty declares) against
+// text. Copying the reference's parameter shape made
+//
+//	\newcommand{\RealModelWeight}{\ensuremath{\textcolor{darkgreen}{\boldsymbol{w}_R}}}
+//
+// expand to "{arkgreen{" — the backslash and the first letter of the colour name eaten
+// — and go-tex/math refused it with "missing }". 52 equations on corpus paper
+// 2405.18549, 86 over five papers, NONE of them dropped before that change.
+//
+// The census caught it and the A/B did not: Sigma went DOWN by 4 and the paper's loss
+// showed as 111 "garbage" words, one of which was "${w_R}$" — the very symbol. A page
+// count cannot see an equation, so a change to a colour command is measured on the
+// equation channel too.
+func TestTextcolorInMathsKeepsTheEquation(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"direct", `\documentclass{article}\usepackage{xcolor}\begin{document}` +
+			`$\textcolor{red}{x} + y$\end{document}`},
+		{"through a macro, as the corpus writes it",
+			`\documentclass{article}\usepackage{xcolor}` +
+				`\definecolor{darkgreen}{rgb}{0,0.3,0}` +
+				`\newcommand{\W}{\ensuremath{\textcolor{darkgreen}{w}}}` +
+				`\begin{document}$\W + z$\end{document}`},
+		{"with a model", `\documentclass{article}\usepackage{xcolor}\begin{document}` +
+			`$\textcolor[HTML]{FF0000}{x} + y$\end{document}`},
+	} {
+		e, err := compile([]byte(c.src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: compile: %v", c.name, err)
+		}
+		if len(e.mathDropped) != 0 {
+			t.Errorf("%s: equation dropped: %v", c.name, e.mathDropped)
+		}
+	}
+}
