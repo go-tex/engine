@@ -516,6 +516,18 @@ type classGeometry struct {
 	// \geometry{…, paperwidth=6.75in, paperheight=10in, …} — and this emulation
 	// loads no class file, so nothing else publishes it.
 	paperW, paperH float64
+	// fontPermille is the class's BASE BODY SIZE as a permille of 10pt (900 = 9pt),
+	// for a class that states one its size options cannot express. Zero leaves
+	// whatever the size option chose.
+	//
+	// acmart needs it: its format decides the body size, not a 10pt/11pt/12pt option
+	// (acmart.cls:237-256 is an \ifcase over \ACM@format@nr setting \ACM@fontsize,
+	// then \LoadClass[\ACM@fontsize, reqno]{amsart}), and setPtsize reads only the
+	// three named options — so every acmart paper was set at 10pt. Measured on corpus
+	// paper 2304.01951 (sigconf, so 9pt), page 4 against its reference: our glyphs
+	// were 11.35pt tall and 4.49pt wide against 10.22 and 3.90, at the SAME line pitch
+	// and the SAME column width. 11% too large in the same measure is ~11% more lines.
+	fontPermille int
 }
 
 // applyClassGeometry installs a single-column-equivalent text block and base
@@ -543,6 +555,11 @@ func (e *Engine) applyClassGeometry(g classGeometry) {
 		e.setNamedDimen("paperwidth", ptToSP(g.paperW))
 		e.setNamedDimen("paperheight", ptToSP(g.paperH))
 	}
+	// After the leading, because setPtsize set both from the size option and this is
+	// the class overriding it.
+	if g.fontPermille > 0 {
+		e.scaleClassFontsToBase(g.fontPermille)
+	}
 }
 
 // acmartFormats maps each acmart format option to its single-column-equivalent
@@ -564,23 +581,23 @@ func (e *Engine) applyClassGeometry(g classGeometry) {
 var acmartFormats = map[string]classGeometry{
 	// manuscript: single column, letterpaper, 9pt body under \onehalfspacing —
 	// a wide-spaced review layout. \textwidth≈465pt, \textheight≈585pt.
-	"manuscript": {inkedW: 465, textH: 585, leading: 13.5},
+	"manuscript": {inkedW: 465, textH: 585, leading: 13.5, fontPermille: 900},
 	// Single-column journal formats. acmsmall/acmcp: 6.75in×10in paper,
 	// \textwidth=486−2·46=394pt. acmlarge: letter, \textwidth=612−2·81=450pt. 10pt.
-	"acmsmall": {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27},
+	"acmsmall": {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27, fontPermille: 1000},
 	"acmcp":    {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27},
-	"acmlarge": {inkedW: 450, textH: 600, leading: 12},
+	"acmlarge": {inkedW: 450, textH: 600, leading: 12, fontPermille: 1000},
 	// Two-column formats: inkedW = \textwidth−\columnsep. sigconf/siggraph/sigchi/
 	// acmtog set a 9pt body (11pt leading); sigplan/acmengage a 10pt body (12pt).
-	"acmtog":    {inkedW: 484, textH: 645, leading: 11}, // 508−24
-	"sigconf":   {inkedW: 480, textH: 644, leading: 11}, // 504−24
-	"siggraph":  {inkedW: 480, textH: 644, leading: 11},
-	"sigchi":    {inkedW: 480, textH: 635, leading: 11},
-	"sigplan":   {inkedW: 480, textH: 648, leading: 12},
+	"acmtog":    {inkedW: 484, textH: 645, leading: 11, fontPermille: 900}, // 508−24
+	"sigconf":   {inkedW: 480, textH: 644, leading: 11, fontPermille: 900}, // 504−24
+	"siggraph":  {inkedW: 480, textH: 644, leading: 11, fontPermille: 900},
+	"sigchi":    {inkedW: 480, textH: 635, leading: 11, fontPermille: 900},
+	"sigplan":   {inkedW: 480, textH: 648, leading: 12, fontPermille: 1000},
 	"acmengage": {inkedW: 480, textH: 644, leading: 12},
 	// sigchi-a is a landscape, wide-left-margin single-text-column oddity; the
 	// two-column budget is the closest bounded approximation.
-	"sigchi-a": {inkedW: 480, textH: 644, leading: 11},
+	"sigchi-a": {inkedW: 480, textH: 644, leading: 11, fontPermille: 1000},
 }
 
 // acmartTwoColumnFormat reports whether any acmart format option selects a
@@ -610,6 +627,13 @@ func acmartTwoColumnFormat(opts []string) bool {
 func (e *Engine) applyAcmartGeometry(opts []string) {
 	g := acmartFormats["manuscript"] // acmart.cls's default format
 	for _, o := range opts {
+		// The format is given bare ([sigconf]) or as format=… ([format=sigconf]),
+		// and only the bare spelling was matched here — so a paper writing
+		// \documentclass[format=sigconf]{acmart} silently got the MANUSCRIPT
+		// geometry, single-column and 13.5pt-leaded, where it asked for a
+		// two-column 9pt journal page. acmartTwoColumnFormat already strips the
+		// prefix; this did not, and the two disagreed about the same option.
+		o = strings.TrimPrefix(strings.TrimSpace(o), "format=")
 		if f, ok := acmartFormats[strings.TrimSpace(o)]; ok {
 			g = f
 		}

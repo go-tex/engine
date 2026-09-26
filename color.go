@@ -105,6 +105,25 @@ func (e *Engine) selectColor(c uint32) {
 // when a picture is open the name is handed on to the drawing package's own
 // colour command, which emits what its driver understands.
 func (e *Engine) doColor() {
+	// \color takes an OPTIONAL MODEL, and this read straight past it — color.sty:88-90:
+	//
+	//	\DeclareRobustCommand\color{\@ifnextchar[\@undeclaredcolor\@declaredcolor}
+	//	\def\@undeclaredcolor[#1]#2{…\csname color@#1\endcsname\current@color{#2}…}
+	//
+	// (xcolor.sty:711 declares the same \color.) Without it, readBraceName saw "["
+	// where it wanted "{", backed the token up and returned empty — so the colour was
+	// not set AND "[HTML]000000" was typeset as text. One corpus paper defines its
+	// review-highlight macro as \newcommand{\Rev}[1]{{\color[HTML]{000000}{#1}}} and
+	// uses it 165 times.
+	//
+	// parseColorSpec already knows every model the reference does (rgb, RGB, gray,
+	// HTML, cmyk) — it was reached only through \definecolor.
+	if mt, ok := e.scanOptBracketToks(); ok {
+		model := strings.TrimSpace(e.toksToString(mt))
+		spec := e.readBraceName()
+		e.selectColor(parseColorSpec(model, spec))
+		return // an undeclared colour has no NAME to hand the drawing package
+	}
 	name := e.readBraceName()
 	e.selectColor(e.resolveColor(name))
 	e.tellDriverColor(name)

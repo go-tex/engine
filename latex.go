@@ -62,7 +62,19 @@ const MiniLaTeXKernel = `
 \def\textsf#1{{\sffamily #1}}
 \def\textrm#1{{\rmfamily #1}}
 \def\emph#1{{\itshape #1}}
-\def\textcolor#1#2{{\color{#1}#2}}
+% \textcolor takes the same optional MODEL as \color, and its parameter text in the
+% reference is "#1#" — delimited by the next brace — so the bracket, if any, lands
+% in #1 and the name in #2 (color.sty:103-104, xcolor.sty:758-759):
+%
+%	\protected\def\textcolor#1#{\@textcolor{#1}}
+%	\def\@textcolor#1#2#3{\protect\leavevmode{\color#1{#2}#3}}
+%
+% Taking two plain arguments instead bound #1=[HTML] and #2={FF0000} and left the
+% TEXT unconsumed. \leavevmode is deliberately NOT copied here: the two-argument
+% form never had it, and adding it in the same change would make the measurement
+% unreadable.
+\protected\def\textcolor#1#{\@gotextextcolor{#1}}
+\def\@gotextextcolor#1#2#3{{\color#1{#2}#3}}
 % colortbl's cell/row/column backgrounds. The engine paints no cell background,
 % so these typeset nothing — but they MUST still eat their arguments, or the
 % colour name reaches the page. Measured against tectonic:
