@@ -792,6 +792,10 @@ func (e *Engine) doLoadClass(withOptions bool) {
 	if name == "" {
 		return
 	}
+	// Before the load and OUTSIDE its guard: the size is what the loading class
+	// STATED, and it holds whether or not the loaded .cls is found or emulated. Inside
+	// the guard it never ran for the case it was written for.
+	e.applyLoadClassBaseSize(opts)
 	if data, _, ok := e.findTeXFile(name, []string{".cls"}); ok && !emulateOnly(name) {
 		e.loadTeXFile(data, name, ".cls", append(opts, e.takePassed(name)...))
 	}
@@ -968,6 +972,58 @@ func setCurrentOptionToks(opt string) []tok {
 // class sets \normalsize at 110%/120% of the 10pt design with the size clo's
 // baselineskip (13.6/14.5pt), so body text is set at 11/12pt and wraps like real
 // LaTeX. 10pt is the 100% default — byte-identical to the pre-existing behaviour.
+// classBaseSizes is the class base size a size OPTION names: the engine's font scale
+// as a permille of 10pt, the \normalsize leading, and \@ptsize.
+//
+// 8pt and 9pt are amsart's, and they are not an embellishment: acmart decides its body
+// size from its FORMAT, not from a size option — acmart.cls:237-256 is an \ifcase over
+// \ACM@format@nr that sets \ACM@fontsize (9pt for manuscript/acmtog/sigconf/siggraph/
+// sigchi, 10pt for the rest) and then does
+//
+//	\LoadClass[\ACM@fontsize, reqno]{amsart}
+//
+// Only the three standard options were read here, so every acmart paper was set at 10pt.
+// The leadings are amsart.cls's own \@typesizes tables: \DeclareOption{9pt} gives
+// "\or{9}{11}% normalsize" (amsart.cls:290-296) and \DeclareOption{8pt} "\or{8}{10}"
+// (:283-289). \@ptsize is amsart's convention there too — \def\@ptsize{9}, not size-10,
+// which is why it is a string in this table rather than arithmetic.
+var classBaseSizes = map[string]struct {
+	ptsize   string
+	permille int
+	leading  int
+}{
+	"8pt":  {"8", 800, ptToSP(10)},
+	"9pt":  {"9", 900, ptToSP(11)},
+	"10pt": {"0", 1000, 12 * unity},
+	"11pt": {"1", 1100, ptToSP(13.6)},
+	"12pt": {"2", 1200, ptToSP(14.5)},
+}
+
+// applyLoadClassBaseSize applies a base size named in a \LoadClass option list. A class
+// loading another one is how acmart states its body size, and doLoadClass splices the
+// .cls without going through doDocumentClass — so setPtsize never saw the 9pt and the
+// engine's font scale stayed at 10pt while amsart's own TeX-level \@typesizes changed.
+// Measured on 2304.01951 (sigconf, so 9pt), page 4 against its reference: our glyphs were
+// 11.35pt tall and 4.49pt wide against 10.22 and 3.90, at the same line pitch and the
+// same column width.
+//
+// Only the font scale and the leading are applied, not setPtsize's whole body: the
+// DOCUMENT's options already set \@classoptionslist and the list spacings, and a class
+// loading another must not overwrite those.
+func (e *Engine) applyLoadClassBaseSize(opts []string) {
+	for _, o := range opts {
+		if sz, ok := classBaseSizes[e.resolveSizeOption(o)]; ok {
+			e.define("@ptsize", &meaning{kind: mMacro, body: stringToToks(sz.ptsize)}, true)
+			// The FONT SCALE only, not the leading. amsart's 9pt table says 11pt
+			// (amsart.cls:290-296) and acmart overrides it: the reference's measured line
+			// pitch on 2304.01951 page 4 is 10.5pt, which is what the 12pt default already
+			// gives. Setting 11 here moved the pitch to 10.0 — AWAY from the reference.
+			e.scaleClassFontsToBase(sz.permille)
+			return
+		}
+	}
+}
+
 func (e *Engine) setPtsize(opts []string) {
 	pt := "0"                           // \@ptsize is (size-10): 0/1/2 for 10/11/12pt
 	permille, leading := 1000, 12*unity // class base size and \normalsize leading
@@ -978,13 +1034,8 @@ func (e *Engine) setPtsize(opts []string) {
 		pt, permille, leading = "1", 1100, ptToSP(13.6)
 	}
 	for _, o := range opts {
-		switch strings.TrimSpace(o) {
-		case "10pt":
-			pt, permille, leading = "0", 1000, 12*unity
-		case "11pt":
-			pt, permille, leading = "1", 1100, ptToSP(13.6)
-		case "12pt":
-			pt, permille, leading = "2", 1200, ptToSP(14.5)
+		if sz, ok := classBaseSizes[strings.TrimSpace(o)]; ok {
+			pt, permille, leading = sz.ptsize, sz.permille, sz.leading
 		}
 	}
 	e.define("@ptsize", &meaning{kind: mMacro, body: stringToToks(pt)}, true)
@@ -1273,4 +1324,29 @@ func (e *Engine) captionFontFromOptions(passed []string) {
 			e.define("captionfont", &meaning{kind: mMacro, body: []tok{csTok(v)}}, true)
 		}
 	}
+}
+
+// resolveSizeOption gives a class option's text, expanding it when the option IS a macro.
+//
+// acmart does not write the size literally — acmart.cls:258 is
+//
+//	\LoadClass[\ACM@fontsize, reqno]{amsart}
+//
+// and scanBracketList hands the option back as the unexpanded "\ACM@fontsize", so a
+// lookup on the literal "9pt" matched nothing and the whole path was silently inert:
+// \@ptsize stayed 0 and \baselineskip 12pt while \ACM@fontsize plainly read 9pt, which is
+// exactly what the witness printed before this.
+//
+// Only a single control sequence is resolved, and only one level: a size option is a name
+// or a macro holding one, never an expression.
+func (e *Engine) resolveSizeOption(o string) string {
+	o = strings.TrimSpace(o)
+	if !strings.HasPrefix(o, `\`) {
+		return o
+	}
+	m := e.meaningOf(csTok(strings.TrimPrefix(o, `\`)))
+	if m == nil || m.kind != mMacro {
+		return o
+	}
+	return strings.TrimSpace(e.toksToString(m.body))
 }

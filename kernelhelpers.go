@@ -252,6 +252,57 @@ const LaTeX2eKernelHelpers = `
 % write branch uses, is dropped.
 \def\@typeset@protect{}
 \def\@protected@testopt#1{\@testopt}
+% ── the file list and the file-name parser ──────────────────────────────────
+% Three kernel names a package may call, all three missing. Their meanings are not
+% guessed: they were read out of a compiled document with \meaning, under
+% tectonic 0.17.0.
+%
+%   \@filelist        \relax
+%   \@addtofilelist   \long macro:#1->        (a no-op, unless \listfiles)
+%
+% A no-op looks like something worth skipping, and it is not: xkeyval.sty WALKS
+% \@filelist at load time to find the document class —
+%
+%   \XKV@whilist\@filelist\XKV@tempa\ifx\XKV@documentclass\@undefined\fi{…}
+%
+% and with \@filelist undefined that walk left THREE GROUPS OPEN. Everything the
+% package defined afterwards was then group-local and rolled back at the end, so
+% \XKV@fams came out empty and \setkeys reported every key undefined
+% (go-tex/engine#306). An undefined name that a loop walks is not a missing
+% feature, it is an unbalanced loop.
+\let\@filelist\relax
+\long\def\@addtofilelist#1{}
+% \filename@parse{<name>} splits a file name into \filename@area, \filename@base
+% and \filename@ext, the Unix flavour (latex.ltx:223-233 and 264-280; the VMS, Mac
+% and generic flavours differ only in the directory separator, and this engine
+% resolves paths with /). \filename@ext is \relax — not empty — when the name
+% carries no dot, which is the test callers make.
+\def\filename@parse#1{%
+  \let\filename@area\@empty
+  \expandafter\filename@path#1/\\}
+\def\filename@path#1/#2\\{%
+  \ifx\\#2\\%
+     \def\reserved@a{\filename@simple#1.\\}%
+  \else
+     \edef\filename@area{\filename@area#1/}%
+     \def\reserved@a{\filename@path#2\\}%
+  \fi
+  \reserved@a}
+\def\filename@simple#1.#2\\{%
+  \ifx\\#2\\%
+    \let\filename@ext\relax
+    \edef\filename@base{#1}%
+  \else
+    \filename@dots{#1}#2\\%
+  \fi}
+\def\filename@dots#1#2.#3\\{%
+  \ifx\\#3\\%
+    \def\filename@ext{#2}%
+    \edef\filename@base{#1}%
+  \else
+    \filename@dots{#1.#2}#3\\%
+  \fi}
+\def\filename@dot#1.\\{#1}
 % ── \@argdef / \@yargdef: build an n-argument definition ─────────────────────
 % These are the kernel's own definition builders, and packages call them directly
 % — etoolbox's \newrobustcmd routes every command it defines through \@argdef (no
