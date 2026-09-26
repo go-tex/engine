@@ -1851,8 +1851,26 @@ func (e *Engine) loadMore() {
 	// and numbering are identical); without it the whole display is dropped.
 	e.prim("flalign", func(e *Engine) { e.doAlignEnv("flalign", true, alignPairs) })
 	e.prim("flalign*", func(e *Engine) { e.doAlignEnv("flalign*", false, alignPairs) })
+	// alignat(*) is amsmath's align with the number of column PAIRS stated and no
+	// inter-column space (amsmath.sty:1750-1759):
+	//
+	//	\newenvironment{alignat}{\start@align\z@\st@rredfalse}{\endalign}
+	//
+	// \start@align reads the {n} itself, and n only decides the spacing between
+	// pairs — the content and the numbering are align's. So the count is consumed and
+	// align's column model is reused, exactly as flalign does above; without it the
+	// whole display was dropped. Three corpus papers, four displays.
+	e.prim("alignat", func(e *Engine) {
+		e.readBraceName() // the column-pair count: spacing only
+		e.doAlignEnv("alignat", true, alignPairs)
+	})
+	e.prim("alignat*", func(e *Engine) {
+		e.readBraceName()
+		e.doAlignEnv("alignat*", false, alignPairs)
+	})
 	for _, n := range []string{"endalign", "endalign*", "endeqnarray", "endeqnarray*",
-		"endgather", "endgather*", "endmultline", "endmultline*"} {
+		"endgather", "endgather*", "endmultline", "endmultline*",
+		"endalignat", "endalignat*"} {
 		e.prim(n, func(e *Engine) {})
 	}
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
