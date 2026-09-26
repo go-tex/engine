@@ -271,7 +271,12 @@ const AMSClassSubstrate = `
 \newdimen\displayindent
 \newdimen\predisplaysize
 \newdimen\mathsurround
-\newdimen\lineskiplimit
+% \lineskiplimit is a real parameter (see its prim): a \newdimen here SHADOWED it,
+% which is why \offinterlineskip — \lineskip\z@ \lineskiplimit\maxdimen, the idiom
+% for butting boxes together — still left 1pt between them. The same trap as
+% \prevdepth two screens down, and the third time in this file.
+% \normallineskiplimit stays a register: plain TeX keeps it as a SAVED COPY of the
+% parameter, not as the parameter itself.
 \newdimen\normallineskiplimit
 % \jot is the extra leading between the rows of a multi-line display. latex.ltx
 % ALLOCATES AND SETS IT (\newdimen\jot / \jot=3pt, l.11172-11173); allocating it

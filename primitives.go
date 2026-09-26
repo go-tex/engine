@@ -698,6 +698,14 @@ func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(
 		return func() int { return e.parindent }, func(v int) { e.setEngineDimen(saveParindent, &e.parindent, v, global) }, true
 	case "baselineskip":
 		return func() int { return e.baselineskip }, func(v int) { e.setEngineDimen(saveBaselineskip, &e.baselineskip, v, global) }, true
+	case "lineskip":
+		return func() int { return e.lineskip }, func(v int) {
+			e.setEngineDimen(saveLineskip, &e.lineskip, v, global)
+		}, true
+	case "lineskiplimit":
+		return func() int { return e.lineskiplimit }, func(v int) {
+			e.setEngineDimen(saveLineskiplimit, &e.lineskiplimit, v, global)
+		}, true
 	case "prevdepth":
 		// NOT setEngineDimen, and that is the one thing not to take by analogy with
 		// the four above. tex.web §213:
@@ -735,6 +743,8 @@ const (
 	// baseBaselineskip that outlived its group would be read as a \linespread the
 	// document never asked for.
 	saveBaseBaselineskip = 16
+	saveLineskiplimit    = 17
+	saveLineskip         = 18
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -2136,6 +2146,23 @@ func (e *Engine) loadMore() {
 		e.rightskip = g
 	})
 	e.prim("parindent", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveParindent, &e.parindent, e.scanDimen(), false) })
+	// \lineskiplimit: the threshold interlineGlue compares the deficiency against,
+	// 0pt in plain TeX and LaTeX. It was accepted-and-ignored in texDimenParams and
+	// interlineGlue used \lineskip's width in its place, which put the crossover at
+	// 1pt instead of 0pt.
+	e.prim("lineskiplimit", func(e *Engine) {
+		e.scanEquals()
+		e.setEngineDimen(saveLineskiplimit, &e.lineskiplimit, e.scanDimen(), false)
+	})
+	// \lineskip: the glue substituted when the deficiency falls below
+	// \lineskiplimit. Both parameters §679 names have to be live for the rule to
+	// work; \lineskip was in texGlueParams, accepted and ignored, so \lineskip=5pt
+	// left e.lineskip at its 1pt default. Only the WIDTH is kept, as \baselineskip
+	// does — carrying the stretch is the deeper half recorded in #441.
+	e.prim("lineskip", func(e *Engine) {
+		e.scanEquals()
+		e.setEngineDimen(saveLineskip, &e.lineskip, e.scanGlue().width, false)
+	})
 	// \prevdepth is the depth of the last box on the current vertical list, and the
 	// value appendToPage measures the next interline glue against. It was a
 	// \newdimen register in the substrate with no connection to e.prevDepth, so it
