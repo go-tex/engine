@@ -122,11 +122,18 @@ func (e *Engine) doColor() {
 		model := strings.TrimSpace(e.toksToString(mt))
 		spec := e.readBraceName()
 		e.selectColor(parseColorSpec(model, spec))
-		return // an undeclared colour has no NAME to hand the drawing package
+		e.ignoreSpaces() // color.sty:95
+		return           // an undeclared colour has no NAME to hand the drawing package
 	}
 	name := e.readBraceName()
 	e.selectColor(e.resolveColor(name))
 	e.tellDriverColor(name)
+	// color.sty:102 — \@declaredcolor ends with \ignorespaces, so "\color{red} X"
+	// sets the colour and then typesets "X", not " X". We kept the space: the
+	// reference renders "ROUGEB" where we rendered "ROUGE B" on the witness of #452.
+	// Every \color in the corpus is one space wide, which is why this is measured on
+	// its own rather than folded into that change.
+	e.ignoreSpaces()
 }
 
 // tellDriverColor passes a colour name to the drawing package, if one is loaded
