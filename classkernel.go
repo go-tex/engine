@@ -564,6 +564,21 @@ const LaTeX2eClassKernel = `
 \def\nobreakspace{\space}
 % ── diagnostics not already routed by the kernel-helper layer ────────────────
 \def\@font@warning#1{\message{Font Warning: #1}}
+% \begin{frontmatter} … \end{frontmatter} — elsarticle.cls:1279, verbatim:
+%
+%	\newenvironment{frontmatter}{}{\maketitle}
+%
+% Nothing at the start, \maketitle at the end. Undefined, \begin{frontmatter} resolved
+% to \relax (\csname), the body was typeset as ordinary text, and \maketitle was NEVER
+% CALLED — so the title and the author block simply did not appear. Seven corpus papers
+% write their whole front matter that way: five elsarticle, one frontiersSCNS, one
+% achemso, and only one of the eight bundles its class.
+%
+% Declared in the kernel rather than behind a class test because the shape is shared and
+% a class that defines it overrides this. \maketitle disarms itself
+% (\global\let\maketitle\relax, article.cls:192), so a class that also fires it at
+% \begin{document} does not produce the block twice.
+\newenvironment{frontmatter}{}{\maketitle}
 % ── misc structural no-ops ──────────────────────────────────────────────────
 \def\null{\hbox{}}
 % Package config / style commands the engine has no formatter for: gobble their
