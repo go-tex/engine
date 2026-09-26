@@ -1988,10 +1988,34 @@ func (e *Engine) loadMore() {
 	// use \@ifnextchar\<sentinel> to stop, which the bracket-only fallback could
 	// never detect (it always took ELSE and looped forever).
 	e.prim("@ifnextchar", func(e *Engine) {
-		target, ok := e.getNext()
-		if !ok {
+		// The target is an ARGUMENT, not a token: \@ifnextchar#1#2#3 does
+		// \let\reserved@d=#1, so LaTeX strips a brace group around it and
+		// \@ifnextchar{*}{…}{…} tests for a star exactly as \@ifnextchar*{…}{…}
+		// does. Reading it with getNext took the BRACE as the target, after which
+		// the two branches were read one token late — both were emitted and the
+		// star was typeset.
+		//
+		// This is not a corner case; it is how xkeyval tests for its own star and
+		// plus markers, through xkvutils' \@ifnextcharacter:
+		//
+		//	\long\def\@ifnextcharacter#1#2#3{%
+		//	  \@ifnextchar\bgroup
+		//	  {\@ifnextchar{#1}{#2}{#3}}%
+		//	  {\@ifncharacter{#1}{#2}{#3}}%
+		//	}
+		//
+		// When the next token IS a brace — \setkeys{fam}{…}, the common case — it
+		// takes the first branch, where the target is braced. Every \setkeys then
+		// printed "*+" and left two groups open (go-tex/engine#306).
+		//
+		// A bare control-sequence target (\@ifnextchar\bgroup) and a bare character
+		// (\@ifnextchar[) both arrive as a one-token argument, so they are unchanged
+		// — which is why this survived: every witness used a bare target.
+		tgt := e.grabUndelimited()
+		if len(tgt) == 0 {
 			return
 		}
+		target := tgt[0]
 		thenToks := e.grabUndelimited()
 		elseToks := e.grabUndelimited()
 		e.skipOptSpace()
