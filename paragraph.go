@@ -182,19 +182,35 @@ func hasBadLine(lines []Line) bool {
 // rows were butted together at their natural height with no glue at all. Three
 // sites implementing a rule and a fourth ignoring it is not a rule.
 //
-// ⚠ One divergence from §679 is preserved here deliberately rather than fixed in
-// the same breath, and it is recorded with this quote in go-tex/engine#441: TeX tests
-// d < \lineskiplimit, and this tests d < \lineskip, using \lineskip's width as
-// both the limit and the replacement. With the usual defaults (\lineskiplimit 0pt,
-// \lineskip 1pt) the two differ for d in [0pt, 1pt), where TeX keeps a
-// \baselineskip of width d and we substitute 1pt. Correcting it changes three
-// working sites and wants its own measurement.
+// The threshold is \lineskiplimit and the replacement is \lineskip: two different
+// parameters, 0pt and 1pt in plain TeX and LaTeX. This tested d < \lineskip,
+// using \lineskip's width for both roles, which put the crossover a point too
+// high. Isolating the glue itself — \ht of the vbox less the two boxes' heights,
+// because the TOTAL hides it — against tectonic:
+//
+//	second box   d       tectonic   before    after
+//	11.5pt       +0.5      0.50pt   1.00pt   0.50pt   <- the divergent band
+//	13pt         −1.0      1.00pt   1.00pt   1.00pt   control: d < limit
+//	5pt          +7.0      7.00pt   7.00pt   7.00pt   control: d ≥ limit
+//
+// ⚠ The total is NOT the instrument here. The same three vboxes measured whole
+// read 19.16/19.12, 21.16/20.62 and 19.16/18.62 — the divergent case shows 0.04pt,
+// the smallest of the three, because \hbox{A} is 6.62pt here against the
+// reference's 7.16 and the two errors nearly cancel. Only the glue, derived, says
+// 0.50 against 1.00.
+//
+// Still divergent, and out of scope for the same reason it was before: §679 takes
+// \lineskip and \baselineskip as GLUE, with whatever stretch and shrink they
+// carry, while this builds a rigid spec. That is not a local fix — \baselineskip
+// scans a full glue and keeps only .width (primitives.go), and e.baselineskip is an
+// int, so \baselineskip=12pt plus 2pt loses its stretch at the ASSIGNMENT. See
+// go-tex/engine#441.
 func (e *Engine) interlineGlue(prevDepth, height int) (glueNode, bool) {
 	if prevDepth <= ignoreDepth {
 		return glueNode{}, false
 	}
 	gap := e.baselineskip - prevDepth - height
-	if gap < e.lineskip {
+	if gap < e.lineskiplimit {
 		gap = e.lineskip
 	}
 	return glueNode{spec: glueSpec{width: gap}}, true

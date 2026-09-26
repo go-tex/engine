@@ -133,7 +133,10 @@ const LaTeX2eClassKernel = `
 \newdimen\maxdepth
 \newskip\topskip
 \newskip\parskip
-\newskip\lineskip
+% \lineskip is a real parameter (see its prim): a \newskip here SHADOWED it, and
+% with it the whole §679 rule — \offinterlineskip sets \lineskip\z@ and still left
+% 1pt between boxes. FOURTH time in this codebase: \lastskip, \prevdepth,
+% \lineskiplimit and now this. TestEngineParametersAreNotShadowed asserts the set.
 \newskip\normallineskip
 \newdimen\arraycolsep
 \newdimen\arrayrulewidth

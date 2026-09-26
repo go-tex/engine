@@ -151,9 +151,14 @@ type Engine struct {
 	explicitStretch  bool   // an explicit spacing command (setspace / \linespread / \setstretch) ran
 	spacingSaved     []int  // \baselineskip stack for the setspace `spacing` environment
 	lineskip         int    // minimum interline glue when baselineskip is too small (sp)
-	parindent        int    // width of the indentation box at a paragraph's start (sp)
-	prevDepth        int    // \prevdepth for interline glue (ignoreDepth = suppress)
-	suppressParskip  bool   // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
+	// lineskiplimit is the THRESHOLD that decides which of the two is used
+	// (tex.web §679: "if d<line_skip_limit"), not the same thing as lineskip. It is
+	// 0pt in plain TeX and LaTeX while \lineskip is 1pt, so conflating them moved
+	// the crossover by a point — see interlineGlue.
+	lineskiplimit   int
+	parindent       int  // width of the indentation box at a paragraph's start (sp)
+	prevDepth       int  // \prevdepth for interline glue (ignoreDepth = suppress)
+	suppressParskip bool // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
 	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
 	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns
@@ -1208,6 +1213,10 @@ func (e *Engine) endGroup() {
 			e.baselineskip = s.oldd
 		case saveBaseBaselineskip:
 			e.baseBaselineskip = s.oldd
+		case saveLineskiplimit:
+			e.lineskiplimit = s.oldd
+		case saveLineskip:
+			e.lineskip = s.oldd
 		case saveTextWidth:
 			e.textWidth = s.oldd
 		}

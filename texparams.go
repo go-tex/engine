@@ -53,7 +53,7 @@ var texDimenParams = []string{
 	"maxdepth", "splitmaxdepth", "boxmaxdepth", "delimitershortfall",
 	"nulldelimiterspace", "scriptspace", "mathsurround", "predisplaysize",
 	"displaywidth", "displayindent", "overfullrule", "hangindent",
-	"emergencystretch", "lineskiplimit", "hoffset", "voffset",
+	"emergencystretch", "hoffset", "voffset", // \lineskiplimit is a primitive now
 	"pagegoal", "pagetotal", "pagestretch", "pagefilstretch", "pagefillstretch",
 	"pagefilllstretch", "pageshrink", "pagedepth",
 	// \prevdepth was here and is NOT a parameter to accept-and-ignore any more: it
@@ -68,7 +68,9 @@ var texDimenParams = []string{
 // texGlueParams are TeX's glue parameters. Inter-word spacing comes from the font
 // here, so these hold what a package sets without changing how text is set.
 var texGlueParams = []string{
-	"spaceskip", "xspaceskip", "parfillskip", "lineskip", "topskip",
+	// \lineskip is a primitive now: it and \lineskiplimit are the two parameters
+	// tex.web §679 names, and interlineGlue needs both live.
+	"spaceskip", "xspaceskip", "parfillskip", "topskip",
 	"splittopskip", "abovedisplayskip", "belowdisplayskip",
 	"abovedisplayshortskip", "belowdisplayshortskip", "parskip", "tabskip",
 	"thinmuskip", "medmuskip", "thickmuskip",
