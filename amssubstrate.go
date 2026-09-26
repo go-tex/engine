@@ -25,18 +25,7 @@ package engine
 func (e *Engine) loadAMSPrims() {
 	// \ignorespaces: expand and drop the following run of space tokens. amsart's
 	// \andify emits it to trim the space after the last author.
-	e.prim("ignorespaces", func(e *Engine) {
-		for {
-			t, ok := e.getXToken()
-			if !ok {
-				return
-			}
-			if t.cs_ || t.cat != catSpace {
-				e.back(t)
-				return
-			}
-		}
-	})
+	e.prim("ignorespaces", func(e *Engine) { e.ignoreSpaces() })
 	// \unskip / \unpenalty / \unkern: remove the last glue / penalty / kern from
 	// the current list (tex.web §1104 remove_item, §1105 delete_last; the algorithm
 	// and what the type guard is for are written up at deleteLast).
@@ -526,3 +515,21 @@ const AMSClassSubstrate = `
 }
 \catcode64=11
 `
+
+// ignoreSpaces is \ignorespaces: expand and drop the following run of space tokens.
+// Shared, because more than the primitive needs it — color.sty ends BOTH
+// \@undeclaredcolor (l.95) and \@declaredcolor (l.102) with it, so \color eats the
+// space after its argument and a second copy of this loop would be a second thing to
+// keep in step.
+func (e *Engine) ignoreSpaces() {
+	for {
+		t, ok := e.getXToken()
+		if !ok {
+			return
+		}
+		if t.cs_ || t.cat != catSpace {
+			e.back(t)
+			return
+		}
+	}
+}

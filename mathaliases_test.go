@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -320,5 +321,43 @@ func TestColorTakesAnOptionalModel(t *testing.T) {
 		if !strings.Contains(svg, want) {
 			t.Errorf("%q is not on the page", want)
 		}
+	}
+}
+
+// \color eats the space after its argument: color.sty ends BOTH \@undeclaredcolor
+// (l.95) and \@declaredcolor (l.102) with \ignorespaces, and xcolor delegates to the
+// same two. We kept the space, so "\color{red} X" typeset " X" where the reference
+// typesets "X" — through the CLI the reference renders "ROUGEB" where we rendered
+// "ROUGE B" (the witness of #452).
+//
+// The assertion is RELATIONAL, because the SVG's source layer spells the SOURCE and
+// not the output: asserting on the string "AB" fails even with the fix in place, which
+// is how this test first came out red. What the rule says is that a space there makes
+// no difference — so "A \color{red} B" must render exactly what "A \color{red}B"
+// renders, and the control at the end checks that this measure can see a space at all.
+//
+// Measured over the 154-paper corpus: Sigma 324 -> 324, +2 glyphs, nothing lost. It
+// ships on being right, not on Sigma.
+func TestColorIgnoresFollowingSpaces(t *testing.T) {
+	glyphPos := regexp.MustCompile(`transform="[^"]*"|x="[-0-9.]+"`)
+	render := func(body string) string {
+		src := `\documentclass{article}\usepackage{xcolor}\begin{document}` + body + `\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("compile %q: %v", body, err)
+		}
+		svg := strings.Join(e.RenderPages(e.renderMargin(0)), "")
+		return strings.Join(glyphPos.FindAllString(svg, -1), "|")
+	}
+	for _, c := range []struct{ name, spaced, tight string }{
+		{"declared", `A \color{red} B`, `A \color{red}B`},
+		{"undeclared, with a model", `A \color[HTML]{FF0000} B`, `A \color[HTML]{FF0000}B`},
+	} {
+		if render(c.spaced) != render(c.tight) {
+			t.Errorf("%s: a space after \\color moved the glyphs, so it was not ignored", c.name)
+		}
+	}
+	if render(`A B`) == render(`AB`) {
+		t.Fatal("the control failed: this measure cannot see a space at all")
 	}
 }
