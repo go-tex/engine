@@ -102,11 +102,29 @@ func (b tabBuilt) isRule() bool { return b.hline || b.cline || b.brule || b.bcmi
 // the author block in \begin{tabular}[t]{c}…\end{tabular}, so every affiliation
 // line silently vanished). Placement is a whole-box vertical alignment the engine
 // does not model, so the group is scanned and discarded.
+// The [pos] argument was read and DISCARDED here, in all three of tabular,
+// tabular* and tabularx, so every alignment came out as packed — which is [b],
+// the baseline under the last row. \ht/\dp of \hbox{\begin{tabular}{l}AAA\\BBB\\CCC
+// \end{tabular}}, tectonic against this engine:
+//
+//	         tectonic      before      after
+//	[c]     20.5/15.5   32.4/3.6   20.5/15.5   the DEFAULT
+//	[t]     8.40/27.6   32.4/3.6   8.40/27.6
+//	[b]      32.4/3.6   32.4/3.6    32.4/3.6   the only case we matched
+//
+// The TOTAL was right everywhere — 36.0pt in both engines, 12pt per row — so this
+// was never a sizing defect, only where the baseline sits inside the box. And the
+// one anchor we implemented is the one almost nobody writes: [b] is 3 occurrences
+// in the 200-paper corpus against 628 defaulted and 347 explicit [c].
+//
+// alignParbox already does exactly these three anchors for minipage and parbox,
+// including [c] on the math AXIS rather than the baseline — the reference's
+// 20.5/15.5 on a total of 36 implies a 2.5pt axis, which is axisHeight() at 10pt.
 func (e *Engine) doTabular() {
-	e.scanOptBracketToks() // optional [t]/[b]/[c] placement, before the column spec
+	pos := e.scanOptBracketVPos() // [t]/[b]/[c] before the column spec; default c
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("tabular")
-	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
+	e.place(alignParbox(e.buildTabularBox(aligns, pwidths, vrules, items), pos, e.axisHeight()))
 }
 
 // doTabularStar typesets a tabular* environment: \begin{tabular*}{W}[pos]{spec}.
@@ -125,14 +143,17 @@ func (e *Engine) doTabular() {
 // and the paper came out 43 pages against a reference of 27.
 func (e *Engine) doTabularStar() {
 	width := e.readBraceDimen()
-	e.scanOptBracketToks() // optional [t]/[b]/[c], after the width for tabular*
+	pos := e.scanOptBracketVPos() // [t]/[b]/[c] AFTER the width for tabular*; default c
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("tabular*")
 	box := e.buildTabularBox(aligns, pwidths, vrules, items)
 	if width > box.width {
 		box = hpackSP([]node{box, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}}, packTo, width)
 	}
-	e.place(box)
+	// After the repack, not before: hpack derives the outer box's height and depth
+	// from its contents, so an anchor set on the inner box would be re-read rather
+	// than kept, and the [pos] would silently be the widening's business.
+	e.place(alignParbox(box, pos, e.axisHeight()))
 }
 
 // doTabularx typesets a tabularx environment: \begin{tabularx}{W}{spec}. Unlike
@@ -142,12 +163,12 @@ func (e *Engine) doTabularStar() {
 // have been rewritten into ordinary p{} columns the rest of the tabular machinery
 // (rules, \\, &, \multicolumn, \multirow) is reused unchanged.
 func (e *Engine) doTabularx() {
-	e.scanOptBracketToks() // optional [t]/[b]/[c] placement, before the {width}
+	pos := e.scanOptBracketVPos() // [t]/[b]/[c] before the {width}; default c
 	width := e.readBraceDimen()
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("tabularx")
 	e.resolveXWidths(width, aligns, pwidths, vrules, items)
-	e.place(e.buildTabularBox(aligns, pwidths, vrules, items))
+	e.place(alignParbox(e.buildTabularBox(aligns, pwidths, vrules, items), pos, e.axisHeight()))
 }
 
 // buildTabularBox turns the parsed column spec and collected body items into the

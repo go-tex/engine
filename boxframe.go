@@ -3,6 +3,8 @@
 
 package engine
 
+import "strings"
+
 // This file implements LaTeX's framed boxes: \fbox{content} and
 // \framebox[width][pos]{content}. Both compose their content as an hbox and draw a
 // rule of thickness \fboxrule around it, leaving \fboxsep between the content and
@@ -133,8 +135,37 @@ func (e *Engine) scanOptBracketDimen() (int, bool) {
 }
 
 // scanOptBracketPos reads an optional [pos] alignment letter (l/c/r) and returns
-// it, defaulting to 'c' when the bracket or a recognised letter is absent.
+// it, defaulting to 'c' when the bracket or a recognised letter is absent. This is
+// the HORIZONTAL set, for \makebox and \framebox.
+//
+// ⛔ It is not the one minipage, parbox, tabular and subfigure want: those take
+// t/c/b, a VERTICAL anchor, and they all called this reader — which does not
+// recognise t or b and so returned 'c' for every one of them. alignParbox's 't'
+// and 'b' branches were therefore unreachable from any caller, carefully written
+// and never run. Measured on \hbox{\begin{minipage}[…]{60pt}AAA\\BBB\\CCC\end{minipage}},
+// \ht/\dp against tectonic:
+//
+//	       tectonic          before            after
+//	[c]   18.19/13.19   17.865/12.865   17.865/12.865
+//	[t]    7.16/24.22   17.865/12.865     7.16/24.22
+//	[b]   31.16/00.22   17.865/12.865    31.16/00.22
+//
+// Two readers rather than a union of letters, so the next caller cannot pick the
+// wrong set by accident: a union would have accepted [t] in a \makebox and [l] in
+// a minipage, each silently defaulting somewhere downstream.
 func (e *Engine) scanOptBracketPos() byte {
+	return e.scanOptBracketLetter("lcr")
+}
+
+// scanOptBracketVPos reads the VERTICAL [pos] letter (t/c/b) that minipage,
+// parbox, tabular and subfigure take, defaulting to 'c' — which is what latex.ltx
+// documents for all four, and what alignParbox centres on the math axis.
+func (e *Engine) scanOptBracketVPos() byte {
+	return e.scanOptBracketLetter("tcb")
+}
+
+// scanOptBracketLetter reads an optional [x] whose letter is one of accept.
+func (e *Engine) scanOptBracketLetter(accept string) byte {
 	e.skipOptSpace()
 	t, ok := e.getXToken()
 	if !ok {
@@ -150,7 +181,7 @@ func (e *Engine) scanOptBracketPos() byte {
 		if !ok || (!u.cs_ && u.ch == ']') {
 			break
 		}
-		if !u.cs_ && (u.ch == 'l' || u.ch == 'c' || u.ch == 'r') {
+		if !u.cs_ && u.ch < 0x80 && strings.ContainsRune(accept, u.ch) {
 			pos = byte(u.ch)
 		}
 	}

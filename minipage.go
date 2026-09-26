@@ -25,7 +25,7 @@ func (e *Engine) doMinipage() {
 	// tectonic gives 22.5pt (#398). 12 of the corpus papers set their figures this
 	// way, 54 times.
 	e.leaveVMode()
-	pos := e.scanOptBracketPos() // t / c / b (default c)
+	pos := e.scanOptBracketVPos() // t / c / b (default c)
 	width := e.readBraceDimen()
 	body := e.collectEnvBody("minipage")
 
