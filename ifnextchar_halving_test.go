@@ -81,3 +81,47 @@ func TestHalvingLeavesOrdinaryBranchesAlone(t *testing.T) {
 		t.Errorf("got %q, want [SANS]", out)
 	}
 }
+
+// The TARGET of \@ifnextchar is an ARGUMENT, not a token. ltdefns.dtx does
+// \let\reserved@d=#1, so a brace group around it is stripped and
+// \@ifnextchar{*}{A}{B} tests for a star exactly as \@ifnextchar*{A}{B} does.
+//
+// Reading it with one getNext took the BRACE as the target: both branches were then
+// emitted and the star was typeset. Judged against tectonic 0.17.0 on
+//
+//	\def\tb{\@ifnextchar{*}{YES}{NO}}   A\tb* B\tb x C
+//	\def\tn{\@ifnextchar*{YES}{NO}}     D\tn* E\tn y F
+//
+// the reference gives "AYES* BNOx C" and "DYES* ENOy F"; the braced line came out
+// "A*YESNO* B*YESNOx C". Only the braced form was wrong, which is why every earlier
+// witness (all of them bare) passed.
+//
+// It is not a corner case: xkeyval reaches it through xkvutils' \@ifnextcharacter,
+// whose first branch is taken whenever the next token is a brace — \setkeys{fam}{…},
+// the common case. Every \setkeys printed "*+" and left two groups open
+// (go-tex/engine#306).
+func TestIfnextcharTargetIsAnArgumentNotAToken(t *testing.T) {
+	for _, c := range []struct{ name, def, want, reject string }{
+		{"braced target, star present", `\def\t{\@ifnextchar{*}{YES}{NO}}\t*`, "ranYES", "ranNO"},
+		{"braced target, star absent", `\def\t{\@ifnextchar{*}{YES}{NO}}\t x`, "ranNO", "ranYES"},
+		{"bare target, star present", `\def\t{\@ifnextchar*{YES}{NO}}\t*`, "ranYES", "ranNO"},
+		{"bare target, star absent", `\def\t{\@ifnextchar*{YES}{NO}}\t y`, "ranNO", "ranYES"},
+	} {
+		// The branches define a macro globally, so the test reads the engine's table
+		// rather than the render: \end{document} pops the document group, and a
+		// glyph count is not one path per character in this engine's SVG.
+		def := strings.NewReplacer(
+			"{YES}", `{\gdef\ranYES{}}`, "{NO}", `{\gdef\ranNO{}}`).Replace(c.def)
+		src := `\documentclass{article}\makeatletter` + def + `\makeatother\begin{document}x\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("%s: compile: %v", c.name, err)
+		}
+		if e.meaningOf(csTok(c.want)) == nil {
+			t.Errorf("%s: %s branch did not run", c.name, c.want)
+		}
+		if e.meaningOf(csTok(c.reject)) != nil {
+			t.Errorf("%s: %s branch ALSO ran — both were emitted", c.name, c.reject)
+		}
+	}
+}
