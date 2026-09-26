@@ -277,3 +277,48 @@ func TestMathNoiseStrippedBeforeExpansion(t *testing.T) {
 		}
 	}
 }
+
+// \color and \textcolor take an OPTIONAL MODEL, and both read straight past it.
+// color.sty:88-90 and 103-104 (xcolor.sty:711 and 758-759 are the same):
+//
+//	\DeclareRobustCommand\color{\@ifnextchar[\@undeclaredcolor\@declaredcolor}
+//	\def\@undeclaredcolor[#1]#2{…\csname color@#1\endcsname\current@color{#2}…}
+//	\protected\def\textcolor#1#{\@textcolor{#1}}
+//	\def\@textcolor#1#2#3{\protect\leavevmode{\color#1{#2}#3}}
+//
+// \textcolor's parameter text is "#1#" — delimited by the next brace — so the
+// bracket, if any, lands in #1. Taking two plain arguments bound #1=[HTML] and
+// #2={FF0000} and left the TEXT unconsumed.
+//
+// Judged against tectonic 0.17.0, which renders "A ROUGEB C VERT D E BLEU F G RGBH":
+//
+//	before  A [HTML]FF0000ROUGE B C HTML]00FF00VERT D E BLEU F G [rgb]1,0,0RGB H
+//	after   A ROUGE B C VERT D E BLEU F G RGB H
+//
+// One corpus paper defines \newcommand{\Rev}[1]{{\color[HTML]{000000}{#1}}} and uses
+// it 165 times.
+func TestColorTakesAnOptionalModel(t *testing.T) {
+	const src = `\documentclass{article}\usepackage{xcolor}\begin{document}` +
+		`A \color[HTML]{FF0000}RED\color{black} B` + "\n\n" +
+		`C \textcolor[HTML]{00FF00}{GREEN} D` + "\n\n" +
+		`E \textcolor{blue}{BLUE} F` + "\n\n" +
+		`G \color[rgb]{1,0,0}RGBCOL\color{black} H` +
+		`\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	svg := strings.Join(e.RenderPages(e.renderMargin(0)), "")
+	// The model must not reach the page.
+	for _, leaked := range []string{"HTML]", "[rgb]", "FF0000", "00FF00", "1,0,0"} {
+		if strings.Contains(svg, leaked) {
+			t.Errorf("the colour spec %q was typeset", leaked)
+		}
+	}
+	// …and the text it colours must.
+	for _, want := range []string{"RED", "GREEN", "BLUE", "RGBCOL"} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("%q is not on the page", want)
+		}
+	}
+}
