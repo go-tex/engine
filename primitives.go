@@ -126,6 +126,24 @@ func (e *Engine) loadPrimitives() {
 	// opens and its material (the abstract, and everything after) leaks/vanishes.
 	e.define("bgroup", &meaning{kind: mLetChar, ch: '{', cat: catBegin}, true)
 	e.define("egroup", &meaning{kind: mLetChar, ch: '}', cat: catEnd}, true)
+	// \@sptoken is a SPACE token, latex.ltx:1619 —
+	//
+	//	\def\:{\let\@sptoken= } \:  % this makes \@sptoken a space token
+	//
+	// and LaTeX's own look-ahead tests against it (latex.ltx:1609, \@ifnch's
+	// \ifx\@let@token\@sptoken). Left UNDEFINED, every such \ifx compares a space
+	// against an undefined control sequence and takes the wrong branch, silently.
+	//
+	// keyval's space trimmer is built on exactly that test (keyval.sty:47-52):
+	//
+	//	\def\KV@@sp@d{\ifx\KV@tempa\@sptoken \expandafter\KV@@sp@b
+	//	  \else\expandafter\KV@@sp@b\expandafter#1\fi}
+	//
+	// so \setkeys{fam}{ key = value } looked the key up as "\KV@fam@ key" and
+	// reported it undefined — and a preamble writes its options with spaces. Witness,
+	// through the real xkeyval: \XKV@sp@deflist\lst{ p , q } gave " p, q" where
+	// tectonic gives "p,q".
+	e.define("@sptoken", &meaning{kind: mLetChar, ch: ' ', cat: catSpace}, true)
 	e.prim("relax", func(e *Engine) {})
 	// The end-of-isolated-run marker is \relax wherever it escapes: see sentinel.
 	e.eq[sentinel.cs] = &meaning{kind: mPrim, name: "relax", prim: func(e *Engine) {}}
