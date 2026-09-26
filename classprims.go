@@ -261,6 +261,35 @@ const LaTeX2eClassLead = `
 \def\end@float{\par\endgroup\medskip}
 \def\@dblfloat#1{\gotex@dblfloat{#1}}
 \def\end@dblfloat{\end@float}
+% wrapfig's \begin{wrapfigure}[<lines>]{<position>}{<width>} … and \begin{wraptable}.
+% wrapfig.sty:40-43:
+%
+%	\def\wrapfloat#1{\def\@captype{#1}\@ifnextchar[\WF@wr{\WF@wr[]}}
+%	\def\wrapfigure{\wrapfloat{figure}}
+%	\def\wraptable{\wrapfloat{table}}
+%
+% The real thing narrows the paragraph beside the float so the text WRAPS around it.
+% This engine cannot reshape a paragraph, so the three arguments are consumed and the
+% body becomes an ordinary centred float of the stated WIDTH: the figure and its
+% numbered caption are where they belong in the sequence, and the text that would have
+% run alongside it runs below instead.
+%
+% Undefined, \begin{wrapfigure} resolved to \relax through \csname, the POSITION and the
+% WIDTH were typeset on the page, and the body was set as running prose — a figure and
+% its caption in the middle of a sentence. Eight corpus papers use it, seventeen times,
+% and two use \wraptable.
+%
+% The width is honoured through a \parbox rather than ignored, because a wrapfigure is
+% narrow by construction (0.3-0.5\textwidth is the norm) and a full-width float would
+% make every one of them cost more vertical space than the real one does.
+\def\wrapfigure{\@ifnextbracket\gotex@wrapfloatopt\gotex@wrapfloat}
+\def\wraptable{\@ifnextbracket\gotex@wraptabopt\gotex@wraptab}
+\def\gotex@wrapfloatopt[#1]#2#3{\@float{figure}\parbox{#3}\bgroup}
+\def\gotex@wrapfloat#1#2{\@float{figure}\parbox{#2}\bgroup}
+\def\gotex@wraptabopt[#1]#2#3{\@float{table}\parbox{#3}\bgroup}
+\def\gotex@wraptab#1#2{\@float{table}\parbox{#2}\bgroup}
+\def\endwrapfigure{\egroup\end@float}
+\def\endwraptable{\egroup\end@float}
 \def\usecounter#1{}
 % \twocolumn / \onecolumn are Go primitives (see twocolumn.go / primitives.go): under
 % the two-column opt-in they switch the page column mode, otherwise they gobble the
