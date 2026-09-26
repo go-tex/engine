@@ -36,8 +36,8 @@ github.com/go-pdfkit/pdfkit v0.12.0 h1:5hot3DuFYCMT2IyGuPOPE+af7mpEP1tPHqdQ+jdTF
 github.com/go-pdfkit/pdfkit v0.12.0/go.mod h1:XksteXlOe0lEU7cu8E32ClQOjEDjSAN4yAu/IDn19rM=
 github.com/go-richdoc/richdoc v0.3.0 h1:BPUHZ0NUrmDVffs2jJcj6ur8mqlccZpZVpCOsuQT9gQ=
 github.com/go-richdoc/richdoc v0.3.0/go.mod h1:aCX8ulqg5CoKqSWgWeEWul1Oj0d2VxQeaQNI0+jsm7c=
-github.com/go-tex/math v0.34.0 h1:RxyEMqlJiCCslTfH/PgkyRvCKJGw4BjZBybJhdrPRMw=
-github.com/go-tex/math v0.34.0/go.mod h1:SaB8XOWZXooetm1elSfY0UHwPbyhbditTZxbGoCzjXE=
+github.com/go-tex/math v0.35.0 h1:IzENtAPJsBQ5GO7OGrQNZDlHNXe0FZG+t3nV/+1q9HY=
+github.com/go-tex/math v0.35.0/go.mod h1:SaB8XOWZXooetm1elSfY0UHwPbyhbditTZxbGoCzjXE=
 github.com/go-tex/pdfrender v0.2.0 h1:7oZ6P5nzZYOu2AH8a9PxXz34KXhoZqmvUOBOV/KJgeU=
 github.com/go-tex/pdfrender v0.2.0/go.mod h1:xdT4ZwyIxHLL2GsgJVxOb/H7gsi/TgTI3QXuquj/q3Y=
 github.com/go-tex/texmf v0.6.0 h1:6H4mBHanAVD7SMq+TF6paWeOKlIxKHrtDCP0JkmA270=
