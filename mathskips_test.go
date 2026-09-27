@@ -16,7 +16,7 @@ import "testing"
 //   - \leftskip and the other glue PARAMETERS are assignments that read a <glue>
 //     (tex.web §224), with TeX's optional equals before it.
 func TestMathAssignmentsAndStretchAreStripped(t *testing.T) {
-	for _, c := range []struct{ nom, math string }{
+	for _, c := range []struct{ name, math string }{
 		{"hfill", `a\hfill b`},
 		{"hss", `a\hss b`},
 		{"vfil", `a\vfil b`},
@@ -29,10 +29,10 @@ func TestMathAssignmentsAndStretchAreStripped(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}$`+c.math+`$\end{document}`),
 			Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 	}
 }

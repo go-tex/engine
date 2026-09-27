@@ -117,7 +117,7 @@ func TestAlignmentCellIsAGroup(t *testing.T) {
 // with it the \endgroup — never runs. Each such environment closes the group itself;
 // this checks the whole family at once.
 func TestGoSideEnvironmentsCloseTheirGroup(t *testing.T) {
-	for _, c := range []struct{ nom, src string }{
+	for _, c := range []struct{ name, src string }{
 		{"tabular", `\begin{tabular}{ll}A & B\\\end{tabular}`},
 		{"tabularx", `\begin{tabularx}{200pt}{lX}A & B\\\end{tabularx}`},
 		{"verbatim", "\\begin{verbatim}\nbrut\n\\end{verbatim}"},
@@ -128,13 +128,13 @@ func TestGoSideEnvironmentsCloseTheirGroup(t *testing.T) {
 	} {
 		e, err := buildEngine(Options{Lenient: true}, true)
 		if err != nil {
-			t.Fatalf("%s: buildEngine: %v", c.nom, err)
+			t.Fatalf("%s: buildEngine: %v", c.name, err)
 		}
 		if _, err := e.Run(`\hsize=300pt` + c.src + `\message{[fin]}`); err != nil {
-			t.Fatalf("%s: Run: %v", c.nom, err)
+			t.Fatalf("%s: Run: %v", c.name, err)
 		}
 		if d := e.Diagnostics(); d.OpenGroups != 0 {
-			t.Errorf("%s left %d group(s) open", c.nom, d.OpenGroups)
+			t.Errorf("%s left %d group(s) open", c.name, d.OpenGroups)
 		}
 	}
 }

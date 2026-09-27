@@ -41,7 +41,7 @@ func TestRawBracedArgBuiltByAMacro(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildEngine: %v", err)
 	}
-	out, err := e.Run(`\def\nom{ancre}\def\pose{\hypertarget{\nom}{}}` +
+	out, err := e.Run(`\def\name{ancre}\def\pose{\hypertarget{\name}{}}` +
 		`\pose {\message{[groupe]}}\message{[fin]}`)
 	if err != nil {
 		t.Fatalf("Run: %v", err)

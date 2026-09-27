@@ -33,7 +33,7 @@ func TestInterlineGlueUsesLineskiplimitAsTheThreshold(t *testing.T) {
 	t.Logf("%v", got)
 	h1 := got["H1"]
 	if h1 <= 0 {
-		t.Fatalf("H1 = %v: sans la hauteur de la première boîte la glue n'est pas isolable", h1)
+		t.Fatalf("H1 = %v: without the first box's height the glue cannot be isolated", h1)
 	}
 	for _, c := range []struct {
 		key  string
@@ -47,12 +47,12 @@ func TestInterlineGlueUsesLineskiplimitAsTheThreshold(t *testing.T) {
 	} {
 		v, ok := got[c.key]
 		if !ok {
-			t.Errorf("%s= n'a pas été imprimé", c.key)
+			t.Errorf("%s= was not printed", c.key)
 			continue
 		}
 		glue := v - h1 - c.boxH
 		if d := glue - c.want; d > 0.01 || d < -0.01 {
-			t.Errorf("%s: glue = %.2fpt, la référence donne %.2fpt", c.what, glue, c.want)
+			t.Errorf("%s: glue = %.2fpt, the reference gives %.2fpt", c.what, glue, c.want)
 		}
 	}
 }
@@ -83,12 +83,12 @@ func TestOffinterlineskipLeavesNoGlue(t *testing.T) {
 		t.Fatalf("une des trois valeurs manque: %v", got)
 	}
 	if d := off - 3*h1; d > 0.02 || d < -0.02 {
-		t.Errorf(`\offinterlineskip a laissé %.2fpt de glue: %.2f contre 3 x %.2f = %.2f`,
+		t.Errorf(`\offinterlineskip left %.2fpt of glue: %.2f against 3 x %.2f = %.2f`,
 			off-3*h1, off, h1, 3*h1)
 	}
 	// The control: normal leading is untouched, so this is not "all glue removed".
 	if d := norm - (h1 + 2*12); d > 0.02 || d < -0.02 {
-		t.Errorf("l'interligne ORDINAIRE a bougé: %.2f, attendu %.2f (hauteur + 2 x 12pt)",
+		t.Errorf("the ORDINARY leading moved: %.2f, want %.2f (height + 2 x 12pt)",
 			norm, h1+2*12)
 	}
 }
@@ -105,10 +105,10 @@ func TestLineskipParametersReachTheEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e.lineskip != 5*unity {
-		t.Errorf(`\lineskip=5pt a laissé e.lineskip à %d sp, attendu %d`, e.lineskip, 5*unity)
+		t.Errorf(`\lineskip=5pt left e.lineskip at %d sp, want %d`, e.lineskip, 5*unity)
 	}
 	if e.lineskiplimit != 7*unity {
-		t.Errorf(`\lineskiplimit=7pt a laissé e.lineskiplimit à %d sp, attendu %d`,
+		t.Errorf(`\lineskiplimit=7pt left e.lineskiplimit at %d sp, want %d`,
 			e.lineskiplimit, 7*unity)
 	}
 	// Scoped like the other engine dimens: a group restores them.
@@ -119,7 +119,7 @@ func TestLineskipParametersReachTheEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e2.lineskip != 3*unity {
-		t.Errorf(`\lineskip n'est pas restauré à la fermeture du groupe: %d sp, attendu %d`,
+		t.Errorf(`\lineskip is not restored when the group closes: %d sp, want %d`,
 			e2.lineskip, 3*unity)
 	}
 }

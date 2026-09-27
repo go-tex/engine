@@ -184,13 +184,13 @@ func TestSetfontsizeOnlyNormalsizeRestatesTheClassSize(t *testing.T) {
 	}
 	norm := e.classNormalsizePt
 	if norm <= 0 {
-		t.Fatalf("\\normalsize n'a pas fixé la taille de référence de la classe (%v)", norm)
+		t.Fatalf("\\normalsize did not set the class reference size (%v)", norm)
 	}
 	if _, err := e.Run(`\@setfontsize\small\@ixpt\@xpt`); err != nil {
 		t.Fatal(err)
 	}
 	if e.classNormalsizePt != norm {
-		t.Errorf("un \\small a déplacé la taille de référence de la classe: %v -> %v; "+
+		t.Errorf("a \\small moved the class reference size: %v -> %v; "+
 			"toute l'échelle des tailles se mesure contre elle", norm, e.classNormalsizePt)
 	}
 }

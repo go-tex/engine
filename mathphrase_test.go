@@ -16,15 +16,15 @@ func TestMathAlphabetWrappersAreUnwrapped(t *testing.T) {
 		{`\mathcal{X}`, `X`},
 		{`\operatorname{argmax}`, `argmax`},
 		{`\text{if } x>0`, `if  x>0`},
-		{`\mathbf{\mathrm{x}}`, `x`},    // imbriqué
-		{`x_{\mathrm{enc}}`, `x_{enc}`}, // l'indice garde SES accolades
-		{`\mathrm {spaced}`, `spaced`},  // espace avant le groupe
-		// un symbole GARDE son nom: son caractère vit dans la table du paquet math,
-		// le dupliquer ici mettrait une vérité à deux endroits.
+		{`\mathbf{\mathrm{x}}`, `x`},    // nested
+		{`x_{\mathrm{enc}}`, `x_{enc}`}, // the subscript keeps ITS braces
+		{`\mathrm {spaced}`, `spaced`},  // a space before the group
+		// a SYMBOL keeps its name: its character lives in the maths package's table,
+		// and duplicating it here would put one truth in two places.
 		{`\alpha+\Omega`, `\alpha+\Omega`},
 		{`\frac{a}{b}`, `\frac{a}{b}`},
-		{`\mathrm`, `\mathrm`},                   // sans groupe: inchangé
-		{`\mathrm{unclosed`, `\mathrm{unclosed`}, // accolade non fermée: inchangé
+		{`\mathrm`, `\mathrm`},                   // no group: unchanged
+		{`\mathrm{unclosed`, `\mathrm{unclosed`}, // unclosed brace: unchanged
 		{`plain text`, `plain text`},
 	} {
 		if got := unwrapMathAlphabets(c.in); got != c.want {

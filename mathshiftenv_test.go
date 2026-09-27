@@ -41,7 +41,7 @@ Après.
 
 // \hskip and its <glue> carry no maths and must not cost the equation.
 func TestMathGlueIsStripped(t *testing.T) {
-	for _, c := range []struct{ nom, math string }{
+	for _, c := range []struct{ name, math string }{
 		{"registre", `\hskip\parindent x`},
 		{"dimen", `\hskip 10pt x`},
 		{"a stretchable dimen", `\kern -3.5pt plus 2pt minus 1pt x`},
@@ -49,10 +49,10 @@ func TestMathGlueIsStripped(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}$`+c.math+`$\end{document}`),
 			Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if n := len(e.mathDropped); n != 0 {
-			t.Errorf("%s: the math layer dropped the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer dropped the formula (%v)", c.name, e.mathDropped)
 		}
 	}
 }

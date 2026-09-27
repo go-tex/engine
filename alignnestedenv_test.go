@@ -14,7 +14,7 @@ import "testing"
 //
 // 622 of the 4172 formulas the 200-paper arXiv corpus drops are that fault.
 func TestAlignKeepsNestedEnvironmentsWhole(t *testing.T) {
-	for _, c := range []struct{ nom, body string }{
+	for _, c := range []struct{ name, body string }{
 		{"bmatrix", `S &= \begin{bmatrix} a & b \\ c & d \end{bmatrix} \\ &= X`},
 		{"cases", `f(x) &= \begin{cases} 1 & x>0 \\ 0 & x\le 0 \end{cases} \\ &= g(x)`},
 		{"nested array", `A &= \left(\begin{array}{cc} 1 & 2 \\ 3 & 4 \end{array}\right)`},
@@ -22,10 +22,10 @@ func TestAlignKeepsNestedEnvironmentsWhole(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\usepackage{amsmath}\begin{document}`+
 			`\begin{align*}`+c.body+`\end{align*}\end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused %v", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused %v", c.name, e.mathDropped)
 		}
 	}
 }

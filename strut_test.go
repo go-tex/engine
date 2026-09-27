@@ -45,11 +45,11 @@ func TestStrutSetsTheLineHeight(t *testing.T) {
 		for _, k := range c.keys {
 			v, ok := got[k]
 			if !ok {
-				t.Errorf("%s= n'a pas été imprimé (%s)", k, c.what)
+				t.Errorf("%s= was not printed (%s)", k, c.what)
 				continue
 			}
 			if d := v - c.want; d > 0.01 || d < -0.01 {
-				t.Errorf("%s (%s) = %.2fpt, la référence donne %.1fpt", k, c.what, v, c.want)
+				t.Errorf("%s (%s) = %.2fpt, the reference gives %.1fpt", k, c.what, v, c.want)
 			}
 		}
 	}
@@ -57,9 +57,9 @@ func TestStrutSetsTheLineHeight(t *testing.T) {
 	// THIS engine produces without a strut: the assertion is that a strut changed
 	// nothing here, not that the number matches the reference.
 	if v, ok := got["WH"]; !ok {
-		t.Error(`WH= n'a pas été imprimé`)
+		t.Error(`WH= was not printed`)
 	} else if d := v - 4.73; d > 0.01 || d < -0.01 {
-		t.Errorf("le témoin SANS strut a bougé: %.2fpt au lieu de 4.73pt", v)
+		t.Errorf("the control WITHOUT a strut moved: %.2fpt instead of 4.73pt", v)
 	}
 }
 
@@ -97,11 +97,11 @@ func TestStrutBoxFollowsEveryLeadingChange(t *testing.T) {
 	} {
 		v, ok := got[c.key]
 		if !ok {
-			t.Errorf("%s= n'a pas été imprimé (%s)", c.key, c.what)
+			t.Errorf("%s= was not printed (%s)", c.key, c.what)
 			continue
 		}
 		if d := v - c.want; d > 0.01 || d < -0.01 {
-			t.Errorf("\\ht\\strutbox sous %s = %.2fpt, la référence donne %.2fpt", c.what, v, c.want)
+			t.Errorf("\\ht\\strutbox under %s = %.2fpt, the reference gives %.2fpt", c.what, v, c.want)
 		}
 	}
 }
@@ -118,9 +118,9 @@ func TestZeroAreaRulesAreNotEmitted(t *testing.T) {
 		`\noindent A\strut\vrule height 8pt depth 3pt width 0pt B\par`+
 		`\noindent C\rule{40pt}{3pt}D\par\end{document}`)
 	if n := strings.Count(svg, `width="0"`); n != 0 {
-		t.Errorf(`%d rectangle(s) d'aire nulle émis, attendu 0`, n)
+		t.Errorf(`%d zero-area rectangle(s) emitted, want 0`, n)
 	}
 	if !strings.Contains(svg, `width="40" height="3"`) {
-		t.Error(`la \rule{40pt}{3pt} VISIBLE n'est plus dessinée: le garde est trop large`)
+		t.Error(`the VISIBLE \rule{40pt}{3pt} is no longer drawn: the guard is too broad`)
 	}
 }

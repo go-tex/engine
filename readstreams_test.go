@@ -71,7 +71,7 @@ func TestReadTakesOneLineAtATime(t *testing.T) {
 // place of an allocated handle.
 func TestReadAcceptsTheFormsTeXDoes(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
-		{"espace avant le nom", `\read\zr to \zl `},
+		{"espace avant le name", `\read\zr to \zl `},
 		{"sans espace", `\read\zr to\zl `},
 		{"a bare stream number", `\read0 to \zl `},
 	} {
@@ -156,8 +156,8 @@ func TestReadStreamEdges(t *testing.T) {
 		{"a number outside the sixteen", `\message{[\ifeof99 FIN\else OUVERT\fi]}`, "[FIN]"},
 		{"negative", `\message{[\ifeof-1 FIN\else OUVERT\fi]}`, "[FIN]"},
 		{"\\openin hors bornes", `\openin99=donnees.txt \message{[\ifeof99 FIN\else OUVERT\fi]}`, "[FIN]"},
-		{"\\openin sans nom", `\newread\zr\openin\zr= \message{[\ifeof\zr FIN\else OUVERT\fi]}`, "[FIN]"},
-		{"\\read sans nom de macro", `\newread\zr\openin\zr=donnees.txt \read\zr to {}\message{[ok]}`, "[ok]"},
+		{"\\openin sans name", `\newread\zr\openin\zr= \message{[\ifeof\zr FIN\else OUVERT\fi]}`, "[FIN]"},
+		{"\\read sans name de macro", `\newread\zr\openin\zr=donnees.txt \read\zr to {}\message{[ok]}`, "[ok]"},
 		{"the spaces of a line are kept", `\newread\zr\openin\zr=espaces.txt \read\zr to \zl \message{[\meaning\zl]}`, `[macro:->a b c]`},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 // The substituted material is run through the gullet, bounded to what was spliced:
 // an isolated expansion stops at its own sentinel (#174), so it cannot read past it.
 func TestMathExpandsThePrimitivesAMacroBringsWithIt(t *testing.T) {
-	for _, c := range []struct{ nom, preamble, math string }{
+	for _, c := range []struct{ name, preamble, math string }{
 		{"number", `\newcount\c@inst \c@inst=3 \def\theinst{\number\c@inst}`, `x^{\theinst}`},
 		{"the", `\newcount\c@sec \c@sec=7 \def\thesec{\the\c@sec}`, `y_{\thesec}`},
 		{"expandafter", `\def\aa{2}\def\bb{\expandafter\aa}`, `z^{\bb}`},
@@ -25,13 +25,13 @@ func TestMathExpandsThePrimitivesAMacroBringsWithIt(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\makeatletter`+c.preamble+
 			`\makeatother\begin{document}$`+c.math+`$\end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 		if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
-			t.Errorf("%s: no path — the formula is not typeset", c.nom)
+			t.Errorf("%s: no path — the formula is not typeset", c.name)
 		}
 	}
 }

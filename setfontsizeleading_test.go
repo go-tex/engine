@@ -59,11 +59,11 @@ func TestSetfontsizeLeadingFollowsTheSizeAndComesBack(t *testing.T) {
 	} {
 		v, ok := got[w.key]
 		if !ok {
-			t.Errorf("%s= (%s) n'a pas été imprimé", w.key, w.what)
+			t.Errorf("%s= (%s) was not printed", w.key, w.what)
 			continue
 		}
 		if d := v - w.want; d > 0.01 || d < -0.01 {
-			t.Errorf("%s (%s) = %.2fpt, la référence donne %.1fpt", w.key, w.what, v, w.want)
+			t.Errorf("%s (%s) = %.2fpt, the reference gives %.1fpt", w.key, w.what, v, w.want)
 		}
 	}
 }
@@ -102,14 +102,14 @@ func TestSetfontsizeLeadingMovesTheLines(t *testing.T) {
 		ya, oka := markerY(svg, c.a)
 		yb, okb := markerY(svg, c.b)
 		if !oka || !okb {
-			t.Fatalf("repères %s/%s absents de la page", c.a, c.b)
+			t.Fatalf("markers %s/%s are not on the page", c.a, c.b)
 		}
 		got := yb - ya
-		t.Logf("%-34s %.2f (référence %.2f)", c.what, got, c.want)
+		t.Logf("%-34s %.2f (reference %.2f)", c.what, got, c.want)
 		// 0.15pt: the sp-rounding residual the control carries, not a tolerance on
 		// the defect, which was 2.54pt and 5.93pt.
 		if d := got - c.want; d > 0.15 || d < -0.15 {
-			t.Errorf("interligne %s = %.2fpt, la référence donne %.2fpt (écart %+.2f)",
+			t.Errorf("leading %s = %.2fpt, the reference gives %.2fpt (difference %+.2f)",
 				c.what, got, c.want, d)
 		}
 	}
@@ -146,12 +146,12 @@ func TestSetfontsizeLeadingKeepsTheLinespread(t *testing.T) {
 		ya, oka := markerY(svg, c.a)
 		yb, okb := markerY(svg, c.b)
 		if !oka || !okb {
-			t.Fatalf("repères %s/%s absents de la page", c.a, c.b)
+			t.Fatalf("markers %s/%s are not on the page", c.a, c.b)
 		}
 		got := yb - ya
-		t.Logf("%-32s %.2f (référence %.2f)", c.what, got, c.want)
+		t.Logf("%-32s %.2f (reference %.2f)", c.what, got, c.want)
 		if d := got - c.want; d > 0.15 || d < -0.15 {
-			t.Errorf("interligne %s = %.2fpt, la référence donne %.2fpt (écart %+.2f)",
+			t.Errorf("leading %s = %.2fpt, the reference gives %.2fpt (difference %+.2f)",
 				c.what, got, c.want, d)
 		}
 	}

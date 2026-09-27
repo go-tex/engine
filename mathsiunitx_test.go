@@ -13,7 +13,7 @@ import (
 // capacitance written $C_m = \SI{1}{\micro\farad\per\square\cm}$ left the page with
 // nothing on it. 158 of the 4172 formulas the arXiv corpus drops are \SI.
 func TestSIUnitxInMath(t *testing.T) {
-	for _, c := range []struct{ nom, math string }{
+	for _, c := range []struct{ name, math string }{
 		{"SI", `C = \SI{1}{\micro\farad\per\square\cm}`},
 		{"qty", `v = \qty{9.81}{\meter\per\second\squared}`},
 		{"num", `n = \num{12345}`},
@@ -23,10 +23,10 @@ func TestSIUnitxInMath(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\usepackage{siunitx}\begin{document}$`+
 			c.math+`$\end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 	}
 }

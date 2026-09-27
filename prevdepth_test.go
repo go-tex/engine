@@ -34,11 +34,11 @@ func TestPrevdepthReadsTheLastBoxDepth(t *testing.T) {
 	for _, k := range []string{"UN", "DEUX"} {
 		v, ok := got[k]
 		if !ok {
-			t.Errorf(`%s= n'a pas été imprimé: \the\prevdepth n'a rien produit`, k)
+			t.Errorf(`%s= was not printed: \the\prevdepth produced nothing`, k)
 			continue
 		}
 		if x := v - d; x > 0.01 || x < -0.01 {
-			t.Errorf(`%s: \the\prevdepth = %.2fpt, la profondeur de la boîte est %.2fpt`, k, v, d)
+			t.Errorf(`%s: \the\prevdepth = %.2fpt, the box's depth is %.2fpt`, k, v, d)
 		}
 	}
 }
@@ -66,10 +66,10 @@ func TestNointerlineskipSuppressesTheInterlineGlue(t *testing.T) {
 		t.Fatalf("une des trois hauteurs manque: %v", got)
 	}
 	if raw >= ctl {
-		t.Errorf(`\prevdepth=-1000pt n'a pas supprimé la glue: %.2fpt contre %.2fpt sans`, raw, ctl)
+		t.Errorf(`\prevdepth=-1000pt did not suppress the glue: %.2fpt against %.2fpt without`, raw, ctl)
 	}
 	if d := nil_ - raw; d > 0.01 || d < -0.01 {
-		t.Errorf(`\nointerlineskip (%.2fpt) et \prevdepth=-1000pt (%.2fpt) doivent coïncider: `+
+		t.Errorf(`\nointerlineskip (%.2fpt) and \prevdepth=-1000pt (%.2fpt) must agree: `+
 			`la macro EST cette assignation`, nil_, raw)
 	}
 }
@@ -102,10 +102,10 @@ func TestRemovelastskipNeedsItsGlueTerminated(t *testing.T) {
 		t.Fatalf("une des trois hauteurs manque: %v", got)
 	}
 	if d := bare - ctl; d > 0.01 || d < -0.01 {
-		t.Errorf(`\vskip 20pt \removelastskip a retiré quelque chose (%.2f contre %.2f): `+
+		t.Errorf(`\vskip 20pt \removelastskip removed something (%.2f against %.2f): `+
 			`la référence ne le fait pas non plus, la macro s'expanse pendant la relecture de la glue`, bare, ctl)
 	}
 	if d := ctl - rel; d < 19.9 || d > 20.1 {
-		t.Errorf(`\vskip 20pt\relax\removelastskip a retiré %.2fpt, attendu les 20pt du \vskip`, d)
+		t.Errorf(`\vskip 20pt\relax\removelastskip removed %.2fpt, want the \vskip's 20pt`, d)
 	}
 }

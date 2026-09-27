@@ -10,7 +10,7 @@ import "testing"
 // maths layer as an unknown command and took the formula with it, in 15 of the 200
 // arXiv papers.
 func TestMathPenaltyIsStripped(t *testing.T) {
-	for _, c := range []struct{ nom, math string }{
+	for _, c := range []struct{ name, math string }{
 		{"entier", `a\penalty 100 b`},
 		{"a negative integer", `a\penalty-100 b`},
 		{"registre", `a\penalty\@M b`},
@@ -19,10 +19,10 @@ func TestMathPenaltyIsStripped(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}$`+c.math+`$\end{document}`),
 			Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 	}
 }

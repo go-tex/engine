@@ -22,7 +22,7 @@ func TestStripMathLayout(t *testing.T) {
 		{"accolade ÉCHAPPÉE, qui est dessinée", `\{a\}`, "{a}"},
 		{"bascule de style sans argument", `\displaystyle z`, "z"},
 		{"bascule de fonte", `\text{\normalfont q}`, `\text{q}`},
-		{"un symbole garde son nom", `\Omega`, `\Omega`},
+		{"un symbole garde son name", `\Omega`, `\Omega`},
 		{"un symbole suivi d'une accolade", `\frac{a}{b}`, `\frac{a}{b}`},
 		{"rien à faire", `abc`, "abc"},
 	} {

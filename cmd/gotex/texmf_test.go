@@ -143,13 +143,13 @@ func TestResolverAsksEveryTreeInOrder(t *testing.T) {
 	}
 	r := resolverOverFuncs([]func(string) ([]byte, bool){first, second})
 	if got, ok := r("a.tex"); !ok || string(got) != "depuis le premier" {
-		t.Errorf("a.tex résolu en %q (%v), attendu le premier arbre", got, ok)
+		t.Errorf("a.tex resolved to %q (%v), want the first tree", got, ok)
 	}
 	if got, ok := r("b.tex"); !ok || string(got) != "b" {
-		t.Errorf("b.tex résolu en %q (%v), attendu le second arbre", got, ok)
+		t.Errorf("b.tex resolved to %q (%v), want the second tree", got, ok)
 	}
 	if _, ok := r("absent.tex"); ok {
-		t.Error("un nom absent des deux arbres ne devrait pas se résoudre")
+		t.Error("a name absent from both trees must not resolve")
 	}
 }
 

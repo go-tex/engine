@@ -21,8 +21,8 @@ func TestNotesOnASecondScreenDoNotMultiplyPages(t *testing.T) {
 		t.Skip("needs a texmf tree with the real beamer.cls")
 	}
 	for _, c := range []struct {
-		nom, option string
-		want        int
+		name, option string
+		want         int
 	}{
 		{"sans option", "", 2},
 		{"show notes", `\setbeameroption{show notes}`, 2},
@@ -35,10 +35,10 @@ func TestNotesOnASecondScreenDoNotMultiplyPages(t *testing.T) {
 \begin{frame}{B}deux\end{frame}
 \end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if got := len(e.Pages()); got != c.want {
-			t.Errorf("%s: %d pages, want %d (two frames are two pages)", c.nom, got, c.want)
+			t.Errorf("%s: %d pages, want %d (two frames are two pages)", c.name, got, c.want)
 		}
 	}
 }
