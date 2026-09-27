@@ -450,6 +450,21 @@ const LaTeX2eClassKernel = `
 % thing \pmb was imitating rather than dropping the formula. 348 of the 4172
 % formulas the arXiv corpus drops are \pmb.
 \def\pmb#1{\boldsymbol{#1}}
+% \symbol{N} is the character at code N (latex.ltx:10001,
+% \DeclareRobustCommand\symbol[1]{\char#1\relax}; the \Ucharcat branch above it is for
+% Unicode engines). The reference definition is used VERBATIM because go-tex/math
+% already renders \char — which is worth knowing before writing a rewrite: \mathchar is
+% unknown there, \char is not. 6 equations on one corpus paper, which writes
+% \symbol{92} eleven times for a backslash.
+\def\symbol#1{\char#1\relax}
+% amsmath's \And is an ampersand set as a RELATION between two thick spaces
+% (amsmath.sty:403, \def\And{\DOTSB\;\mathchar"3026 \;}): "3026 is class 3
+% (relation), family 0, slot 0x26 = 38 = '&'. Expanding the real definition would only
+% trade \And for an unknown \mathchar, and a bare & is the maths layer's COLUMN
+% SEPARATOR, so the ampersand is written \& and the class stated with \mathrel.
+% \DOTSB only marks a \dots boundary and carries no glyph. 10 equations on one corpus
+% paper, which writes 1$\And$2.
+\def\And{\;\mathrel{\&}\;}
 % amsmath's stackable accents (\Tilde \Bar \Hat …) render as the ordinary accents
 % the math layer knows; the retry path expands e.g. \Bar{x} -> \bar{x}.
 \def\Tilde{\tilde}
