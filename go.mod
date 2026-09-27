@@ -2,12 +2,12 @@ module github.com/go-tex/engine
 
 go 1.26.4
 
-require github.com/go-opentype/opentype v0.12.0
+require github.com/go-opentype/opentype v0.13.0
 
 require (
 	github.com/go-gfx/gfx v0.34.0
 	github.com/go-pdfkit/pdfkit v0.12.0
-	github.com/go-tex/math v0.37.0
+	github.com/go-tex/math v0.38.0
 	github.com/go-tex/pdfrender v0.2.0
 	golang.org/x/text v0.42.0
 )
