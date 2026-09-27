@@ -1385,6 +1385,7 @@ const IEEEtranNames = `
 % argument, so replacing the command outright is what the class does.
 \long\def\author#1{\gdef\@author{#1}}
 \long\def\thanks#1{}
+\def\IEEEoverridecommandlockouts{\relax}
 % The two-column branch of IEEEtran's own definition, which is what every corpus paper is in:
 % an italic bold run-in name, an em dash, then the list. \endIEEEkeywords adds vertical space
 % and restores the size.
@@ -1397,5 +1398,98 @@ const IEEEtranNames = `
 // applyIEEEtranGeometry because geometry is engine state and these are macros the document can
 // still override afterwards.
 func (e *Engine) loadIEEEtranNames(opts []string) error {
-	return e.LoadFormat(IEEEtranNames)
+	if err := e.LoadFormat(IEEEtranNames); err != nil {
+		return err
+	}
+	// The author blocks differ BY MODE in the class, and following that matters on the
+	// page — see IEEEtranAuthorBlocksRows / IEEEtranAuthorBlocksInline.
+	blocks := IEEEtranAuthorBlocksInline
+	for _, m := range []string{"conference", "peerreviewca", "transmag"} {
+		if hasOption(opts, m) {
+			blocks = IEEEtranAuthorBlocksRows
+			break
+		}
+	}
+	if err := e.LoadFormat(blocks); err != nil {
+		return err
+	}
+	// The spanning form is loaded only where the class actually set two columns — the
+	// same condition, a few lines up. \twocolumn[…] is a no-op that GOBBLES its span
+	// unless e.twoColLive is on (primitives.go), so handing a one-column paper the
+	// spanning \maketitle would discard its whole title block.
+	if e.twoColLive {
+		return e.LoadFormat(IEEEtranTitleSpan)
+	}
+	return e.LoadFormat(IEEEtranTitlePlain)
 }
+
+// IEEEtranAuthorBlocksRows and IEEEtranAuthorBlocksInline are IEEEtran's author blocks, and
+// the class defines them TWO WAYS.
+//
+// In conference, peerreviewca and transmag mode it sets them through \@IEEEauthorhalign
+// (IEEEtran.cls:4632, :4649, :4683): each block is a ROW, ended by the macro's own \crcr,
+// and the halign puts the authors side by side in columns. Outside those modes it defines
+// them as plain pass-throughs (:4676-4677):
+//
+//	\def\IEEEauthorblockN#1{#1}
+//	\def\IEEEauthorblockA#1{#1}
+//
+// The halign is not implemented here, so the rows become a vertical stack — but the
+// DISTINCTION has to be kept, and getting it wrong is visible on the page both ways.
+//
+// ⛔ A conference paper writes one block per line and needs the break: without it
+// 2408.02112 came out as "Stephen M. Watt Ontario Research Centre for Computer Algebra and
+// Cheriton School of …" on one line that ran off the right edge.
+//
+// ⛔ A journal paper writes them INLINE, with its own punctuation between:
+// "\IEEEauthorblockN{Daanish Mahajan}, \IEEEauthorblockN{Chirag Jain}, …" (2405.05734).
+// Breaking there strands each comma alone on a line, where the reference reads
+// "Daanish Mahajan, Chirag Jain, Navin Kashyap" — which is exactly what the class's
+// pass-through gives.
+const IEEEtranAuthorBlocksRows = `
+\long\def\IEEEauthorblockN#1{\par#1\par}
+\long\def\IEEEauthorblockA#1{\par#1\par}
+`
+
+// IEEEtranAuthorBlocksInline is the class's own definition outside the three row modes.
+const IEEEtranAuthorBlocksInline = `
+\long\def\IEEEauthorblockN#1{#1}
+\long\def\IEEEauthorblockA#1{#1}
+`
+
+// IEEEtranTitleSpan and IEEEtranTitlePlain replace the generic \maketitle (latex.go) for an
+// emulated IEEEtran. Two things were wrong with the generic one on this class.
+//
+// ⛔ \centerline{\@author} is an \hbox. A multi-block IEEEtran author is a VERTICAL list —
+// \IEEEauthorblockN{name} over \IEEEauthorblockA{affiliation}, repeated per author — and an
+// hbox flattens it into one line that does not wrap. On 2408.02112 the reference sets two
+// authors side by side over four lines of affiliation each; we set one line that ran off the
+// right edge of the page. A \par inside that hbox does nothing at all, which is why defining
+// \IEEEauthorblockN with one changed the corpus by exactly zero glyphs before this.
+//
+// ⛔ And the block did not SPAN the columns. IEEEtran sets two columns from \documentclass,
+// so the generic \maketitle emitted the title into column one, where it overlapped the body.
+// \twocolumn[…] is precisely the construct for this: its bracket material is typeset at full
+// width and placed across the top of the region's first page (twocolumn.go,
+// typesetSpanFullWidth / colRegion.span), which is how the revtex emulation already does it.
+//
+// The font sizes are deliberately left as the generic \maketitle had them. This change is
+// structural — a vertical, full-width block instead of a horizontal box — and the title's
+// real size is a separate fidelity question with its own effect on Sigma.
+const IEEEtranTitleSpan = `
+\makeatletter
+\long\def\maketitle{\twocolumn[%
+  \begin{center}\@title\par\smallskip\@author\par\end{center}\bigskip]%
+  \global\let\maketitle\relax}
+\makeatother
+`
+
+// IEEEtranTitlePlain is the same block without the span, for [onecolumn]. It still replaces
+// \centerline with a center environment, because the hbox defect above is not about columns.
+const IEEEtranTitlePlain = `
+\makeatletter
+\long\def\maketitle{\par\bigskip
+  \begin{center}\@title\par\smallskip\@author\par\end{center}\bigskip
+  \global\let\maketitle\relax}
+\makeatother
+`
