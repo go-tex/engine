@@ -583,6 +583,22 @@ const LaTeX2eClassKernel = `
 % \gdef, so a \let saved and restored locally does not survive it. Checked against
 % tectonic, which letters the section after \end{appendices} exactly as we did with the
 % local form — the reference agreed with the bug, which is how the mechanism got named.
+% threeparttable's \begin{threeparttable}[<pos>] … and \begin{tablenotes}[<opts>] …
+% (threeparttable.sty:107-120, :258-262). The real package MEASURES the tabular and boxes
+% the caption, the table and the notes as one unit at the table's width; this engine cannot
+% reshape that, and it does not need to — measured on a witness, the content and the note
+% labels already come out in the right order and at the right size (\TPTnoteSettings only
+% sets list margins, not a font size).
+%
+% The ONE defect was the optional argument: undefined, \begin{threeparttable}[b] resolved to
+% \relax through \csname and typeset "[b]" on the page, ahead of the caption. Three corpus
+% papers each, and that is all this repairs.
+%
+% \@captype is set as the real one does, so a \caption inside a threeparttable that is NOT
+% inside a table environment still numbers as a table.
+\newenvironment{threeparttable}[1][t]{%
+  \@ifundefined{@captype}{\def\@captype{table}}{}}{}
+\newenvironment{tablenotes}[1][]{\par}{\par}
 \newenvironment{appendices}{%
   \global\let\gotex@presection\thesection
   \global\let\gotex@presubsection\thesubsection
