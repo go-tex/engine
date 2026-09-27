@@ -503,14 +503,23 @@ const AMSClassSubstrate = `
 % defines its own figure* must keep it, and one that declares it with
 % \newenvironment would fail outright against a name already taken (acmart does,
 % and defining these too early cost that paper 14 of its 18 pages).
+% ⛔ The definitions are GLOBAL. A local \def here is rolled back by the first group that
+% closes after \begin{document}, and a document does not have to be well-behaved for that
+% to happen: corpus paper 2405.05734 writes its IEEEtran \author{…} across BLANK LINES, so
+% the call is abandoned on a \par (tex.web §392), the brace depth is left off, and the
+% \def'd figure*/table* went with the group. Its five appendix floats then lost their
+% captions and their numbers — the reference has Fig. 13 to Fig. 17 and we repeated
+% "Figure 12" — and the same document also lost table* and IEEEkeywords the same way.
+%
+% A real class defines these with \newenvironment, which is global; so must this.
 \AtBeginDocument{%
   \@ifundefined{figure*}{%
-    \expandafter\long\expandafter\def\csname figure*\endcsname{\@dblfloat{figure}}%
-    \expandafter\long\expandafter\def\csname endfigure*\endcsname{\end@dblfloat}%
+    \expandafter\long\expandafter\gdef\csname figure*\endcsname{\@dblfloat{figure}}%
+    \expandafter\long\expandafter\gdef\csname endfigure*\endcsname{\end@dblfloat}%
   }{}%
   \@ifundefined{table*}{%
-    \expandafter\long\expandafter\def\csname table*\endcsname{\@dblfloat{table}}%
-    \expandafter\long\expandafter\def\csname endtable*\endcsname{\end@dblfloat}%
+    \expandafter\long\expandafter\gdef\csname table*\endcsname{\@dblfloat{table}}%
+    \expandafter\long\expandafter\gdef\csname endtable*\endcsname{\end@dblfloat}%
   }{}%
 }
 \catcode64=11
