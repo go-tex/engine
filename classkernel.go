@@ -567,6 +567,34 @@ const LaTeX2eClassKernel = `
 % \begin{frontmatter} … \end{frontmatter} — elsarticle.cls:1279, verbatim:
 %
 %	\newenvironment{frontmatter}{}{\maketitle}
+% \begin{appendices} … \end{appendices} — the appendix package's environment form of
+% \appendix (appendix.sty:204-237). Its body is mostly the [toc]/[page]/[title] options'
+% machinery; what it does unconditionally is \@resets@pp — zero the section counters and
+% letter them, which is exactly \appendix — and it ends with \@ppsaveapp\@pprestoresec,
+% RESTORING the section numbering afterwards, which a bare \appendix does not.
+%
+% Undefined, \begin{appendices} resolved to \relax through \csname: the appendices were
+% numbered as ordinary sections, so "Appendix A" came out as a section number and every
+% \ref to it with it. Four corpus papers.
+%
+% The save/restore is the part worth copying: a paper with anything after
+% \end{appendices} would otherwise keep lettering it.
+% The restore is GLOBAL, and that is not a detail: \appendix redefines \thesection with
+% \gdef, so a \let saved and restored locally does not survive it. Checked against
+% tectonic, which letters the section after \end{appendices} exactly as we did with the
+% local form — the reference agreed with the bug, which is how the mechanism got named.
+\newenvironment{appendices}{%
+  \global\let\gotex@presection\thesection
+  \global\let\gotex@presubsection\thesubsection
+  \xdef\gotex@presectionno{\the\c@section}%
+  \appendix}{%
+  \global\let\thesection\gotex@presection
+  \global\let\thesubsection\gotex@presubsection
+  \global\c@section=\gotex@presectionno\relax}
+% \appendixname is what the package's [title] option puts before the letter, and a
+% document may \renewcommand it; latex.ltx sets it for the standard classes and the
+% emulation had no value at all, so "\appendixname~\thesection" typeset as a bare tilde.
+\providecommand\appendixname{Appendix}
 %
 % Nothing at the start, \maketitle at the end. Undefined, \begin{frontmatter} resolved
 % to \relax (\csname), the body was typeset as ordinary text, and \maketitle was NEVER
