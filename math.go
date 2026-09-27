@@ -372,6 +372,12 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = li
 				continue
 			}
+			// xstring's string switches, resolved on the SOURCE STRING because a TeX
+			// transcription is unreachable from a formula (mathifeqcase.go).
+			if sw, sok := e.resolveMathIfEqCase(src, name); sok {
+				src = sw
+				continue
+			}
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
 				continue
