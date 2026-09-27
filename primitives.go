@@ -2098,6 +2098,11 @@ func (e *Engine) loadMore() {
 	e.prim("hypersetup", func(e *Engine) { e.doHypersetup() })   // hyperref: link-styling options (colorlinks, urlcolor, …)
 	e.prim("hyperref", func(e *Engine) { e.doHyperref() })       // hyperref: internal link by \label, or 4-arg form
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
+	// The two halves of a footnote, placed separately: \footnotemark leaves the raised
+	// number and \footnotetext typesets the note. See footnote.go — \footnotemark was
+	// undefined and \footnotetext was a stub that swallowed the note whole.
+	e.prim("footnotemark", func(e *Engine) { e.doFootnoteMark() })
+	e.prim("footnotetext", func(e *Engine) { e.doFootnoteText() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
 	// \gotex@fontsizeat{size}: put the font at the size a class size table
 	// (size1x.clo) states for one of \tiny…\Huge, read against its \normalsize.

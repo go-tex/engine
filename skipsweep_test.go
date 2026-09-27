@@ -9,6 +9,19 @@ import "testing"
 // required group (and any optional [.]) do not leak their body: an undefined
 // marker command placed inside the gobbled group must never be executed, and the
 // command itself must not be reported skipped, while text after it still runs.
+//
+// ⛔ \footnotetext WAS one of these cases, and it should not have been. The two cases
+// asserted that \footnotetext{\zzbody} does not execute \zzbody — which pinned a silent
+// content LOSS as correct behaviour: \footnotetext[n]{text} is a footnote whose mark
+// \footnotemark placed elsewhere, and the gobbler threw the note away on eight corpus
+// papers with nothing reported, because a stub is not an undefined command. It is a Go
+// primitive now and its body is typeset, so those cases are gone and the behaviour is
+// covered by footnotemark_test.go instead.
+//
+// The lesson generalises past this one macro: a test written around a stub asserts that
+// the stub is right. Before adding a case here, ask whether the argument being swallowed
+// is CONFIGURATION (\newcolumntype's column spec, which this engine genuinely does not
+// implement) or CONTENT.
 func TestSkipSweep_GobbleArgs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -16,8 +29,6 @@ func TestSkipSweep_GobbleArgs(t *testing.T) {
 	}{
 		{"newcolumntype-opt", `\newcolumntype{C}[1]{\zzbody} \zzafter`},
 		{"newcolumntype-plain", `\newcolumntype{L}{\zzbody} \zzafter`},
-		{"footnotetext-plain", `\footnotetext{\zzbody} \zzafter`},
-		{"footnotetext-opt", `\footnotetext[3]{\zzbody} \zzafter`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -25,7 +36,7 @@ func TestSkipSweep_GobbleArgs(t *testing.T) {
 			if skip["zzbody"] != 0 {
 				t.Errorf("gobbled body leaked: \\zzbody executed (%d)", skip["zzbody"])
 			}
-			for _, cmd := range []string{"newcolumntype", "footnotetext"} {
+			for _, cmd := range []string{"newcolumntype"} {
 				if skip[cmd] != 0 {
 					t.Errorf("%s reported skipped (should be defined): %d", cmd, skip[cmd])
 				}

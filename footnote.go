@@ -15,7 +15,10 @@ package engine
 // long note across pages, \footnotemark/\footnotetext separation, and per-note
 // \footnotesize. A note is set at the body size.
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // footnoteNode carries a rendered footnote body down the main vertical list. It
 // contributes its height to the page (reserving space) but is not painted inline;
@@ -62,22 +65,81 @@ func (e *Engine) doFootnote() {
 	text := e.grabUndelimited()
 	e.footnoteCounter++
 	n := e.footnoteCounter
+	e.queueFootnoteText(n, text)
+	e.emitFootnoteMark(n)
+}
 
+// queueFootnoteText builds the numbered note and holds it until the enclosing paragraph
+// attaches it to the vertical list. Split out of doFootnote so \footnotetext can reach it:
+// the two halves of a footnote are separable in LaTeX and were not here.
+func (e *Engine) queueFootnoteText(n int, text []tok) {
 	// Body = \footnotesize "N. " + text, set as a mini-paragraph to the body
 	// width (the size is scoped to the sandbox by typesetGroupToVbox).
 	label := []tok{csTok("footnotesize")}
 	label = append(label, numberToks(n)...)
 	label = append(label, chTok('.', catOther), chTok(' ', catSpace))
-	body := e.typesetGroupToVbox(append(label, text...))
-	e.pendingFootnotes = append(e.pendingFootnotes, body)
+	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(append(label, text...)))
+}
 
-	// Inline raised reference number.
-	if e.curFont != nil {
-		if !e.inPar {
-			e.beginParagraph(true)
-		}
-		e.parList = append(e.parList, e.footnoteMarker(n))
+// emitFootnoteMark drops the raised reference number at the current point.
+func (e *Engine) emitFootnoteMark(n int) {
+	if e.curFont == nil {
+		return
 	}
+	if !e.inPar {
+		e.beginParagraph(true)
+	}
+	e.parList = append(e.parList, e.footnoteMarker(n))
+}
+
+// doFootnoteMark implements \footnotemark and doFootnoteText implements \footnotetext: the
+// two halves of a footnote, placed separately. latex.ltx:13202-13206 and :13219-13222 —
+//
+//	\def\footnotemark{\@ifnextchar[\@xfootnotemark
+//	  {\stepcounter{footnote}\protected@xdef\@thefnmark{\thefootnote}\@footnotemark}}
+//	\def\footnotetext{\@ifnextchar[\@xfootnotenext
+//	  {\protected@xdef\@thefnmark{\thempfn}\@footnotetext}}
+//
+// ⛔ \footnotemark was undefined — 10 uses over 7 corpus papers, and a hard stop for three of
+// them — while \footnotetext was DEFINED as a stub that swallowed the note whole
+// (\def\footnotetext{\@ifnextbracket\@gobbleoptarg\@gobble}, latex.go). So the pair lost the
+// text and reported nothing: the census counts what the engine does not have, and a stub is
+// something it has. Ten corpus papers use one or both. gobblers.py in go-tex/measure is the
+// inventory that question produced.
+//
+// ⛔ Note which one steps the counter. \footnotemark does; \footnotetext does NOT, because it
+// pairs with a mark that already stepped. Getting that backwards numbers every later note
+// one too high. The bracket forms set the number explicitly and, in LaTeX, inside a group —
+// so they do not disturb the counter either.
+func (e *Engine) doFootnoteMark() {
+	n, explicit := e.scanOptFootnoteNumber()
+	if !explicit {
+		e.footnoteCounter++
+		n = e.footnoteCounter
+	}
+	e.emitFootnoteMark(n)
+}
+
+func (e *Engine) doFootnoteText() {
+	n, explicit := e.scanOptFootnoteNumber()
+	if !explicit {
+		n = e.footnoteCounter
+	}
+	e.queueFootnoteText(n, e.grabUndelimited())
+}
+
+// scanOptFootnoteNumber reads the optional [n] both commands take. A bracket whose content
+// is not a number is consumed and ignored rather than guessed at.
+func (e *Engine) scanOptFootnoteNumber() (int, bool) {
+	toks, ok := e.scanOptBracketToks()
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(e.toksToString(toks)))
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // footnoteMarker builds the raised reference number placed inline at the \footnote
