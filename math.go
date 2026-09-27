@@ -372,6 +372,12 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = li
 				continue
 			}
+			// xstring's \IfEqCase / \IfStrEqCase: a string switch whose DECISION can be
+			// taken textually even though its machinery cannot be expanded.
+			if xc, xok := e.resolveXStringCase(src, name); xok {
+				src = xc
+				continue
+			}
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
 				continue
