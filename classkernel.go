@@ -595,6 +595,32 @@ const LaTeX2eClassKernel = `
 % document may \renewcommand it; latex.ltx sets it for the standard classes and the
 % emulation had no value at all, so "\appendixname~\thesection" typeset as a bare tilde.
 \providecommand\appendixname{Appendix}
+% \begin{keyword} … \end{keyword} — elsarticle.cls:711-724. The real one collects the
+% keywords into \keybox and the title block unboxes it after the abstract
+% (elsarticle.cls:783, :823) with an italic "Keywords:" label. Undefined, the body was
+% typeset where it stood — the words were on the page, in roughly the right place, with NO
+% LABEL, and \sep leaked between them because the class defines it inside this environment
+% (\def\sep{\unskip, }). Eight corpus papers.
+%
+% Emitted in place rather than boxed: the engine has no \keybox for the title block to
+% unbox, and in place is where frontmatter already puts it.
+\newenvironment{keyword}{%
+  \par\smallskip\def\sep{\unskip, }%
+  \def\MSC{\par\leavevmode\textit{MSC:\space}}%
+  \def\PACS{\par\leavevmode\textit{PACS:\space}}%
+  \def\JEL{\par\leavevmode\textit{JEL:\space}}%
+  \textit{\keywordname:\space}\ignorespaces}{\par\smallskip}
+\providecommand\keywordname{Keywords}
+% \begin{acks} … \end{acks} — acmart.cls:3144-3150, a \specialcomment whose begin emits
+% the heading:
+%
+%	\specialcomment{acks}{\begingroup\section*{\acksname}
+%	  \phantomsection\addcontentsline{toc}{section}{\acksname}}{\endgroup}
+%
+% Undefined, the acknowledgements were typeset with no HEADING at all. Six corpus papers.
+% The TOC line is left out: the engine writes no .toc for a later run.
+\newenvironment{acks}{\begingroup\section*{\acksname}}{\endgroup}
+\providecommand\acksname{Acknowledgments}
 %
 % Nothing at the start, \maketitle at the end. Undefined, \begin{frontmatter} resolved
 % to \relax (\csname), the body was typeset as ordinary text, and \maketitle was NEVER
