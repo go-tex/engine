@@ -91,6 +91,37 @@ const AcmartMetadata = `
 % emitted ONCE. It is what lets a class fire \maketitle at \begin{document} — which
 % achemso does — without doubling the block for a document that also calls it.
 \long\def\maketitle{\par\begin{center}{\large\bfseries\@title\par}\medskip{\@acmauthors\par}\smallskip{\itshape\@acmaffils\par}\end{center}\par\bigskip\global\let\maketitle\relax}
+% acmart's THEOREM SET, from its \AtEndPreamble block (acmart.cls:3042-3070):
+%
+%	\if@ACM@acmthm
+%	  \theoremstyle{acmplain}
+%	  \@ifundefined{theorem}{\newtheorem{theorem}{Theorem}[section]}{}
+%	  \@ifundefined{conjecture}{\newtheorem{conjecture}[theorem]{Conjecture}}{}
+%	  … proposition, lemma, corollary …
+%	  \theoremstyle{acmdefinition}
+%	  \@ifundefined{example}{\newtheorem{example}[theorem]{Example}}{}
+%	  \@ifundefined{definition}{\newtheorem{definition}[theorem]{Definition}}{}
+%	\fi
+%
+% and acmthm is TRUE by default (\ExecuteOptionsX{acmthm=true}, acmart.cls:89), so a paper
+% that writes \begin{example} without declaring it is relying on the class — which is what
+% corpus paper 2402.04392 does, eleven times. Its reference prints "Example 3.1", "3.4",
+% "3.5": one shared counter, numbered within the section.
+%
+% Every declaration keeps acmart's \@ifundefined guard, so a document's own \newtheorem
+% still wins — that is the whole point of the guard in the class, and dropping it here would
+% renumber a paper that declares its own.
+%
+% The two theorem STYLES are not emulated (acmplain is italic-bodied, acmdefinition
+% roman-bodied): what was missing is the environments, and a style is a separate question
+% from an environment that does not exist.
+\@ifundefined{theorem}{\newtheorem{theorem}{Theorem}[section]}{}
+\@ifundefined{conjecture}{\newtheorem{conjecture}[theorem]{Conjecture}}{}
+\@ifundefined{proposition}{\newtheorem{proposition}[theorem]{Proposition}}{}
+\@ifundefined{lemma}{\newtheorem{lemma}[theorem]{Lemma}}{}
+\@ifundefined{corollary}{\newtheorem{corollary}[theorem]{Corollary}}{}
+\@ifundefined{example}{\newtheorem{example}[theorem]{Example}}{}
+\@ifundefined{definition}{\newtheorem{definition}[theorem]{Definition}}{}
 \makeatother
 `
 

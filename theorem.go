@@ -67,10 +67,8 @@ func (e *Engine) doNewtheorem() {
 	ctr := "c@" + env
 	ctrCode := -1
 	switch {
-	case hasShared:
-		if shared := strings.TrimSpace(e.toksToString(sharedToks)); shared != "" {
-			ctr = "c@" + shared
-		}
+	case hasShared && strings.TrimSpace(e.toksToString(sharedToks)) != "":
+		ctr = "c@" + strings.TrimSpace(e.toksToString(sharedToks))
 	default:
 		// Allocate a fresh \count register, exactly as \newcount would.
 		if e.allocCnt < 256 {
@@ -81,13 +79,32 @@ func (e *Engine) doNewtheorem() {
 	}
 
 	// \the<env>: the printed representation of the number.
+	//
+	// A SHARED counter delegates to the environment it shares with, and does not print the
+	// raw register: latex.ltx:12728, \@othm, is
+	//
+	//	\global\@namedef{the#1}{\@nameuse{the#2}}
+	//
+	// so \newtheorem{example}[theorem]{Example} gives \theexample = \thetheorem, which
+	// itself may be \thesection.\the\c@theorem. Printing \the\c@theorem instead dropped
+	// the section: acmart declares its whole theorem set on the theorem counter
+	// (acmart.cls:3042-3070), and corpus paper 2402.04392 came out "Example 1", "Example 4",
+	// "Example 5" where its reference has "Example 3.1", "3.4", "3.5" — the right numbers
+	// with the section lost off the front.
+	shared := ""
+	if hasShared {
+		shared = strings.TrimSpace(e.toksToString(sharedToks))
+	}
 	var numBody []tok
-	if hasWithin {
+	switch {
+	case shared != "":
+		numBody = []tok{csTok("the" + shared)}
+	case hasWithin:
 		within := strings.TrimSpace(e.toksToString(withinToks))
 		// Nest on the parent's FORMATTED number (\the<within>, which itself chains
 		// e.g. section.subsection), matching LaTeX's \newtheorem[within].
 		numBody = []tok{csTok("the" + within), chTok('.', catOther), csTok("the"), csTok(ctr)}
-	} else {
+	default:
 		numBody = []tok{csTok("the"), csTok(ctr)}
 	}
 	e.define("the"+env, &meaning{kind: mMacro, body: numBody}, true)
