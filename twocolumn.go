@@ -270,7 +270,48 @@ func (e *Engine) switchToTwoColumn(span *boxNode) {
 	}
 	e.enterTwoColumnMeasure()
 	e.twoColumn = true
+	// ⛔ A region that holds NO VISIBLE CONTENT must not get a page of its own. Regions are
+	// page-aligned, so appending one here closes the previous region and paginates it — and
+	// when all it held was page-style marks and empty glue, that was a BLANK PAGE with the
+	// title block pushed onto page two.
+	//
+	// Reproduced in seven lines with a bundled acmart.cls: [sigplan] (two-column) gives a
+	// blank page 1 and the title on page 2, [acmsmall] (one column) is correct. acmart's
+	// \maketitle is \twocolumn[\box\mktitle@bx] (acmart.cls:2319-2343, once per format), and
+	// at that moment the list held exactly three nodes — two pageStyleNode and a zero-width
+	// glueNode. Nine corpus papers bundle the class, and every one of them lost page 1.
+	//
+	// TeX does not ship an empty page either, so this is the faithful behaviour and not a
+	// special case: start the spanning region where the contentless material starts, and let
+	// it carry those marks along.
+	if n := len(e.colRegions); n > 0 && !e.mvlHasContent(e.colRegions[n-1].at) {
+		e.colRegions[n-1] = colRegion{at: e.colRegions[n-1].at, cols: 2, span: span, colW: e.hsize}
+		return
+	}
 	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 2, span: span, colW: e.hsize})
+}
+
+// mvlHasContent reports whether the main vertical list from index from onward holds anything
+// that puts ink on a page.
+//
+// ⛔ The invisible types are listed EXPLICITLY and everything else counts as content. A list
+// of what does NOT count would inherit its own blind spot: a node type added later would be
+// silently invisible, and the failure — a page quietly dropped — is one nobody would look for.
+// This way an unknown node keeps its page, which is the direction that is safe to be wrong in.
+func (e *Engine) mvlHasContent(from int) bool {
+	if from < 0 {
+		from = 0
+	}
+	for _, n := range e.mvl[from:] {
+		switch n.(type) {
+		case pageStyleNode, *pageStyleNode, glueNode, *glueNode, kernNode, *kernNode,
+			penaltyNode, *penaltyNode, specialNode, *specialNode:
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // doDblFloat implements \begin{figure*}/\begin{table*} — the \@dblfloat double-column
