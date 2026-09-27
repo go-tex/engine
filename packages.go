@@ -1385,6 +1385,30 @@ const IEEEtranNames = `
 % argument, so replacing the command outright is what the class does.
 \long\def\author#1{\gdef\@author{#1}}
 \long\def\thanks#1{}
+% IEEEtran.cls:4676-4677 defines the author blocks as PASS-THROUGHS outside conference,
+% peerreviewca and transmag mode:
+%
+%	\def\IEEEauthorblockN#1{#1}
+%	\def\IEEEauthorblockA#1{#1}
+%
+% In those three modes it sets them through \@IEEEauthorhalign (:4683), which puts the name
+% rows and the affiliation rows side by side in COLUMNS. That halign is not implemented here,
+% so every mode gets the pass-through, and the columns become a vertical stack.
+%
+% ⛔ Not a bare #1 though. The halign's \crcr is what ends each block, so with #1 alone the
+% names and the affiliations run into ONE paragraph: on 2408.02112 the reference reads
+% "Stephen M. Watt" then "D. J. Jeffrey" then their affiliations, and we ran them together as
+% "Stephen M. Watt Ontario Research Centre for Computer Algebra and Cheriton School of …".
+% A paragraph per block keeps the content and its reading order, and loses only the column
+% arrangement — which is what not implementing the halign costs.
+\long\def\IEEEauthorblockN#1{\par#1\par}
+\long\def\IEEEauthorblockA#1{\par#1\par}
+% Conference mode LOCKS OUT \thanks, \IEEEPARstart, \IEEEbiography, \IEEEpubid and
+% \IEEEmembership; this command restores each from its saved meaning (IEEEtran.cls:6274-6285).
+% Nothing is locked out in this emulation, so there is nothing to restore — but the command
+% has to EXIST, because a paper that calls it is stopped by an undefined control sequence
+% before its preamble is finished.
+\def\IEEEoverridecommandlockouts{\relax}
 % The two-column branch of IEEEtran's own definition, which is what every corpus paper is in:
 % an italic bold run-in name, an em dash, then the list. \endIEEEkeywords adds vertical space
 % and restores the size.
