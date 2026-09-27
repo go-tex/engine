@@ -17,6 +17,7 @@ full LPPL preamble at the top of the file (do not strip it).
 | `size11.clo`  | `\ProvidesFile{size11.clo}` | `2026-06-04 v1.4n` | generated from `classes.dtx` with option `11pt` |
 | `size12.clo`  | `\ProvidesFile{size12.clo}` | `2026-06-04 v1.4n` | generated from `classes.dtx` with option `12pt` |
 | `amsart.cls`  | `\ProvidesClass{amsart}` | `2020/05/29 v2.20.6` | generated from `amsclass.dtx` (CTAN amscls) with options `amsart,classes` |
+| `isomath.sty` | `\ProvidesPackage{isomath}` | `2012/09/04 v0.6.1` | CTAN `isomath`, © 2008, 2012 Günter Milde |
 
 ## Provenance / how these were produced
 
@@ -132,3 +133,21 @@ they are docstrip products of their parent `.dtx`.
 Embedding these needs `//go:embed texmf/*.tex` as well as `*.sty` (see `texmf.go`),
 and the kernel's `\@filelist` / `\@addtofilelist` / `\filename@parse`, which
 `xkeyval.sty` walks at load time to find the document class.
+
+## `isomath.sty`
+
+Not part of the LaTeX base system: a third-party CTAN package, © 2008, 2012 Günter
+Milde, under the **LPPL 1.3 or later** (its own header states the licence; the
+preamble is intact and the file is verbatim — same SHA-256 as the distribution copy).
+
+It is embedded because its absence costs **56 dropped equations** on one paper of the
+arXiv reference corpus, measured with the dropped-equation census: `\matrixsym` 30,
+`\vectorsym` 19, `\tensorsym` 7, all of them content the reader never sees and none
+of it visible in the page count, which stays at 27 either way.
+
+It requires `fixmath` and `kvoptions` (`isomath.sty:68`, `:76`) and **neither is
+embedded**. That is fine and is asserted by a test: the loader skips a
+`\RequirePackage` it cannot resolve and the `\providecommand` definitions below it
+still run. If a missing `\RequirePackage` ever became fatal, this package would stop
+working and those 56 equations would come back — silently, because a dropped equation
+does not fail a build.
