@@ -287,6 +287,21 @@ const AMSClassSubstrate = `
 % \IEEEeqnarray row strut as 0.7/0.3\normalbaselineskip, and \@arrayparboxrestore
 % — which runs inside every array cell and parbox — sets \baselineskip from it.
 \newskip\normalbaselineskip \normalbaselineskip=12pt
+% \normalbaselines restores the three interline parameters from those saved copies. It is
+% a kernel macro, not an AMS one — latex.ltx:558-559, verbatim:
+%
+%	\def\normalbaselines{\lineskip\normallineskip
+%	  \baselineskip\normalbaselineskip \lineskiplimit\normallineskiplimit}
+%
+% and it belongs here because this is where two of its three registers are declared
+% (\normallineskip is in classkernel.go, loaded before this substrate).
+%
+% Missing, it was skipped 17 times across 6 corpus papers. The one that shows is acmart:
+% \@typeset@author@bx (acmart.cls:2656-2657) opens with \def\and{\par}\normalbaselines and
+% then \global\setbox\author@bx=\vtop{…} — so the AUTHOR BOX of every bundled-acmart paper
+% was built with whatever interline spacing the surrounding group happened to leave.
+\def\normalbaselines{\lineskip\normallineskip
+  \baselineskip\normalbaselineskip \lineskiplimit\normallineskiplimit}
 % \lastskip is a real primitive now (tex.web §424, see Engine.lastSkip): it reads
 % the glue at the end of the list being built. The stand-in that used to sit here
 % was a \newskip — a register, permanently zero — and a register SHADOWS the
