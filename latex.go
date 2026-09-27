@@ -1217,13 +1217,19 @@ const MiniLaTeXKernel = `
 % \qedhere (amsthm): the end-of-proof square requested mid-line/mid-display is
 % dropped here (the proof's trailing \qed still sets the mark).
 \def\qedhere{}
-% \footnotetext[n]{text} and \newcolumntype{x}[n]{spec}: accepted and gobbled
-% whole (optional [.] plus the required group) instead of leaking their bodies.
-% \long: \@footnotetext is \long (latex.ltx:13187) and array.sty's column rewrites
-% are too (array.sty:273). A gobbler that refuses a \par does not gobble less — the
-% abandoned call leaks the body it was meant to swallow onto the page.
+% \newcolumntype{x}[n]{spec}: accepted and gobbled whole (optional [.] plus the
+% required group) instead of leaking its body.
+% \long: array.sty's column rewrites are \long (array.sty:273). A gobbler that refuses
+% a \par does not gobble less — the abandoned call leaks the body it was meant to
+% swallow onto the page.
+%
+% ⛔ \footnotetext used to sit on this same gobbler, and that was a silent LOSS, not a
+% gobble: \footnotetext[n]{text} is the note whose MARK \footnotemark placed elsewhere,
+% so the whole note went in the bin while every census channel read the macro as
+% working. It is a Go primitive now (footnote.go, primitives.go). go-tex/measure's
+% gobblers.py is the inventory that question produced — 144 definitions of this shape,
+% 62 of them used by the corpus.
 \long\def\@gobbleoptarg[#1]#2{}
-\def\footnotetext{\@ifnextbracket\@gobbleoptarg\@gobble}
 \def\newcolumntype#1{\@ifnextbracket\@gobbleoptarg\@gobble}
 % Body-level commands seen across the corpus that, left undefined, DROP real
 % content rather than mere configuration (from the skip census):
