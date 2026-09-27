@@ -365,6 +365,13 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 				src = ph
 				continue
 			}
+			// leftindex: a symbol's indices set on its LEFT. Same shape as the physics
+			// package above — a package's commands, rewritten only when the document
+			// asked for the package.
+			if li, lok := e.resolveLeftIndex(src, name); lok {
+				src = li
+				continue
+			}
 			if noised, nok := stripMathNoise(src, name); nok {
 				src = noised
 				continue
