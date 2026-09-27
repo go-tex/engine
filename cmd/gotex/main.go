@@ -222,7 +222,12 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 	} else {
 		// Text-mode Skipped keys are the bare command name; print with a leading \.
-		fmt.Fprintf(w, "gotex: %d undefined command(s) skipped (most frequent first):\n", len(d.Skipped))
+		//
+		// BOTH numbers, because len() and the rows count different things and the
+		// header used to print only the first. See the MathDropped header below for
+		// what that cost.
+		fmt.Fprintf(w, "gotex: %d undefined command(s) skipped, %d occurrence(s) "+
+			"(most frequent first):\n", len(d.Skipped), totalCount(d.Skipped))
 		for _, e := range sortedByCount(d.Skipped) {
 			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, printableCS(e.name))
 		}
@@ -230,11 +235,37 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if len(d.MathDropped) > 0 {
 		// MathDropped keys already carry their leading \ (or are the sentinel "$math$"),
 		// so print them verbatim.
-		fmt.Fprintf(w, "gotex: %d math equation group(s) dropped by the math layer (most frequent trigger first):\n", len(d.MathDropped))
+		//
+		// ⛔ This header used to read "%d math equation group(s) dropped" with
+		// len(d.MathDropped) — the number of distinct TRIGGERS, not of equations. On
+		// one corpus paper it announced "12 math equation group(s) dropped" above
+		// twelve rows summing to 58, and 58 is the number of equations the reader
+		// lost: MathDropped's own documentation says it "tallies whole equations",
+		// and recordMathSkip increments it once per refused equation.
+		//
+		// The cost was not cosmetic. Reading that line made me doubt a corpus census
+		// I had built by summing the rows — which was right — and nearly retract a
+		// published figure. A count and a label that disagree are worse than no
+		// count.
+		fmt.Fprintf(w, "gotex: %d equation(s) dropped by the math layer over %d "+
+			"distinct trigger(s) (most frequent first):\n",
+			totalCount(d.MathDropped), len(d.MathDropped))
 		for _, e := range sortedByCount(d.MathDropped) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+}
+
+// totalCount sums a tally's values. The maps this file reports are keyed by command
+// and valued by OCCURRENCES, so len() and the sum answer different questions — and a
+// header that prints one while naming the other is how a correct measurement came to
+// be doubted.
+func totalCount(m map[string]int) int {
+	n := 0
+	for _, v := range m {
+		n += v
+	}
+	return n
 }
 
 // printableCS renders a command's name the way TeX shows it, so a command whose

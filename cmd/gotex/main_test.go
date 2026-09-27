@@ -129,9 +129,32 @@ func TestRunReportMathDropped(t *testing.T) {
 	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
 		t.Fatalf("run exit=%d stderr=%s", code, se.String())
 	}
-	if !bytes.Contains(se.Bytes(), []byte("math equation group(s) dropped")) ||
+	if !bytes.Contains(se.Bytes(), []byte("dropped by the math layer")) ||
 		!bytes.Contains(se.Bytes(), []byte(`\nosuchmathprimitive`)) {
 		t.Errorf("report missing the dropped math equation; stderr=%q", se.String())
+	}
+}
+
+// The header counts EQUATIONS and says so. It used to print len(MathDropped) — the
+// number of distinct triggers — under the words "equation group(s) dropped", and on
+// one corpus paper that announced 12 above twelve rows summing to 58. Both numbers
+// are now printed and each is named.
+//
+// Three formulas refused by two distinct commands, so the two counts differ and a
+// header that confused them would fail here.
+func TestRunReportCountsEquationsAndTriggersSeparately(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}`+
+		`$\nosuchmathprimitive$ $\nosuchmathprimitive$ $\anotherbadone$`+
+		`\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	if want := "3 equation(s) dropped by the math layer over 2 distinct trigger(s)"; !bytes.Contains(se.Bytes(), []byte(want)) {
+		t.Errorf("header does not read %q; stderr=%q", want, se.String())
 	}
 }
 
