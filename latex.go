@@ -147,8 +147,15 @@ const MiniLaTeXKernel = `
 % \long: latex.ltx:12747 declares \title with \DeclareRobustCommand (no star), and
 % \@star@or@long (latex.ltx:1173) makes the unstarred form \long. \author on the very
 % next line IS starred, so it is deliberately NOT \long here either — a \par in an
-% author block is a runaway in real LaTeX too, and the 3 in the corpus are its error,
-% not ours.
+% author block IS a runaway in real LaTeX, for article and amsart.
+%
+% ⛔ That is a statement about latex.ltx, not about the corpus, and it was read as both.
+% A CLASS may declare \author \long, and IEEEtran does, with its reason on the line
+% above: "V1.7 allow \author to contain \par's. This is needed to allow \thanks to
+% contain \par." (IEEEtran.cls:4881-4882). Its papers are therefore not in error and
+% their references compile; keeping the strict form for them cost a whole title block.
+% The class's own definition is installed in packages.go. Before concluding that a
+% corpus paper is at fault here, check what its CLASS says.
 \long\def\@titleopt[#1]#2{\def\@shorttitle{#1}\def\@title{#2}}
 \long\def\@titlemand#1{\def\@title{#1}}
 \def\author{\@ifnextchar[{\@authoropt}{\@authormand}}
@@ -351,8 +358,20 @@ const MiniLaTeXKernel = `
 \newcount\c@table
 \long\def\thefigure{\the\c@figure}
 \long\def\thetable{\the\c@table}
-\def\fnum@figure{Figure \thefigure}
-\def\fnum@table{Table \thetable}
+% \fnum@figure / \fnum@table go through \figurename / \tablename, which is how every
+% class renames its floats — article.cls:457 and :469 are
+%
+%	\def\fnum@figure{\figurename\nobreakspace\thefigure}
+%	\def\fnum@table{\tablename\nobreakspace\thetable}
+%
+% The name was spelt out here instead, so \figurename existed NOWHERE in the engine and a
+% class or a document that renames a float could not. IEEEtran calls them "Fig." and "TABLE"
+% (IEEEtran.cls:2607-2608) and its references never say "Figure": eleven corpus papers, every
+% caption in each.
+\providecommand\figurename{Figure}
+\providecommand\tablename{Table}
+\def\fnum@figure{\figurename\nobreakspace\thefigure}
+\def\fnum@table{\tablename\nobreakspace\thetable}
 \long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
 \long\def\endfigure{\par\endgroup\bigskip}
 \long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
