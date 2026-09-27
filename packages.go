@@ -1385,29 +1385,6 @@ const IEEEtranNames = `
 % argument, so replacing the command outright is what the class does.
 \long\def\author#1{\gdef\@author{#1}}
 \long\def\thanks#1{}
-% IEEEtran.cls:4676-4677 defines the author blocks as PASS-THROUGHS outside conference,
-% peerreviewca and transmag mode:
-%
-%	\def\IEEEauthorblockN#1{#1}
-%	\def\IEEEauthorblockA#1{#1}
-%
-% In those three modes it sets them through \@IEEEauthorhalign (:4683), which puts the name
-% rows and the affiliation rows side by side in COLUMNS. That halign is not implemented here,
-% so every mode gets the pass-through, and the columns become a vertical stack.
-%
-% ⛔ Not a bare #1 though. The halign's \crcr is what ends each block, so with #1 alone the
-% names and the affiliations run into ONE paragraph: on 2408.02112 the reference reads
-% "Stephen M. Watt" then "D. J. Jeffrey" then their affiliations, and we ran them together as
-% "Stephen M. Watt Ontario Research Centre for Computer Algebra and Cheriton School of …".
-% A paragraph per block keeps the content and its reading order, and loses only the column
-% arrangement — which is what not implementing the halign costs.
-\long\def\IEEEauthorblockN#1{\par#1\par}
-\long\def\IEEEauthorblockA#1{\par#1\par}
-% Conference mode LOCKS OUT \thanks, \IEEEPARstart, \IEEEbiography, \IEEEpubid and
-% \IEEEmembership; this command restores each from its saved meaning (IEEEtran.cls:6274-6285).
-% Nothing is locked out in this emulation, so there is nothing to restore — but the command
-% has to EXIST, because a paper that calls it is stopped by an undefined control sequence
-% before its preamble is finished.
 \def\IEEEoverridecommandlockouts{\relax}
 % The two-column branch of IEEEtran's own definition, which is what every corpus paper is in:
 % an italic bold run-in name, an em dash, then the list. \endIEEEkeywords adds vertical space
@@ -1424,6 +1401,18 @@ func (e *Engine) loadIEEEtranNames(opts []string) error {
 	if err := e.LoadFormat(IEEEtranNames); err != nil {
 		return err
 	}
+	// The author blocks differ BY MODE in the class, and following that matters on the
+	// page — see IEEEtranAuthorBlocksRows / IEEEtranAuthorBlocksInline.
+	blocks := IEEEtranAuthorBlocksInline
+	for _, m := range []string{"conference", "peerreviewca", "transmag"} {
+		if hasOption(opts, m) {
+			blocks = IEEEtranAuthorBlocksRows
+			break
+		}
+	}
+	if err := e.LoadFormat(blocks); err != nil {
+		return err
+	}
 	// The spanning form is loaded only where the class actually set two columns — the
 	// same condition, a few lines up. \twocolumn[…] is a no-op that GOBBLES its span
 	// unless e.twoColLive is on (primitives.go), so handing a one-column paper the
@@ -1433,6 +1422,40 @@ func (e *Engine) loadIEEEtranNames(opts []string) error {
 	}
 	return e.LoadFormat(IEEEtranTitlePlain)
 }
+
+// IEEEtranAuthorBlocksRows and IEEEtranAuthorBlocksInline are IEEEtran's author blocks, and
+// the class defines them TWO WAYS.
+//
+// In conference, peerreviewca and transmag mode it sets them through \@IEEEauthorhalign
+// (IEEEtran.cls:4632, :4649, :4683): each block is a ROW, ended by the macro's own \crcr,
+// and the halign puts the authors side by side in columns. Outside those modes it defines
+// them as plain pass-throughs (:4676-4677):
+//
+//	\def\IEEEauthorblockN#1{#1}
+//	\def\IEEEauthorblockA#1{#1}
+//
+// The halign is not implemented here, so the rows become a vertical stack — but the
+// DISTINCTION has to be kept, and getting it wrong is visible on the page both ways.
+//
+// ⛔ A conference paper writes one block per line and needs the break: without it
+// 2408.02112 came out as "Stephen M. Watt Ontario Research Centre for Computer Algebra and
+// Cheriton School of …" on one line that ran off the right edge.
+//
+// ⛔ A journal paper writes them INLINE, with its own punctuation between:
+// "\IEEEauthorblockN{Daanish Mahajan}, \IEEEauthorblockN{Chirag Jain}, …" (2405.05734).
+// Breaking there strands each comma alone on a line, where the reference reads
+// "Daanish Mahajan, Chirag Jain, Navin Kashyap" — which is exactly what the class's
+// pass-through gives.
+const IEEEtranAuthorBlocksRows = `
+\long\def\IEEEauthorblockN#1{\par#1\par}
+\long\def\IEEEauthorblockA#1{\par#1\par}
+`
+
+// IEEEtranAuthorBlocksInline is the class's own definition outside the three row modes.
+const IEEEtranAuthorBlocksInline = `
+\long\def\IEEEauthorblockN#1{#1}
+\long\def\IEEEauthorblockA#1{#1}
+`
 
 // IEEEtranTitleSpan and IEEEtranTitlePlain replace the generic \maketitle (latex.go) for an
 // emulated IEEEtran. Two things were wrong with the generic one on this class.

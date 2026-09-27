@@ -135,3 +135,40 @@ func TestIEEEtranTitleBlockIsVerticalAndSpans(t *testing.T) {
 		}
 	}
 }
+
+// The author blocks differ BY MODE in the class, and both ways are visible on the page.
+// Conference/peerreviewca/transmag set each block as a ROW of \@IEEEauthorhalign, ended by
+// its own \crcr (IEEEtran.cls:4632, :4649); outside those modes the class defines plain
+// pass-throughs (:4676-4677), because a journal paper writes the blocks INLINE with its own
+// punctuation between them.
+//
+// ⛔ Getting it backwards is visible either way. With the row form everywhere, 2405.05734's
+// "\IEEEauthorblockN{Daanish Mahajan}, \IEEEauthorblockN{Chirag Jain}, …" broke after each
+// name and stranded every comma alone on a line, where the reference reads
+// "Daanish Mahajan, Chirag Jain, Navin Kashyap". With the inline form everywhere,
+// 2408.02112's one-block-per-line conference author ran together on a single line.
+func TestIEEEtranAuthorBlocksFollowTheClassMode(t *testing.T) {
+	src := func(opts string) string {
+		return `\documentclass[` + opts + `]{IEEEtran}\begin{document}\title{THETITLE}` +
+			`\author{\IEEEauthorblockN{ALICEUN}, \IEEEauthorblockN{BOBDEUX}}` +
+			`\maketitle\section{Intro}BODY\end{document}`
+	}
+	yOf := func(opts string) (string, string) {
+		e, err := compile([]byte(src(opts)), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("[%s] compile: %v", opts, err)
+		}
+		svg := strings.Join(e.RenderPages(e.renderMargin(0)), "")
+		return tspanY(t, svg, "ALICEUN"), tspanY(t, svg, "BOBDEUX")
+	}
+	// journal: the two names share a line, so the comma between them stays with them.
+	if a, b := yOf("journal"); a != b {
+		t.Errorf("journal mode broke between the blocks (y=%s then y=%s): the comma the "+
+			"document wrote between them is now alone on a line", a, b)
+	}
+	// conference: one block per line.
+	if a, b := yOf("conference"); a == b {
+		t.Errorf("conference mode set both blocks on one line (y=%s): the \\crcr that ends "+
+			"each row of \\@IEEEauthorhalign is missing", a)
+	}
+}
