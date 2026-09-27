@@ -45,11 +45,11 @@ func TestTabularHonoursItsVerticalPosition(t *testing.T) {
 	} {
 		v, ok := got[c.key]
 		if !ok {
-			t.Errorf("%s= n'a pas été imprimé (%s)", c.key, c.what)
+			t.Errorf("%s= was not printed (%s)", c.key, c.what)
 			continue
 		}
 		if d := v - c.want; d > 0.01 || d < -0.01 {
-			t.Errorf("tabular %s = %.2fpt, la référence donne %.2fpt", c.what, v, c.want)
+			t.Errorf("tabular %s = %.2fpt, the reference gives %.2fpt", c.what, v, c.want)
 		}
 	}
 	// The three totals must agree: only the anchor moves, never the size. This is
@@ -85,15 +85,15 @@ func TestMinipageHonoursItsVerticalPosition(t *testing.T) {
 	t.Logf("%v", got)
 	total := got["CH"] + got["CD"]
 	if total < 20 {
-		t.Fatalf("total invraisemblable (%.2fpt): les repères manquent — %v", total, got)
+		t.Fatalf("implausible total (%.2fpt): the markers are missing - %v", total, got)
 	}
 	// The three anchors must be DISTINCT: identical values are the defect itself.
 	if d := got["TH"] - got["CH"]; d > -1 {
-		t.Errorf("[t] hauteur %.2f et [c] hauteur %.2f: [t] doit être BIEN plus haut placé",
+		t.Errorf("[t] height %.2f and [c] height %.2f: [t] must sit MUCH higher",
 			got["TH"], got["CH"])
 	}
 	if d := got["BH"] - got["CH"]; d < 1 {
-		t.Errorf("[b] hauteur %.2f et [c] hauteur %.2f: [b] doit être BIEN plus bas placé",
+		t.Errorf("[b] height %.2f and [c] height %.2f: [b] must sit MUCH lower",
 			got["BH"], got["CH"])
 	}
 	// [b] keeps the reference at the last line's baseline: height = total - its depth.
@@ -103,7 +103,7 @@ func TestMinipageHonoursItsVerticalPosition(t *testing.T) {
 	}
 	// [c] centres on the math axis, above the baseline: height > half the total.
 	if got["CH"] <= total/2 {
-		t.Errorf("[c] hauteur %.2f n'est pas au-dessus de la moitié du total %.2f: "+
+		t.Errorf("[c] height %.2f is not above half the total %.2f: "+
 			"latex.ltx centre sur l'AXE, pas sur la ligne de base", got["CH"], total)
 	}
 }
@@ -130,13 +130,13 @@ func TestMakeboxKeepsTheHorizontalPositionSet(t *testing.T) {
 				return v
 			}
 		}
-		t.Fatalf("le repère ZZ n'est pas sur la page pour [%s]", pos)
+		t.Fatalf("the ZZ marker is not on the page for [%s]", pos)
 		return 0
 	}
 	xl, xc, xr := x("l"), x("c"), x("r")
 	t.Logf("x de ZZ: [l] %.2f  [c] %.2f  [r] %.2f", xl, xc, xr)
 	if !(xl < xc && xc < xr) {
-		t.Errorf("[l] %.2f, [c] %.2f, [r] %.2f doivent être strictement croissants "+
+		t.Errorf("[l] %.2f, [c] %.2f, [r] %.2f must be strictly increasing "+
 			"dans une boîte de 60pt; des valeurs égales veulent dire que la lettre "+
 			"n'atteint pas l'alignement", xl, xc, xr)
 	}

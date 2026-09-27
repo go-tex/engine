@@ -37,7 +37,7 @@ import (
 // reaches \mbox and is set in text mode before the maths layer ever sees it. They
 // are guards on the paths either side of the one that broke, not witnesses to it.
 func TestMathKeepsAFormulaWhoseMacroHidesAFontSwitch(t *testing.T) {
-	for _, c := range []struct{ nom, preamble, body string }{
+	for _, c := range []struct{ name, preamble, body string }{
 		{
 			"through two indirections",
 			`\newcommand*{\codefont}{\ttfamily\small}` +
@@ -52,13 +52,13 @@ func TestMathKeepsAFormulaWhoseMacroHidesAFontSwitch(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}`+c.preamble+
 			`\begin{document}`+c.body+`\end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 		if svg := strings.Join(e.RenderPages(e.renderMargin(0)), ""); !strings.Contains(svg, "<path") {
-			t.Errorf("%s: no path — the formula is not typeset", c.nom)
+			t.Errorf("%s: no path — the formula is not typeset", c.name)
 		}
 	}
 }

@@ -16,8 +16,8 @@ import (
 func TestFigureDeclaredSize(t *testing.T) {
 	dir := t.TempDir()
 	for _, c := range []struct {
-		nom, fichier, contenu string
-		w, h                  int
+		name, fichier, contenu string
+		w, h                   int
 	}{
 		{"EPS BoundingBox", "a.eps", "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 300 150\n", 300, 150},
 		{"EPS HiRes gagne", "b.eps", "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 300 150\n%%HiResBoundingBox: 0 0 200.4 100.2\n", 200, 100},
@@ -31,7 +31,7 @@ func TestFigureDeclaredSize(t *testing.T) {
 			t.Fatal(err)
 		}
 		if w, h := figureDeclaredSize(p); w != c.w || h != c.h {
-			t.Errorf("%s: (%d, %d), want (%d, %d)", c.nom, w, h, c.w, c.h)
+			t.Errorf("%s: (%d, %d), want (%d, %d)", c.name, w, h, c.w, c.h)
 		}
 	}
 	if w, h := figureDeclaredSize(filepath.Join(dir, "absent.eps")); w != 0 || h != 0 {
@@ -87,10 +87,10 @@ func TestEPSPlaceholderKeepsItsAspect(t *testing.T) {
 		t.Fatal("aucun cadre de remplacement sur la page")
 	}
 	// 400 × 100 bp asked for at 200pt wide is 50pt tall (the bp→pt correction is
-	// under a percent and cancels in the ratio). Mesuré sur la boîte EXTÉRIEURE :
-	// le cadre est dessiné DANS l'espace demandé (image.go), donc c'est elle qui
-	// dit ce que la figure prend à la page.
+	// under a percent and cancels in the ratio). Measured on the OUTER box: the frame
+	// is drawn INSIDE the requested space (image.go), so it is the outer box that says
+	// what the figure takes from the page.
 	if w, h := got.width(), got.height()+got.depth(); w != 200*unity || h < 49*unity || h > 51*unity {
-		t.Errorf("cadre %.1fpt × %.1fpt, want 200.0pt × 50.0pt", spToPt(w), spToPt(h))
+		t.Errorf("frame %.1fpt x %.1fpt, want 200.0pt x 50.0pt", spToPt(w), spToPt(h))
 	}
 }

@@ -53,10 +53,10 @@ func TestNoParameterIsBothAPrimitiveAndAListedParam(t *testing.T) {
 	}
 	sort.Strings(bad)
 	if len(bad) > 0 {
-		t.Errorf("%d nom(s) à la fois primitive et paramètre listé:\n  %s\n"+
+		t.Errorf("%d name(s) both a primitive and a listed parameter:\n  %s\n"+
 			"Le vainqueur dépend de l'ORDRE de chargement (loadTeXParams à "+
 			"primitives.go:209), donc la primitive peut être masquée sans bruit. "+
-			"Retirer le nom de la liste, ou l'ajouter à allowedBoth avec sa raison.",
+			"Retirer le name de la liste, ou l'ajouter à allowedBoth avec sa raison.",
 			len(bad), strings.Join(bad, "\n  "))
 	}
 }
@@ -89,7 +89,7 @@ func TestEngineParametersAreNotShadowed(t *testing.T) {
 	} {
 		m := e.eq[n]
 		if m == nil {
-			t.Errorf(`\%s n'est pas défini du tout`, n)
+			t.Errorf(`\%s is not defined at all`, n)
 			continue
 		}
 		if m.kind != mPrim {

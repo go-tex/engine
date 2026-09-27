@@ -47,7 +47,7 @@ func TestSubfigurePanelsShareALine(t *testing.T) {
 		}
 		y, ok := markerY(string(pages[0]), "SUITE")
 		if !ok {
-			t.Fatalf("%d panneau(x): le repère SUITE n'est pas sur la page", n)
+			t.Fatalf("%d panel(s): the AFTER marker is not on the page", n)
 		}
 		ys = append(ys, y)
 	}

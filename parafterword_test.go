@@ -26,8 +26,8 @@ import (
 // horizontal mode, with the paragraph never closed.
 func TestBlankLineAfterAControlWordIsAParagraphBreak(t *testing.T) {
 	for _, c := range []struct {
-		nom, src string
-		wantPar  bool
+		name, src string
+		wantPar   bool
 	}{
 		{"control word then blank line", "X\\relax\n\n", true},
 		{"plain text then blank line", "X\n\n", true},
@@ -58,7 +58,7 @@ func TestBlankLineAfterAControlWordIsAParagraphBreak(t *testing.T) {
 			}
 		}
 		if sawPar != c.wantPar {
-			t.Errorf("%s: \\par present = %v, want %v (tokens %v)", c.nom, sawPar, c.wantPar, got)
+			t.Errorf("%s: \\par present = %v, want %v (tokens %v)", c.name, sawPar, c.wantPar, got)
 		}
 	}
 }

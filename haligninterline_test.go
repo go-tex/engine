@@ -36,7 +36,7 @@ func TestHalignRowsTakeInterlineGlue(t *testing.T) {
 	}
 	inc := (h - u) / 2
 	if d := inc - bl; d > 0.01 || d < -0.01 {
-		t.Errorf("incrément par rangée de \\halign = %.2fpt, attendu \\baselineskip = %.2fpt "+
+		t.Errorf("\\halign per-row increment = %.2fpt, want \\baselineskip = %.2fpt "+
 			"(hauteurs %.2f pour 3 rangées, %.2f pour 1)", inc, bl, h, u)
 	}
 }
@@ -68,9 +68,9 @@ func TestInterlineGlueHasBothBranches(t *testing.T) {
 	// Crowded case: a box taller than \baselineskip falls back to \lineskip.
 	g, ok = e.interlineGlue(0, e.baselineskip+10*unity)
 	if !ok {
-		t.Fatal("le cas serré doit tout de même donner de la glue")
+		t.Fatal("the tight case must still produce glue")
 	}
 	if g.spec.width != e.lineskip {
-		t.Errorf("cas serré: glue = %d, attendu \\lineskip = %d", g.spec.width, e.lineskip)
+		t.Errorf("tight case: glue = %d, want \\lineskip = %d", g.spec.width, e.lineskip)
 	}
 }

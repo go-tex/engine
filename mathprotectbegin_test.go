@@ -16,7 +16,7 @@ import "testing"
 // formula that used it; over the corpus, bmatrix, pmatrix, cases, aligned, split and
 // array accounted for 676 fresh drops in 42 papers.
 func TestMathKeepsAnEnvironmentInsideAMacro(t *testing.T) {
-	for _, c := range []struct{ nom, def, math string }{
+	for _, c := range []struct{ name, def, math string }{
 		{"bmatrix", `\newcommand{\mymat}[2]{\begin{bmatrix}#1\\#2\end{bmatrix}}`, `A=\mymat{a}{b}`},
 		{"cases", `\newcommand{\mycase}[1]{\begin{cases}#1 & x>0\end{cases}}`, `f=\mycase{1}`},
 		{"array", `\newcommand{\myarr}[1]{\begin{array}{c}#1\end{array}}`, `M=\myarr{z}`},
@@ -24,10 +24,10 @@ func TestMathKeepsAnEnvironmentInsideAMacro(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\usepackage{amsmath}`+c.def+
 			`\begin{document}$`+c.math+`$\end{document}`), Options{Lenient: true})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if len(e.mathDropped) != 0 {
-			t.Errorf("%s: the math layer refused the formula (%v)", c.nom, e.mathDropped)
+			t.Errorf("%s: the math layer refused the formula (%v)", c.name, e.mathDropped)
 		}
 	}
 }

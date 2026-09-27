@@ -32,7 +32,7 @@ func TestKernelMacrosAreDefined(t *testing.T) {
 // The declarations must consume their arguments, and must do so in a STRICT run:
 // what these documents need is not to be skipped but to be read and dropped.
 func TestKernelDeclarationsConsumeTheirArguments(t *testing.T) {
-	for _, c := range []struct{ nom, src string }{
+	for _, c := range []struct{ name, src string }{
 		{"DeclareMathSymbol", `\DeclareMathSymbol{0}\mathalpha{numbers}{"30}`},
 		{"pdfstringdefDisableCommands", `\pdfstringdefDisableCommands{\def\x{ne doit pas paraitre}}`},
 		{"@checkend", `\@checkend{document}`},
@@ -41,10 +41,10 @@ func TestKernelDeclarationsConsumeTheirArguments(t *testing.T) {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}\makeatletter `+
 			c.src+`x\end{document}`), Options{})
 		if err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		if got := pageChars(e); got != "x" {
-			t.Errorf("%s: la page porte %q, want %q", c.nom, got, "x")
+			t.Errorf("%s: la page porte %q, want %q", c.name, got, "x")
 		}
 	}
 }

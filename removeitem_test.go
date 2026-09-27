@@ -46,19 +46,19 @@ func TestRemoveItemHonoursTheTypeGuard(t *testing.T) {
 	w := printedDimens(t, string(pages[0]))
 	for _, k := range []string{"A", "B", "C", "D", "E", "F"} {
 		if _, ok := w[k]; !ok {
-			t.Fatalf("%s= n'a pas été imprimé (largeurs lues: %v)", k, w)
+			t.Fatalf("%s= was not printed (widths read: %v)", k, w)
 		}
 	}
 	t.Logf("largeurs: %v", w)
 	if d := w["A"] - w["B"]; d > 0.01 || d < -0.01 {
-		t.Errorf(`\unskip n'a pas retiré l'espace intermot: \hbox{abc \unskip d} `+
+		t.Errorf(`\unskip did not remove the interword space: \hbox{abc \unskip d} `+
 			`fait %.2fpt de plus que \hbox{abcd} (attendu 0)`, d)
 	}
 	if d := w["C"] - w["D"]; d > 0.01 || d < -0.01 {
-		t.Errorf(`\unkern n'a pas retiré le kern: %.2fpt d'écart avec \hbox{xy} (attendu 0)`, d)
+		t.Errorf(`\unkern did not remove the kern: %.2fpt away from \hbox{xy} (want 0)`, d)
 	}
 	if d := w["E"] - w["D"]; d < 9.99 || d > 10.01 {
-		t.Errorf(`\unskip a touché un KERN: \hbox{x\kern10pt\unskip y} fait %.2fpt `+
+		t.Errorf(`\unskip touched a KERN: \hbox{x\kern10pt\unskip y} is %.2fpt `+
 			`de plus que \hbox{xy}, attendu les 10pt du kern`, d)
 	}
 }
@@ -88,18 +88,18 @@ func TestUnpenaltyRemovesThePenaltyAndOnlyTheTail(t *testing.T) {
 	for _, w := range []string{"AVANT", "APRES", "DEUXA", "DEUXB"} {
 		v, ok := markerY(svg, w)
 		if !ok {
-			t.Fatalf("le repère %s n'est pas sur la page", w)
+			t.Fatalf("the marker %s is not on the page", w)
 		}
 		y[w] = v
 	}
 	t.Logf("y: AVANT %.2f APRES %.2f / DEUXA %.2f DEUXB %.2f",
 		y["AVANT"], y["APRES"], y["DEUXA"], y["DEUXB"])
 	if d := y["APRES"] - y["AVANT"]; d > 1 || d < -1 {
-		t.Errorf(`\unpenalty n'a pas retiré la pénalité: APRES est %.2fpt sous AVANT, `+
+		t.Errorf(`\unpenalty did not remove the penalty: AFTER is %.2fpt below BEFORE, `+
 			`donc la coupure forcée a tenu`, d)
 	}
 	if d := y["DEUXB"] - y["DEUXA"]; d < 1 {
-		t.Errorf(`la pénalité TÉMOIN a disparu: DEUXB est à %.2fpt de DEUXA, `+
+		t.Errorf(`the CONTROL penalty vanished: TWOB is %.2fpt from TWOA, `+
 			`attendu une ligne d'écart`, d)
 	}
 }
@@ -145,17 +145,17 @@ func TestUnskipInVerticalModeTakesTheTailAndOnlyTheTail(t *testing.T) {
 			for _, w := range []string{"Premier", "APRES", "TEMOIN"} {
 				v, ok := markerY(svg, w)
 				if !ok {
-					t.Fatalf("le repère %s n'est pas sur la page", w)
+					t.Fatalf("the marker %s is not on the page", w)
 				}
 				y[w] = v
 			}
 			got, ctl := y["APRES"]-y["Premier"], y["TEMOIN"]-y["APRES"]
 			t.Logf("Premier->APRES %.2f, APRES->TEMOIN %.2f", got, ctl)
 			if d := got - c.wantAfter; d > 1 || d < -1 {
-				t.Errorf("écart Premier->APRES %.2f, attendu %.0f", got, c.wantAfter)
+				t.Errorf("gap First->AFTER %.2f, want %.0f", got, c.wantAfter)
 			}
 			if d := ctl - c.wantControl; d > 1 || d < -1 {
-				t.Errorf("écart APRES->TEMOIN %.2f, attendu %.0f: le \\vskip témoin "+
+				t.Errorf("gap AFTER->CONTROL %.2f, want %.0f: the control \\vskip "+
 					"a été touché alors qu'il n'est pas en queue", ctl, c.wantControl)
 			}
 		})

@@ -17,7 +17,7 @@ import "testing"
 func TestPanelsShareALine(t *testing.T) {
 	const panel = `\begin{minipage}{50pt}\rule{40pt}{40pt}\end{minipage}`
 	const pbox = `\parbox{50pt}{\rule{40pt}{40pt}}`
-	for _, c := range []struct{ nom, src string }{
+	for _, c := range []struct{ name, src string }{
 		{"one minipage", `\setbox0\vbox{` + panel + `}`},
 		{"two minipages", `\setbox0\vbox{` + panel + `\hfill` + panel + `}`},
 		{"three minipages", `\setbox0\vbox{` + panel + `\hfill` + panel + `\hfill` + panel + `}`},
@@ -29,17 +29,17 @@ func TestPanelsShareALine(t *testing.T) {
 		}
 		e.SetFont(spMock{})
 		if _, err := e.Run(c.src); err != nil {
-			t.Fatalf("%s: %v", c.nom, err)
+			t.Fatalf("%s: %v", c.name, err)
 		}
 		b := e.box[0]
 		if b == nil {
-			t.Fatalf("%s: no box", c.nom)
+			t.Fatalf("%s: no box", c.name)
 		}
 		// Every case is ONE line of panels, so the vbox is one panel tall however
 		// many panels it holds. spMock's baselineskip does not apply to a single
 		// line, so the height is the panel's own: 40pt total, centred on the axis.
 		if got, want := b.height+b.depth, 40*unity; got != want {
-			t.Errorf("%s: vbox = %d sp, want %d (one line of panels)", c.nom, got, want)
+			t.Errorf("%s: vbox = %d sp, want %d (one line of panels)", c.name, got, want)
 		}
 	}
 }
