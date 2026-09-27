@@ -723,6 +723,49 @@ func mathNoiseCS(cs string) bool {
 //
 // The formula then sets at the surrounding size and face. The size is lost; the
 // content is not, and the content is the larger of the two.
+// mathAlphabet are the \math… alphabets the engine defines as IDENTITY wrappers
+// (classkernel.go:427-439, \def\mathtt#1{#1}) and go-tex/math renders itself. The
+// identity is right in text mode, where the engine has one face; inside a formula it
+// throws the face away, and flattenMathBody expands it, so
+//
+//	\newcommand{\code}[1]{\mathtt{#1}}   then   $\code{A}$
+//
+// handed the maths layer a bare "A" — the typewriter face lost and nothing reported,
+// because the formula still renders and still counts one glyph. Written directly,
+// $\mathtt{A}$ was fine; only a macro body lost it (#471).
+//
+// The class-kernel comment above those definitions says the identity is "harmless —
+// user math is handled wholesale by the math layer", and that premise is exactly what
+// a substituted macro body breaks.
+//
+// This is a LIST, which go-tex/math could drift away from, so
+// TestMathAlphabetsAreAllHonouredByTheMathLayer renders \name{A} against a bare A for
+// every entry and fails if any stops differing. \mathnormal and \mathds are
+// deliberately absent: the layer has no mapping for the first, and the second is an
+// alias to \mathbb that SHOULD keep expanding.
+var mathAlphabet = map[string]bool{
+	"mathrm": true, "mathbf": true, "mathit": true, "mathsf": true,
+	"mathtt": true, "mathcal": true, "mathfrak": true, "mathscr": true,
+}
+
+// mathSpace are TeX's maths spacing commands, and they lose the same way for the same
+// reason. format.go:47-56 defines them as ordinary horizontal space —
+// \let\,\thinspace, \def\;{\hskip.27778em}, \def\quad{\hskip1em} — under a comment
+// that says so: "what a real LaTeX produces in text". In a formula the maths layer
+// measures them in MATH UNITS and renders them itself (\, is 3mu, \: 4mu, \; 5mu,
+// \! −3mu, \quad 18mu, \qquad 36mu), so flattening a macro body turned
+//
+//	\newcommand{\w}[1]{a\;#1}   then   $\w{b}$
+//
+// into "a b" — the \hskip stripped and a plain space left behind. \quad and \qquad
+// vanished outright.
+//
+// \! is the one that is not merely lost: it is a NEGATIVE thin space, −3mu, and it came
+// out as a positive space. The sign flipped.
+var mathSpace = map[string]bool{
+	",": true, ";": true, ":": true, "!": true, "quad": true, "qquad": true,
+}
+
 var mathFontSwitch = map[string]bool{
 	"tiny": true, "scriptsize": true, "footnotesize": true, "small": true,
 	"normalsize": true, "large": true, "Large": true, "LARGE": true,
@@ -1147,7 +1190,8 @@ func (e *Engine) substituteMathBody(body []tok, args []string) string {
 func (e *Engine) flattenMathBody(body string) string {
 	ts := tokenizeTeX(body)
 	for i, t := range ts {
-		if t.cs_ && (t.cs == "begin" || t.cs == "end" || e.isCharStandIn(t.cs) || mathFontSwitch[t.cs]) {
+		if t.cs_ && (t.cs == "begin" || t.cs == "end" || e.isCharStandIn(t.cs) ||
+			mathFontSwitch[t.cs] || mathAlphabet[t.cs] || mathSpace[t.cs]) {
 			ts[i].noexp = true
 		}
 	}
