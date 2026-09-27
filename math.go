@@ -313,6 +313,16 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 			src = replaceMathCS(src, name, sym)
 			continue
 		}
+		// A maths SPACE the layer does not know, at the width of one it does: \> is
+		// plain TeX's \:, \thinspace is \,, and so on. Here for the same reason as
+		// the symbols above — \thinspace and \negthinspace are DEFINED macros here
+		// (format.go:45-46, text-mode \hskip), so consulting the macro table first
+		// expands one into an \hskip that stripMathGlue then turns into a plain space.
+		// Measured: $a\thinspace b$ came out exactly as wide as $a b$.
+		if sy, syok := e.resolveMathSpaceSynonym(src, name); syok {
+			src = sy
+			continue
+		}
 		// A mathNoise entry carries no maths BY DEFINITION, so expanding one can
 		// never help — and when the entry is a defined MACRO the retry below expands
 		// it instead, turning one unknown command into an unrenderable source and
