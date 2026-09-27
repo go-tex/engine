@@ -569,6 +569,7 @@ func (e *Engine) doDocumentClass() {
 			// emulation-floor branch, so a bundled acmart.cls gets them too.)
 		} else {
 			e.applyIEEEtranGeometry(opts)
+			e.loadIEEEtranNames(opts)
 		}
 		return
 	}
@@ -1349,4 +1350,52 @@ func (e *Engine) resolveSizeOption(o string) string {
 		return o
 	}
 	return strings.TrimSpace(e.toksToString(m.body))
+}
+
+// IEEEtranNames is what IEEEtran calls its floats and its keyword block, plus the two
+// commands the class makes \long. Every line is cited, and every one is visible on the page:
+//
+//	IEEEtran.cls:2607  \def\figurename{Fig.}          — not "Figure"
+//	IEEEtran.cls:2608  \def\tablename{TABLE}          — in CAPITALS
+//	IEEEtran.cls:2830  \def\thetable{\@Roman\c@table} — ROMAN numerals
+//	IEEEtran.cls:2614  \def\IEEEkeywordsname{Index Terms}
+//	IEEEtran.cls:5286  \def\IEEEkeywords{… \textit{\IEEEkeywordsname}---\relax …}
+//	IEEEtran.cls:4882  \long\def\author#1{\gdef\@author{#1}}
+//	IEEEtran.cls:4874  \long\def\thanks#1{…}
+//
+// Checked against the reference PDFs rather than taken on trust: five IEEEtran papers of the
+// corpus print "Fig. N" and never "Figure N", "TABLE I/II/III" and never "Table 1", and four
+// of the five print "Index Terms". Eleven corpus papers use the class.
+//
+// compsoc is the exception on three of these — IEEEtran.cls:2609 restores "Figure" and :2828
+// arabic table numbers for it — and NO corpus paper asks for compsoc, so the option is not
+// branched on here. A paper that did would get the non-compsoc names, which is the same kind
+// of approximation the geometry above already makes.
+const IEEEtranNames = `
+\makeatletter
+\def\figurename{Fig.}
+\def\tablename{TABLE}
+\def\thetable{\@Roman\c@table}
+\providecommand\IEEEkeywordsname{Index Terms}
+% \author and \thanks are \long IN THIS CLASS, and IEEEtran.cls says why on the line above
+% its own definition: "V1.7 allow \author to contain \par's. This is needed to allow \thanks
+% to contain \par." (IEEEtran.cls:4881-4882, and :4874 for \thanks). LaTeX's own \author is
+% deliberately NOT \long (see latex.go), which is right for article and amsart; it is wrong
+% here, and the difference costs a whole title block. IEEEtran's \author takes no optional
+% argument, so replacing the command outright is what the class does.
+\long\def\author#1{\gdef\@author{#1}}
+\long\def\thanks#1{}
+% The two-column branch of IEEEtran's own definition, which is what every corpus paper is in:
+% an italic bold run-in name, an em dash, then the list. \endIEEEkeywords adds vertical space
+% and restores the size.
+\newenvironment{IEEEkeywords}{\par\bfseries\textit{\IEEEkeywordsname}---\relax\ignorespaces}%
+  {\par\normalfont\normalsize\medskip}
+\makeatother
+`
+
+// loadIEEEtranNames splices IEEEtranNames for an emulated IEEEtran. It is a separate load from
+// applyIEEEtranGeometry because geometry is engine state and these are macros the document can
+// still override afterwards.
+func (e *Engine) loadIEEEtranNames(opts []string) error {
+	return e.LoadFormat(IEEEtranNames)
 }
