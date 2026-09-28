@@ -43,7 +43,7 @@ const MiniLaTeXKernel = `
 \def\@currenvir{}
 \def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
 \def\end#1{\csname end#1\endcsname\gotex@endenv{#1}}
-\def\document{\catcode64=12 }
+\def\document{\if1\gotexatasked\else\catcode64=12 \fi}
 \def\enddocument{\par\vfill\penalty-10000 }
 \def\rm{}
 \def\bf{}
@@ -967,8 +967,25 @@ const MiniLaTeXKernel = `
 % NOT package emulation — a command that genuinely draws (a TikZ picture) still
 % cannot render, it just no longer aborts the preamble. (Derived from an arXiv
 % compatibility study: these were the commands most often blocking real papers.)
-\def\makeatletter{\catcode64=11\relax}
-\def\makeatother{\catcode64=12\relax}
+% ⛔ \makeatletter records that the DOCUMENT asked for it, because \document has to tell a
+% preamble that asked from one that did not.
+%
+% Real LaTeX leaves the at-sign alone at begin-document: latex.ltx:6672-6712 assigns no
+% catcode there, so whatever the preamble left is what the body gets. This engine loads its
+% formats with the at-sign as a LETTER and never hands it back (classkernel.go and
+% amssubstrate.go both end that way), so \document forced catcode 12 to compensate — and the
+% compensation also undid a \makeatletter that the preamble had asked for and never revoked.
+%
+% Measured against tectonic on five lines — documentclass, \makeatletter, begin document,
+% then printing the at-sign's catcode: tectonic 11, this engine 12. 21 of the 154 corpus
+% papers open \makeatletter in their preamble.
+%
+% ⛔ Handing the at-sign back at the end of the last format is the faithful shape and it
+% breaks 37 tests in this package: the engine's own witnesses probe @-names without asking
+% for them. Hence the flag, which changes nothing except for a document that DID ask.
+\def\gotexatasked{0}
+\def\makeatletter{\catcode64=11\relax\def\gotexatasked{1}}
+\def\makeatother{\catcode64=12\relax\def\gotexatasked{0}}
 \newcount\pdfoutput
 \newcount\pdfminorversion
 \newdimen\voffset\newdimen\hoffset
