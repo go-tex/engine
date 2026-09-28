@@ -713,8 +713,20 @@ func figureDeclaredSize(name string) (w, h int) {
 	n, _ := io.ReadFull(f, head)
 	head = head[:n]
 	switch {
-	case bytes.HasPrefix(head, []byte("%!PS")), bytes.Contains(head, []byte("%%BoundingBox")):
-		return epsBoundingBox(head)
+	// ⛔ The %PDF- PREFIX is tested first, because the EPS case below matches on a
+	// SUBSTRING and a substring anywhere in 64KB beats a prefix that identifies the
+	// whole file. A .pdf produced from a vector drawing routinely carries an embedded
+	// EPS, and with it that EPS's %%BoundingBox: kendall-structure.pdf in corpus paper
+	// 2406.10437 is a %PDF- whose page box is 354.4x154.0pt and which holds
+	// "%%BoundingBox: 51 -155 439 797" at offset 34398. Read as EPS it measured
+	// 386x951 — an aspect of 2.46 instead of 0.43 — so a \includegraphics[width=
+	// \textwidth] placeholder stood 886.9pt tall where the figure is 156.4pt, five and
+	// a half times too tall and more than a full text height of invented vertical
+	// space. pdfIntrinsicPoints, which this case calls, reads the page box correctly;
+	// it was simply never reached.
+	//
+	// Measured on the 154-paper corpus: 9 of 1209 PDF figures across 3 papers are
+	// %PDF- files carrying a %%BoundingBox, and 2406.10437 holds 5 of them.
 	case bytes.HasPrefix(head, []byte("%PDF-")):
 		const maxPDFScan = 32 << 20
 		data := head
@@ -732,6 +744,8 @@ func figureDeclaredSize(name string) (w, h int) {
 			return 0, 0
 		}
 		return int(wPt + 0.5), int(hPt + 0.5)
+	case bytes.HasPrefix(head, []byte("%!PS")), bytes.Contains(head, []byte("%%BoundingBox")):
+		return epsBoundingBox(head)
 	}
 	return 0, 0
 }
