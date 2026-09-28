@@ -453,34 +453,68 @@ const MiniLaTeXKernel = `
 % paragraph-wide at \par). Nesting is tracked in the count \@alglevel; openers bump
 % it after emitting their line, closers drop it before.
 \def\@algsetleft{\ifcase\@alglevel\leftskip0pt\or\leftskip12pt\or\leftskip24pt\or\leftskip36pt\or\leftskip48pt\or\leftskip60pt\or\leftskip72pt\else\leftskip84pt\fi}
-\long\def\@algline{\par\@algsetleft\noindent}
-\long\def\@algif#1{\par\@algsetleft\noindent\@algkw{if} #1 \@algkw{then}\advance\@alglevel by1}
-\long\def\@algelsif#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{else if} #1 \@algkw{then}\advance\@alglevel by1}
-\def\@algelse{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{else}\advance\@alglevel by1}
-\def\@algendif{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end if}}
-\long\def\@algfor#1{\par\@algsetleft\noindent\@algkw{for} #1 \@algkw{do}\advance\@alglevel by1}
-\long\def\@algforall#1{\par\@algsetleft\noindent\@algkw{for all} #1 \@algkw{do}\advance\@alglevel by1}
-\def\@algendfor{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end for}}
-\long\def\@algwhile#1{\par\@algsetleft\noindent\@algkw{while} #1 \@algkw{do}\advance\@alglevel by1}
-\def\@algendwhile{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end while}}
-\def\@algrepeat{\par\@algsetleft\noindent\@algkw{repeat}\advance\@alglevel by1}
-\long\def\@alguntil#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{until} #1}
-\def\@algloop{\par\@algsetleft\noindent\@algkw{loop}\advance\@alglevel by1}
-\def\@algendloop{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end loop}}
-\long\def\@algreq{\par\@algsetleft\noindent\@algkw{Require:} }
-\long\def\@algens{\par\@algsetleft\noindent\@algkw{Ensure:} }
-\long\def\@alginput{\par\@algsetleft\noindent\@algkw{Input:} }
-\long\def\@algoutput{\par\@algsetleft\noindent\@algkw{Output:} }
-\long\def\@algreturn{\par\@algsetleft\noindent\@algkw{return} }
-\long\def\@algfunction#1#2{\par\@algsetleft\noindent\@algkw{function} #1(#2)\advance\@alglevel by1}
-\def\@algendfunction{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end function}}
-\long\def\@algprocedure#1#2{\par\@algsetleft\noindent\@algkw{procedure} #1(#2)\advance\@alglevel by1}
-\def\@algendprocedure{\advance\@alglevel by-1\par\@algsetleft\noindent\@algkw{end procedure}}
+% \begin{algorithmic}[N] numbers every N-th line, and N defaults to 0 meaning no
+% numbers at all (algorithmic.sty:123). The optional argument was DISCARDED here, so
+% every numbered algorithm lost its numbers — and the surrounding prose refers to them
+% ("see line 7"). Measured on 999 arXiv papers: 230 \begin{algorithmic} carry the
+% argument, over 109 papers, against 35 that do not.
+%
+% The pair below is algorithmic.sty's \ALC@it (line 146) and \ALC@lno (line 127):
+% step a remainder, reset it to 0 when it reaches N, step the line number, and print
+% the number only when the remainder is 0. N=0 therefore never resets and never prints,
+% which is exactly the unnumbered default.
+%
+% N is compared as a STRING, as upstream does with \ifthenelse{\equal{…}}: no number is
+% ever scanned, so no value of the argument can raise "Missing number", and a value that
+% never matches behaves as 0 — upstream's own degradation. All 230 corpus uses are
+% numeric ([1] 229 times, [2] once).
+\newcount\@algrem
+\newcount\@algno
+\def\@algevery{0}
+\def\@algnumreset{\@algrem0\relax\@algno0\relax\def\@algevery{0}}
+\def\@algopt[#1]{\def\@algevery{#1}}
+% The empty box in the else branch is not decoration: upstream sets an unnumbered line's
+% text at the same leftmargin as a numbered one (\labelwidth 1.2em + \labelsep 0.5em,
+% algorithmic.sty:221-225), so without it every skipped number would shift its line.
+\def\@alglno{\def\@algzero{0}\ifx\@algevery\@algzero\else
+\advance\@algrem by1\relax
+\edef\@algcur{\the\@algrem}%
+\ifx\@algcur\@algevery\@algrem0\relax\fi
+\advance\@algno by1\relax
+\ifnum\@algrem=0 \hbox to1.2em{\hss{\footnotesize\the\@algno:}}\else\hbox to1.2em{}\fi
+\hskip0.5em\fi}
+% An unnumbered line keeps the indent but takes no number: algorithmicx's \Statex, and
+% algorithmic.sty's \REQUIRE/\ENSURE, which use \item[<label>] and never reach \ALC@it.
+\def\@algnolno{\def\@algzero{0}\ifx\@algevery\@algzero\else\hbox to1.2em{}\hskip0.5em\fi}
+\long\def\@algline{\par\@algsetleft\noindent\@alglno}
+\long\def\@alglinex{\par\@algsetleft\noindent\@algnolno}
+\long\def\@algif#1{\par\@algsetleft\noindent\@alglno\@algkw{if} #1 \@algkw{then}\advance\@alglevel by1}
+\long\def\@algelsif#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{else if} #1 \@algkw{then}\advance\@alglevel by1}
+\def\@algelse{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{else}\advance\@alglevel by1}
+\def\@algendif{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end if}}
+\long\def\@algfor#1{\par\@algsetleft\noindent\@alglno\@algkw{for} #1 \@algkw{do}\advance\@alglevel by1}
+\long\def\@algforall#1{\par\@algsetleft\noindent\@alglno\@algkw{for all} #1 \@algkw{do}\advance\@alglevel by1}
+\def\@algendfor{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end for}}
+\long\def\@algwhile#1{\par\@algsetleft\noindent\@alglno\@algkw{while} #1 \@algkw{do}\advance\@alglevel by1}
+\def\@algendwhile{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end while}}
+\def\@algrepeat{\par\@algsetleft\noindent\@alglno\@algkw{repeat}\advance\@alglevel by1}
+\long\def\@alguntil#1{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{until} #1}
+\def\@algloop{\par\@algsetleft\noindent\@alglno\@algkw{loop}\advance\@alglevel by1}
+\def\@algendloop{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end loop}}
+\long\def\@algreq{\par\@algsetleft\noindent\@algnolno\@algkw{Require:} }
+\long\def\@algens{\par\@algsetleft\noindent\@algnolno\@algkw{Ensure:} }
+\long\def\@alginput{\par\@algsetleft\noindent\@algnolno\@algkw{Input:} }
+\long\def\@algoutput{\par\@algsetleft\noindent\@algnolno\@algkw{Output:} }
+\long\def\@algreturn{\par\@algsetleft\noindent\@alglno\@algkw{return} }
+\long\def\@algfunction#1#2{\par\@algsetleft\noindent\@alglno\@algkw{function} #1(#2)\advance\@alglevel by1}
+\def\@algendfunction{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end function}}
+\long\def\@algprocedure#1#2{\par\@algsetleft\noindent\@alglno\@algkw{procedure} #1(#2)\advance\@alglevel by1}
+\def\@algendprocedure{\advance\@alglevel by-1\par\@algsetleft\noindent\@alglno\@algkw{end procedure}}
 \long\def\@algcomment#1{\quad{\small #1}}
 \long\def\@algcall#1#2{\@algkw{call} #1(#2)}
-\long\def\algorithmic{\par\begingroup\parindent0pt\@alglevel0\relax\@algsetup\@discardopt}
+\long\def\algorithmic{\par\begingroup\parindent0pt\@alglevel0\relax\@algsetup\@algnumreset\@ifnextchar[{\@algopt}{}}
 \def\@algsetup{%
-\let\STATE\@algline\let\State\@algline\let\STATEx\@algline\let\Statex\@algline
+\let\STATE\@algline\let\State\@algline\let\STATEx\@alglinex\let\Statex\@alglinex
 \let\IF\@algif\let\If\@algif\let\ELSIF\@algelsif\let\ElsIf\@algelsif\let\ELSE\@algelse\let\Else\@algelse\let\ENDIF\@algendif\let\EndIf\@algendif
 \let\FOR\@algfor\let\For\@algfor\let\FORALL\@algforall\let\ForAll\@algforall\let\ENDFOR\@algendfor\let\EndFor\@algendfor
 \let\WHILE\@algwhile\let\While\@algwhile\let\ENDWHILE\@algendwhile\let\EndWhile\@algendwhile
