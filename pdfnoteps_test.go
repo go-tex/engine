@@ -68,13 +68,22 @@ func TestAPDFCarryingAnEmbeddedEPSBoxIsMeasuredAsAPDF(t *testing.T) {
 // 846pt — taller than the text block, which is how the defect showed up at all.
 func TestThePlaceholderHeightFollowsThePageBoxNotTheEmbeddedEPS(t *testing.T) {
 	p := minimalPDFWithEmbeddedEPSBox(t, 354.356, 153.952)
+	// ⛔ The file is named by its BARE name from its own directory, never by an
+	// absolute path interpolated into TeX source. A Windows temp path is
+	// "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\..." — every backslash
+	// is an escape character to TeX and the ~ is active (a non-breaking space), so
+	// the name never resolves, figureDeclaredSize returns 0x0 and the placeholder
+	// falls back to a SQUARE. That is what this test measured on windows-latest:
+	// ZZBOX=345.0pt, exactly the requested width, while the fix itself was fine —
+	// the sibling test, which passes the path to Go and not to TeX, passed there.
+	t.Chdir(filepath.Dir(p))
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
 	e.lenient = true
 	src := `\documentclass[11pt]{article}\usepackage{graphicx}\begin{document}` +
-		`\setbox0=\hbox{\includegraphics[width=345pt]{` + p + `}}` +
+		`\setbox0=\hbox{\includegraphics[width=345pt]{` + filepath.Base(p) + `}}` +
 		`\typeout{ZZBOX=\the\ht0}x\end{document}`
 	if _, err := e.Run(src); err != nil {
 		t.Fatalf("unexpected error %v", err)
