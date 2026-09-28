@@ -8,7 +8,7 @@ package engine
 // token lists; rows are entries separated by & and ended by \cr. Each column's
 // width is the maximum of its cells' natural widths, every cell is then repacked
 // to that width, and the rows are stacked into a vbox. Simplifications for now:
-// no \tabskip glue, no \omit/\span/\noalign, and a cell may not contain a bare
+// no \tabskip glue, no \omit/\span, and a cell may not contain a bare
 // top-level {…} group (use \hbox{…} for grouped content) — matching the box
 // builder's brace handling.
 
@@ -27,17 +27,77 @@ func (e *Engine) doHalign() {
 		return
 	}
 	templates := e.parsePreamble()
-	var rows [][][]node
+	var items []alignItem
 	for {
+		for {
+			vmat, ok := e.scanNoalign()
+			if !ok {
+				break
+			}
+			items = append(items, alignItem{vmat: vmat})
+		}
 		row, ended := e.parseRow(templates)
 		if row != nil {
-			rows = append(rows, row)
+			items = append(items, alignItem{row: row})
 		}
 		if ended {
 			break
 		}
 	}
-	e.contribute(e.assembleAlignment(templates, rows))
+	e.contribute(e.assembleAlignment(templates, items))
+}
+
+// alignItem is one thing in an alignment's vertical list: either a row of cells
+// or the material a \noalign contributed between two rows. Exactly one field is
+// set.
+type alignItem struct {
+	row  [][]node
+	vmat []node
+}
+
+// scanNoalign consumes a \noalign{…} if one is next, returning the vertical list
+// its group builds.
+//
+// tex.web §785: \noalign may appear only where a row could begin — at the very
+// start of an alignment or just after a \cr — and its argument is VERTICAL mode
+// material that goes into the enclosing vertical list, between the rows. TikZ
+// stacks the lines of a node with align= exactly this way, one \halign whose
+// rows are the lines and whose \noalign{\vskip …} is the leading between them
+// (tikz.code.tex, \tikz@align@end@check), so a node reading
+//
+//	\node [align=center] {one \\ two};
+//
+// used to leave \noalign undefined. That is not merely a lost skip: the group
+// after it then reached parseRow as a bare top-level {…}, which a cell may not
+// hold, and the rest of the document went with it.
+func (e *Engine) scanNoalign() ([]node, bool) {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return nil, false
+	}
+	if !t.cs_ || t.cs != "noalign" {
+		e.back(t)
+		return nil, false
+	}
+	e.skipOptSpace()
+	b, ok := e.getXToken()
+	if !ok {
+		return nil, true
+	}
+	if c, isChar := e.implicitChar(b); isChar {
+		b = c // \bgroup opens the group just as { does
+	}
+	if b.cs_ || b.cat != catBegin {
+		e.back(b) // \noalign without a group: nothing to contribute
+		return nil, true
+	}
+	// TeX makes the material a group of its own (tex.web §785 opens one), so a
+	// font or glue change inside a \noalign stops at it.
+	e.beginGroupKind(boxGroup)
+	list := e.buildVBoxList()
+	e.endGroup()
+	return list, true
 }
 
 // parsePreamble reads the template row (up to \cr), returning one entry per
@@ -146,11 +206,11 @@ func (e *Engine) buildCellHList(toks []tok) []node {
 
 // assembleAlignment computes column widths and stacks the repacked rows into a
 // vbox.
-func (e *Engine) assembleAlignment(cols []colTemplate, rows [][][]node) *boxNode {
+func (e *Engine) assembleAlignment(cols []colTemplate, items []alignItem) *boxNode {
 	ncol := len(cols)
 	colw := make([]int, ncol)
-	for _, row := range rows {
-		for j, cell := range row {
+	for _, it := range items {
+		for j, cell := range it.row {
 			if j < ncol {
 				if w := hpackSP(cell, packNatural, 0).width; w > colw[j] {
 					colw[j] = w
@@ -170,9 +230,17 @@ func (e *Engine) assembleAlignment(cols []colTemplate, rows [][][]node) *boxNode
 	// on the direct witness above, not on a corpus measurement, which is 0 pages,
 	// 0 PDFs and 0 ink changed.
 	prevDepth := ignoreDepth
-	for _, row := range rows {
+	for _, it := range items {
+		if it.row == nil {
+			// \noalign material joins the vertical list as it stands. Glue and
+			// penalties do not change prev_depth, and a box inside it already took
+			// its own interline glue while buildVBoxList ran, so the running depth
+			// is left alone here.
+			vlist = append(vlist, it.vmat...)
+			continue
+		}
 		var rowNodes []node
-		for j, cell := range row {
+		for j, cell := range it.row {
 			width := 0
 			if j < ncol {
 				width = colw[j]
