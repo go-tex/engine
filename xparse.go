@@ -251,6 +251,14 @@ func (e *Engine) doDocumentCommand(mode xpMode) {
 	e.eq[name] = &meaning{
 		kind: mPrim,
 		name: "gotex@doc@" + name, // not in expandableSet: runs in the stomach, like a \protected xparse command
+		// The specification and the replacement text are kept on the meaning as well
+		// as captured by the closure, so the maths layer's string-level expansion can
+		// reach them: it only ever looked at mMacro, and every \NewDocumentCommand
+		// macro therefore arrived in a formula as a bare name — 1193 equations of a
+		// 999-paper census (#496). See expandXparseInMathSource (math.go).
+		xpDoc:   true, // NOT "xpSpecs != nil": an empty specification gives a nil slice
+		xpSpecs: specs,
+		body:    body,
 		prim: func(e *Engine) {
 			args := e.grabXparseArgs(specs)
 			e.push(substituteParams(body, args))
