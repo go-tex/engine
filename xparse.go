@@ -105,17 +105,32 @@ func (r *specReader) nextGroup() []tok {
 
 // parseXparseSpec turns an argument specification like "s m O{0.5} m O{-0.5}" into
 // a descriptor list. Unknown or unsupported specifiers (e/E embellishments, v) are
-// skipped as gracefully as possible.
-func parseXparseSpec(spec []tok) []xpArg {
+// skipped as gracefully as possible, and the second result says whether any WAS.
+//
+// ⛔ Two kinds are APPROXIMATED rather than modelled, and it matters which:
+//
+//	e E   the embellishment's group is consumed and NO descriptor is appended, so the
+//	      remaining #n keep their numbers — changing that would renumber every existing
+//	      body — and the embellished argument is simply not grabbed.
+//	v     a verbatim argument is taken as an ordinary mandatory one, which grabs the
+//	      opening DELIMITER instead of the text between the pair.
+//
+// Both are long-standing text-mode behaviour and are left exactly as they were. But the
+// maths layer substitutes into a STRING and must not run on a specification whose arity
+// it cannot trust — it would produce a formula with the wrong text, silently. So the flag
+// is reported, and doDocumentCommand keeps such a command OUT of the maths path.
+func parseXparseSpec(spec []tok) ([]xpArg, bool) {
 	r := &specReader{toks: spec}
 	var args []xpArg
+	approx := false
 	for {
 		t, ok := r.nextNonSpace()
 		if !ok {
 			break
 		}
 		if t.cs_ {
-			continue // a control sequence in a spec is not something we model
+			approx = true // a control sequence in a spec is not something we model
+			continue
 		}
 		switch t.ch {
 		case '+', '!', '>': // long / spacing / processor prefixes — no effect here
@@ -149,13 +164,16 @@ func parseXparseSpec(spec []tok) []xpArg {
 			args = append(args, a)
 		case 'e', 'E':
 			r.nextGroup() // embellishment token list — unsupported, consume its group
+			approx = true // the argument is LOST from the list: see the note above
 		case 'v':
 			args = append(args, xpArg{kind: xpMandatory}) // verbatim: best-effort as mandatory
+			approx = true
 		default:
 			// unknown specifier: ignore it
+			approx = true
 		}
 	}
-	return args
+	return args, approx
 }
 
 // peekChar consumes and reports the next non-space token when it is the character
@@ -247,7 +265,7 @@ func (e *Engine) doDocumentCommand(mode xpMode) {
 	if mode == xpProvide && e.eq[name] != nil {
 		return
 	}
-	specs := parseXparseSpec(spec)
+	specs, approx := parseXparseSpec(spec)
 	e.eq[name] = &meaning{
 		kind: mPrim,
 		name: "gotex@doc@" + name, // not in expandableSet: runs in the stomach, like a \protected xparse command
@@ -256,7 +274,10 @@ func (e *Engine) doDocumentCommand(mode xpMode) {
 		// reach them: it only ever looked at mMacro, and every \NewDocumentCommand
 		// macro therefore arrived in a formula as a bare name — 1193 equations of a
 		// 999-paper census (#496). See expandXparseInMathSource (math.go).
-		xpDoc:   true, // NOT "xpSpecs != nil": an empty specification gives a nil slice
+		// NOT "xpSpecs != nil": an empty specification gives a nil slice. And an
+		// APPROXIMATED specification (e/E/v, or an unknown letter) stays out of the
+		// maths path entirely: its arity cannot be trusted there.
+		xpDoc:   !approx,
 		xpSpecs: specs,
 		body:    body,
 		prim: func(e *Engine) {
@@ -282,7 +303,7 @@ func (e *Engine) doDocumentEnvironment(mode xpMode) {
 	if mode == xpProvide && e.eq[name] != nil {
 		return
 	}
-	specs := parseXparseSpec(spec)
+	specs, _ := parseXparseSpec(spec)
 	e.eq[name] = &meaning{
 		kind: mPrim, name: "gotex@docenv@" + name,
 		prim: func(e *Engine) {

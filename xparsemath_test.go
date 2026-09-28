@@ -106,10 +106,12 @@ func TestASpecificationItCannotServeIsRefusedLoudly(t *testing.T) {
 	// exists to prevent.
 	// o and O{def} were in this list until they were served; what remains is the star,
 	// the token test and the delimited/embellished/verbatim kinds.
+	// o, O{def}, s and t<c> were each in this list until they were served. What remains
+	// is the delimited, embellished and verbatim kinds.
 	for _, c := range []struct{ name, src string }{
-		{`\Str`, `\NewDocumentCommand \Str {s m} {#2}$\Str*{x}$`},
-		{`\Tst`, `\NewDocumentCommand \Tst {t! m} {#2}$\Tst!{x}$`},
 		{`\Dlm`, `\NewDocumentCommand \Dlm {r() m} {#1#2}$\Dlm(a){b}$`},
+		{`\Emb`, `\NewDocumentCommand \Emb {m E{_^}{{}{}}} {#1}$\Emb{a}_b^c$`},
+		{`\Vrb`, `\NewDocumentCommand \Vrb {v} {#1}$\Vrb|x|$`},
 	} {
 		d := mathDropRun(t, c.src)
 		if d[c.name] == 0 {
@@ -253,5 +255,119 @@ func TestASpecificationBeyondNineParametersIsRefused(t *testing.T) {
 		`$\Nine{a}{b}{c}{d}{e}{f}{g}{h}{\alpha}$`)
 	if n := d[`\Nine`]; n != 0 {
 		t.Errorf(`nine arguments were refused: %d drop(s) (%v)`, n, d)
+	}
+}
+
+// s is t* (latex.ltx:2131), so one clause serves both. 14 census triggers and 234
+// equations. Both directions of both are checked, because the marker is what
+// \IfBooleanTF tests and getting it backwards renders the wrong branch silently.
+func TestAStarIsTestedAndConsumedOnlyOnAMatch(t *testing.T) {
+	// Star present: the TRUE branch runs, so the unknown inside it drops.
+	d := mathDropRun(t, `\NewDocumentCommand \Sb {s m} {\IfBooleanTF{#1}{\nosuchmaththing}{#2}}`+
+		`$\Sb*{\alpha}$`)
+	if d[`\Sb`] != 0 {
+		t.Errorf(`\Sb dropped with a star (%v)`, d)
+	}
+	if d[`\nosuchmaththing`] == 0 {
+		t.Errorf(`\IfBooleanTF took the FALSE branch although * was given (%v)`, d)
+	}
+	// Star absent: the FALSE branch runs, so nothing drops.
+	d = mathDropRun(t, `\NewDocumentCommand \Sb {s m} {\IfBooleanTF{#1}{\nosuchmaththing}{#2}}`+
+		`$\Sb{\alpha}$`)
+	if d[`\Sb`] != 0 {
+		t.Errorf(`\Sb dropped without a star (%v)`, d)
+	}
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`\IfBooleanTF took the TRUE branch with no star: %d drop(s) (%v)`, n, d)
+	}
+}
+
+// ⛔ The star must be CONSUMED on a match and left alone otherwise. If it were consumed
+// either way, the mandatory argument after it would be taken from the wrong place; if it
+// were never consumed, the * would stay in the formula. Both are observable.
+func TestTheStarIsConsumedExactlyWhenPresent(t *testing.T) {
+	// Consumed: the mandatory argument is {\alpha}, not the star, so the body {#2}
+	// renders \alpha and nothing drops.
+	d := mathDropRun(t, `\NewDocumentCommand \Sc {s m} {#2}$\Sc*{\alpha}$`)
+	if len(d) != 0 {
+		t.Errorf(`something dropped: the star was not consumed cleanly (%v)`, d)
+	}
+	// Not consumed when absent: {\nosuchmaththing} must still be #2 and reach the body.
+	d = mathDropRun(t, `\NewDocumentCommand \Sc {s m} {#2}$\Sc{\nosuchmaththing}$`)
+	if d[`\nosuchmaththing`] == 0 {
+		t.Errorf(`the mandatory argument was not taken when no star was present (%v)`, d)
+	}
+}
+
+// t<c> tests any single character, not only a star. "t!" is what a corpus paper writes.
+func TestATokenTestWorksForACharacterOtherThanAStar(t *testing.T) {
+	d := mathDropRun(t, `\NewDocumentCommand \Tb {t! m} {\IfBooleanTF{#1}{\nosuchmaththing}{#2}}`+
+		`$\Tb!{\alpha}$`)
+	if d[`\nosuchmaththing`] == 0 {
+		t.Errorf(`the ! was not recognised as present (%v)`, d)
+	}
+	d = mathDropRun(t, `\NewDocumentCommand \Tb {t! m} {\IfBooleanTF{#1}{\nosuchmaththing}{#2}}`+
+		`$\Tb{\alpha}$`)
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`the ! was seen although absent: %d drop(s) (%v)`, n, d)
+	}
+}
+
+// The full corpus shape: "s O{\lambda} m m", from a real paper. It exercises the star,
+// a defaulted optional and two mandatory arguments in one specification, in that order.
+func TestTheCorpusSpecificationWithAStarAnOptionalAndTwoMandatory(t *testing.T) {
+	decl := `\NewDocumentCommand \Ren {s O{\lambda} m m}{\IfBooleanTF{#1}{#2#3}{#2#4}}`
+	// Star given: #3 is used, so the unknown in #4 must vanish.
+	d := mathDropRun(t, decl+`$\Ren*[\mu]{\alpha}{\nosuchmaththing}$`)
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`with the star, #4 was used instead of #3: %d drop(s) (%v)`, n, d)
+	}
+	// No star, optional absent: #2 is the default \lambda and #4 is used.
+	d = mathDropRun(t, decl+`$\Ren{\alpha}{\beta}$`)
+	if len(d) != 0 {
+		t.Errorf(`the default-plus-two-mandatory form dropped (%v)`, d)
+	}
+}
+
+// The star is found whatever spacing the SOURCE carries. ⚠ This does not exercise the
+// space-skipping loop: scanMathSource collapses runs of spaces and the needle consumes
+// the one it emits, so all four forms below reach the parser identically — measured, and
+// an ablation of that loop breaks nothing. What the test does pin is the end-to-end
+// behaviour a paper depends on, which is worth having whatever resolves it.
+func TestSpacesBeforeAStarAreSkipped(t *testing.T) {
+	decl := `\NewDocumentCommand \Sd {s m} {\IfBooleanTF{#1}{\nosuchmaththing}{#2}}`
+	for _, use := range []string{`$\Sd*{\alpha}$`, `$\Sd *{\alpha}$`, `$\Sd  *{\alpha}$`} {
+		d := mathDropRun(t, decl+use)
+		if d[`\nosuchmaththing`] == 0 {
+			t.Errorf(`%s: the star was not seen through the spaces (%v)`, use, d)
+		}
+	}
+	// And a space does NOT invent a star where there is none.
+	d := mathDropRun(t, decl+`$\Sd  {\alpha}$`)
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`spaces alone were read as a star: %d drop(s) (%v)`, n, d)
+	}
+}
+
+// ⛔ An APPROXIMATED specification stays out of the maths path entirely. parseXparseSpec
+// models e/E by consuming the group and appending NO descriptor (so existing #n keep
+// their numbers) and v by taking the argument as ordinary mandatory — both long-standing
+// text-mode behaviour. The maths layer substitutes into a string and cannot run on an
+// arity it does not trust, so it must refuse rather than mangle silently.
+func TestAnApproximatedSpecificationStaysOutOfTheMathsPath(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{`\Emb`, `\NewDocumentCommand \Emb {m E{_^}{{}{}}} {#1}$\Emb{a}$`},
+		{`\Vrb`, `\NewDocumentCommand \Vrb {v} {#1}$\Vrb|x|$`},
+	} {
+		d := mathDropRun(t, c.src)
+		if d[c.name] == 0 {
+			t.Errorf(`%s was served although its specification is only approximated (%v)`, c.name, d)
+		}
+	}
+	// A specification with NO approximation must still be served, so the flag is not a
+	// blanket refusal.
+	d := mathDropRun(t, `\NewDocumentCommand \Ok {s o m} {#3}$\Ok{\alpha}$`)
+	if n := d[`\Ok`]; n != 0 {
+		t.Errorf(`an exact specification was refused: %d drop(s) (%v)`, n, d)
 	}
 }

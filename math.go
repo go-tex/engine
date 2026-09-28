@@ -445,7 +445,13 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 //
 // Refused, each because it is not the same thing as \newcommand's machinery:
 //
-//	s t         a star or token test, yielding \BooleanTrue/\BooleanFalse.
+//	s t<c>      a star, or a test for one character. s IS t* (latex.ltx:2131), so they
+//	            are one clause. The argument is the \gotex@BoolTrue / \gotex@BoolFalse
+//	            marker \IfBooleanTF tests — already expandable, like the NoValue tests —
+//	            and the character is consumed only on a match. 14 triggers, 234 equations.
+//
+// Refused, each because it is not the same thing as \newcommand's machinery:
+//
 //	r R d D e E v   delimited, embellished or verbatim arguments.
 //
 // Refusing is the design: a half-understood specification would substitute with the
@@ -462,7 +468,9 @@ func (e *Engine) expandXparseInMathSource(src, name string, m *meaning) (string,
 	// and a test exercises exactly that.
 	nargs := 0
 	for _, a := range m.xpSpecs {
-		if a.kind != xpMandatory && a.kind != xpOptional {
+		switch a.kind {
+		case xpMandatory, xpOptional, xpStar, xpTest:
+		default:
 			return "", false
 		}
 		nargs++
@@ -529,6 +537,36 @@ func (e *Engine) parseXparseMathArgs(s string, specs []xpArg) ([]string, int, bo
 			}
 			args = append(args, arg)
 			p += len(s[p:]) - len(remainder)
+		case xpStar, xpTest:
+			// s is t* — latex.ltx:2131 normalises it to exactly that — so the two are
+			// one clause here, differing only in the character sought. The character is
+			// consumed ONLY on a match, which is what the stomach's peekChar does
+			// (xparse.go:163).
+			//
+			// ⛔ The space skip below is UNREACHABLE with today's emitter, and kept for
+			// the same reason as parseXparseMathArgs's default clause: scanMathSource
+			// writes every control sequence as backslash-name-SPACE and collapses runs,
+			// and the needle consumes that one space, so p already sits on the test
+			// character. Measured: "$\Sd*{x}$", "$\Sd *{x}$" and "$\Sd   *  {x}$" all
+			// behave identically, and an ablation of the loop breaks no test. Removing
+			// it would make a future emitter that keeps a second space read it as "no
+			// star" and take the FALSE branch — silently.
+			//
+			// The argument is a MARKER either way: \gotex@BoolTrue or \gotex@BoolFalse,
+			// which \IfBooleanTF tests. It is never the character itself, and it is
+			// never empty — an empty argument would make \IfBooleanTF{#1}{…}{…} read
+			// its branches as the test.
+			q := p
+			for q < len(s) && s[q] == ' ' {
+				q++
+			}
+			r, width := utf8.DecodeRuneInString(s[q:])
+			if width > 0 && r == a.testTok.ch {
+				args = append(args, e.toksToString(boolTrueToks()))
+				p = q + width
+			} else {
+				args = append(args, e.toksToString(boolFalseToks()))
+			}
 		default:
 			// ⛔ UNREACHABLE while expandXparseInMathSource's guard stands, and kept for
 			// that reason rather than in spite of it: without it a new specifier kind
