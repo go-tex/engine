@@ -433,44 +433,112 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 //	m … m       mandatory only — the same shape as \newcommand{\c}[n]{…}, which the
 //	            code below already parses out of the STRING. 18 triggers, 200 equations.
 //
+//	o O{def}    optional arguments, each grabbed IN ITS PLACE in the specification —
+//	            "s O{\lambda} m m" is a real corpus example, and \newcommand can only
+//	            put an optional argument first. An ABSENT one takes the specifier's own
+//	            default: the \gotex@NoValue marker for o, d for O{d}, which is what the
+//	            kernel's normalisation of o to D[]{-NoValue-} means (latex.ltx:2121).
+//	            The body then tests it with \IfNoValueTF, which is already expandable
+//	            (primitives.go's expandableSet literal lists all nine tests), so
+//	            flattenMathBody resolves the branch after substitution and the maths
+//	            layer never sees the test. 24 triggers, 324 equations.
+//
 // Refused, each because it is not the same thing as \newcommand's machinery:
 //
-//	o O d D     an ABSENT optional argument yields the -NoValue- marker, which the body
-//	            tests with \IfNoValueTF. \newcommand substitutes a DEFAULT instead, so
-//	            mapping one onto the other makes \IfNoValueF{#1}{…} take the wrong
-//	            branch. 24 triggers, 324 equations — the next thing to do here, and it
-//	            needs the marker, not a default.
 //	s t         a star or token test, yielding \BooleanTrue/\BooleanFalse.
-//	r R e E v   delimited, embellished or verbatim arguments.
+//	r R d D e E v   delimited, embellished or verbatim arguments.
 //
 // Refusing is the design: a half-understood specification would substitute with the
 // wrong arity and silently mangle the formula, where a name left standing is reported
 // and the census counts it.
 func (e *Engine) expandXparseInMathSource(src, name string, m *meaning) (string, bool) {
-	n := 0
+	// Only m and the optional kinds, and at most TeX's nine parameters.
+	//
+	// This check and parseXparseMathArgs's own default clause are LAYERED: removing
+	// this one alone changes nothing observable for a star or a delimited specifier,
+	// because the parser then refuses the same occurrence one step later. It is kept
+	// because it refuses BEFORE any string scanning and because it is where the
+	// contract reads; the nine-parameter bound below is the part only it can enforce,
+	// and a test exercises exactly that.
+	nargs := 0
 	for _, a := range m.xpSpecs {
-		if a.kind != xpMandatory {
+		if a.kind != xpMandatory && a.kind != xpOptional {
 			return "", false
 		}
-		n++
+		nargs++
 	}
-	if n > 9 {
+	if nargs > 9 {
 		return "", false
 	}
-	if n == 0 {
+	if nargs == 0 {
 		return replaceMathCS(src, name, e.flattenMathBody(e.toksToString(m.body))), true
 	}
-	// A mandatory-only specification is exactly \newcommand's parameter text, so the
-	// body can be reused with the same substitution the macro path uses.
-	shim := &meaning{kind: mMacro, body: m.body, long: true}
-	for i := 1; i <= n; i++ {
-		shim.params = append(shim.params, tok{ch: rune('0' + i), cat: catParam})
+	needle := "\\" + name + " "
+	var out strings.Builder
+	changed := false
+	for {
+		i := strings.Index(src, needle)
+		if i < 0 {
+			break
+		}
+		out.WriteString(src[:i])
+		rest := src[i+len(needle):]
+		args, consumed, ok := e.parseXparseMathArgs(rest, m.xpSpecs)
+		if !ok {
+			out.WriteString(needle) // leave this occurrence for go-tex/math to reject
+			src = rest
+			continue
+		}
+		out.WriteString(e.flattenMathBody(e.substituteMathBody(m.body, args)))
+		src = rest[consumed:]
+		changed = true
 	}
-	saved := e.eq[name]
-	e.eq[name] = shim
-	out, ok := e.expandMacroInMathSource(src, name)
-	e.eq[name] = saved
-	return out, ok
+	if !changed {
+		return "", false
+	}
+	out.WriteString(src)
+	return out.String(), true
+}
+
+// parseXparseMathArgs grabs one argument per specifier, IN ORDER, out of a go-tex/math
+// source string. It is the ordered counterpart of parseMathArgsOpt, which can only put
+// an optional argument FIRST because that is all \newcommand can express — an xparse
+// specification puts them anywhere, and "s O{\lambda} m m" is a real corpus example.
+//
+// An absent optional argument takes the specifier's own default, which for o is the
+// \gotex@NoValue marker and for O{d} is d. That distinction is the whole reason this
+// cannot go through \newcommand's machinery: the kernel normalises o to D[]{-NoValue-}
+// (latex.ltx:2121) and the body tests it with \IfNoValueTF, where \newcommand would
+// substitute a default and make \IfNoValueF{#1}{…} take the wrong branch.
+func (e *Engine) parseXparseMathArgs(s string, specs []xpArg) ([]string, int, bool) {
+	p := 0
+	args := make([]string, 0, len(specs))
+	for _, a := range specs {
+		switch a.kind {
+		case xpMandatory:
+			got, n, ok := parseMathArgs(s[p:], 1)
+			if !ok {
+				return nil, 0, false
+			}
+			args = append(args, got[0])
+			p += n
+		case xpOptional:
+			arg, remainder, taken := takeMathOptArg(s[p:])
+			if !taken {
+				arg = e.toksToString(a.def)
+			}
+			args = append(args, arg)
+			p += len(s[p:]) - len(remainder)
+		default:
+			// ⛔ UNREACHABLE while expandXparseInMathSource's guard stands, and kept for
+			// that reason rather than in spite of it: without it a new specifier kind
+			// would fall through, leave args SHORT, and substitute the wrong text —
+			// silently. An ablation of this clause alone breaks no test, which is the
+			// honest state of a guard whose job is to survive a change to its caller.
+			return nil, 0, false
+		}
+	}
+	return args, p, true
 }
 
 // expandMacroInMathSource substitutes the user/kernel macro \name in a go-tex/math
