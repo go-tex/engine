@@ -450,6 +450,31 @@ const LaTeX2eClassKernel = `
 % thing \pmb was imitating rather than dropping the formula. 348 of the 4172
 % formulas the arXiv corpus drops are \pmb.
 \def\pmb#1{\boldsymbol{#1}}
+% \mathpalette#1#2 sets #2 four times over, once per style, and lets \mathchoice pick —
+% latex.ltx:11179-11184, used VERBATIM:
+%
+%     \def\mathpalette#1#2{%
+%       \mathchoice{#1\displaystyle{#2}}{#1\textstyle{#2}}
+%                  {#1\scriptstyle{#2}}{#1\scriptscriptstyle{#2}}}
+%
+% 336 equations over 6 papers of a 999-paper census (#466), and every one of the six uses
+% it the same way: to build a CUSTOM SYMBOL whose parts must be sized by hand, as
+% \mathbin{\mathpalette\shuffle@{}} or \mathpalette\@cupdot{}.
+%
+% ⛔ It has to live HERE and not in go-tex/math, and the order is the reason. Those
+% papers' \shuffle@ and \@cupdot are their own \newcommand*[2] macros, which this engine
+% substitutes into the maths SOURCE STRING. Expanding \mathpalette inside the maths layer
+% instead would leave the source reading \mathpalette\shuffle@{} while the layer asked
+% for \shuffle@ — and the retry would then try to grab TWO arguments after \shuffle@ in a
+% source that has one. Expanded here, the source becomes
+% \mathchoice{\shuffle@\displaystyle{}}{…} and the same pass expands \shuffle@ with the
+% arguments actually standing beside it.
+%
+% go-tex/math gained \mathchoice itself in v0.46.0; without that this definition would
+% only trade one unknown command for another.
+\def\mathpalette#1#2{%
+  \mathchoice{#1\displaystyle{#2}}{#1\textstyle{#2}}%
+             {#1\scriptstyle{#2}}{#1\scriptscriptstyle{#2}}}
 % \symbol{N} is the character at code N (latex.ltx:10001,
 % \DeclareRobustCommand\symbol[1]{\char#1\relax}; the \Ucharcat branch above it is for
 % Unicode engines). The reference definition is used VERBATIM because go-tex/math
