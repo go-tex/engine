@@ -1042,7 +1042,29 @@ const MiniLaTeXKernel = `
 \long\def\gotex@optone@a[#1]#2{}
 \def\thanks#1{}
 \def\address#1{}
-\def\email#1{}
+% \email{a@b} is PRINTED in the title block by every class in this corpus that does not
+% define its own — measured against the reference PDFs: 57 of 68 \email values appear in
+% their reference, and of the 32 papers that have both an \email and a reference, 20 print
+% it on PAGE 1 (acmart 8, llncs 4, sagej 2, revtex4-1 2, article 2, achemso, sn-jnl). The
+% eleven values that do NOT appear are template placeholders the author never replaced —
+% firstname.lastname@phillips.org, iauthor@gmail.com, davejudysteve@university.edu.
+%
+% ⛔ Discarded here since the beginning, and nothing could see it: a stub the engine DEFINES
+% is not an undefined command, so no census channel counts it. go-tex/measure's gobblers.py
+% is the inventory; \email leads it at 44 papers and 100 uses.
+%
+% It takes authblk's route, the one \affil above already uses: append to \@author, separated
+% by \\, and let whatever \@maketitle the class has typeset it — article.cls sets \@author
+% inside \begin{tabular}[t]{c} whose rows are \\-separated (article.cls:246-248), and this
+% engine's own generic \maketitle centres it.
+%
+% ⛔ amsart is the exception and needs no branch here: it prints \email in its BOTTOM matter,
+% after the bibliography (amsart.cls:509, :525 — "Email address"), and the 3 corpus papers
+% whose reference shows it on the LAST page are amsart and mathincs. \documentclass{amsart}
+% loads the real embedded class, which defines \email itself and overrides this.
+\long\def\email#1{\gotex@emailadd{#1}}
+\long\def\gotex@emailadd#1{\ifx\@author\@empty\gdef\@author{#1}\else
+  \g@addto@macro\@author{\\ #1}\fi}
 \def\keywords#1{}
 \def\AtBeginDocument#1{}
 \def\AtEndDocument#1{}
