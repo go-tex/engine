@@ -104,10 +104,12 @@ func TestASpecificationItCannotServeIsRefusedLoudly(t *testing.T) {
 	// and "x" as two mandatory arguments and sets "x"; $\Dfl{a}{b}$ sets "ab". All
 	// three then stop being reported, which is exactly the silent mangling the guard
 	// exists to prevent.
+	// o and O{def} were in this list until they were served; what remains is the star,
+	// the token test and the delimited/embellished/verbatim kinds.
 	for _, c := range []struct{ name, src string }{
-		{`\Opt`, `\NewDocumentCommand \Opt {o} {\Gamma}$\Opt[x]$`},
 		{`\Str`, `\NewDocumentCommand \Str {s m} {#2}$\Str*{x}$`},
-		{`\Dfl`, `\NewDocumentCommand \Dfl {O{z} m} {#1#2}$\Dfl{a}{b}$`},
+		{`\Tst`, `\NewDocumentCommand \Tst {t! m} {#2}$\Tst!{x}$`},
+		{`\Dlm`, `\NewDocumentCommand \Dlm {r() m} {#1#2}$\Dlm(a){b}$`},
 	} {
 		d := mathDropRun(t, c.src)
 		if d[c.name] == 0 {
@@ -149,4 +151,107 @@ func TestAnXparseEnvironmentIsNotFlattenedIntoAFormula(t *testing.T) {
 	}
 	// Nothing to assert about maths here: the point is that the environment path is
 	// untouched and still runs. A panic or an error would be the failure.
+}
+
+// Optional arguments, each grabbed IN ITS PLACE. 24 census triggers and 324 equations,
+// and the reason it could not go through \newcommand's machinery: an ABSENT o yields the
+// -NoValue- marker (latex.ltx:2121 normalises o to D[]{-NoValue-}) and the body tests it
+// with \IfNoValueTF, where \newcommand would substitute a DEFAULT and make
+// \IfNoValueF{#1}{…} take the wrong branch.
+func TestAnOptionalArgumentIsGrabbedAndItsAbsenceCarriesTheMarker(t *testing.T) {
+	// Present: the body's \IfNoValueF branch must RUN, so the unknown inside it drops.
+	d := mathDropRun(t, `\NewDocumentCommand \Dw {o} {\Gamma\IfNoValueF{#1}{\nosuchmaththing}}$\Dw[3]$`)
+	if d[`\Dw`] != 0 {
+		t.Errorf(`\Dw dropped: the optional argument was not grabbed (%v)`, d)
+	}
+	if d[`\nosuchmaththing`] == 0 {
+		t.Errorf(`\IfNoValueF took the ABSENT branch although [3] was given (%v)`, d)
+	}
+	// Absent: the same branch must NOT run, so nothing drops at all. This is the half
+	// that a default value would get wrong.
+	d = mathDropRun(t, `\NewDocumentCommand \Dw {o} {\Gamma\IfNoValueF{#1}{\nosuchmaththing}}$\Dw$`)
+	if d[`\Dw`] != 0 {
+		t.Errorf(`\Dw dropped when its optional argument was absent (%v)`, d)
+	}
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`\IfNoValueF ran its branch %d time(s) on an ABSENT argument: the marker is not reaching it (%v)`, n, d)
+	}
+}
+
+// O{default} substitutes the DEFAULT when absent, which is the other half of the pair —
+// and the two must not be confused, since o and O differ only in that.
+func TestADefaultedOptionalArgumentUsesItsDefault(t *testing.T) {
+	// Absent: #1 is the default, which here is itself unknown, so it must drop under it.
+	d := mathDropRun(t, `\NewDocumentCommand \Df {O{\nosuchmaththing}} {#1}$\Df$`)
+	if d[`\nosuchmaththing`] == 0 {
+		t.Errorf(`the default was not substituted for the absent argument (%v)`, d)
+	}
+	// Present: the default must NOT be used.
+	d = mathDropRun(t, `\NewDocumentCommand \Df {O{\nosuchmaththing}} {#1}$\Df[\alpha]$`)
+	if n := d[`\nosuchmaththing`]; n != 0 {
+		t.Errorf(`the default was used although [\alpha] was given: %d drop(s) (%v)`, n, d)
+	}
+}
+
+// ⛔ The specification's ORDER is honoured. \newcommand can only make the FIRST
+// parameter optional; "m o m" cannot be expressed by it at all, and a corpus paper
+// writes "s O{\lambda} m m". Each case below puts an unknown command in a position that
+// only survives if the arguments were matched in order.
+func TestTheSpecificationOrderIsHonoured(t *testing.T) {
+	// m o m, all supplied: the body keeps #2 only, so the unknowns in #1 and #3 vanish.
+	d := mathDropRun(t, `\NewDocumentCommand \Mid {m o m} {#2}`+
+		`$\Mid{\nosuchA}[\beta]{\nosuchB}$`)
+	for _, bad := range []string{`\nosuchA`, `\nosuchB`} {
+		if n := d[bad]; n != 0 {
+			t.Errorf(`%s survived: the arguments were not matched in order (%v)`, bad, d)
+		}
+	}
+	if d[`\Mid`] != 0 {
+		t.Errorf(`\Mid dropped (%v)`, d)
+	}
+	// m o m with the optional ABSENT: the two mandatory ones must still be taken from
+	// their own places, so {\gamma} lands in #3 and not in #2.
+	d = mathDropRun(t, `\NewDocumentCommand \Mid {m o m} {#3}`+
+		`$\Mid{\nosuchA}{\gamma}$`)
+	if n := d[`\nosuchA`]; n != 0 {
+		t.Errorf(`the first mandatory argument leaked into the body: %d drop(s) (%v)`, n, d)
+	}
+	if d[`\Mid`] != 0 {
+		t.Errorf(`\Mid dropped with the optional absent (%v)`, d)
+	}
+}
+
+// ⛔ \IfNoValueTF and friends had to become EXPANDABLE. The comment beside them in
+// xparse.go claimed they already were and NOTHING registered them, so a body carrying
+// one survived flattenMathBody and the maths layer was handed \IfNoValueF itself. This
+// asserts the registration rather than its effect, because the effect is easy to get by
+// accident and the registration is the claim.
+func TestTheArgumentTestsAreExpandable(t *testing.T) {
+	for _, n := range []string{
+		"IfNoValueTF", "IfNoValueT", "IfNoValueF",
+		"IfValueTF", "IfValueT", "IfValueF",
+		"IfBooleanTF", "IfBooleanT", "IfBooleanF",
+	} {
+		if !isExpandable(n) {
+			t.Errorf(`\%s is not expandable: a conditional that chooses a branch belongs in the gullet`, n)
+		}
+	}
+}
+
+// TeX has nine parameters. A specification asking for more is refused, and this is the
+// one clause the OUTER guard alone enforces — parseXparseMathArgs would happily grab ten
+// arguments, so removing the guard is invisible for every other refused kind but not for
+// this one. That is why the test exists in this shape.
+func TestASpecificationBeyondNineParametersIsRefused(t *testing.T) {
+	d := mathDropRun(t, `\NewDocumentCommand \Ten {m m m m m m m m m m} {#1}`+
+		`$\Ten{a}{b}{c}{d}{e}{f}{g}{h}{i}{j}$`)
+	if d[`\Ten`] == 0 {
+		t.Errorf(`a ten-argument specification was accepted: TeX has nine parameters (%v)`, d)
+	}
+	// Nine is fine.
+	d = mathDropRun(t, `\NewDocumentCommand \Nine {m m m m m m m m m} {#9}`+
+		`$\Nine{a}{b}{c}{d}{e}{f}{g}{h}{\alpha}$`)
+	if n := d[`\Nine`]; n != 0 {
+		t.Errorf(`nine arguments were refused: %d drop(s) (%v)`, n, d)
+	}
 }
