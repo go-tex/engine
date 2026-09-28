@@ -484,9 +484,25 @@ type meaning struct {
 	optDefault []tok
 	prim       func(e *Engine)
 	name       string // primitive name (for \meaning/\string)
-	ch         rune   // let-char / chardef code
-	cat        cat
-	code       int
+	// xpSpecs is the argument specification of an xparse document command
+	// (\NewDocumentCommand and friends). Such a command is bound to a STOMACH
+	// primitive — a real one is \protected — so the maths layer's string-level
+	// expansion, which only ever looked at mMacro, could not reach it and every
+	// \NewDocumentCommand macro arrived in a formula as a bare name. Keeping the
+	// specification and the body HERE, beside the closure that also captures them,
+	// lets expandMacroInMathSource serve the cases it can serve exactly.
+	// Measured: 99 census triggers, 1193 equations (go-tex/engine#496).
+	//
+	// ⛔ xpDoc is a separate flag and not "xpSpecs != nil", because an EMPTY
+	// specification — \NewDocumentCommand \dist {} {…}, a command with no arguments —
+	// gives a nil slice. Keying on the slice made the one case worth most (37 of the 99
+	// triggers, 293 equations) indistinguishable from "not an xparse command at all",
+	// and the fix silently did nothing until this flag replaced the test.
+	xpDoc   bool
+	xpSpecs []xpArg
+	ch      rune // let-char / chardef code
+	cat     cat
+	code    int
 	// protected marks a \protected macro. TeX expands such a macro when it is
 	// executed but NOT inside an isolated expansion (\edef, \message, \write,
 	// \special), which is how a macro survives being written into a token list

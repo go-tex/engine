@@ -415,6 +415,64 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 	return svg, m, src, err
 }
 
+// expandXparseInMathSource substitutes an xparse document command (\NewDocumentCommand
+// and friends) in a go-tex/math source string.
+//
+// ⛔ These commands were invisible to this whole pass. xparse binds one to a STOMACH
+// primitive, because a real \NewDocumentCommand is \protected and must not expand
+// inside an \edef; expandMacroInMathSource only ever looked at mMacro, so every such
+// macro reached the maths layer as a bare NAME. Measured on 999 papers of the arXiv
+// corpus: 99 census triggers worth 1193 equations, the largest single group in it
+// (#496).
+//
+// Only the specifications this can serve EXACTLY are served, and the rest are left
+// verbatim for go-tex/math to report:
+//
+//	{}          no arguments — replace every occurrence with the body. 37 of the 99
+//	            triggers, 293 equations, and the largest of the five groups.
+//	m … m       mandatory only — the same shape as \newcommand{\c}[n]{…}, which the
+//	            code below already parses out of the STRING. 18 triggers, 200 equations.
+//
+// Refused, each because it is not the same thing as \newcommand's machinery:
+//
+//	o O d D     an ABSENT optional argument yields the -NoValue- marker, which the body
+//	            tests with \IfNoValueTF. \newcommand substitutes a DEFAULT instead, so
+//	            mapping one onto the other makes \IfNoValueF{#1}{…} take the wrong
+//	            branch. 24 triggers, 324 equations — the next thing to do here, and it
+//	            needs the marker, not a default.
+//	s t         a star or token test, yielding \BooleanTrue/\BooleanFalse.
+//	r R e E v   delimited, embellished or verbatim arguments.
+//
+// Refusing is the design: a half-understood specification would substitute with the
+// wrong arity and silently mangle the formula, where a name left standing is reported
+// and the census counts it.
+func (e *Engine) expandXparseInMathSource(src, name string, m *meaning) (string, bool) {
+	n := 0
+	for _, a := range m.xpSpecs {
+		if a.kind != xpMandatory {
+			return "", false
+		}
+		n++
+	}
+	if n > 9 {
+		return "", false
+	}
+	if n == 0 {
+		return replaceMathCS(src, name, e.flattenMathBody(e.toksToString(m.body))), true
+	}
+	// A mandatory-only specification is exactly \newcommand's parameter text, so the
+	// body can be reused with the same substitution the macro path uses.
+	shim := &meaning{kind: mMacro, body: m.body, long: true}
+	for i := 1; i <= n; i++ {
+		shim.params = append(shim.params, tok{ch: rune('0' + i), cat: catParam})
+	}
+	saved := e.eq[name]
+	e.eq[name] = shim
+	out, ok := e.expandMacroInMathSource(src, name)
+	e.eq[name] = saved
+	return out, ok
+}
+
 // expandMacroInMathSource substitutes the user/kernel macro \name in a go-tex/math
 // source string. A parameterless macro's every occurrence is replaced by its
 // replacement text; an argument macro (\newcommand\abs[1]{\lvert#1\rvert},
@@ -425,7 +483,13 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 // which this matches and reproduces.
 func (e *Engine) expandMacroInMathSource(src, name string) (string, bool) {
 	m := e.eq[name]
-	if m == nil || m.kind != mMacro {
+	if m == nil {
+		return "", false
+	}
+	if m.kind == mPrim && m.xpDoc {
+		return e.expandXparseInMathSource(src, name, m)
+	}
+	if m.kind != mMacro {
 		return "", false
 	}
 	if len(m.params) == 0 {
