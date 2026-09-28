@@ -28,6 +28,22 @@ func TestPDFIntrinsicPoints(t *testing.T) {
 			body: "%PDF\n/MediaBox [0 0 612 792]\n/CropBox [10 20 210 320]\n", wantW: 200, wantH: 300, wantOK: true},
 		{name: "nonzero origin",
 			body: "/MediaBox [ 100 50 300 350 ]", wantW: 200, wantH: 300, wantOK: true},
+		// A turned page is shown turned, so its size as displayed has width and
+		// height the other way round from the box as written. These are the two
+		// shapes the corpus holds: 2307.08085's web_manage2.pdf (595x842, /Rotate
+		// 90) and 2408.03452's ufront-a100.pdf (612x792, /Rotate 90).
+		{name: "quarter turn swaps the sides",
+			body: "%PDF-1.5\n/MediaBox [0 0 595 842]\n/Rotate 90\n", wantW: 842, wantH: 595, wantOK: true},
+		{name: "three quarter turn swaps them too",
+			body: "%PDF-1.5\n/MediaBox [0 0 612 792]\n/Rotate 270\n", wantW: 792, wantH: 612, wantOK: true},
+		{name: "a negative rotation is the same turn",
+			body: "%PDF-1.5\n/MediaBox [0 0 612 792]\n/Rotate -90\n", wantW: 792, wantH: 612, wantOK: true},
+		{name: "a half turn leaves the sides alone",
+			body: "%PDF-1.5\n/MediaBox [0 0 612 792]\n/Rotate 180\n", wantW: 612, wantH: 792, wantOK: true},
+		{name: "an upright page states zero",
+			body: "%PDF-1.5\n/MediaBox [0 0 612 792]\n/Rotate 0\n", wantW: 612, wantH: 792, wantOK: true},
+		{name: "a rotation the spec does not allow is ignored",
+			body: "%PDF-1.5\n/MediaBox [0 0 612 792]\n/Rotate 45\n", wantW: 612, wantH: 792, wantOK: true},
 		{name: "no box", body: "%PDF-1.4\nnothing here\n", wantOK: false},
 		{name: "degenerate zero-height", body: "/MediaBox [0 0 100 0]", wantOK: false},
 	}

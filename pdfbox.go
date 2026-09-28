@@ -46,6 +46,10 @@ var pdfBoxArrayRE = regexp.MustCompile(
 // separate object elsewhere in the file.
 var pdfBoxRefRE = regexp.MustCompile(`/(CropBox|MediaBox)\s+([0-9]+)\s+([0-9]+)\s+R`)
 
+// pdfRotateRE matches a page's /Rotate entry. The value is a multiple of 90, and
+// a producer may write it negative (/Rotate -90 is what /Rotate 270 means).
+var pdfRotateRE = regexp.MustCompile(`/Rotate\s+(-?[0-9]+)`)
+
 // pdfStreamRE finds the start of each stream body: the keyword, then a line break
 // (CR LF or LF alone). The body runs to the next "endstream".
 var pdfStreamRE = regexp.MustCompile(`stream\r?\n`)
@@ -64,7 +68,7 @@ func (r pdfRect) ok() bool   { return r.w() > 0 && r.h() > 0 }
 // degenerate.
 func pdfIntrinsicPoints(data []byte) (wPt, hPt float64, ok bool) {
 	if r, found := pdfEffectiveBox(data, data); found {
-		return r.w(), r.h(), true
+		return pdfTurned(r, pdfPageRotation(data))
 	}
 	// PDF 1.5 and later may pack the page dictionary into a compressed object
 	// stream, where no literal box appears in the file's bytes. Inflating costs
@@ -73,10 +77,50 @@ func pdfIntrinsicPoints(data []byte) (wPt, hPt float64, ok bool) {
 	// referenced object lives.
 	for _, u := range pdfInflatedStreams(data) {
 		if r, found := pdfEffectiveBox(u, data); found {
-			return r.w(), r.h(), true
+			// The rotation lives in the same page dictionary as the box, so it is
+			// read from the same blob; a page dictionary in an object stream does
+			// not state its rotation anywhere else.
+			return pdfTurned(r, pdfPageRotation(u))
 		}
 	}
 	return 0, 0, false
+}
+
+// pdfPageRotation reports the page's /Rotate in degrees clockwise, normalised to
+// 0, 90, 180 or 270. A page that states nothing is not turned.
+func pdfPageRotation(blob []byte) int {
+	m := pdfRotateRE.FindSubmatch(blob)
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		return 0
+	}
+	n %= 360
+	if n < 0 {
+		n += 360
+	}
+	if n%90 != 0 {
+		return 0 // not a rotation the spec allows; treat the page as upright
+	}
+	return n
+}
+
+// pdfTurned gives a box's size as the page is SHOWN, which is the box turned by
+// the page's /Rotate. A quarter turn swaps width and height.
+//
+// A figure is included at the size a viewer displays it, so a placeholder that
+// reserves the box as written reserves a portrait space for a landscape picture.
+// Two of the 770 figures in the go-tex corpus are turned this way, and they are
+// both in papers whose pagination the placeholder got wrong: 2307.08085's
+// web_manage2.pdf and 2408.03452's ufront-a100.pdf each state a portrait
+// MediaBox and /Rotate 90, and each is shown landscape.
+func pdfTurned(r pdfRect, rotation int) (wPt, hPt float64, ok bool) {
+	if rotation == 90 || rotation == 270 {
+		return r.h(), r.w(), true
+	}
+	return r.w(), r.h(), true
 }
 
 // pdfEffectiveBox finds the box a viewer would show in one blob — the file itself,
