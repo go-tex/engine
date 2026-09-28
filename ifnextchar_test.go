@@ -125,3 +125,34 @@ func TestFindMathCSStopsAtAControlWordBoundary(t *testing.T) {
 		t.Errorf("matched before an @, which continues the name: %d", i)
 	}
 }
+
+// ⛔ A source TRUNCATED before the branches must be refused, not read. TeX can never hand
+// a } to an undelimited parameter (tex.web §395), so a } arriving as an argument says the
+// branches are gone — parseMathArgs takes any single rune, closing delimiters included.
+//
+// This is the corpus shape, not an invented one: 2606.25916 writes \makebox[1ex]{…} inside
+// \xrightarrow's lower argument, \makebox is built on \@ifnextchar(, and the maths source
+// arrives as "\raisebox {1pt}{\@ifnextchar(}" with the branches and the box's content
+// already gone. Reading "(", "}", "]" as three arguments swallowed \raisebox's second
+// argument and typeset 69 equations wrong, where before they were reported.
+//
+// The witness distinguishes refusal from a wrong reading: on the wrong reading \raisebox
+// loses its second argument and the equation drops under \raisebox instead, so the two
+// outcomes are different observations rather than one being quieter.
+func TestIfNextCharRefusesASourceTruncatedBeforeItsBranches(t *testing.T) {
+	d := mathDropRun(t, `$R \xrightarrow[\raisebox{1pt}{\@ifnextchar(}]{\tau} R'$`)
+	if n := d[`\@ifnextchar`]; n != 1 {
+		t.Errorf("a truncated look-ahead was read instead of refused: %v", d)
+	}
+}
+
+func TestHasBareCloseBraceFindsTheTruncation(t *testing.T) {
+	if !hasBareCloseBrace([]string{"(", "}", "]"}) {
+		t.Error("the corpus shape was not recognised as truncated")
+	}
+	// A } is only ever the SIGN of truncation, so an ordinary look-ahead — including one
+	// whose branches are empty, which is legal — must not be refused.
+	if hasBareCloseBrace([]string{"[", "", "x"}) {
+		t.Error("an empty branch was mistaken for a truncation")
+	}
+}

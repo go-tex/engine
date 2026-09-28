@@ -38,7 +38,7 @@ func (e *Engine) expandIfNextCharInMathSource(src, name string) (string, bool) {
 		out.WriteString(src[:i])
 		rest := src[i+1+len(name):]
 		args, consumed, ok := parseMathArgs(rest, 3)
-		if !ok || args[0] == "" {
+		if !ok || args[0] == "" || hasBareCloseBrace(args) {
 			// Leave this occurrence for go-tex/math to reject. An empty first
 			// argument is malformed input, not "no token to match".
 			out.WriteString("\\" + name)
@@ -134,4 +134,30 @@ func findMathCS(src, name string) int {
 // answers about TeX's letters, does not.
 func isMathCSLetter(c byte) bool {
 	return isMathLetter(c) || c == '@'
+}
+
+// hasBareCloseBrace reports whether any argument is a lone }, which means the source
+// was TRUNCATED before the look-ahead's branches and parseMathArgs read the delimiters
+// that follow it instead.
+//
+// TeX can never hand a } to an undelimited parameter — it raises "Argument of \x has
+// an extra }" (tex.web §395) — so a } arriving here is not an argument and the reading
+// is not merely uncertain, it is wrong. parseMathArgs takes any single rune, closing
+// delimiters included, so the check belongs to the caller that knows what the runes mean.
+//
+// ⛔ Measured, and this is why it is here rather than in a comment: 2606.25916 writes
+// \makebox[1ex]{…} inside \xrightarrow's lower argument, \makebox is built on
+// \@ifnextchar( (latex.ltx), and the maths source arrives as
+// "\raisebox {1pt}{\@ifnextchar(}" — the branches AND the box's content gone upstream.
+// Reading "(", "}", "]" as the three arguments dropped \raisebox's second argument and
+// typeset 69 equations wrong, where before they were reported. The glyph-path count is
+// what caught it: those 69 equations stopped being reported and produced 2 glyphs
+// between them, against 1195 for the 83 that genuinely render.
+func hasBareCloseBrace(args []string) bool {
+	for _, a := range args {
+		if a == "}" {
+			return true
+		}
+	}
+	return false
 }
