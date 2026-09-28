@@ -187,6 +187,36 @@ const MiniLaTeXKernel = `
 % starts empty and takes no separator.
 \long\def\gotex@affiladd#1{\ifx\@author\@empty\gdef\@author{#1}\else
   \g@addto@macro\@author{\\ #1}\fi}
+% \multirow IS implemented — buildMultirow (tabular.go) parses \multirow{n}{width}{text}
+% and spans the cell over n rows — but only for a cell that BEGINS with it: isMultirow
+% inspects the cell's raw tokens. Anywhere else the control sequence was undefined, and a
+% skipped command leaves its ARGUMENTS behind: on 2304.06819 the table cells read
+%
+%	\parbox[t]{0mm}{\multirow{3}{*}{\rotatebox[origin=c]{90}{WSI}}}
+%
+% and we printed "3*WSI" — the row count and the width marker as literal text beside the
+% content. 8 corpus papers, 20 occurrences, and 2304.06819 alone has 10.
+%
+% This is the fallback for those positions: consume multirow.sty's signature and typeset the
+% TEXT. multirow.sty:70 declares
+%
+%	\multirow[vpos]{nrows}[bigstruts]{width}[vmove]{text}
+%
+% so every optional argument is read and dropped, and the three mandatory ones are read with
+% only the last kept. The row span is lost — that needs the tabular builder, which already
+% has it for the position where it can be done — but the content survives and the row count
+% stops appearing on the page.
+%
+% ⛔ It does not shadow the real implementation: isMultirow tests the raw token \multirow
+% before any expansion, so a cell that begins with \multirow still takes the spanning path.
+% Both positions are asserted in multirowanywhere_test.go.
+\def\multirow{\@ifnextbracket\gotex@mrvpos\gotex@mrrows}
+\long\def\gotex@mrvpos[#1]{\gotex@mrrows}
+\long\def\gotex@mrrows#1{\@ifnextbracket\gotex@mrstruts\gotex@mrwidth}
+\long\def\gotex@mrstruts[#1]{\gotex@mrwidth}
+\long\def\gotex@mrwidth#1{\@ifnextbracket\gotex@mrmove\gotex@mrtext}
+\long\def\gotex@mrmove[#1]{\gotex@mrtext}
+\long\def\gotex@mrtext#1{#1}
 \def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
 \long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
 \long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
