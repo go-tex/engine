@@ -344,6 +344,19 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 		}
 		next, ok := e.expandMacroInMathSource(src, name)
 		if !ok {
+			// LaTeX's one-token look-ahead. Tried before the strippers below
+			// because it DECIDES what the rest of the formula is, and after the
+			// macro expander above so that a document which redefines
+			// \@ifnextchar as a macro of its own is expanded, not intercepted.
+			// The test is on the primitive's identity rather than the reported
+			// name, so \kernel@ifnextchar — \let to it precisely so a package
+			// cannot break the kernel (latex.ltx:1607) — is served too.
+			if m := e.eq[name]; m != nil && m.kind == mPrim && m.name == "@ifnextchar" {
+				if picked, pok := e.expandIfNextCharInMathSource(src, name); pok {
+					src = picked
+					continue
+				}
+			}
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
 			// cannot render. Strip them from the source — keeping any content
 			// argument — so the equation typesets in the surrounding colour instead
