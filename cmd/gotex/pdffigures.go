@@ -20,17 +20,35 @@ import (
 //
 // It is GATED behind GOTEX_PDFRENDER and OFF by default: with the variable clear the
 // seam stays nil, exactly as on the engine core, so a PDF figure frames the same
-// placeholder and the default CLI output is byte-for-byte unchanged from current
-// main. Wiring the renderer gives figures their real HEIGHT, which is a deliberate
-// pagination change and belongs behind an opt-in — the memory-noted result is that
-// real height alone (floats off) over-paginates; its intended companion is
-// GOTEX_FLOATS, so a PDF figure floats to a page top at its true size, which is what
-// TeXLive does. So the faithful mode is GOTEX_PDFRENDER=1 GOTEX_FLOATS=1 together.
+// placeholder and the default CLI output is byte-for-byte unchanged.
 //
-// The renderer is third-party code reading arbitrary bytes: a panic in it must cost
-// the figure, not the document, so it is fenced and reported as an ordinary error —
-// which the engine already answers with the placeholder (keeping the figure's true
-// aspect, since loadImage still recovers the page box).
+// GOTEX_PDFRENDER=1 on its own is the whole of it. GOTEX_FLOATS is ON unless it is
+// set to "0" (see floatplace.go), so a figure already floats to a page top; naming
+// the two together, as this comment once did, says nothing the first does not.
+//
+// WHAT IT COSTS AND BUYS, measured over the 154-paper arXiv corpus on 2026-09-28,
+// the two modes rendered back to back:
+//
+//   - it buys the figures. The census channel "PDF figure, no rasteriser wired" —
+//     955 uses across 82 papers — goes to nothing. What is left there is 42
+//     figures whose file is genuinely absent from the corpus.
+//   - it costs 534 s over the corpus (141 s to 675 s). No paper fails and none
+//     renders an empty document, either way; the slowest is the 300-page one at
+//     114 s.
+//   - it moves the page count AWAY from tectonic, slightly: the sum of absolute
+//     deviations goes 328 to 340 and exact pagination 35/154 to 33/154. Ten papers
+//     move, eight of them away. We already under-paginate by 74 pages, and giving
+//     figures their true height shortens the document further, to 90.
+//
+// So it stays an opt-in — but for the third reason, not because it is slow, and not
+// because the renderer cannot be trusted with a corpus. Note also that a page count
+// is a proxy: the flag makes the CONTENT strictly more faithful whatever it does to
+// pagination, so this is a trade, not a regression.
+//
+// The renderer reads arbitrary bytes: a panic in it must cost the figure, not the
+// document, so it is fenced and reported as an ordinary error — which the engine
+// already answers with the placeholder (keeping the figure's true aspect, since
+// loadImage still recovers the page box, turned by any /Rotate it states).
 func init() {
 	if os.Getenv("GOTEX_PDFRENDER") == "" {
 		return
