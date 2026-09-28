@@ -357,6 +357,29 @@ func (e *Engine) renderMathResolvingMacros(r *texmath.Renderer, src string, disp
 					continue
 				}
 			}
+			// An expandable primitive written DIRECTLY in the formula rather than
+			// carried in by a macro body. A substituted body is already run through
+			// the gullet by flattenMathBody, which is why
+			// \def\bb{\expandafter\aa} has worked in a formula since #174 — but a
+			// source the document wrote itself never was, and an \expandafter in it
+			// reached go-tex/math as a bare name.
+			//
+			// It arrives that way because an argument can be COLLECTED rather than
+			// expanded: aastex701.cls:2589 sets its affiliation marks with
+			// \textsuperscript{\expandafter\@affilcomma\@tempa\relax\relax}, and
+			// the superscript's argument becomes maths source verbatim. Measured on
+			// 999 papers: \expandafter 479 equations over 17 papers, the largest
+			// trigger the engine already defines (#466).
+			//
+			// Running the SAME flattener the body path uses is what keeps the two
+			// counting alike, and it runs only after the formula has already failed,
+			// so no formula that renders today can change.
+			if m := e.eq[name]; m != nil && m.kind == mPrim && expandableSet[name] {
+				if flat := e.flattenMathBody(src); flat != src {
+					src = flat
+					continue
+				}
+			}
 			// Colour commands (\color, \textcolor, …) are primitives go-tex/math
 			// cannot render. Strip them from the source — keeping any content
 			// argument — so the equation typesets in the surrounding colour instead
