@@ -87,3 +87,23 @@ func TestAFormulaThatAlreadyRendersIsNotFlattened(t *testing.T) {
 		t.Error("a plain formula drew nothing")
 	}
 }
+
+// ⛔ An \ifx whose branches are BOTH empty draws nothing, and nothing is what a wrong
+// reading draws too. 2608.07200 is the corpus case: an author mark written as
+//
+//	^{\ifx\@fnmark\@empty\else\unskip\sep\@fnmark\let\sep=,\fi …}
+//
+// which this PR takes from "equation dropped" to "empty superscript" — 2 drops, 0 extra
+// glyph paths. That is the shape the glyph channel cannot settle on its own, so the
+// witness is a controlled one: the SAME conditional with a non-empty mark must draw it.
+func TestATopLevelIfxTakesTheRightBranchAndNotJustAnEmptyOne(t *testing.T) {
+	const math = `x^{\ifx\gotexmark\gotexnone\else\gotexmark\fi}`
+	empty := mathGlyphPaths(t, `\def\gotexmark{}\def\gotexnone{}`, math)
+	marked := mathGlyphPaths(t, `\def\gotexmark{2}\def\gotexnone{}`, math)
+	// The DIFFERENCE is the claim: the page number is drawn either way, so an absolute
+	// count measures the furniture as well as the formula.
+	if marked-empty != 1 {
+		t.Errorf("the mark added %d glyph path(s), want 1 (empty %d, marked %d)",
+			marked-empty, empty, marked)
+	}
+}
