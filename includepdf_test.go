@@ -118,3 +118,60 @@ func TestIncludepdfExpandsItsPageList(t *testing.T) {
 		}
 	}
 }
+
+// An included page is a PAGE, not column material.
+//
+// pdfpages leaves two-column mode for the whole inclusion and returns to it after
+// (pdfpages.sty:693 \if@twocolumn\@twocolumnfalse, :743
+// \@twocolumntrue\@firstcolumnfalse\newpage). Placed as column material two
+// included pages land on one sheet, which is how 2312.05895 — revtex4-1
+// twocolumn — turned its twelve-page supplement into six.
+//
+// The assertion is on the column REGIONS rather than on a page count, because the
+// page count is what a reader sees and the regions are what decides it: a test on
+// the count alone passes for any reason that happens to add pages.
+func TestIncludepdfLeavesTwoColumnModeForItsPages(t *testing.T) {
+	var calls []int
+	withStubPageRasterizer(t, &calls)
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\twocolumn text \includepdf[pages={1,2}]{testdata/stub.pdf} more`); err != nil {
+		t.Fatal(err)
+	}
+	var cols []int
+	for _, r := range e.colRegions {
+		cols = append(cols, r.cols)
+	}
+	// two columns, then one for the inclusion, then two again.
+	if len(cols) < 3 {
+		t.Fatalf("regions %v: the inclusion did not open one of its own", cols)
+	}
+	last := cols[len(cols)-3:]
+	if last[0] != 2 || last[1] != 1 || last[2] != 2 {
+		t.Errorf("regions %v, want the inclusion set one-column between two-column ones", cols)
+	}
+	if len(calls) != 2 {
+		t.Errorf("asked for %v, want both pages", calls)
+	}
+}
+
+// A one-column document must not grow a region because of an inclusion: the
+// two-column detour is for two-column documents only.
+func TestIncludepdfLeavesAOneColumnDocumentAlone(t *testing.T) {
+	var calls []int
+	withStubPageRasterizer(t, &calls)
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	if _, err := e.Run(`text \includepdf[pages={1,2}]{testdata/stub.pdf} more`); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.colRegions) != 0 {
+		t.Errorf("regions %v, want none in a one-column document", e.colRegions)
+	}
+}
