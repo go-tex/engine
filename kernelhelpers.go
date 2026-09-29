@@ -387,6 +387,25 @@ const LaTeX2eKernelHelpers = `
 \def\ClassWarningNoLine#1#2{\message{Class #1 Warning: #2}}
 \def\ClassInfo#1#2{\message{Class #1 Info: #2}}
 \def\ClassError#1#2#3{\message{Class #1 Error: #2}}
+% \aftermaketitle@chk{<name>} is revtex's guard against a front-matter construct used
+% AFTER \maketitle: the argument is only the construct's name, for the error message,
+% and the macro never typesets it. aastex inherits it and calls it once, from the
+% BEGIN code of an environment it renews:
+%
+%	\renewenvironment{frontmatter@abstract}{%
+%	  \aftermaketitle@chk{\begin{abstract}}%
+%
+% ⛔ Undefined, it is SKIPPED — and skipping releases its argument, so \begin{abstract}
+% runs, which enters frontmatter@abstract, which reaches \aftermaketitle@chk again.
+% Unbounded recursion out of a name that was never meant to be typeset. Measured on
+% 2607.24141 (aastex631, 123KB of source): \aftermaketitle@chk skipped 100000 times —
+% the runaway guard's own limit — 200005 groups left open, and the document came out as
+% ONE page. A missing no-op cost the whole paper.
+%
+% Defined to discard its argument, which is what the real one does with it whenever the
+% construct is in the right place: this engine does not enforce front-matter ordering,
+% so the check is always the silent branch.
+\long\def\aftermaketitle@chk#1{}
 \def\@latex@warning#1{\message{LaTeX Warning: #1}}
 \def\@latex@warning@no@line#1{\message{LaTeX Warning: #1}}
 \def\@latex@info#1{\message{LaTeX Info: #1}}
