@@ -705,6 +705,9 @@ func (e *Engine) doUsepackageLoad() {
 		if !e.loadTextFontPackage(name) {
 			e.noteFontSubstitution(name)
 		}
+		if name == "url" || name == "hyperref" {
+			e.bindURLPath()
+		}
 		if name == "geometry" {
 			e.applyGeometry(strings.Join(opts, ","))
 			continue
@@ -1493,3 +1496,23 @@ const IEEEtranTitlePlain = `
   \global\let\maketitle\relax}
 \makeatother
 `
+
+// bindURLPath gives \path url.sty's meaning, if the name is still free.
+//
+// url.sty declares it optionally (line 204):
+//
+//	% picTeX defines \path, so declare it optionally:
+//	\@ifundefined{path}{\DeclareUrlCommand\path{\urlstyle{tt}}}{}
+//
+// so the package loaded FIRST keeps the name. pkgRequested records what the
+// document has asked for so far, in order, which is exactly the test url.sty
+// makes — a document that drew with tikz or forest before loading url keeps
+// their \path, and one that never loads url or hyperref never has url's at all.
+func (e *Engine) bindURLPath() {
+	for name := range e.pkgRequested {
+		if isPGFFamily(name) || name == "forest" || name == "pictex" {
+			return // their \path, not url's
+		}
+	}
+	e.urlPathBound = true
+}

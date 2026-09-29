@@ -302,6 +302,10 @@ type Engine struct {
 	// name is tallied here for reporting. nil until the first skip.
 	lenient   bool
 	skippedCS map[string]int
+
+	// urlPathBound says \path carries url.sty's meaning — set when url or hyperref
+	// is loaded and no pgf-family package owns the name already. See bindURLPath.
+	urlPathBound bool
 	// fontSubst records the text-font packages the document asked for, by package
 	// name -> the face it wanted. The engine sets one built-in face, so each of
 	// these is a silent substitution of a DIFFERENT WIDTH — see fontsubst.go.
