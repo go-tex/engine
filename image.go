@@ -198,6 +198,20 @@ func (e *Engine) recordFigureDrop(err error) {
 	e.figuresDropped[figureDropReason(err)]++
 }
 
+// pictureDropReason is the cause recorded for a picture environment the engine
+// gobbles and stands a framed box in for — a TikZ/PGF/tikz-cd diagram. It is one
+// bucket for every such environment rather than one per name, so the count
+// aggregates over a corpus the way the other causes do.
+const pictureDropReason = "picture environment, not drawn"
+
+// recordPictureDrop tallies one gobbled picture environment.
+func (e *Engine) recordPictureDrop() {
+	if e.figuresDropped == nil {
+		e.figuresDropped = map[string]int{}
+	}
+	e.figuresDropped[pictureDropReason]++
+}
+
 // figureDropReason buckets a load failure into a cause a reader can act on. The
 // filename is deliberately left out so the counts aggregate over a corpus.
 func figureDropReason(err error) string {

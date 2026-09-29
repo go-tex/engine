@@ -17,6 +17,21 @@ func runSkip(t *testing.T, body string) map[string]int {
 	return e.SkippedCommands()
 }
 
+// runPics returns how many picture environments were stood in for by a framed
+// box. The count lives in the FIGURE channel, not among the skipped commands:
+// \tikzpicture is defined, its body is consumed whole and a box is reserved for
+// it, so calling it an undefined command misreports what the engine did — and
+// put it at the top of that channel over the whole corpus.
+func runPics(t *testing.T, body string) int {
+	t.Helper()
+	src := `\documentclass{article}\begin{document}` + body + `\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile %q: %v", body, err)
+	}
+	return e.Diagnostics().FiguresDropped[pictureDropReason]
+}
+
 // noLeak asserts none of the TikZ drawing commands leaked as skipped commands
 // (they were gobbled with their environment, not seen one by one).
 func noLeak(t *testing.T, skip map[string]int, cmds ...string) {
@@ -37,8 +52,14 @@ func TestTikzGobble_NoLeak(t *testing.T) {
 		`\foreach \x in {1,2} {\draw (\x,0) circle (2pt);} `+
 		`\end{tikzpicture} Y \zzmarker`)
 	noLeak(t, skip, "draw", "node", "path", "foreach")
-	if skip["tikzpicture"] == 0 {
-		t.Error("no placeholder recorded for the gobbled tikzpicture")
+	if skip["tikzpicture"] != 0 {
+		t.Error("a gobbled tikzpicture is not an undefined command and must not be tallied as one")
+	}
+	if n := runPics(t, `X \begin{tikzpicture}[scale=2] `+
+		`\draw (0,0)--(1,1); \node at (0,0) {N}; \path (0,0) rectangle (1,1); `+
+		`\foreach \x in {1,2} {\draw (\x,0) circle (2pt);} `+
+		`\end{tikzpicture} Y \zzmarker`); n != 1 {
+		t.Errorf("picture placeholders = %d, want 1", n)
 	}
 	if skip["zzmarker"] != 1 {
 		t.Errorf("content after \\end{tikzpicture} not processed: zzmarker=%d (want 1)", skip["zzmarker"])
@@ -53,8 +74,10 @@ func TestTikzGobble_Nested(t *testing.T) {
 		`\begin{tikzpicture} \draw b; \end{tikzpicture} \draw c; `+
 		`\end{tikzpicture} \zzafter`)
 	noLeak(t, skip, "draw")
-	if skip["tikzpicture"] != 1 {
-		t.Errorf("nested tikzpicture placeholder count = %d (want 1)", skip["tikzpicture"])
+	if n := runPics(t, `\begin{tikzpicture} \draw a; `+
+		`\begin{tikzpicture} \draw b; \end{tikzpicture} \draw c; `+
+		`\end{tikzpicture} \zzafter`); n != 1 {
+		t.Errorf("nested tikzpicture placeholder count = %d (want 1)", n)
 	}
 	if skip["zzafter"] != 1 {
 		t.Errorf("content after nested env not processed: zzafter=%d (want 1)", skip["zzafter"])
@@ -68,8 +91,9 @@ func TestTikzGobble_FromMacroBody(t *testing.T) {
 	skip := runSkip(t, `\def\diagram{\begin{tikzpicture}\draw z;\end{tikzpicture}}`+
 		`\zzbefore \diagram \zzafter`)
 	noLeak(t, skip, "draw")
-	if skip["tikzpicture"] == 0 {
-		t.Error("macro-body tikzpicture produced no placeholder")
+	if n := runPics(t, `\def\diagram{\begin{tikzpicture}\draw z;\end{tikzpicture}}`+
+		`\zzbefore \diagram \zzafter`); n != 1 {
+		t.Errorf("macro-body tikzpicture placeholders = %d, want 1", n)
 	}
 	if skip["zzbefore"] != 1 || skip["zzafter"] != 1 {
 		t.Errorf("surrounding text eaten: zzbefore=%d zzafter=%d (want 1,1)",
@@ -82,8 +106,10 @@ func TestTikzGobble_PgfAndCd(t *testing.T) {
 	skip := runSkip(t, `\begin{pgfpicture}\pgfusepath{stroke}\end{pgfpicture}\zzp `+
 		`\begin{tikzcd} A \arrow{r} & B \end{tikzcd}\zzc`)
 	noLeak(t, skip, "pgfusepath", "arrow")
-	if skip["pgfpicture"] == 0 || skip["tikzcd"] == 0 {
-		t.Errorf("missing placeholder: pgfpicture=%d tikzcd=%d", skip["pgfpicture"], skip["tikzcd"])
+	// One bucket for every picture environment, so the two count together.
+	if n := runPics(t, `\begin{pgfpicture}\pgfusepath{stroke}\end{pgfpicture}\zzp `+
+		`\begin{tikzcd} A \arrow{r} & B \end{tikzcd}\zzc`); n != 2 {
+		t.Errorf("pgfpicture + tikzcd placeholders = %d, want 2", n)
 	}
 	if skip["zzp"] != 1 || skip["zzc"] != 1 {
 		t.Errorf("content after env not processed: zzp=%d zzc=%d", skip["zzp"], skip["zzc"])
@@ -95,8 +121,8 @@ func TestTikzGobble_PgfAndCd(t *testing.T) {
 func TestTikzGobble_Unterminated(t *testing.T) {
 	skip := runSkip(t, `before \begin{tikzpicture}\draw q; and more text with no closing`)
 	noLeak(t, skip, "draw")
-	if skip["tikzpicture"] != 0 {
-		t.Errorf("unterminated env should not emit a placeholder, got %d", skip["tikzpicture"])
+	if n := runPics(t, `before \begin{tikzpicture}\draw q; and more text with no closing`); n != 0 {
+		t.Errorf("unterminated env should not emit a placeholder, got %d", n)
 	}
 }
 
@@ -108,7 +134,7 @@ func TestTikzGobble_EnvNameEdges(t *testing.T) {
 	// (nested-brace branch); the letters still spell "tikzpicture", so it matches.
 	skip := runSkip(t, `\begin{tikzpicture}\draw a;\end{tikz\relax{}picture} tail \zztail`)
 	noLeak(t, skip, "draw")
-	if skip["tikzpicture"] == 0 {
+	if n := runPics(t, `\begin{tikzpicture}\draw a;\end{tikz\relax{}picture} tail \zztail`); n != 1 {
 		t.Error("edge-spelled \\end name did not close the environment")
 	}
 	if skip["zztail"] != 1 {
@@ -119,25 +145,29 @@ func TestTikzGobble_EnvNameEdges(t *testing.T) {
 	// returns "" (no match), so the environment stays open to end of input.
 	skip2 := runSkip(t, `\begin{tikzpicture}\draw b;\end zzz`)
 	noLeak(t, skip2, "draw")
-	if skip2["tikzpicture"] != 0 {
-		t.Errorf("non-brace \\end must not close the env: placeholder=%d", skip2["tikzpicture"])
+	if n := runPics(t, `\begin{tikzpicture}\draw b;\end zzz`); n != 0 {
+		t.Errorf("non-brace \\end must not close the env: placeholder=%d", n)
 	}
 }
 
-// TestTikzGobble_PlaceholderInitsSkipMap runs a bare picture in strict mode from a
-// fresh engine whose skip map is still nil, so emitPicturePlaceholder takes the
-// lazy-init branch.
-func TestTikzGobble_PlaceholderInitsSkipMap(t *testing.T) {
+// TestTikzGobble_PlaceholderInitsFigureMap runs a bare picture in strict mode from
+// a fresh engine whose figure map is still nil, so recordPictureDrop takes the
+// lazy-init branch — and checks the same run leaves the skipped-command tally
+// empty, since nothing here is undefined.
+func TestTikzGobble_PlaceholderInitsFigureMap(t *testing.T) {
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
-	e.skippedCS = nil // force the nil-map branch
+	e.figuresDropped = nil // force the nil-map branch
 	if _, err := e.Run(`\begin{tikzpicture}\end{tikzpicture}`); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if e.SkippedCommands()["tikzpicture"] != 1 {
-		t.Errorf("placeholder not recorded from nil map: %v", e.SkippedCommands())
+	if got := e.Diagnostics().FiguresDropped[pictureDropReason]; got != 1 {
+		t.Errorf("placeholder not recorded from nil map: %v", e.Diagnostics().FiguresDropped)
+	}
+	if len(e.SkippedCommands()) != 0 {
+		t.Errorf("a handled picture was tallied as an undefined command: %v", e.SkippedCommands())
 	}
 }
 
