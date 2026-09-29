@@ -77,3 +77,44 @@ func TestResolvePageListDoesNotClampAgainstZero(t *testing.T) {
 		t.Errorf(`"every page" of an unknown count = %v, want nothing`, got)
 	}
 }
+
+// The pages= value is EXPANDED, because a document builds it.
+//
+// 2312.05895 ends with \foreach \x in {1,...,12} around
+// \includepdf[pages={\x,{}}]{SI.pdf}. Read without expansion, \x is a control
+// sequence, the option scanner drops control sequences, and pages={\x,{}} becomes
+// pages={,{}} — an empty selection. Its whole twelve-page supplement went that
+// way in silence, with the loop working perfectly.
+func TestIncludepdfExpandsItsPageList(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      []int
+	}{
+		{"a macro as the page number", `\def\x{3}\includepdf[pages={\x}]{testdata/stub.pdf}`, []int{3}},
+		{"a macro inside a list", `\def\x{2}\includepdf[pages={1,\x,4}]{testdata/stub.pdf}`, []int{1, 2, 4}},
+		{"a macro as a range end", `\def\n{4}\includepdf[pages={2-\n}]{testdata/stub.pdf}`, []int{2, 3, 4}},
+		// The whole chain the corpus paper uses, loop included.
+		{"driven by \\foreach", `\foreach \x in {1,...,3}{\includepdf[pages={\x,{}}]{testdata/stub.pdf}}`, []int{1, 2, 3}},
+	} {
+		var calls []int
+		withStubPageRasterizer(t, &calls)
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(c.src); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if len(calls) != len(c.want) {
+			t.Errorf("%s asked for %v, want %v", c.name, calls, c.want)
+			continue
+		}
+		for i := range calls {
+			if calls[i] != c.want[i] {
+				t.Errorf("%s asked for %v, want %v", c.name, calls, c.want)
+				break
+			}
+		}
+	}
+}

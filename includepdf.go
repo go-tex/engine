@@ -29,8 +29,12 @@ import (
 // content, today, through machinery that already exists.
 //
 // With no rasteriser wired (the browser build, or the CLI without GOTEX_PDFRENDER)
-// the pages are still COUNTED — an empty page each, reported as a dropped figure —
-// because a missing renderer must not silently shorten the document.
+// NOTHING is contributed and the pages do not exist, which is the paragraph above
+// applied to the whole command: a blank page is not a page of somebody's
+// supplement. The comment here used to say the opposite — "the pages are still
+// COUNTED, an empty page each" — and it was not what the code did: \includepdf
+// alone in a document gives "document has no pages". Measured on 2312.05895,
+// whose twelve-page supplement appears with GOTEX_PDFRENDER=1 and not without it.
 func (e *Engine) doIncludepdf() {
 	pages, _ := e.scanIncludepdfOpts()
 	name := e.readBraceName()
@@ -141,10 +145,16 @@ func (e *Engine) scanIncludepdfOpts() (pages string, ok bool) {
 	// (Splitting the whole text on commas first is exactly how this lost every page
 	// but the first.) splitOptsTopLevel — geometry's, for papersize={w,h} — is the
 	// same rule and is reused rather than written twice.
+	// The option text is read WITH expansion. pdfpages reads pages= through keyval,
+	// which expands the value, and a document builds that value: 2312.05895 loops
+	// \foreach \x in {1,...,12} over \includepdf[pages={\x,{}}]{SI.pdf}. Read
+	// unexpanded, \x is a control sequence, control sequences are dropped below,
+	// and pages={\x,{}} becomes pages={,{}} — an empty selection. Its whole
+	// twelve-page supplement went that way, silently, with the loop working.
 	var sb strings.Builder
 	depth := 0
 	for {
-		u, got := e.getNext()
+		u, got := e.getXToken()
 		if !got {
 			break
 		}
