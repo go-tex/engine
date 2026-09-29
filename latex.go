@@ -1854,11 +1854,18 @@ func (e *Engine) grabEnvNameArg() string {
 // figure size. Reserving this space — rather than emitting nothing — keeps the
 // surrounding text flowing where the real diagram sat, which is both more
 // faithful than a blank and keeps pagination stable.
+//
+// It is tallied as a DROPPED FIGURE, not as an undefined command. The engine
+// defines \tikzpicture, consumes its body whole and reserves a box for it —
+// nothing about that is undefined — and tallying it in Skipped said otherwise
+// to every reader of the report, which prints "undefined command(s) skipped".
+// On the 154-paper corpus that put \tikzpicture at the TOP of that channel,
+// 21 papers and 138 occurrences, ahead of every command the engine really does
+// not know; a census used to choose what to implement next therefore named
+// TikZ first, for a construct that is handled. FiguresDropped is where it
+// belongs and says what it is: the picture is lost, the layout is not.
 func (e *Engine) emitPicturePlaceholder(name string) {
-	if e.skippedCS == nil {
-		e.skippedCS = map[string]int{}
-	}
-	e.skippedCS[name]++
+	e.recordPictureDrop()
 	e.startImage()
 	inner := &boxNode{kind: hbox, width: 96 * unity, height: 60 * unity}
 	e.parList = append(e.parList, frameNode{inner: inner, sep: fboxSep, rule: fboxRule})

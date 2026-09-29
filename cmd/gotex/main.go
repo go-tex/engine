@@ -196,7 +196,7 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 		for _, e := range list {
 			n += e.count
 		}
-		fmt.Fprintf(w, "gotex: %d figure(s) placed as an empty box — the file, not the command, is what failed:\n", n)
+		fmt.Fprintf(w, "gotex: %d figure(s) placed as an empty box — what is lost is the PICTURE, not the layout:\n", n)
 		for _, e := range list {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
