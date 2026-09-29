@@ -66,8 +66,33 @@ func (e *Engine) doIncludepdf() {
 	if len(list) == 0 && n == 0 {
 		list = resolvePageList(pages, 1<<20) // unbounded: let each page's render decide
 	}
+	// An included page is a PAGE, not column material. pdfpages leaves two-column
+	// mode for the whole inclusion and comes back to it afterwards
+	// (pdfpages.sty:693 \if@twocolumn\@twocolumnfalse, and :743
+	// \@twocolumntrue\@firstcolumnfalse\newpage). Placed as column material,
+	// two included pages land on one sheet: 2312.05895 is revtex4-1 twocolumn and
+	// its twelve-page supplement came out as six.
+	restore := e.leaveColumnsForPages()
 	for _, p := range list {
 		e.includeOnePDFPage(data, p)
+	}
+	restore()
+}
+
+// leaveColumnsForPages drops out of a two-column region for the length of an
+// inclusion and returns the function that goes back to it. Outside a two-column
+// region it does nothing and returns a no-op, so a one-column document is
+// untouched.
+func (e *Engine) leaveColumnsForPages() func() {
+	if !e.inTwoColumnRegion() {
+		return func() {}
+	}
+	was := e.twoColumn
+	e.startOneColumn()
+	e.twoColumn = false
+	return func() {
+		e.switchToTwoColumn(nil)
+		e.twoColumn = was
 	}
 }
 
