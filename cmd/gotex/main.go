@@ -329,19 +329,48 @@ func writeOutput(src []byte, name, format string, opt engine.Options) (int, engi
 		}
 		return len(pages), diag, nil
 	}
-	f, err := os.Create(name)
+	// The PDF is streamed into a temporary file beside the destination and moved
+	// onto it only once the compile has SUCCEEDED.
+	//
+	// os.Create truncates its target the moment it is called, before a single
+	// page exists, so a compile that failed, hung or was killed left the
+	// destination EMPTY — and TeX's convention is that `gotex main.tex` writes
+	// main.pdf, which is very often a file somebody wants to keep. Measured on
+	// 2026-09-27: a corpus sweep running the engine under `timeout` in each
+	// paper's own directory emptied 136 of the 153 main.pdf it passed through,
+	// in one pass, and those were the published PDFs the corpus compared against.
+	//
+	// A process killed outright still leaves the temporary file behind — nothing
+	// can be run after SIGKILL — but the destination survives, which is the file
+	// that matters. The name starts with a dot so it does not look like output.
+	f, err := os.CreateTemp(filepath.Dir(name), ".gotex-*.pdf")
 	if err != nil {
 		return 0, engine.Diagnostics{}, err
 	}
+	tmp := f.Name()
 	// Close deterministically and surface a write error in preference to the
 	// close error. Relying on a deferred Close alone would ignore its error and
 	// (on Windows) could keep the handle open past the caller's temp-dir
-	// cleanup; closing here releases the handle before writeOutput returns.
+	// cleanup; closing here releases the handle before writeOutput returns —
+	// and on Windows a rename cannot move a file that is still open.
 	pages, diag, err := engine.CompileToPDFDiag(src, opt, f)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	return pages, diag, err
+	if err != nil {
+		os.Remove(tmp)
+		return pages, diag, err
+	}
+	// CreateTemp makes the file 0600; the output has always been 0644.
+	if err := os.Chmod(tmp, 0644); err != nil {
+		os.Remove(tmp)
+		return pages, diag, err
+	}
+	if err := os.Rename(tmp, name); err != nil {
+		os.Remove(tmp)
+		return pages, diag, err
+	}
+	return pages, diag, nil
 }
 
 // readIf reads a file, returning nil bytes (no error) when the path is empty.

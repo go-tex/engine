@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -190,5 +192,77 @@ func TestPrintableCSNamesAControlCharacter(t *testing.T) {
 		if got := printableCS(c.in); got != c.want {
 			t.Errorf("printableCS(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// A compile that fails leaves the previous output untouched.
+//
+// os.Create truncates its target before a single page exists, so a failed, hung
+// or killed compile used to leave the destination EMPTY. That is not a small
+// matter, because TeX's convention is that `gotex main.tex` writes main.pdf: the
+// destination is very often a file somebody wants to keep. On 2026-09-27 a corpus
+// sweep running the engine under `timeout` in each paper's own directory emptied
+// 136 of the 153 main.pdf it passed through, and those were the published PDFs
+// the corpus compared against.
+func TestAFailedCompileLeavesTheOldOutputAlone(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	// Strict mode (no -lenient): an undefined control sequence is fatal.
+	os.WriteFile(src, []byte(`\documentclass{article}\begin{document}\thisIsNotACommand\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.pdf")
+	const kept = "A PREVIOUS PDF WORTH KEEPING"
+	if err := os.WriteFile(out, []byte(kept), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var so, se bytes.Buffer
+	if code := run([]string{"-o", out, src}, &so, &se); code == 0 {
+		t.Fatalf("the compile was meant to fail; stderr=%s", se.String())
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("the output is gone: %v", err)
+	}
+	if string(b) != kept {
+		t.Errorf("output is %d bytes %q, want the %d bytes that were there", len(b), b, len(kept))
+	}
+	// Nothing half-written is left in its place either.
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), ".gotex-") {
+			t.Errorf("a temporary file was left behind: %s", e.Name())
+		}
+	}
+}
+
+// And a compile that succeeds still replaces it.
+func TestASuccessfulCompileReplacesTheOldOutput(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\hsize=300pt Replaced.\par`), 0644)
+	out := filepath.Join(dir, "doc.pdf")
+	os.WriteFile(out, []byte("OLD"), 0644)
+
+	var so, se bytes.Buffer
+	if code := run([]string{"-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) < 500 || string(b[:5]) != "%PDF-" {
+		t.Fatalf("bad PDF (%d bytes)", len(b))
+	}
+	// The mode the output has always had, not CreateTemp's 0600.
+	fi, err := os.Stat(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o644 {
+		t.Errorf("mode %v, want 0644", fi.Mode().Perm())
 	}
 }
