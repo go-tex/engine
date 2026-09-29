@@ -2062,6 +2062,11 @@ func (e *Engine) loadMore() {
 	e.prim("gotex@circle", func(e *Engine) { e.doPictureCircle() })
 	e.prim("gotex@oval", func(e *Engine) { e.doPictureOval() })
 	e.prim("gotex@qbezier", func(e *Engine) { e.doQbezier() })
+	// pgffor's loop, for the document-level form. Inside a picture the body is
+	// gobbled whole, so this only ever runs outside one; see foreach.go for the
+	// shape it covers and the paper that measures what it was costing. With
+	// GOTEX_PGF=1 the real pgffor \let\foreach to its own, later, and wins.
+	e.prim("foreach", func(e *Engine) { e.doForeach() })
 	e.prim("tikzpicture", func(e *Engine) { e.doGobbleEnv("tikzpicture") })
 	e.prim("endtikzpicture", func(e *Engine) {}) // consumed literally by doGobbleEnv; defined for safety
 	e.prim("pgfpicture", func(e *Engine) { e.doGobbleEnv("pgfpicture") })
