@@ -129,6 +129,30 @@ func (e *Engine) collectEnvBody(name string) []tok {
 	lastEnd, lastEndName, rewound := -1, "", false
 	for {
 		t, ok := e.getNext()
+		if ok && rewound == false && len(e.levels) < level && lastEnd < 0 {
+			// The scan has left the file it began in without finding \end{name}, and
+			// there is no stored \end{other} to reconsider (the rewind below). Stop
+			// HERE rather than read on into the enclosing document.
+			//
+			// The \end is not coming from this input: the environment was opened by a
+			// class or package whose closer arrives another way, and every token past
+			// the file boundary belongs to the document, not to the body. Read on, they
+			// were captured into a box nobody places — arXiv 2304.12934 loses its whole
+			// reference list that way, 445 words, the worst text deficit in the corpus:
+			// iucr.cls opens \begin{minipage}{\linewidth} inside a conditional while the
+			// figure is being read from an \input file, and the raw scan took the \else
+			// branch, the rest of the file, and everything after it.
+			//
+			// What is pushed back was GATHERED, never run — the same property that makes
+			// the rewind above sound — so nothing is executed twice. The body flows on as
+			// ordinary text: a locally wrong box, not a lost document.
+			e.back(t)
+			if len(body) > 0 {
+				e.push(append([]tok(nil), body...))
+			}
+			e.endEnvGroup()
+			return nil
+		}
 		if ok && !rewound && len(e.levels) < level && lastEnd >= 0 && e.endMacroLeadsToEnd(lastEndName) {
 			// The scan has run off the end of the file it began in, and the last
 			// \end{other} it stored leads to an \end after all — through one more macro,
