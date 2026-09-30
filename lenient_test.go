@@ -105,25 +105,30 @@ func TestLenientSkippedCommands(t *testing.T) {
 func TestLenientBodyFailuresTolerated(t *testing.T) {
 	cases := []struct {
 		name, src, wantSkip string
+		// wantMissingFile names a command that is DEFINED and RAN and found no
+		// file — \input, \bibliography. Like the missing figure above, that is not
+		// a missing command, and tallying it as one put "\input" among the things
+		// the engine lacks on a corpus where \input works.
+		wantMissingFile string
 	}{
 		// A missing figure is NOT a skipped \includegraphics: the command is defined
 		// and ran, reserving a placeholder box. It is reported under FiguresDropped,
 		// by cause — asserted in TestFigureDropIsReportedByCauseNotAsUndefinedCommand.
 		{"missing image", `\documentclass{article}\begin{document}
 Before.\par\includegraphics[width=100pt]{no-such-figure.png}\par After.
-\end{document}`, ""},
+\end{document}`, "", ""},
 		{"unknown math", `\documentclass{article}\begin{document}
 Text $a + \someunknownmathop b$ more text.
-\end{document}`, `\someunknownmathop`},
+\end{document}`, `\someunknownmathop`, ""},
 		{"undefined length", `\documentclass{article}\begin{document}
 \setlength{\nosuchlength}{4pt}Body text.
-\end{document}`, ""},
+\end{document}`, "", ""},
 		{"missing input", `\documentclass{article}\begin{document}
 Head.\input{no-such-file}Tail.
-\end{document}`, "input"},
+\end{document}`, "", "input"},
 		{"missing bibliography", `\documentclass{article}\begin{document}
 Body.\bibliography{no-such-refs}
-\end{document}`, "bibliography"},
+\end{document}`, "", "bibliography"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -136,6 +141,16 @@ Body.\bibliography{no-such-refs}
 			}
 			if c.wantSkip != "" && e.SkippedCommands()[c.wantSkip] == 0 {
 				t.Errorf("expected %q recorded as skipped, got %v", c.wantSkip, e.SkippedCommands())
+			}
+			if c.wantMissingFile != "" {
+				if e.Diagnostics().FilesMissing[c.wantMissingFile] == 0 {
+					t.Errorf("expected %q recorded as a missing FILE, got %v",
+						c.wantMissingFile, e.Diagnostics().FilesMissing)
+				}
+				if e.SkippedCommands()[c.wantMissingFile] != 0 {
+					t.Errorf("%q was tallied as an undefined command; it is defined and it ran",
+						c.wantMissingFile)
+				}
 			}
 		})
 	}

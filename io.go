@@ -89,10 +89,7 @@ func (e *Engine) doInput() {
 	data, err := e.readInput(file)
 	if err != nil {
 		if e.tolerant() {
-			if e.skippedCS == nil {
-				e.skippedCS = map[string]int{}
-			}
-			e.skippedCS["input"]++
+			e.recordMissingFile("input")
 			return // best-effort: skip an \input whose file isn't shipped
 		}
 		e.fail("input file not found: " + file)
