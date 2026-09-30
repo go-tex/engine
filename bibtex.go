@@ -578,10 +578,7 @@ func (e *Engine) doBibliography() {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		if e.tolerant() {
-			if e.skippedCS == nil {
-				e.skippedCS = map[string]int{}
-			}
-			e.skippedCS["bibliography"]++
+			e.recordMissingFile("bibliography")
 			return // best-effort: skip a \bibliography whose .bib isn't shipped
 		}
 		e.fail("bibliography file not found: " + file)
@@ -625,10 +622,7 @@ func (e *Engine) doPutbib() {
 	data, err := e.readInput(file)
 	if err != nil {
 		if e.tolerant() {
-			if e.skippedCS == nil {
-				e.skippedCS = map[string]int{}
-			}
-			e.skippedCS["putbib"]++
+			e.recordMissingFile("putbib")
 			return // best-effort: the unit's .bbl was not shipped (bibtex not run)
 		}
 		e.fail("bibliography unit file not found: " + file)

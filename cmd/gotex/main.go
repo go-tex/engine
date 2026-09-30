@@ -218,6 +218,16 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "        \\usepackage{%s} wanted %s\n", pkg, d.FontsSubstituted[pkg])
 		}
 	}
+	if n := totalCount(d.FilesMissing); n > 0 {
+		// Not a missing command: \input, \bibliography and \putbib all ran and
+		// found nothing to read. Saying so keeps them out of the undefined channel,
+		// which a census reads to choose what to implement next.
+		fmt.Fprintf(w, "gotex: %d file(s) the document names were not shipped with it — "+
+			"the file, not the command, is missing:\n", n)
+		for _, e := range sortedByCount(d.FilesMissing) {
+			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
+		}
+	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 	} else {

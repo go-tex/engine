@@ -662,8 +662,8 @@ An entry in ` + name + `.
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if d := e.Diagnostics(); d.Skipped["putbib"] != 0 {
-		t.Errorf("\\putbib skipped %d time(s); the unit .bbl files were not read", d.Skipped["putbib"])
+	if d := e.Diagnostics(); d.FilesMissing["putbib"] != 0 {
+		t.Errorf("\\putbib found no file %d time(s); the unit .bbl files were not read", d.FilesMissing["putbib"])
 	}
 	// Both units contributed their entry: Alpha from bu1.bbl, Beta from bu2.bbl —
 	// each \bibitem's \label recorded, which happens only if its .bbl was typeset.
@@ -684,8 +684,12 @@ func TestPutbibMissingUnitFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lenient compile: %v", err)
 	}
-	if got := e.Diagnostics().Skipped["putbib"]; got != 1 {
-		t.Errorf("Skipped[putbib] = %d, want 1", got)
+	// A MISSING FILE, not a missing command: \putbib is defined and it ran.
+	if got := e.Diagnostics().FilesMissing["putbib"]; got != 1 {
+		t.Errorf("FilesMissing[putbib] = %d, want 1", got)
+	}
+	if got := e.Diagnostics().Skipped["putbib"]; got != 0 {
+		t.Errorf("Skipped[putbib] = %d; \\putbib is not an undefined command", got)
 	}
 
 	// Strict: the same missing file aborts, as a real TeX would on \input of it.

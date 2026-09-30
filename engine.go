@@ -337,6 +337,10 @@ type Engine struct {
 	// figure is dropped.
 	figuresDropped map[string]int
 
+	// filesMissing tallies files the document NAMES and that were not shipped with
+	// it, keyed by the command that asked for one. See recordMissingFile.
+	filesMissing map[string]int
+
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
 	// options queued by \PassOptionsTo*, and a depth that makes loading tolerant of
@@ -2243,6 +2247,15 @@ type Diagnostics struct {
 	// is at fault or the engine is. nil/empty when every figure loaded.
 	FiguresDropped map[string]int
 
+	// FilesMissing tallies files the document names and that are not there, keyed
+	// by the command that asked: "\\input", "\\bibliography", "\\putbib". It is NOT
+	// a missing command — every one of those is defined and RAN; what failed is
+	// that the file is not in the submission. Tallied in Skipped, as they were,
+	// the report printed "undefined command(s) skipped: \\input" over a corpus
+	// where \\input works, and a census read that as an engine gap. nil/empty when
+	// every named file was found.
+	FilesMissing map[string]int
+
 	// ExtraBrace tallies TeX's "Argument of \x has an extra }" recoveries, keyed by
 	// the macro and the line, e.g. "\\use@pgfmodule (line 661)". It is a RECOVERY,
 	// not a missing command, and it has its own field for the reason RunawayArgs
@@ -2284,6 +2297,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 	for k, v := range e.undefinedEnvs {
 		undefinedEnvs[k] = v
 	}
+	var filesMissing map[string]int
+	if len(e.filesMissing) > 0 {
+		filesMissing = make(map[string]int, len(e.filesMissing))
+		for k, v := range e.filesMissing {
+			filesMissing[k] = v
+		}
+	}
 	var figuresDropped map[string]int
 	if len(e.figuresDropped) > 0 {
 		figuresDropped = make(map[string]int, len(e.figuresDropped))
@@ -2300,6 +2320,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 	}
 	return Diagnostics{
 		Skipped:          skipped,
+		FilesMissing:     filesMissing,
 		Runaway:          e.runaway,
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
@@ -3300,4 +3321,20 @@ func keepsProtectedPrefix(name string) bool {
 		return true
 	}
 	return false
+}
+
+// recordMissingFile tallies a file the document named and that is not there.
+//
+// The command is not the problem: \input, \bibliography and \putbib are all
+// defined here and all RAN — they simply found nothing to read. Recorded in
+// skippedCS, as they were, the report printed them under "undefined command(s)
+// skipped", so a census of the 154-paper corpus listed "\input, 9 papers, 9
+// occurrences" among the commands the engine lacks. It does not lack \input.
+// Strict mode already said the right thing ("input file not found: …"); this is
+// the lenient tally saying it too.
+func (e *Engine) recordMissingFile(cmd string) {
+	if e.filesMissing == nil {
+		e.filesMissing = map[string]int{}
+	}
+	e.filesMissing[cmd]++
 }
