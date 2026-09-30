@@ -358,6 +358,14 @@ const MiniLaTeXKernel = `
 \def\harvardand{and}
 \def\harvardyearleft{(}
 \def\harvardyearright{)}
+% \harvardurl is the URL line harvard.sty writes at the end of an entry
+% (harvard.sty:28, the branch taken without hyperref):
+%     \newcommand{\harvardurl}[1]{\textbf{URL:} \textit{#1}}
+% Its hyperref branch only adds the link around the same words. Left undefined it
+% was the last of the family still missing, and the census counted 25 of them in
+% one paper alone: every entry of its reference list lost the line that says where
+% the work is.
+\def\harvardurl#1{\textbf{URL:} \textit{#1}}
 % glossaries: \newacronym[⟨opts⟩]{⟨label⟩}{⟨short⟩}{⟨long⟩} declares an acronym and
 % \gls{⟨label⟩} prints it. This engine keeps only the SHORT form (what the expansion
 % is after first use, and what the running text reads as); an unknown label prints
