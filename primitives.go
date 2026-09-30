@@ -2095,6 +2095,7 @@ func (e *Engine) loadMore() {
 	e.prim("Verb", func(e *Engine) { e.doVerbFancy() })          // fancyvrb: \Verb[opts]{text} or |text|
 	e.prim("urldef", func(e *Engine) { e.doUrldef() })           // url.sty: define, do not typeset
 	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
+	e.prim("path", func(e *Engine) { e.doPath() })               // url.sty: literal, NOT a link
 	e.prim("Url", func(e *Engine) { e.doBigURL() })              // url.sty low-level \Url: typeset + close its \begingroup
 	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
 	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })     // hyperref: literal URL, no link

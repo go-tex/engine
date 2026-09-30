@@ -86,7 +86,8 @@ func (e *Engine) doUrldef() {
 		e.back(t)
 		return
 	}
-	arg, argOK := e.readRawBracedArg()
+	// \urldef{\mail}\path|a@b| is the delimited form; readUrlArg takes both.
+	arg, argOK := e.readUrlArg()
 	if !argOK {
 		return
 	}
@@ -126,6 +127,88 @@ func (e *Engine) doBigURL() {
 	if k, open := e.curGroupKind(); open && k == semiSimpleGroup {
 		e.closeSemiSimple()
 	}
+}
+
+// doPath implements url.sty's \path.
+//
+// url.sty declares it at its line 204 as
+//
+//	% picTeX defines \path, so declare it optionally:
+//	\@ifundefined{path}{\DeclareUrlCommand\path{\urlstyle{tt}}}{}
+//
+// so it is \url's sibling set in typewriter and, unlike hyperref's \url, NOT a
+// link of its own — a bibliography writes \href{https://doi.org/…}{\path{doi:…}}
+// and the href is what carries the link. Undefined, the text inside it was
+// dropped: five corpus papers lose their DOIs, a mail address and a file path
+// that way, 49 occurrences.
+//
+// The optional declaration is the interesting half, and it is not decoration:
+// picTeX, TikZ and forest use the same name for something else entirely, and
+// whoever is loaded FIRST keeps it. So this binds only when url or hyperref is
+// loaded and no pgf-family package came before — see bindURLPath. Binding it
+// unconditionally was measured and was worse: forest's
+// \path [draw, \forestoption{edge}] came out as a URL and 2402.04711 lost a page.
+func (e *Engine) doPath() {
+	if !e.urlPathBound {
+		// url.sty has not been loaded (nor hyperref, which loads it), or a pgf-family
+		// package got there first and owns the name. Either way this is not url's
+		// \path, and behaving as if it were mangles the other one: 2402.04711 draws
+		// its trees with forest, whose \path [draw, \forestoption{edge}] would be
+		// set as a URL. Fall back to exactly what an unbound name did before.
+		e.skipUndefined("path")
+		return
+	}
+	text, ok := e.readUrlArg()
+	if !ok {
+		return
+	}
+	inner := e.urlBox(text)
+	if inner == nil {
+		return
+	}
+	e.placeInline(inner)
+}
+
+// readUrlArg reads a url.sty command's argument, which may be braced OR fenced by
+// any character the document chooses: \path{a/b} and \path|a/b| are both legal,
+// and 2404.16039 writes \urldef{\mailAM}\path|alexmos@kma.zcu.cz |. The fence is
+// whatever non-brace character comes first, and the argument runs to its next
+// occurrence.
+//
+// The delimited form can only be read from the SOURCE, for the reason
+// readRawBracedArg gives at length: with something pending on the input stack the
+// characters at the mouth's position are not the argument. From an expansion this
+// falls back to the braced reader, which handles that case correctly.
+func (e *Engine) readUrlArg() (string, bool) {
+	if len(e.lists) > 0 {
+		return e.readRawBracedArg()
+	}
+	p := e.bpos
+	for p < len(e.base) {
+		if cc := e.catOf(e.base[p]); cc != catSpace && cc != catEOL {
+			break
+		}
+		p++
+	}
+	if p >= len(e.base) {
+		return "", false
+	}
+	if e.base[p] == '{' {
+		return e.readRawBracedArg()
+	}
+	fence := e.base[p]
+	p++
+	start := p
+	for p < len(e.base) {
+		if e.base[p] == fence {
+			text := string(e.base[start:p])
+			e.bpos = p + 1
+			return text, true
+		}
+		p++
+	}
+	// No closing fence: do not swallow the rest of the document.
+	return "", false
 }
 
 // doNolinkurl implements \nolinkurl{URL}: like \url it typesets URL literally in
