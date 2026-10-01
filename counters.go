@@ -181,6 +181,14 @@ func (e *Engine) doRefstepcounter() {
 		expanded := e.expandList([]tok{csTok("the" + name)})
 		e.define("@currentlabel", &meaning{kind: mMacro, body: expanded}, false)
 	}
+	// …and the counter's NAME is the reference type, which is where cleveref gets
+	// "Section" from. LaTeX's own hook is this one: \refstepcounter is what every
+	// numbered thing steps through, so recording the type here covers sections,
+	// theorems, algorithms and anything a package numbers, instead of one command
+	// at a time. Before, only \@nsection, \equation and \caption set it, so a
+	// document whose class uses the real \@startsection path — every standard one —
+	// left \Cref{sec:…} printing a bare number.
+	e.define("@currentreftype", &meaning{kind: mMacro, body: stringToToks(name)}, false)
 }
 
 // readBraceInt reads a {…} group whose content is scanned as a <number> and
