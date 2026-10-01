@@ -2527,6 +2527,25 @@ func (e *Engine) scanInt() int {
 		if t.is('`', catOther) {
 			return sign * e.scanCharCode()
 		}
+		// TeX's HEXADECIMAL and OCTAL constants (tex.web §445): "<hex digits> and
+		// '<octal digits>. A hexadecimal digit is 0-9 or an UPPERCASE A-F; TeX stops at
+		// anything else and leaves it in the stream, which is why "1f reads as 1 and
+		// then typesets an f — checked against tectonic, where that lowercase f is what
+		// produces "Missing \begin{document}".
+		//
+		// ⛔ Without these the scanner returned 0 AND left the constant in the stream, so
+		// the digits were typeset as prose: 2603.18955 writes
+		// \mathchardef\emptyset="001F in its preamble and the string "001F came out on
+		// page 1, ahead of the title. Measured on 999 papers: 296 hexadecimal constants
+		// over 51 papers and 18 octal ones over 2 — 52 papers in all — and they sit on
+		// the primitives a symbol setup is made of: \mathchardef 95, \mathcode 24,
+		// \chardef 9.
+		if t.is('"', catOther) {
+			return sign * e.scanRadixDigits(16)
+		}
+		if t.is('\'', catOther) {
+			return sign * e.scanRadixDigits(8)
+		}
 		if !t.cs_ && t.ch >= '0' && t.ch <= '9' {
 			n := int(t.ch - '0')
 			for {
@@ -2545,6 +2564,46 @@ func (e *Engine) scanInt() int {
 		e.back(t)
 		return 0
 	}
+}
+
+// scanRadixDigits reads the digits of a hexadecimal or octal constant, TeX's way: it
+// consumes digits of the radix and stops at the first token that is not one, putting that
+// token back unless it is the single optional space a constant may be followed by
+// (tex.web §445). An empty run is the number zero, as TeX's "Missing number" recovery is.
+func (e *Engine) scanRadixDigits(radix int) int {
+	n := 0
+	for {
+		u, ok := e.peekXToken()
+		if !ok {
+			return n
+		}
+		d, isDigit := radixDigit(u, radix)
+		if !isDigit {
+			if u.cat != catSpace {
+				e.back(u)
+			}
+			return n
+		}
+		n = n*radix + d
+	}
+}
+
+// radixDigit reports the value of a token used as a digit of the given radix. Only a
+// character token counts, and only an UPPERCASE letter serves as a hexadecimal digit —
+// TeX's <hexadecimal digit> is 0-9 or A-F, so "1f is the number 1 followed by a letter f.
+func radixDigit(t tok, radix int) (int, bool) {
+	if t.cs_ {
+		return 0, false
+	}
+	switch {
+	case t.ch >= '0' && t.ch <= '9':
+		if d := int(t.ch - '0'); d < radix {
+			return d, true
+		}
+	case radix == 16 && t.ch >= 'A' && t.ch <= 'F':
+		return int(t.ch-'A') + 10, true
+	}
+	return 0, false
 }
 
 // assignmentPrims are the primitives that perform an assignment, after which a
