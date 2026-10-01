@@ -1874,6 +1874,11 @@ func (e *Engine) loadMore() {
 		e.prim(n, func(e *Engine) {})
 	}
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
+	// xargs: \newcommandx puts an optional argument at any position (see xargs.go).
+	e.prim("newcommandx", func(e *Engine) { e.doNewcommandx(xpNew) })
+	e.prim("renewcommandx", func(e *Engine) { e.doNewcommandx(xpDeclare) })
+	e.prim("providecommandx", func(e *Engine) { e.doNewcommandx(xpProvide) })
+	e.prim("DeclareRobustCommandx", func(e *Engine) { e.doNewcommandx(xpDeclare) })
 	e.prim("renewcommand", func(e *Engine) { e.doNewcommand() })
 	e.prim("providecommand", func(e *Engine) { e.doProvidecommand() })
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
