@@ -593,6 +593,16 @@ func (e *Engine) doBibliography() {
 	if e.bibAuthor == nil {
 		e.bibAuthor = map[string]string{}
 	}
+	e.emitBibliography(included)
+}
+
+// emitBibliography turns entries into the \begin{thebibliography} block the rest
+// of the engine already typesets, and splices it. Shared by \bibliography (from a
+// .bib) and \printbibliography (from biber's data .bbl), so the two cannot drift.
+func (e *Engine) emitBibliography(included []bibEntry) {
+	if e.bibAuthor == nil {
+		e.bibAuthor = map[string]string{}
+	}
 	var b strings.Builder
 	b.WriteString(`\begin{thebibliography}{99}`)
 	for _, en := range included {
@@ -604,6 +614,38 @@ func (e *Engine) doBibliography() {
 	}
 	b.WriteString(`\end{thebibliography}`)
 	e.spliceSource(b.String())
+}
+
+// doPrintBibliography implements biblatex's \printbibliography.
+//
+// biblatex does not ship a ready thebibliography block the way BibTeX does — biber
+// writes a DATA file and the package formats it at run time — so there is nothing
+// to splice and the command cannot be served the way \bibliography is. Undefined,
+// it took the whole reference list with it: seven of the 154 corpus papers use it.
+//
+// A .bbl that is NOT biber's is passed to the ordinary path, since \printbibliography
+// in a document whose .bbl came from BibTeX is just \bibliography by another name.
+func (e *Engine) doPrintBibliography() {
+	e.scanBracketList() // [heading=…, title=…, keyword=…]: accepted, not acted on
+	data, ok := e.readJobBBL()
+	if !ok {
+		if e.tolerant() {
+			e.recordMissingFile("printbibliography")
+			return
+		}
+		e.fail("printbibliography: no .bbl was shipped")
+		return
+	}
+	src := string(data)
+	if !isBiblatexBBL(src) {
+		e.spliceInputFile(data)
+		return
+	}
+	entries := parseBiblatexBBL(src)
+	if len(entries) == 0 {
+		return
+	}
+	e.emitBibliography(entries)
 }
 
 // doPutbib implements the bibunits package's \putbib: the low-level bibliography

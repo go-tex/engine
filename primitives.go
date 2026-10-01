@@ -2092,17 +2092,18 @@ func (e *Engine) loadMore() {
 		}
 	})
 	e.prim("verb", func(e *Engine) { e.doVerb() })
-	e.prim("Verb", func(e *Engine) { e.doVerbFancy() })          // fancyvrb: \Verb[opts]{text} or |text|
-	e.prim("urldef", func(e *Engine) { e.doUrldef() })           // url.sty: define, do not typeset
-	e.prim("url", func(e *Engine) { e.doURL() })                 // hyperref: literal, clickable URL
-	e.prim("path", func(e *Engine) { e.doPath() })               // url.sty: literal, NOT a link
-	e.prim("Url", func(e *Engine) { e.doBigURL() })              // url.sty low-level \Url: typeset + close its \begingroup
-	e.prim("href", func(e *Engine) { e.doHref() })               // hyperref: text clickable to a URL
-	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })     // hyperref: literal URL, no link
-	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() }) // hyperref: named in-document destination
-	e.prim("hyperlink", func(e *Engine) { e.doHyperlink() })     // hyperref: same-document link to a target
-	e.prim("hypersetup", func(e *Engine) { e.doHypersetup() })   // hyperref: link-styling options (colorlinks, urlcolor, …)
-	e.prim("hyperref", func(e *Engine) { e.doHyperref() })       // hyperref: internal link by \label, or 4-arg form
+	e.prim("Verb", func(e *Engine) { e.doVerbFancy() })                      // fancyvrb: \Verb[opts]{text} or |text|
+	e.prim("urldef", func(e *Engine) { e.doUrldef() })                       // url.sty: define, do not typeset
+	e.prim("url", func(e *Engine) { e.doURL() })                             // hyperref: literal, clickable URL
+	e.prim("path", func(e *Engine) { e.doPath() })                           // url.sty: literal, NOT a link
+	e.prim("printbibliography", func(e *Engine) { e.doPrintBibliography() }) // biblatex
+	e.prim("Url", func(e *Engine) { e.doBigURL() })                          // url.sty low-level \Url: typeset + close its \begingroup
+	e.prim("href", func(e *Engine) { e.doHref() })                           // hyperref: text clickable to a URL
+	e.prim("nolinkurl", func(e *Engine) { e.doNolinkurl() })                 // hyperref: literal URL, no link
+	e.prim("hypertarget", func(e *Engine) { e.doHypertarget() })             // hyperref: named in-document destination
+	e.prim("hyperlink", func(e *Engine) { e.doHyperlink() })                 // hyperref: same-document link to a target
+	e.prim("hypersetup", func(e *Engine) { e.doHypersetup() })               // hyperref: link-styling options (colorlinks, urlcolor, …)
+	e.prim("hyperref", func(e *Engine) { e.doHyperref() })                   // hyperref: internal link by \label, or 4-arg form
 	e.prim("footnote", func(e *Engine) { e.doFootnote() })
 	// The two halves of a footnote, placed separately: \footnotemark leaves the raised
 	// number and \footnotetext typesets the note. See footnote.go — \footnotemark was
