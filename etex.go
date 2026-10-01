@@ -187,6 +187,13 @@ func (e *Engine) isInternalDimen(t tok) bool {
 			"baselineskip", "leftskip", "rightskip", "lastskip", "dimexpr":
 			return true
 		}
+		// The glyph-metric primitives are internal dimensions too: lmcs.cls writes
+		// \setlength{\@lmcscurXheight}{\fontcharht\font`X}, which reads one.
+		for _, n := range fontCharDimNames {
+			if m.name == n {
+				return true
+			}
+		}
 	}
 	return false
 }
