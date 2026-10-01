@@ -437,6 +437,9 @@ func (e *Engine) applyGeometry(opts string) {
 	} else {
 		e.hsize = g.paperW - g.left - g.right
 	}
+	// What geometry computes is the ONE-COLUMN text width. In a two-column document
+	// the column measure has to be taken again from it — see retakeColumnMeasure.
+	e.retakeColumnMeasure()
 	// A band the option list did not name is the CLASS's, read from \headheight,
 	// \headsep and \footskip: \Gm@@process subtracts those very registers
 	// (geometry.sty:784-791), and a head=/headsep=/foot= key works by assigning them

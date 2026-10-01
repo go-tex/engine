@@ -50,6 +50,34 @@ func (e *Engine) applyTwoColumnMeasure() {
 	}
 }
 
+// retakeColumnMeasure re-derives the column measure after something has replaced
+// the text width underneath it.
+//
+// \documentclass[twocolumn] halves \hsize as soon as it is seen, saving the
+// one-column width to halve from. A geometry package loaded AFTER it then assigns
+// the new text width straight to \hsize — the full width, correctly, since that is
+// what geometry computes — and the halving is simply gone, with twoColApplied
+// still set so nothing takes it again. Measured on \documentclass[twocolumn]
+// {article} + \usepackage[margin=0.5in]{geometry}: \hsize reads 542.03pt where the
+// same document without geometry reads 229.5pt. Every width built from \linewidth
+// or \columnwidth — which the kernel \let to \hsize — is then twice too wide:
+// arXiv 2311.15028 draws all nine of its \includegraphics[width=\linewidth] at
+// 542pt into 262pt columns, so they overlap each other and bury five of its figure
+// legends.
+func (e *Engine) retakeColumnMeasure() {
+	if !e.twoColumn || !e.twoColApplied {
+		return // not in a column measure: nothing to re-derive
+	}
+	e.oneColHsize = e.hsize // the width just assigned IS the new one-column width
+	e.twoColApplied = false
+	e.applyTwoColumnMeasure()
+	// The seed region captured the OLD column width; it is the same region, so it
+	// must carry the new one or pagination keeps breaking at the stale measure.
+	if len(e.colRegions) == 1 && e.colRegions[0].at == 0 && e.colRegions[0].cols == 2 {
+		e.colRegions[0].colW = e.hsize
+	}
+}
+
 // colRegion is one \onecolumn/\twocolumn span of the main vertical list: from index at
 // (into e.mvl) until the next region's at, typeset in cols columns. span, when non-nil,
 // is the \twocolumn[...] full-width material placed across the top of the region's first
