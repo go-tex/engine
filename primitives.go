@@ -1874,6 +1874,7 @@ func (e *Engine) loadMore() {
 		e.prim(n, func(e *Engine) {})
 	}
 	e.prim("newcommand", func(e *Engine) { e.doNewcommand() })
+	e.initFontCharPrims() // \fontcharht and kin, \XeTeXLinkBox (fontchar.go)
 	// xargs: \newcommandx puts an optional argument at any position (see xargs.go).
 	e.prim("newcommandx", func(e *Engine) { e.doNewcommandx(xpNew) })
 	e.prim("renewcommandx", func(e *Engine) { e.doNewcommandx(xpDeclare) })

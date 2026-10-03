@@ -2778,6 +2778,8 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.scanExpr(false), 0
 			case m.kind == mPrim && m.name == "dimen":
 				return e.dimen[e.scanInt()], 0
+			case m.kind == mPrim && isFontCharDim(m.name):
+				return e.fontCharDim(m.name), 0
 			case m.kind == mPrim && m.name == "wd":
 				return e.boxDim('w'), 0
 			case m.kind == mPrim && m.name == "ht":
