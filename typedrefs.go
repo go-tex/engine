@@ -287,6 +287,25 @@ func (e *Engine) crefFormFor(typ string) (crefForm, bool) {
 	if f, ok := e.crefNames[typ]; ok {
 		return f, true
 	}
+	// A type with no naming of its own inherits the one it falls back to —
+	// INCLUDING a name the document gave that type. This looked unnecessary
+	// because crefForms already holds "section" under the subsection key, but the
+	// default is not what a document asking for an abbreviation gets:
+	//
+	//	\Crefname{section}{Sec.}{Secs.}  +  \Cref{subsec}
+	//	   tectonic "Sec. 1.1"            the defaults alone "Section 1.1"
+	//
+	// It is three of the six rows the cleveref arc still had going the wrong way
+	// (2405.18549 printed "Section" 16 to 41 times against a reference 0, because
+	// it renames section to "Sec." and refers to subsections).
+	if fb := crefTypeFallback(typ); fb != typ {
+		if f, ok := e.crefNames[fb]; ok {
+			return f, true
+		}
+		if f, ok := e.crefThmNames[fb]; ok {
+			return f, true
+		}
+	}
 	// A \newtheorem heading names its own type, between the built-in defaults and
 	// the document's \crefname: cleveref writes it to the @preamble macros, so it
 	// overrides the defaults and loses to anything the document says, whichever
@@ -438,6 +457,13 @@ func crefTypeFallback(typ string) string {
 		return "section"
 	case "subappendix", "subsubappendix":
 		return "appendix"
+	// Asked of tectonic rather than guessed, which is why these two arrived late:
+	// \Crefname{figure}{Fig.}{Figs.} renders \Cref of a sub-panel "Fig. 1a", and
+	// \Crefname{table}{Tbl.}{Tbls.} renders a sub-table "Tbl. 1a".
+	case "subfigure":
+		return "figure"
+	case "subtable":
+		return "table"
 	}
 	return typ
 }
