@@ -3,7 +3,10 @@
 
 package engine
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // This file implements typed cross-references: hyperref's \autoref and \nameref,
 // and cleveref's \cref / \Cref. Unlike \ref (which prints a bare number), these
@@ -158,6 +161,15 @@ func (e *Engine) doNameref() {
 // accepts a comma-separated key list; see crefText for the multi-key rendering.
 func (e *Engine) doCref(capital bool) {
 	keys := splitComma(e.readBraceName())
+	// A \crefformat replaces the whole rendering, name included, so it is tried
+	// first. Only the single-key case: several keys go through
+	// \crefmultiformat in cleveref, which no corpus paper uses.
+	if len(keys) == 1 {
+		if body, ok := e.crefFormatted(keys[0], capital); ok {
+			e.push(body)
+			return
+		}
+	}
 	e.pushString(e.crefText(keys, capital))
 }
 
@@ -330,4 +342,157 @@ func (e *Engine) doCrefname(capital bool) {
 		}
 	}
 	e.crefNames[typ] = f
+}
+
+// crefFmt holds the token templates \crefformat / \Crefformat install for one
+// reference type. cleveref's format takes three parameters — #1 the number, #2 a
+// prefix and #3 a suffix, which are its hyperlink wrappers and are empty here —
+// and it replaces the NAME as well as the layout, so a format wins over every
+// naming tier (cleveref.sty:543-549 applies cref@<type>@format and never looks
+// at the name).
+type crefFmt struct {
+	lower []tok // \cref
+	upper []tok // \Cref
+}
+
+// doCrefformat implements \crefformat{type}{template} and \Crefformat. One corpus
+// paper in 154 uses them, twice — and it is the whole of that paper's remaining
+// deficit: 2406.01525 writes \crefformat{section}{#2\S#1#3}, so its reference
+// prints "§3" where the engine printed "Section 3", 56 times. Reading the format
+// is also why its page count went one over in #527.
+//
+// The template is read RAW: #1 must survive to substitution time, and a \S in it
+// must not expand before it is typeset.
+//
+// The cross-fill is cleveref's (\@crefformat, cleveref.sty:1886-1910): installing
+// one case installs the other when that one is unset. cleveref wraps the copy in
+// \MakeUppercase or \MakeLowercase; this copies the tokens unchanged, which
+// differs only for a template carrying LETTERS — and a template that spells a
+// word is one a document writes for both cases anyway, as the corpus paper does.
+func (e *Engine) doCrefformat(capital bool) {
+	typ := e.readBraceName()
+	tpl := e.readBraceToksRaw()
+	if typ == "" || len(tpl) == 0 {
+		return
+	}
+	if e.crefFormats == nil {
+		e.crefFormats = map[string]crefFmt{}
+	}
+	f := e.crefFormats[typ]
+	if capital {
+		f.upper = tpl
+		if f.lower == nil {
+			f.lower = foldFirstLetter(tpl, false)
+		}
+	} else {
+		f.lower = tpl
+		if f.upper == nil {
+			f.upper = foldFirstLetter(tpl, true)
+		}
+	}
+	e.crefFormats[typ] = f
+}
+
+// crefTypeFallback gives the type whose naming and format a type inherits when
+// it has none of its own. Only the two the oracle was asked about are here;
+// subfigure and subtable are left alone rather than guessed at.
+func crefTypeFallback(typ string) string {
+	switch typ {
+	case "subsection", "subsubsection":
+		return "section"
+	}
+	return typ
+}
+
+// crefFormatted renders one key through a \crefformat template, substituting the
+// number for #1 and nothing for the hyperlink wrappers #2 and #3. It reports
+// false when the key's type has no format, which is every type in all but one
+// corpus paper.
+func (e *Engine) crefFormatted(key string, capital bool) ([]tok, bool) {
+	typ := e.refTypes[key]
+	f, ok := e.crefFormats[typ]
+	if !ok {
+		// A format falls back the same way the NAME does: a subsection with no
+		// format of its own follows the section's, which is why cleveref's default
+		// name for one is "section" too. Checked against tectonic both ways — a
+		// \crefformat{section} renders \cref of a subsection as "§1.1", while a
+		// \crefname{subsection}{subsec.} IS honoured, so the type really is
+		// `subsection` and this is a fallback, not an alias.
+		if a := crefTypeFallback(typ); a != typ {
+			f, ok = e.crefFormats[a]
+		}
+	}
+	if !ok {
+		return nil, false
+	}
+	tpl := f.lower
+	if capital {
+		tpl = f.upper
+	}
+	num := e.refText(key)
+	if len(tpl) == 0 || num == "??" {
+		return nil, false
+	}
+	out := make([]tok, 0, len(tpl)+len(num))
+	for i := 0; i < len(tpl); i++ {
+		if n, w := crefParamAt(tpl, i); n > 0 {
+			i += w - 1
+			if n == 1 {
+				out = append(out, stringToToks(num)...)
+			}
+			continue // #2 and #3 are cleveref's hyperlink wrappers: nothing here
+		}
+		out = append(out, tpl[i])
+	}
+	return out, true
+}
+
+// crefParamAt reports the parameter number at tpl[i] and how many tokens it
+// spans, or 0 if there is none. A template read with grabGroup keeps "#1" as TWO
+// tokens — a catParam '#' and the digit — where a \def body folds them into one,
+// which is why the first version of this substituted nothing and printed
+// "#2§#1#3" on the page.
+func crefParamAt(tpl []tok, i int) (int, int) {
+	t := tpl[i]
+	if t.cs_ || t.cat != catParam {
+		return 0, 0
+	}
+	if t.ch >= '1' && t.ch <= '9' { // a \def-style folded parameter token
+		return int(t.ch - '0'), 1
+	}
+	if i+1 < len(tpl) {
+		if d := tpl[i+1]; !d.cs_ && d.ch >= '1' && d.ch <= '9' {
+			return int(d.ch - '0'), 2
+		}
+	}
+	return 0, 0
+}
+
+// foldFirstLetter upper- or lowercases the first LETTER a template would typeset,
+// leaving its parameters, control sequences and punctuation alone. It is how
+// cleveref cross-fills a one-sided \crefformat: \@crefformat wraps the copy in
+// \MakeUppercase or \MakeLowercase (cleveref.sty:1886-1910), applied to an
+// UNBRACED argument, so only the first token shifts.
+//
+// Checked against tectonic: \crefformat{figure}{fig.~#2#1#3} alone makes \Cref
+// print "Fig. 1" — not "FIG. 1", and not the default "Figure 1".
+func foldFirstLetter(tpl []tok, upper bool) []tok {
+	out := append([]tok(nil), tpl...)
+	for i := 0; i < len(out); i++ {
+		if n, w := crefParamAt(out, i); n > 0 {
+			i += w - 1
+			continue
+		}
+		t := out[i]
+		if t.cs_ || !unicode.IsLetter(t.ch) {
+			continue
+		}
+		if upper {
+			out[i].ch = unicode.ToUpper(t.ch)
+		} else {
+			out[i].ch = unicode.ToLower(t.ch)
+		}
+		return out
+	}
+	return out
 }
