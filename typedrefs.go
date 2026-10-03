@@ -248,6 +248,13 @@ func (e *Engine) crefFormFor(typ string) (crefForm, bool) {
 	if f, ok := e.crefNames[typ]; ok {
 		return f, true
 	}
+	// A \newtheorem heading names its own type, between the built-in defaults and
+	// the document's \crefname: cleveref writes it to the @preamble macros, so it
+	// overrides the defaults and loses to anything the document says, whichever
+	// order the two are written in.
+	if f, ok := e.crefThmNames[typ]; ok {
+		return f, true
+	}
 	f, ok := crefForms[typ]
 	if !ok {
 		return f, false
