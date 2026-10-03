@@ -646,7 +646,8 @@ const LaTeX2eClassKernel = `
   \appendix}{%
   \global\let\thesection\gotex@presection
   \global\let\thesubsection\gotex@presubsection
-  \global\c@section=\gotex@presectionno\relax}
+  \global\c@section=\gotex@presectionno\relax
+  \gotex@sectionreftypes}
 % \appendixname is what the package's [title] option puts before the letter, and a
 % document may \renewcommand it; latex.ltx sets it for the standard classes and the
 % emulation had no value at all, so "\appendixname~\thesection" typeset as a bare tilde.

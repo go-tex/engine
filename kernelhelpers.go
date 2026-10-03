@@ -417,6 +417,19 @@ const LaTeX2eKernelHelpers = `
 % \enddocument (redefined here to run the hook; the originals in MiniLaTeXKernel
 % only toggled the @ catcode / added \vfill). \AtEndOfPackage / \AtEndOfClass
 % accumulate into hooks the Go loader runs+resets after each load (see CONTRACT).
+% \appendix retargets the section family's cleveref reference TYPE as well as its
+% numbering: after it, a \section is an "appendix" and \Cref prints "Appendix A"
+% where it printed "Section A" (cleveref.sty:185-215, checked against tectonic).
+%
+% It is wrapped HERE, at \begin{document}, around whatever \appendix is by then —
+% not defined in the kernel. The kernel's own \appendix is overridden by every
+% real class: with article.cls resolvable, \meaning\appendix is the CLASS's
+% \par\setcounter{section}{0}…, so a \gotex@appendixreftypes written into the
+% kernel definition was never reached. 9 of the 16 corpus papers that use \cref
+% open an appendix.
+\def\gotex@wrapappendix{\@ifundefined{appendix}{}{%
+  \let\gotex@origappendix\appendix
+  \def\appendix{\gotex@origappendix\gotex@appendixreftypes}}}
 \def\@begindocumenthook{}
 \def\@enddocumenthook{}
 \def\@endofpackagehook{}
@@ -435,7 +448,7 @@ const LaTeX2eKernelHelpers = `
 % accumulators and the named hooks of the 2020 format (see hooks.go), in the order
 % the real format uses: begindocument/before, the \AtBeginDocument code, then
 % begindocument/end, then the document environment's own env/document/begin.
-\def\document{\if1\gotexatasked\else\catcode64=12 \fi\gotex@bodybegins\gotex@applybaselinestretch\gotex@setmeasure
+\def\document{\if1\gotexatasked\else\catcode64=12 \fi\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 % \enddocument also plants the LastPage label the lastpage package is loaded for,

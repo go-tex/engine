@@ -2299,6 +2299,10 @@ func (e *Engine) loadMore() {
 	e.prim("Crefname", func(e *Engine) { e.doCrefname(true) })
 	e.prim("crefformat", func(e *Engine) { e.doCrefformat(false) })
 	e.prim("Crefformat", func(e *Engine) { e.doCrefformat(true) })
+	// \appendix retargets the section family's reference TYPE as well as its
+	// numbering; \end{appendices} puts it back (see typedrefs.go, inAppendix).
+	e.prim("gotex@appendixreftypes", func(e *Engine) { e.inAppendix = true })
+	e.prim("gotex@sectionreftypes", func(e *Engine) { e.inAppendix = false })
 	// listings package: code blocks and inline verbatim (see listings.go). Reached
 	// via \begin{lstlisting}/\end{lstlisting} (endlstlisting is consumed literally by
 	// doLstlisting, defined here for safety) and \lstinline<delim>…<delim>.

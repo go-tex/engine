@@ -217,6 +217,10 @@ type Engine struct {
 	// crefFormats holds \crefformat / \Crefformat templates, which replace the
 	// whole rendering rather than the name (see crefFormatted).
 	crefFormats map[string]crefFmt
+	// inAppendix is set between \appendix (or \begin{appendices}) and the end of
+	// the document: it retargets the section family's reference type (see
+	// appendixRefType).
+	inAppendix bool
 	// cleveref's capitalise / noabbrev package options, which select among the
 	// four default naming sets the package ships (see crefFormFor).
 	crefCapitalise bool
