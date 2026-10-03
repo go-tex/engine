@@ -995,9 +995,6 @@ const MiniLaTeXKernel = `
 \newlength\abovecaptionskip \setlength\abovecaptionskip{10pt}
 \newlength\belowcaptionskip \setlength\belowcaptionskip{0pt}
 \def\captionof#1#2{\def\@captype{#1}\caption{#2}}
-\def\captionsetup{\@ifnextbracket{\@captionsetupopt}{\@captionsetupnoopt}}
-\def\@captionsetupopt[#1]#2{}
-\def\@captionsetupnoopt#1{}
 % \long: the body reaches this through \newcommand\caption@ibox[3] (caption.sty:457,
 % unstarred, so \long) and \long\def\subcaption@@@subfloat#1#2#3 (subcaption.sty:270).
 % Ours stands in for both, and grabs the body itself.

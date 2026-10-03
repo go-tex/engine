@@ -642,6 +642,35 @@ func (e *Engine) applyAcmartGeometry(opts []string) {
 		}
 	}
 	e.applyClassGeometry(g)
+	e.applyAcmartFigureName(opts)
+}
+
+// applyAcmartFigureName heads an ACM JOURNAL paper's figures "Fig." instead of
+// "Figure", which the real class does with
+//
+//	\if@ACM@journal \captionsetup[figure]{name={Fig.}} \fi   (acmart.cls:931-934)
+//
+// and only there: the sigconf family keeps "Figure". The journal formats are
+// acmsmall, acmlarge, acmtog and acmcp (acmart.cls:219-247). A bundled acmart.cls
+// does this through \captionsetup itself (see caption.go) and does not reach here;
+// this covers the 7 corpus papers whose acmart is EMULATED, of which one —
+// 2406.01525, \documentclass[acmsmall]{acmart} — has 15 "Fig." in its reference
+// where we printed "Figure".
+//
+// ⛔ manuscript is NOT in the list although acmart counts it as a journal and
+// makes it the DEFAULT. Two corpus papers write \documentclass[STYLE]{acmart} —
+// an unsubstituted placeholder, so a formatted real acmart would fall back to
+// manuscript — and both references print "Figure", not "Fig.". Whatever the real
+// class does with an invalid format, it is not the journal branch, so the name is
+// changed only when the document NAMES a journal format.
+func (e *Engine) applyAcmartFigureName(opts []string) {
+	for _, o := range opts {
+		switch strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(o), "format=")) {
+		case "acmsmall", "acmlarge", "acmtog", "acmcp":
+			e.define("figurename", &meaning{kind: mMacro, body: stringToToks("Fig.")}, true)
+			return
+		}
+	}
 }
 
 // applyAchemsoGeometry gives the emulated achemso class its real text block and
