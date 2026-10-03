@@ -856,8 +856,19 @@ const MiniLaTeXKernel = `
 \def\caption#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
-\def\@begintheorem#1#2{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
-\def\@beginthmnonum#1{\def\@currentreftype{theorem}\def\@currentlabelname{}\noindent{\bf #1}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+% A theorem's reference type is the ENVIRONMENT's name, not the word "theorem"
+% and not the counter's: cleveref keys its naming on it, and it is what
+% \crefname{theo}{thm.}{thm.} in a document addresses. \newtheorem's generated
+% macro announces it in \gotex@thmtype (theorem.go); the fallback below is for a
+% class that calls \@begintheorem itself.
+%
+% \refstepcounter cannot supply it, because \newtheorem{theo}[definition]{Theorem}
+% steps the DEFINITION counter: before this, \Cref{thm} printed "Theorem 2" where
+% the reference prints "Thm. 2", and \Cref of an actual definition printed
+% "Theorem 1" for "Definition 1" — both labels had taken the same type.
+\def\gotex@thmtype{theorem}
+\def\@begintheorem#1#2{\edef\@currentreftype{\gotex@thmtype}\def\@currentlabelname{}\noindent{\bf #1\ #2}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
+\def\@beginthmnonum#1{\edef\@currentreftype{\gotex@thmtype}\def\@currentlabelname{}\noindent{\bf #1}\@ifnextbracket{\@opargbegintheorem}{\@stdbegintheorem}}
 % ── siunitx unit-name macros ────────────────────────────────────────────────
 % Standalone expansions for the unit/prefix/power macros. \si, \unit, \SI, \qty
 % and \ang read their arguments raw (no expansion) and resolve names in Go, so

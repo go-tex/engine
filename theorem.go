@@ -25,7 +25,10 @@ package engine
 // TeX text) keeps the @-bearing internal names catcode-immune, so \newtheorem
 // works whether used in the preamble or the document body.
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // doNewtheorem implements \newtheorem{env}{Heading}, its \newtheorem{env}[shared]
 // {Heading} (share another environment's counter) and \newtheorem{env}{Heading}
@@ -58,6 +61,7 @@ func (e *Engine) doNewtheorem() {
 		return
 	}
 
+	e.recordTheoremCrefName(env, head)
 	if starred {
 		e.defineUnnumberedTheorem(env, head)
 		return
@@ -120,12 +124,15 @@ func (e *Engine) doNewtheorem() {
 	// then hand {Heading}{number} to \@begintheorem (which reads the optional note).
 	body := []tok{
 		csTok("par"), csTok("medskip"), csTok("begingroup"),
+	}
+	body = append(body, thmTypeToks(env)...)
+	body = append(body, []tok{
 		csTok("global"), csTok("advance"), csTok(ctr), chTok(' ', catSpace),
 		chTok('b', catLetter), chTok('y', catLetter), chTok('1', catOther), csTok("relax"),
 		csTok("edef"), csTok("@currentlabel"), chTok('{', catBegin), csTok("the" + env), chTok('}', catEnd),
 		csTok("@oparg"), chTok('{', catBegin),
 		csTok("@begintheorem"), chTok('{', catBegin),
-	}
+	}...)
 	body = append(body, head...)
 	body = append(body, chTok('}', catEnd), chTok('{', catBegin), csTok("the"+env), chTok('}', catEnd))
 	// Close \@oparg's argument and hand it the default empty bracket group, so the
@@ -146,8 +153,11 @@ func (e *Engine) doNewtheorem() {
 func (e *Engine) defineUnnumberedTheorem(env string, head []tok) {
 	body := []tok{
 		csTok("par"), csTok("medskip"), csTok("begingroup"),
-		csTok("@beginthmnonum"), chTok('{', catBegin),
 	}
+	body = append(body, thmTypeToks(env)...)
+	body = append(body, []tok{
+		csTok("@beginthmnonum"), chTok('{', catBegin),
+	}...)
 	body = append(body, head...)
 	body = append(body, chTok('}', catEnd))
 	e.define(env, &meaning{kind: mMacro, body: body}, true)
@@ -244,4 +254,61 @@ func digitToks(n int) []tok {
 		out[i] = chTok(rev[len(rev)-1-i], catOther)
 	}
 	return out
+}
+
+// thmTypeToks builds \def\gotex@thmtype{env}, which is how a theorem environment
+// tells \@begintheorem its own name. \refstepcounter cannot: the counter a
+// theorem steps is not the environment — \newtheorem{theo}[definition]{Theorem}
+// steps `definition` — and cleveref keys its naming on the ENVIRONMENT.
+func thmTypeToks(env string) []tok {
+	t := []tok{csTok("def"), csTok("gotex@thmtype"), chTok('{', catBegin)}
+	t = append(t, stringToToks(env)...)
+	return append(t, chTok('}', catEnd))
+}
+
+// recordTheoremCrefName names a theorem environment for \cref, from the heading
+// it was declared with — cleveref's own rule, which it applies by patching all
+// three of LaTeX's \newtheorem internals (cleveref.sty:105-173):
+//
+//	cref@<env>@name  = \MakeLowercase <Heading>
+//	Cref@<env>@name  = \MakeUppercase <Heading>
+//
+// and \MakeUppercase takes ONE token, so those fold the FIRST LETTER only:
+// "Theorem" gives "theorem" and "Theorem", not "THEOREM". Checked against
+// tectonic, which prints "theorem 1" / "Theorem 1" for \newtheorem{theorem} and
+// "lemma 1" / "Lemma 1" for \newtheorem{lem}{Lemma} — the name follows the
+// HEADING, not the environment's own spelling.
+//
+// The PLURAL is deliberately left empty, because cleveref leaves it empty too:
+// tectonic renders \cref{c:a,c:b} on a \newtheorem{cor}{Corollary} as "?? 1?? 2".
+// crefText prints the bare numbers for an unnamed plural instead, which is the
+// one place here that does not follow the reference — reproducing "??" would be
+// faithful to a rendering nobody wants.
+func (e *Engine) recordTheoremCrefName(env string, head []tok) {
+	name := strings.TrimSpace(e.toksToString(e.expandList(append([]tok(nil), head...))))
+	if name == "" || env == "" {
+		return
+	}
+	if e.crefThmNames == nil {
+		e.crefThmNames = map[string]crefForm{}
+	}
+	e.crefThmNames[env] = crefForm{
+		lower: foldFirst(name, false),
+		upper: foldFirst(name, true),
+	}
+}
+
+// foldFirst upper- or lowercases the first letter of s and leaves the rest, which
+// is what \MakeUppercase/\MakeLowercase applied to an unbraced argument do.
+func foldFirst(s string, upper bool) string {
+	r := []rune(s)
+	if len(r) == 0 {
+		return s
+	}
+	if upper {
+		r[0] = unicode.ToUpper(r[0])
+	} else {
+		r[0] = unicode.ToLower(r[0])
+	}
+	return string(r)
 }

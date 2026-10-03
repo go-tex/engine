@@ -381,3 +381,105 @@ func TestCrefnameBeatsPackageOption(t *testing.T) {
 		t.Errorf("unnamed section under [capitalise] = %q, want %q", got, want)
 	}
 }
+
+// A theorem environment's reference type is the ENVIRONMENT's name, and its
+// cleveref name comes from the HEADING it was declared with — cleveref's own
+// rule, applied by patching all three of LaTeX's \newtheorem internals
+// (cleveref.sty:105-173). Both halves matter and they fail differently:
+//
+//   - the type was hard-coded "theorem" in \@begintheorem, so every theorem-like
+//     environment shared one type and a document's \crefname{theo}{thm.} could
+//     not reach it. \refstepcounter cannot supply it either, because
+//     \newtheorem{theo}[definition]{Theorem} steps the DEFINITION counter.
+//   - the name follows the heading, not the environment: \newtheorem{lem}{Lemma}
+//     is "lemma"/"Lemma", never "lem".
+//
+// The expectations are tectonic's, from a witness run against it: "theorem 1 |
+// Theorem 1 | lemma 1 | Lemma 1 | proposition 1.1 | Proposition 1.1", and with a
+// shared counter "Thm. 2 | thm. 2 | Definition 1".
+func TestTheoremTypeAndName(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\hsize=300pt
+\usepackage{cleveref}
+\newtheorem{definition}{Definition}
+\newtheorem{lem}{Lemma}
+\newtheorem{theo}[definition]{Theorem}
+\begin{definition}\label{d}X\end{definition}
+\begin{lem}\label{l}Y\end{lem}
+\begin{theo}\label{t}Z\end{theo}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	// Each label carries its own environment's name, not the counter's and not
+	// a single shared "theorem".
+	wantType := map[string]string{"d": "definition", "l": "lem", "t": "theo"}
+	for k, want := range wantType {
+		if got := e.refTypes[k]; got != want {
+			t.Errorf("refType[%q] = %q, want %q", k, got, want)
+		}
+	}
+	want := map[string]string{
+		"d": "definition 1", "l": "lemma 1", "t": "theorem 2",
+	}
+	wantUp := map[string]string{
+		"d": "Definition 1", "l": "Lemma 1", "t": "Theorem 2",
+	}
+	for k, w := range want {
+		if got := e.crefOne(k, false); got != w {
+			t.Errorf("cref %q = %q, want %q", k, got, w)
+		}
+		if got := e.crefOne(k, true); got != wantUp[k] {
+			t.Errorf("Cref %q = %q, want %q", k, got, wantUp[k])
+		}
+	}
+}
+
+// A document's \crefname beats the heading, whichever order the two are written
+// in — the heading's name sits a tier below, exactly as cleveref's @preamble
+// macros do. 2405.18549 depends on this: it declares twelve theorem kinds and
+// then renames nine of them to abbreviations, and its reference prints "Prop."
+// 16 times where the heading alone would give "Proposition".
+func TestCrefnameBeatsTheoremHeading(t *testing.T) {
+	for _, order := range []string{"nameFirst", "theoremFirst"} {
+		e := newTypedRefEngine()
+		decl := `\newtheorem{prop}{Proposition}`
+		name := `\Crefname{prop}{Prop.}{Prop.}` + "\n" + `\crefname{prop}{prop.}{prop.}`
+		pre := decl + "\n" + name
+		if order == "nameFirst" {
+			pre = name + "\n" + decl
+		}
+		src := `\hsize=300pt
+\usepackage{cleveref}
+` + pre + `
+\begin{prop}\label{p}X\end{prop}`
+		if _, err := e.Run(src); err != nil {
+			t.Fatalf("%s: %v", order, err)
+		}
+		if got, want := e.crefOne("p", true), "Prop. 1"; got != want {
+			t.Errorf("%s: Cref = %q, want %q", order, got, want)
+		}
+		if got, want := e.crefOne("p", false), "prop. 1"; got != want {
+			t.Errorf("%s: cref = %q, want %q", order, got, want)
+		}
+	}
+}
+
+// A heading names the singular only, because cleveref names the singular only:
+// tectonic renders \cref{c:a,c:b} on a \newtheorem{cor}{Corollary} as "?? 1?? 2".
+// crefText prints the bare numbers instead — the one place here that does not
+// follow the reference, since reproducing "??" would be faithful to a rendering
+// nobody wants.
+func TestTheoremHeadingHasNoPlural(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\hsize=300pt
+\usepackage{cleveref}
+\newtheorem{cor}{Corollary}
+\begin{cor}\label{a}X\end{cor}
+\begin{cor}\label{b}Y\end{cor}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e.crefText([]string{"a", "b"}, false), "1 and 2"; got != want {
+		t.Errorf("plural = %q, want %q", got, want)
+	}
+}

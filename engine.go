@@ -211,6 +211,9 @@ type Engine struct {
 	// crefNames holds a document's own \crefname/\Crefname, which override
 	// cleveref's defaults for one reference type. Nil until a document names one.
 	crefNames map[string]crefForm
+	// crefThmNames holds the names \newtheorem headings give their environments,
+	// a tier below crefNames (see crefFormFor).
+	crefThmNames map[string]crefForm
 	// cleveref's capitalise / noabbrev package options, which select among the
 	// four default naming sets the package ships (see crefFormFor).
 	crefCapitalise bool
