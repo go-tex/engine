@@ -2297,6 +2297,8 @@ func (e *Engine) loadMore() {
 	e.prim("Cref", func(e *Engine) { e.doCref(true) })
 	e.prim("crefname", func(e *Engine) { e.doCrefname(false) })
 	e.prim("Crefname", func(e *Engine) { e.doCrefname(true) })
+	// caption package: \captionsetup's name= option (see caption.go).
+	e.prim("captionsetup", func(e *Engine) { e.doCaptionsetup() })
 	e.prim("crefformat", func(e *Engine) { e.doCrefformat(false) })
 	e.prim("Crefformat", func(e *Engine) { e.doCrefformat(true) })
 	// \appendix retargets the section family's reference TYPE as well as its
