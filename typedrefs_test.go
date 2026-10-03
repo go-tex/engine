@@ -318,3 +318,66 @@ func TestCrefnameUnnamedCaseIsNumberOnly(t *testing.T) {
 		t.Errorf("plural (unnamed) = %q, want %q", got, want)
 	}
 }
+
+// cleveref ships four default naming sets and selects between them with two
+// package options (cleveref.sty:3889-3946). Its own defaults are abbrev ON,
+// capitalise OFF (cleveref.sty:3814-3831), so only [capitalise] and [noabbrev]
+// change anything — and only equation and figure are abbreviated at all, which
+// is why noabbrev shows on those two alone while capitalise moves every type.
+//
+// Nine corpus papers load cleveref with options; four of them use \cref, 186 of
+// the corpus's 905 uses. Measured by channel against tectonic, all four papers
+// move toward the reference and none away, several landing on its exact count
+// ("Fig." 3 → 65 against a reference 65 in 2201.02101).
+func TestCrefPackageOptions(t *testing.T) {
+	for _, c := range []struct {
+		opts string
+		want []string // \cref of section, figure, equation, then \Cref of each
+	}{
+		{"", []string{"section 1", "fig. 1", "eq. (1)", "Section 1", "Figure 1", "Equation (1)"}},
+		{"[capitalise]", []string{"Section 1", "Fig. 1", "Eq. (1)", "Section 1", "Figure 1", "Equation (1)"}},
+		{"[capitalize]", []string{"Section 1", "Fig. 1", "Eq. (1)", "Section 1", "Figure 1", "Equation (1)"}},
+		{"[noabbrev]", []string{"section 1", "figure 1", "equation (1)", "Section 1", "Figure 1", "Equation (1)"}},
+		{"[capitalize,noabbrev]", []string{"Section 1", "Figure 1", "Equation (1)", "Section 1", "Figure 1", "Equation (1)"}},
+	} {
+		e := newTypedRefEngine()
+		src := `\hsize=300pt
+\usepackage` + c.opts + `{cleveref}
+\section{Intro}\label{s}
+\begin{figure}\caption{A plot}\label{fig}\end{figure}
+\begin{equation} x \label{eq}\end{equation}`
+		if _, err := e.Run(src); err != nil {
+			t.Fatalf("%s: %v", c.opts, err)
+		}
+		got := []string{
+			e.crefOne("s", false), e.crefOne("fig", false), e.crefOne("eq", false),
+			e.crefOne("s", true), e.crefOne("fig", true), e.crefOne("eq", true),
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("cleveref%s: form %d = %q, want %q", c.opts, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// An option changes the DEFAULTS; a document's own \crefname still wins, because
+// cleveref keeps the two in different macros — the option's names are @preamble
+// ones, which lose to anything the document set (cleveref.sty:1296-1320).
+func TestCrefnameBeatsPackageOption(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\hsize=300pt
+\usepackage[capitalise]{cleveref}
+\crefname{figure}{fig.}{figs.}
+\section{Intro}\label{s}
+\begin{figure}\caption{A plot}\label{fig}\end{figure}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e.crefOne("fig", false), "fig. 1"; got != want {
+		t.Errorf("named figure = %q, want %q", got, want)
+	}
+	if got, want := e.crefOne("s", false), "Section 1"; got != want {
+		t.Errorf("unnamed section under [capitalise] = %q, want %q", got, want)
+	}
+}

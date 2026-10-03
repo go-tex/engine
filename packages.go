@@ -771,6 +771,29 @@ func (e *Engine) doUsepackageLoad() {
 			e.applyGeometry(opt)
 			continue
 		}
+		if name == "cleveref" {
+			// cleveref ships FOUR default naming sets and picks between them with two
+			// package options, both read here (cleveref.sty:3889-3946):
+			//
+			//	capitalise / capitalize  \cref prints the capitalised names too
+			//	noabbrev                 "equation"/"figure" instead of "eq."/"fig."
+			//
+			// Its own defaults are abbrev ON, capitalise OFF (cleveref.sty:3814-3831),
+			// which is what crefForms holds; the options are applied over it rather
+			// than stored as names, because a document's own \crefname must still win
+			// over them and does so through a DIFFERENT macro in cleveref (the
+			// language defaults are @preamble ones).
+			//
+			// Nine corpus papers load cleveref with options and four of them use
+			// \cref — 186 of the corpus's 905 uses. Ignoring the options printed
+			// lowercase names through all four.
+			if hasOption(opts, "capitalise") || hasOption(opts, "capitalize") {
+				e.crefCapitalise = true
+			}
+			if hasOption(opts, "noabbrev") {
+				e.crefNoAbbrev = true
+			}
+		}
 		if name == "apacite" {
 			// apacite drives an APA-style .bbl but is often required by a journal
 			// class (agujournal, sn-jnl) without the .sty being bundled. Left
