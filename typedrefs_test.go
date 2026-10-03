@@ -66,8 +66,11 @@ func TestAutorefText(t *testing.T) {
 	e := newTypedRefEngine()
 	e.labels = map[string]string{"s": "1", "ss": "1.1", "eq": "2", "fig": "3", "tab": "4", "thm": "5", "p": "II", "it": "6", "x": "7"}
 	e.refTypes = map[string]string{"s": "section", "ss": "subsection", "eq": "equation", "fig": "figure", "tab": "table", "thm": "theorem", "p": "part", "it": "item"}
+	// hyperref's own names (hyperref.sty:3158-3175), NOT this table's previous
+	// guess: a section and a subsection are LOWERCASE there, and \autoref of an
+	// equation carries no parentheses. Confirmed against tectonic.
 	cases := map[string]string{
-		"s": "Section 1", "ss": "Subsection 1.1", "eq": "Equation (2)",
+		"s": "section 1", "ss": "subsection 1.1", "eq": "Equation 2",
 		"fig": "Figure 3", "tab": "Table 4", "thm": "Theorem 5",
 		"p": "Part II", "it": "item 6",
 		"x":       "7",  // known number, untyped: bare number
@@ -167,8 +170,10 @@ func TestTypedRefsTypeset(t *testing.T) {
 	}
 	var b strings.Builder
 	collectChars(e.mvl, &b)
-	// "Section 1" | "eq. (2)" | "Thm. 3" | "Intro" — inter-word spaces are glue.
-	if got, want := b.String(), "Section1|eq.(2)|Theorem3|Intro"; got != want {
+	// "section 1" | "eq. (2)" | "Theorem 3" | "Intro" — inter-word spaces are glue.
+	// \autoref's "section" is LOWERCASE: that is hyperref's own name for it
+	// (hyperref.sty:3166), while cleveref's \Cref capitalises.
+	if got, want := b.String(), "section1|eq.(2)|Theorem3|Intro"; got != want {
 		t.Errorf("typeset %q, want %q", got, want)
 	}
 }
@@ -194,8 +199,9 @@ func TestForwardTypedRefTwoPass(t *testing.T) {
 	}
 	var b strings.Builder
 	collectChars(e.mvl, &b)
-	// \autoref{s}→"Section 1", \nameref{s}→"Preliminaries", then the heading "1Preliminaries".
-	if got, want := b.String(), "Section1thenPreliminaries.1Preliminaries"; got != want {
+	// \autoref{s}→"section 1" (hyperref's lowercase name), \nameref{s}→
+	// "Preliminaries", then the heading "1Preliminaries".
+	if got, want := b.String(), "section1thenPreliminaries.1Preliminaries"; got != want {
 		t.Errorf("second pass typeset %q, want %q", got, want)
 	}
 }
@@ -556,5 +562,139 @@ func TestCrefParamAt(t *testing.T) {
 	}
 	if n, _ := crefParamAt([]tok{chTok('#', catParam)}, 0); n != 0 {
 		t.Errorf("a trailing # reported parameter %d", n)
+	}
+}
+
+// After \appendix the section family's reference TYPE changes: a \section is an
+// appendix, a \subsection a subappendix and a \subsubsection a subsubappendix
+// (cleveref.sty:185-215). Only "appendix" carries a name, so the two sub-levels
+// reach it through crefTypeFallback — which is what cleveref's English block
+// does too, and what tectonic prints:
+//
+//	\section      in an appendix   appendix A       Appendix A
+//	\subsection   in an appendix   appendix A.1     Appendix A.1
+//	\subsubsection in an appendix  appendix A.1.1   Appendix A.1.1
+//
+// Before, all three printed "section A". 9 of the 16 corpus papers that use
+// \cref open an appendix.
+func TestAppendixRefType(t *testing.T) {
+	e := newTypedRefEngine()
+	// A full document, because the wrap is planted at \begin{document}: the
+	// kernel's \appendix is overridden by every real class, so the only honest
+	// place to wrap it is around whatever it is by then.
+	src := `\documentclass{article}\hsize=300pt
+\usepackage{cleveref}
+\begin{document}
+\section{Un}\label{s}
+\appendix
+\section{App}\label{a}
+\subsection{Sous}\label{as}
+\subsubsection{SousSous}\label{ass}
+\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	wantType := map[string]string{
+		"s": "section", "a": "appendix", "as": "subappendix", "ass": "subsubappendix",
+	}
+	for k, want := range wantType {
+		if got := e.refTypes[k]; got != want {
+			t.Errorf("refType[%q] = %q, want %q", k, got, want)
+		}
+	}
+	// A section BEFORE \appendix keeps its own name, and every level inside it
+	// reaches the appendix's.
+	for k, want := range map[string]string{
+		"s": "section 1", "a": "appendix A", "as": "appendix A.1", "ass": "appendix A.1.1",
+	} {
+		if got := e.crefOne(k, false); got != want {
+			t.Errorf("cref %q = %q, want %q", k, got, want)
+		}
+	}
+	if got, want := e.crefOne("a", true), "Appendix A"; got != want {
+		t.Errorf("Cref = %q, want %q", got, want)
+	}
+}
+
+// appendixRefType only touches the section family, and only inside an appendix:
+// a figure's type is a figure wherever it sits.
+func TestAppendixRefTypeLeavesOthersAlone(t *testing.T) {
+	for _, in := range []string{"figure", "table", "equation", "theorem", "item", ""} {
+		if got := appendixRefType(in, true); got != in {
+			t.Errorf("appendixRefType(%q, true) = %q, want it unchanged", in, got)
+		}
+	}
+	for _, in := range []string{"section", "subsection", "subsubsection"} {
+		if got := appendixRefType(in, false); got != in {
+			t.Errorf("appendixRefType(%q, false) = %q, want it unchanged", in, got)
+		}
+	}
+}
+
+// \end{appendices} puts the type back, as it puts \thesection back — the
+// appendix package's environment form is the only one of the two that ends.
+func TestAppendicesEnvironmentRestoresType(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\documentclass{article}\hsize=300pt
+\usepackage{cleveref}
+\begin{document}
+\begin{appendices}
+\section{App}\label{a}
+\end{appendices}
+\section{Encore}\label{s}
+\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e.refTypes["a"], "appendix"; got != want {
+		t.Errorf("inside: refType = %q, want %q", got, want)
+	}
+	if got, want := e.refTypes["s"], "section"; got != want {
+		t.Errorf("after: refType = %q, want %q", got, want)
+	}
+}
+
+// \autoref's names are hyperref's own \HyLang@english block
+// (hyperref.sty:3158-3175), and their case is NOT uniform: a section, a chapter
+// and a paragraph are lowercase while an equation, a figure and an appendix are
+// capitalised. The table capitalised everything, and it parenthesised an
+// equation's number as \cref does — hyperref's \autoref of an equation is
+// "Equation 1".
+//
+// tectonic agrees with the source line for line, which is how these were fixed:
+//
+//	\autoref  section 1 | subsection 1.1 | Figure 1 | Equation 1
+//	          Appendix A | subsection A.1
+//
+// The last pair is the one that cost a regression: hyperref has NO sub-appendix,
+// so a \subsection inside an appendix is still a "subsection" to it, while
+// cleveref calls it a subappendix. autorefText maps that type back.
+func TestAutorefNamesAreHyperrefs(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\documentclass{article}\hsize=300pt
+\usepackage{hyperref}
+\begin{document}
+\section{Un}\label{s}
+\subsection{Sous}\label{ss}
+\begin{figure}\caption{f}\label{fig}\end{figure}
+\begin{equation} x \label{eq}\end{equation}
+\appendix
+\section{App}\label{a}
+\subsection{SousApp}\label{as}
+\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ key, want string }{
+		{"s", "section 1"},
+		{"ss", "subsection 1.1"},
+		{"fig", "Figure 1"},
+		{"eq", "Equation 1"}, // no parentheses, unlike \cref
+		{"a", "Appendix A"},
+		{"as", "subsection A.1"}, // hyperref has no sub-appendix
+	} {
+		if got := e.autorefText(c.key); got != c.want {
+			t.Errorf("autoref %q = %q, want %q", c.key, got, c.want)
+		}
 	}
 }

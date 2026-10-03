@@ -46,15 +46,31 @@ import (
 // yields "??", as with \ref.
 
 // autorefNames maps a reference type to hyperref's \autoref display name.
+// It is hyperref's own \HyLang@english block (hyperref.sty:3158-3175), and the
+// case is NOT uniform there: a section, a chapter and a paragraph are lowercase
+// while an equation, a figure and an appendix are capitalised. The table used to
+// capitalise everything, so \autoref{sec:x} printed "Section 1" where hyperref
+// prints "section 1" — checked against tectonic, which agrees with the source
+// line for line.
 var autorefNames = map[string]string{
-	"section":    "Section",
-	"subsection": "Subsection",
-	"equation":   "Equation",
-	"figure":     "Figure",
-	"table":      "Table",
-	"theorem":    "Theorem",
-	"part":       "Part",
-	"item":       "item",
+	"equation":      "Equation",
+	"figure":        "Figure",
+	"subfigure":     "Figure",
+	"table":         "Table",
+	"subtable":      "Table",
+	"part":          "Part",
+	"appendix":      "Appendix",
+	"theorem":       "Theorem",
+	"chapter":       "chapter",
+	"section":       "section",
+	"subsection":    "subsection",
+	"subsubsection": "subsubsection",
+	"paragraph":     "paragraph",
+	"subparagraph":  "subparagraph",
+	"footnote":      "footnote",
+	"item":          "item",
+	"line":          "line",
+	"page":          "page",
 }
 
 // crefForm holds cleveref's names for one reference type.
@@ -117,7 +133,8 @@ func (e *Engine) recordRefMeta(key string) {
 	if e.refNames == nil {
 		e.refNames = map[string]string{}
 	}
-	e.refTypes[key] = e.toksToString(e.expandList([]tok{csTok("@currentreftype")}))
+	e.refTypes[key] = appendixRefType(
+		e.toksToString(e.expandList([]tok{csTok("@currentreftype")})), e.inAppendix)
 	e.refNames[key] = e.toksToString(e.expandList([]tok{csTok("@currentlabelname")}))
 }
 
@@ -135,13 +152,23 @@ func (e *Engine) autorefText(key string) string {
 	if num == "??" {
 		return "??"
 	}
-	name, ok := autorefNames[e.refTypes[key]]
+	// hyperref has no sub-appendix: only the top-level \section is renamed inside
+	// an appendix, and a \subsection there is still a "subsection". cleveref DOES
+	// have one, so the type recorded for cleveref's sake is mapped back here —
+	// tectonic prints "Appendix A" and "subsection A.1" for the same two labels.
+	typ := e.refTypes[key]
+	switch typ {
+	case "subappendix":
+		typ = "subsection"
+	case "subsubappendix":
+		typ = "subsubsection"
+	}
+	name, ok := autorefNames[typ]
 	if !ok {
 		return num // known number but no recognised type: bare number
 	}
-	if e.refTypes[key] == "equation" {
-		return name + " (" + num + ")"
-	}
+	// No parentheses, unlike \cref: hyperref's \autoref of an equation is
+	// "Equation 1". Measured against tectonic.
 	return name + " " + num
 }
 
@@ -268,6 +295,15 @@ func (e *Engine) crefFormFor(typ string) (crefForm, bool) {
 		return f, true
 	}
 	f, ok := crefForms[typ]
+	if !ok {
+		// The same fallback the FORMAT lookup uses: only "appendix" carries a name,
+		// so a subappendix reaches it here. tectonic prints "appendix A.1" for a
+		// subsection inside an appendix, and gave a BARE NUMBER here until this
+		// line existed.
+		if a := crefTypeFallback(typ); a != typ {
+			f, ok = crefForms[a]
+		}
+	}
 	if !ok {
 		return f, false
 	}
@@ -400,6 +436,37 @@ func crefTypeFallback(typ string) string {
 	switch typ {
 	case "subsection", "subsubsection":
 		return "section"
+	case "subappendix", "subsubappendix":
+		return "appendix"
+	}
+	return typ
+}
+
+// appendixRefType retargets the section family's reference type inside an
+// appendix, which is what cleveref does (cleveref.sty:185-215): after \appendix
+// a \section is an `appendix`, a \subsection a `subappendix` and a
+// \subsubsection a `subsubappendix`. Only `appendix` carries a NAME, so the two
+// sub-levels reach it through crefTypeFallback — cleveref's English block names
+// no sub-appendix either, and tectonic prints "appendix A.1" for a subsection
+// and "appendix A.1.1" for a subsubsection.
+//
+// Before this, all three printed "section A" where the reference prints
+// "appendix A": 9 of the 16 corpus papers that use \cref open an appendix, and
+// 695 of the corpus's 905 uses are in them.
+//
+// The hook is on the kernel's own \appendix and on \end{appendices}, so a class
+// that REDEFINES \appendix without calling ours is not covered.
+func appendixRefType(typ string, inAppendix bool) string {
+	if !inAppendix {
+		return typ
+	}
+	switch typ {
+	case "section":
+		return "appendix"
+	case "subsection":
+		return "subappendix"
+	case "subsubsection":
+		return "subsubappendix"
 	}
 	return typ
 }
