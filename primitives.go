@@ -2295,6 +2295,8 @@ func (e *Engine) loadMore() {
 	e.prim("nameref", func(e *Engine) { e.doNameref() })
 	e.prim("cref", func(e *Engine) { e.doCref(false) })
 	e.prim("Cref", func(e *Engine) { e.doCref(true) })
+	e.prim("crefname", func(e *Engine) { e.doCrefname(false) })
+	e.prim("Crefname", func(e *Engine) { e.doCrefname(true) })
 	// listings package: code blocks and inline verbatim (see listings.go). Reached
 	// via \begin{lstlisting}/\end{lstlisting} (endlstlisting is consumed literally by
 	// doLstlisting, defined here for safety) and \lstinline<delim>…<delim>.

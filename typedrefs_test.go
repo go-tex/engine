@@ -82,18 +82,23 @@ func TestAutorefText(t *testing.T) {
 
 // crefText / crefOne print cleveref's lowercase (\cref) and capitalised (\Cref)
 // abbreviations, parenthesising equation numbers.
+// The names are cleveref's own, read from cleveref.sty:3962-4055 — NOT this
+// table's previous guess, which abbreviated both cases alike ("Fig.", "Tab.",
+// "Thm.") and had no entry for a section at all. cleveref abbreviates the
+// LOWERCASE equation and figure only; everything capitalised is spelt out, and a
+// subsection is named "Section" like a section.
 func TestCrefSingle(t *testing.T) {
 	e := newTypedRefEngine()
 	e.labels = map[string]string{"s": "1", "ss": "1.1", "eq": "2", "fig": "3", "tab": "4", "thm": "5", "p": "II", "it": "6", "x": "7"}
 	e.refTypes = map[string]string{"s": "section", "ss": "subsection", "eq": "equation", "fig": "figure", "tab": "table", "thm": "theorem", "p": "part", "it": "item"}
 	lower := map[string]string{
-		"s": "section 1", "ss": "subsection 1.1", "eq": "eq. (2)",
-		"fig": "fig. 3", "tab": "tab. 4", "thm": "thm. 5", "p": "part II", "it": "item 6",
+		"s": "section 1", "ss": "section 1.1", "eq": "eq. (2)",
+		"fig": "fig. 3", "tab": "table 4", "thm": "theorem 5", "p": "part II", "it": "item 6",
 		"x": "7", "missing": "??",
 	}
 	upper := map[string]string{
-		"s": "Section 1", "ss": "Subsection 1.1", "eq": "Eq. (2)",
-		"fig": "Fig. 3", "tab": "Tab. 4", "thm": "Thm. 5", "p": "Part II", "it": "Item 6",
+		"s": "Section 1", "ss": "Section 1.1", "eq": "Equation (2)",
+		"fig": "Figure 3", "tab": "Table 4", "thm": "Theorem 5", "p": "Part II", "it": "Item 6",
 		"x": "7", "missing": "??",
 	}
 	for key, want := range lower {
@@ -123,7 +128,7 @@ func TestCrefMultiKey(t *testing.T) {
 		{[]string{"a", "b"}, true, "Sections 1 and 2"},
 		{[]string{"a", "b", "c"}, false, "sections 1, 2 and 3"},
 		{[]string{"e1", "e2"}, false, "eqs. (1) and (2)"},
-		{[]string{"e1", "e2"}, true, "Eqs. (1) and (2)"},
+		{[]string{"e1", "e2"}, true, "Equations (1) and (2)"},
 		{[]string{"u", "u"}, false, "9 and 9"}, // untyped: numbers only
 	}
 	for _, c := range cases {
@@ -163,7 +168,7 @@ func TestTypedRefsTypeset(t *testing.T) {
 	var b strings.Builder
 	collectChars(e.mvl, &b)
 	// "Section 1" | "eq. (2)" | "Thm. 3" | "Intro" — inter-word spaces are glue.
-	if got, want := b.String(), "Section1|eq.(2)|Thm.3|Intro"; got != want {
+	if got, want := b.String(), "Section1|eq.(2)|Theorem3|Intro"; got != want {
 		t.Errorf("typeset %q, want %q", got, want)
 	}
 }
@@ -235,5 +240,81 @@ func TestJoinAnd(t *testing.T) {
 		if got := joinAnd(c.in); got != c.want {
 			t.Errorf("joinAnd(%v) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// A document's own \crefname / \Crefname override cleveref's defaults, and each
+// names ONE case while cross-filling the other if the document has not. The
+// expectations are real cleveref's, from \@crefname (cleveref.sty:1296-1320):
+//
+//   - \Crefname alone lowercases for \cref — which is why three of the four
+//     corpus papers that name their types give only the capitalised form;
+//   - \crefname alone UPPERCASES the whole word for \Cref ("EQ."), a cleveref
+//     wart kept here because the reference these runs are measured against is
+//     cleveref itself;
+//   - whichever came first wins: the second call sees the case already set and
+//     leaves it alone;
+//   - the parentheses around an equation number come from \creflabelformat, not
+//     from the name, so they survive a renaming.
+func TestCrefnameOverridesDefaults(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\hsize=300pt
+\Crefname{figure}{Fig.}{Figs.}
+\crefname{section}{Sec.}{Secs.}
+\Crefname{section}{Section}{Sections}
+\crefname{equation}{eq.}{eqs.}
+\Crefname{assumption}{Assumption}{Assumptions}
+\section{Intro}\label{s}
+\begin{figure}\caption{A plot}\label{fig}\end{figure}
+\begin{equation} x \label{eq}\end{equation}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		key     string
+		capital bool
+		want    string
+	}{
+		{"fig", true, "Fig. 1"},  // named
+		{"fig", false, "fig. 1"}, // cross-filled, lowercased
+		{"s", true, "Section 1"}, // named by the second call
+		{"s", false, "Sec. 1"},   // named by the first, which the second leaves
+		{"eq", false, "eq. (1)"}, // named, parentheses kept
+		{"eq", true, "EQ. (1)"},  // cross-filled by \MakeUppercase, parens kept
+	}
+	for _, c := range cases {
+		if got := e.crefOne(c.key, c.capital); got != c.want {
+			t.Errorf("crefOne(%q, capital=%v) = %q, want %q", c.key, c.capital, got, c.want)
+		}
+	}
+	// A type the document names but never numbers is still named, and the plural
+	// comes from the same pair.
+	if got, want := e.crefNames["assumption"].lowerP, "assumptions"; got != want {
+		t.Errorf("assumption plural (lower) = %q, want %q", got, want)
+	}
+	// And naming one type leaves every other default alone.
+	if got, want := e.crefOne("fig", true), "Fig. 1"; got != want {
+		t.Errorf("after naming: %q, want %q", got, want)
+	}
+}
+
+// A named type whose other case the document never set prints the BARE number,
+// which is what cleveref does for a type it has no name for — the alternative,
+// falling back to the built-in default, would print a name the document replaced.
+func TestCrefnameUnnamedCaseIsNumberOnly(t *testing.T) {
+	e := newTypedRefEngine()
+	e.labels = map[string]string{"a": "7"}
+	e.refTypes = map[string]string{"a": "widget"}
+	e.crefNames = map[string]crefForm{"widget": {lower: "widget", lowerP: "widgets"}}
+	if got, want := e.crefOne("a", false), "widget 7"; got != want {
+		t.Errorf("lower = %q, want %q", got, want)
+	}
+	if got, want := e.crefOne("a", true), "7"; got != want {
+		t.Errorf("upper (unnamed) = %q, want %q", got, want)
+	}
+	e.labels["b"] = "8"
+	e.refTypes["b"] = "widget"
+	if got, want := e.crefText([]string{"a", "b"}, true), "7 and 8"; got != want {
+		t.Errorf("plural (unnamed) = %q, want %q", got, want)
 	}
 }

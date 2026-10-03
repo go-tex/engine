@@ -1306,8 +1306,6 @@ const MiniLaTeXKernel = `
 \long\def\counterwithin#1#2{}
 \def\setcellgapes{\@ifnextbracket\gotex@optone\@gobble}
 \def\makegapedcells{}
-\def\crefname#1#2#3{}
-\def\Crefname#1#2#3{}
 \def\urlstyle#1{}
 \def\urladdr#1{}
 \def\aliascntresetthe#1{}

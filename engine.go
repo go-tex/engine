@@ -208,6 +208,9 @@ type Engine struct {
 	// time and carried through the two-pass compile exactly like labels.
 	refTypes map[string]string // \label → \@currentreftype, used by \autoref / \cref
 	refNames map[string]string // \label → \@currentlabelname (title), used by \nameref
+	// crefNames holds a document's own \crefname/\Crefname, which override
+	// cleveref's defaults for one reference type. Nil until a document names one.
+	crefNames map[string]crefForm
 	// \pageref: where in the main vertical list each \label was declared, turned
 	// into a page number once the run has finished and carried into the render
 	// pass — the same marker→page mechanism the table of contents uses, because

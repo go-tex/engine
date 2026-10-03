@@ -3,6 +3,8 @@
 
 package engine
 
+import "strings"
+
 // This file implements typed cross-references: hyperref's \autoref and \nameref,
 // and cleveref's \cref / \Cref. Unlike \ref (which prints a bare number), these
 // print the number together with the NAME of the thing it points to — "Section 1",
@@ -61,16 +63,45 @@ type crefForm struct {
 	paren  bool   // wrap the number in parentheses (equations)
 }
 
-// crefForms is the \cref abbreviation table documented above.
+// crefForms is cleveref's own default naming, read from cleveref.sty's
+// \crefname/\Crefname block (cleveref.sty:3962-4055). The lower pair is what
+// \cref prints, the upper pair what \Cref prints, and they are NOT the same word
+// abbreviated: cleveref abbreviates the LOWERCASE figure/equation only, and
+// spells the capitalised forms out.
+//
+// The table used to carry "Fig."/"Tab."/"Eq." for BOTH, and nothing at all for a
+// section, so \Cref{sec:…} printed a bare number. 15 of the 154 corpus papers use
+// \cref/\Cref, 904 times: 2302.04180 writes \Cref 51 times and its reference has
+// "Section N" twelve times where ours had none.
 var crefForms = map[string]crefForm{
-	"section":    {"section", "Section", "sections", "Sections", false},
-	"subsection": {"subsection", "Subsection", "subsections", "Subsections", false},
-	"equation":   {"eq.", "Eq.", "eqs.", "Eqs.", true},
-	"figure":     {"fig.", "Fig.", "figs.", "Figs.", false},
-	"table":      {"tab.", "Tab.", "tabs.", "Tabs.", false},
-	"theorem":    {"thm.", "Thm.", "thms.", "Thms.", false},
-	"part":       {"part", "Part", "parts", "Parts", false},
-	"item":       {"item", "Item", "items", "Items", false},
+	"section":       {"section", "Section", "sections", "Sections", false},
+	"subsection":    {"section", "Section", "sections", "Sections", false},
+	"subsubsection": {"section", "Section", "sections", "Sections", false},
+	"chapter":       {"chapter", "Chapter", "chapters", "Chapters", false},
+	"part":          {"part", "Part", "parts", "Parts", false},
+	"appendix":      {"appendix", "Appendix", "appendices", "Appendices", false},
+	"equation":      {"eq.", "Equation", "eqs.", "Equations", true},
+	"figure":        {"fig.", "Figure", "figs.", "Figures", false},
+	"subfigure":     {"fig.", "Figure", "figs.", "Figures", false},
+	"table":         {"table", "Table", "tables", "Tables", false},
+	"subtable":      {"table", "Table", "tables", "Tables", false},
+	"algorithm":     {"algorithm", "Algorithm", "algorithms", "Algorithms", false},
+	"listing":       {"listing", "Listing", "listings", "Listings", false},
+	"line":          {"line", "Line", "lines", "Lines", false},
+	"page":          {"page", "Page", "pages", "Pages", false},
+	"footnote":      {"footnote", "Footnote", "footnotes", "Footnotes", false},
+	"theorem":       {"theorem", "Theorem", "theorems", "Theorems", false},
+	"lemma":         {"lemma", "Lemma", "lemmas", "Lemmas", false},
+	"corollary":     {"corollary", "Corollary", "corollaries", "Corollaries", false},
+	"proposition":   {"proposition", "Proposition", "propositions", "Propositions", false},
+	"definition":    {"definition", "Definition", "definitions", "Definitions", false},
+	"result":        {"result", "Result", "results", "Results", false},
+	"example":       {"example", "Example", "examples", "Examples", false},
+	"remark":        {"remark", "Remark", "remarks", "Remarks", false},
+	"note":          {"note", "Note", "notes", "Notes", false},
+	"item":          {"item", "Item", "items", "Items", false},
+	"enumi":         {"item", "Item", "items", "Items", false},
+	"enumii":        {"item", "Item", "items", "Items", false},
 }
 
 // recordRefMeta freezes the current \@currentreftype and \@currentlabelname under
@@ -139,7 +170,7 @@ func (e *Engine) crefText(keys []string, capital bool) string {
 	case 1:
 		return e.crefOne(keys[0], capital)
 	}
-	form, ok := crefForms[e.refTypes[keys[0]]]
+	form, ok := e.crefFormFor(e.refTypes[keys[0]])
 	nums := make([]string, len(keys))
 	for i, k := range keys {
 		nums[i] = e.crefNum(k, form, ok)
@@ -151,19 +182,25 @@ func (e *Engine) crefText(keys []string, capital bool) string {
 	if capital {
 		name = form.upperP
 	}
+	if name == "" {
+		return joinAnd(nums) // named type, unnamed case: numbers only
+	}
 	return name + " " + joinAnd(nums)
 }
 
 // crefOne renders a single-key \cref/\Cref.
 func (e *Engine) crefOne(key string, capital bool) string {
 	num := e.refText(key)
-	form, ok := crefForms[e.refTypes[key]]
+	form, ok := e.crefFormFor(e.refTypes[key])
 	if !ok || num == "??" {
 		return num // "??" for an unknown key; a bare number for an untyped one
 	}
 	name := form.lower
 	if capital {
 		name = form.upper
+	}
+	if name == "" {
+		return num
 	}
 	if form.paren {
 		return name + " (" + num + ")"
@@ -199,4 +236,65 @@ func joinAnd(parts []string) string {
 		out += parts[i]
 	}
 	return out + " and " + parts[len(parts)-1]
+}
+
+// crefFormFor returns the naming to use for a reference type: a document's own
+// \crefname/\Crefname first, cleveref's defaults otherwise. Four of the 154
+// corpus papers name their own types, 35 times, and three of the four ask for
+// the SHORT forms ("Sec.", "Fig.", "Tab.", "Eq.") where cleveref's default
+// spells the capitalised name out — so without this the defaults table is not a
+// fallback, it is an override.
+func (e *Engine) crefFormFor(typ string) (crefForm, bool) {
+	if f, ok := e.crefNames[typ]; ok {
+		return f, true
+	}
+	f, ok := crefForms[typ]
+	return f, ok
+}
+
+// doCrefname implements cleveref's \crefname{type}{singular}{plural} and its
+// \Crefname counterpart. Each names ONE case: \crefname what \cref prints,
+// \Crefname what \Cref prints.
+//
+// The cross-fill is cleveref's own, from \@crefname (cleveref.sty:1296-1320):
+// naming one case also defines the OTHER one, but only when that one is still
+// unset, by \MakeUppercase or \MakeLowercase of the given name. It is why
+// \Crefname{figure}{Fig.}{Figs.} alone makes \cref print "fig." too. The
+// capitalising direction really does uppercase the whole word in cleveref —
+// \crefname{equation}{eq.}{eqs.} alone gives \Cref "EQ." — and that is kept
+// here, because the reference these runs are compared against is real cleveref.
+//
+// The parentheses around an equation number are NOT part of the name: they come
+// from \creflabelformat (cleveref.sty:7840), so paren survives a renaming.
+func (e *Engine) doCrefname(capital bool) {
+	typ := e.readBraceName()
+	sing := e.readBraceText()
+	plur := e.readBraceText()
+	if typ == "" {
+		return
+	}
+	if e.crefNames == nil {
+		e.crefNames = map[string]crefForm{}
+	}
+	// An entry starts EMPTY, inheriting only the parenthesisation: cleveref's own
+	// defaults live in @preamble macros that lose to anything the document set, so
+	// a document's \Crefname cross-fills the lowercase even for a type that has a
+	// default. The empty string is therefore "this document has not named this
+	// case", and it is also what makes \cref print a bare number.
+	f, named := e.crefNames[typ]
+	if !named {
+		f = crefForm{paren: crefForms[typ].paren}
+	}
+	if capital {
+		f.upper, f.upperP = sing, plur
+		if f.lower == "" {
+			f.lower, f.lowerP = strings.ToLower(sing), strings.ToLower(plur)
+		}
+	} else {
+		f.lower, f.lowerP = sing, plur
+		if f.upper == "" {
+			f.upper, f.upperP = strings.ToUpper(sing), strings.ToUpper(plur)
+		}
+	}
+	e.crefNames[typ] = f
 }
