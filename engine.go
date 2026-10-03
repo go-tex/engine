@@ -214,6 +214,9 @@ type Engine struct {
 	// crefThmNames holds the names \newtheorem headings give their environments,
 	// a tier below crefNames (see crefFormFor).
 	crefThmNames map[string]crefForm
+	// crefFormats holds \crefformat / \Crefformat templates, which replace the
+	// whole rendering rather than the name (see crefFormatted).
+	crefFormats map[string]crefFmt
 	// cleveref's capitalise / noabbrev package options, which select among the
 	// four default naming sets the package ships (see crefFormFor).
 	crefCapitalise bool

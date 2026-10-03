@@ -483,3 +483,78 @@ func TestTheoremHeadingHasNoPlural(t *testing.T) {
 		t.Errorf("plural = %q, want %q", got, want)
 	}
 }
+
+// \crefformat / \Crefformat replace the whole rendering, NAME included: the
+// template's #1 is the number and #2/#3 are cleveref's hyperlink wrappers, empty
+// here. One corpus paper in 154 uses them, twice, and it is the whole of that
+// paper's remaining deficit — 2406.01525 writes \crefformat{section}{#2\S#1#3},
+// so its reference prints "§3" where the engine printed "Section 3", 52 times.
+//
+// Every expectation here was read off tectonic, including the two that are not
+// obvious:
+//
+//   - a one-sided \crefformat cross-fills the other case by shifting the FIRST
+//     LETTER only, so {fig.~#2#1#3} makes \Cref print "Fig. 1" — not "FIG. 1"
+//     from a whole-word \MakeUppercase, and not the default "Figure 1";
+//   - a subsection with no format of its own follows the SECTION's, the same
+//     fallback that makes cleveref's default name for a subsection "section".
+func TestCrefformat(t *testing.T) {
+	e := newTypedRefEngine()
+	src := `\hsize=300pt
+\usepackage{cleveref}
+\crefformat{section}{#2\S#1#3}
+\Crefformat{section}{#2\S#1#3}
+\crefformat{figure}{fig.~#2#1#3}
+\section{Un}\label{s}
+\subsection{Deux}\label{ss}
+\begin{figure}\caption{f}\label{fig}\end{figure}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		key     string
+		capital bool
+		want    string
+	}{
+		{"s", false, `\S 1`},
+		{"s", true, `\S 1`},
+		{"ss", false, `\S 1.1`}, // falls back to the section's format
+		{"fig", false, `fig.~1`},
+		{"fig", true, `Fig.~1`}, // cross-filled, first letter only
+	} {
+		body, ok := e.crefFormatted(c.key, c.capital)
+		if !ok {
+			t.Errorf("crefFormatted(%q, %v): no format", c.key, c.capital)
+			continue
+		}
+		if got := e.toksToString(body); got != c.want {
+			t.Errorf("crefFormatted(%q, %v) = %q, want %q", c.key, c.capital, got, c.want)
+		}
+	}
+	// A type with no format anywhere in its fallback chain is left to the naming
+	// path, which is every type in all but one corpus paper.
+	if _, ok := e.crefFormatted("nosuch", false); ok {
+		t.Error("an unknown key reported a format")
+	}
+}
+
+// A template's "#1" arrives as TWO tokens from a braced group — a catParam '#'
+// and the digit — where a \def body folds them into one. The first version of
+// the substitution looked only for the folded form, found nothing, and printed
+// "#2§#1#3" on the page; this pins both shapes.
+func TestCrefParamAt(t *testing.T) {
+	two := []tok{chTok('#', catParam), chTok('2', catOther)}
+	if n, w := crefParamAt(two, 0); n != 2 || w != 2 {
+		t.Errorf("unfolded #2 = (%d, %d), want (2, 2)", n, w)
+	}
+	folded := []tok{{cat: catParam, ch: '1'}}
+	if n, w := crefParamAt(folded, 0); n != 1 || w != 1 {
+		t.Errorf("folded #1 = (%d, %d), want (1, 1)", n, w)
+	}
+	if n, _ := crefParamAt([]tok{chTok('x', catLetter)}, 0); n != 0 {
+		t.Errorf("a letter reported parameter %d", n)
+	}
+	if n, _ := crefParamAt([]tok{chTok('#', catParam)}, 0); n != 0 {
+		t.Errorf("a trailing # reported parameter %d", n)
+	}
+}
