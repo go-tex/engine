@@ -249,7 +249,33 @@ func (e *Engine) crefFormFor(typ string) (crefForm, bool) {
 		return f, true
 	}
 	f, ok := crefForms[typ]
-	return f, ok
+	if !ok {
+		return f, false
+	}
+	// cleveref's two naming options, applied over its defaults. Only equation and
+	// figure are abbreviated at all, so noabbrev touches those two; capitalise
+	// replaces the whole lowercase set with the capitalised one, and the
+	// abbreviations with it when abbrev is still on (cleveref.sty:3889-3946).
+	if e.crefNoAbbrev {
+		switch typ {
+		case "equation":
+			f.lower, f.lowerP = "equation", "equations"
+		case "figure", "subfigure":
+			f.lower, f.lowerP = "figure", "figures"
+		}
+	}
+	if e.crefCapitalise {
+		f.lower, f.lowerP = f.upper, f.upperP
+		if !e.crefNoAbbrev {
+			switch typ {
+			case "equation":
+				f.lower, f.lowerP = "Eq.", "Eqs."
+			case "figure", "subfigure":
+				f.lower, f.lowerP = "Fig.", "Figs."
+			}
+		}
+	}
+	return f, true
 }
 
 // doCrefname implements cleveref's \crefname{type}{singular}{plural} and its
