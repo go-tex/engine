@@ -1686,8 +1686,42 @@ func (e *Engine) scanOptBracketInt() int {
 // early. When no bracket follows, it pushes back the peeked token and reports
 // (nil, false).
 func (e *Engine) scanOptBracketToks() ([]tok, bool) {
+	return e.scanOptBracketToksX(true)
+}
+
+// scanOptBracketToksNoExpand is the same scan without EXPANDING to find the "[".
+// That is what LaTeX does — \@ifnextchar looks at the next token with
+// \futurelet, which never expands — and the difference is not academic:
+//
+//	\begin{figure}
+//	 \begin{subfigure}{...}x\end{subfigure}
+//	 \caption{f}\label{f:a}
+//	\end{figure}
+//
+// Here \@float{figure} looks for its [placement], the next token is
+// \begin{subfigure}, and expanding it RUNS THE WHOLE SUB-PANEL during the scan —
+// \begin sets \@currenvir to "subfigure", so when \@float resumes it no longer
+// believes it is in a standard float environment, takes the inline path and never
+// sets \@captype. The enclosing \caption then builds
+// \csname the\@captype\endcsname out of an undefined \@captype and the page
+// carries the literal text "\the@captype": 9 of the 154 corpus papers, 31 times.
+//
+// Putting any text before the sub-panel hides it, because then the lookahead
+// stops at a letter and expands nothing — which is also why a \meaning probe
+// placed there made the defect disappear.
+func (e *Engine) scanOptBracketToksNoExpand() ([]tok, bool) {
+	return e.scanOptBracketToksX(false)
+}
+
+func (e *Engine) scanOptBracketToksX(expand bool) ([]tok, bool) {
 	e.skipOptSpace()
-	t, ok := e.getXToken()
+	var t tok
+	var ok bool
+	if expand {
+		t, ok = e.getXToken()
+	} else {
+		t, ok = e.getNext()
+	}
 	if !ok {
 		return nil, false
 	}
