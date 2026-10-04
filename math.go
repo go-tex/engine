@@ -1421,6 +1421,40 @@ func (e *Engine) flattenMathBody(body string) string {
 	return body
 }
 
+// macroBodyAssigns reports whether \name is a macro whose replacement text STARTS with
+// an assignment. Flattening resolves NOTATION, so such a macro must be left for the
+// stomach: expanding it here yields the assignment's tokens, and the engine then expands
+// the very name the assignment was about to redefine.
+//
+// ⛔ The self-redefining idiom makes that non-terminating. quantumarticle.cls:1108 is
+// the textbook form — "nothing the first time, a comma after that":
+//
+//	\def\@@@comma{\def\@@@comma{,}}
+//	\def\@@commaspacebefore#1{\@@@comma{}#1}
+//
+// Reached through \ensuremath in an author block, 2607.22466 spun \@@@comma 400 times
+// and pushed {,} to 200 001 frames deep: one page out of 43KB of source. The stack named
+// the context exactly — flattenMathBody -> expandList -> getXToken.
+func (e *Engine) macroBodyAssigns(name string) bool {
+	m := e.eq[name]
+	if m == nil || m.kind != mMacro {
+		return false
+	}
+	for _, t := range m.body {
+		if !t.cs_ {
+			return false
+		}
+		switch t.cs {
+		case "global", "long", "outer", "protected": // a prefix: look past it
+			continue
+		case "def", "gdef", "edef", "xdef", "let", "futurelet":
+			return true
+		}
+		return false
+	}
+	return false
+}
+
 // isCharStandIn reports whether a name is the engine's TEXT-mode stand-in for a
 // character it has no glyph command for:
 //

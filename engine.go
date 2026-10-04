@@ -1353,6 +1353,13 @@ func (e *Engine) getXToken() (tok, bool) {
 		}
 		switch m.kind {
 		case mMacro:
+			// Flattening math source resolves NOTATION, so a macro whose body is an
+			// ASSIGNMENT stays a token: expanding it yields the assignment's tokens,
+			// and the engine then expands the very name it was about to redefine. See
+			// macroBodyAssigns — the self-redefining idiom never terminates.
+			if e.mathFlatten && e.macroBodyAssigns(t.cs) {
+				return t, true
+			}
 			// A \protected macro stays a token while an \edef (or \message,
 			// \write, \special) is building its list, and expands only when it
 			// is executed. That is the whole point of the prefix.
