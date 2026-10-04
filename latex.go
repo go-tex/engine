@@ -1852,6 +1852,35 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 			e.runCsname(t)
 			continue
 		}
+		// ⛔ An environment has TWO spellings of its own boundary, and this saw only one.
+		// \begin{X} and \end{X} EXPAND to \X and \endX, so an \edef over a macro that
+		// contains an environment leaves the one-token form — measured:
+		// \def\zzs{Author\begin{tikzpicture}\end{tikzpicture}} then \edef gives
+		// "Author\tikzpicture \endtikzpicture". Executing that runs \tikzpicture, which
+		// lands here looking for a \end followed by a braced name, finds none, and reads
+		// to the end of the document.
+		//
+		// \MakeUppercase is exactly that shape — \edef\@MakeCase@a{#1} then
+		// \uppercase\expandafter{…} (classkernel.go) — so \MakeUppercase of a macro
+		// holding an environment swallowed everything after it and left a group open
+		// (#535). \MakeLowercase did the same, which is what says the case shift is not
+		// the cause; and \protected@edef does not help, because \begin carries no
+		// \protect.
+		if t.cs == "end"+name {
+			depth--
+			if depth == 0 {
+				if placeholder {
+					e.emitPicturePlaceholder(name)
+				}
+				e.endEnvGroup()
+				return
+			}
+			continue
+		}
+		if t.cs == name {
+			depth++
+			continue
+		}
 		switch t.cs {
 		case "begin":
 			if e.gobbleEnvName() == name {
