@@ -61,6 +61,23 @@ func (e *Engine) doNewtheorem() {
 		return
 	}
 
+	// ⛔ \newtheorem{X}[X]{…} asks X to share ITS OWN counter. latex.ltx's \@othm tests
+	// \@ifundefined{c@#2} and errors ("No theorem environment #2 defined") because that
+	// counter does not exist yet, so real LaTeX numbers nothing and carries on. Here the
+	// alias was built anyway: \the<env> got the body \the<shared>, which is \the<env>
+	// again — a self-referential macro the engine then spun 400 times into the runaway
+	// guard. Two corpus papers write it, one directly
+	//
+	//	\newtheorem{corollary}[corollary]{Corollary}            (2607.21390)
+	//
+	// and one through a wrapper of its own, \newtheorem{#1vArIAblE}[#1vArIAblE]{#3}
+	// (2606.14675) — each stopping at 3 and 2 pages. Dropping the self-share leaves the
+	// environment with a counter of its own, which is what the rest of this function does
+	// when no [shared] is given at all.
+	if hasShared && strings.TrimSpace(e.toksToString(sharedToks)) == env {
+		hasShared, sharedToks = false, nil
+	}
+
 	e.recordTheoremCrefName(env, head)
 	if starred {
 		e.defineUnnumberedTheorem(env, head)
