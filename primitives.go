@@ -1060,7 +1060,12 @@ func (e *Engine) undefinedEnvAsCode(name string) {
 func (e *Engine) setCurrentEnv(name string) {
 	body := make([]tok, 0, len(name))
 	for _, r := range name {
-		body = append(body, chTok(r, e.catcode[r]))
+		// e.catOf, not e.catcode[r]: the catcode table is 256 wide and an environment
+		// NAME can carry any rune, so indexing it directly PANICS. \begin{毕} — one
+		// Chinese character, which an author writes in their own name — crashed the
+		// engine on an index of 27605. catOf gives a rune past 255 catOther, as the
+		// tokenizer already does for every other character it reads.
+		body = append(body, chTok(r, e.catOf(r)))
 	}
 	e.define("@currenvir", &meaning{kind: mMacro, body: body}, false)
 }
