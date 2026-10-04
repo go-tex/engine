@@ -37,6 +37,16 @@ const AcmartMetadata = `
 \def\@acmbadgemand#1{}
 \let\acmBadgeR\acmBadgeL
 \def\citestyle#1{}
+% acmart's teaserfigure is the full-width figure that sits above the title. It was
+% undefined here, so \caption inside it had no \@captype and the \advance keyword
+% "by1" reached the page as text: the caption read "by1: …". The reference numbers
+% it with the FIGURE counter — measured, tectonic prints "Figure 1: A teaser
+% caption here" for the witness below — so it is a figure-typed float rather than a
+% type of its own, and \thefigure keeps counting across both.
+%
+%	\begin{teaserfigure}\caption{A teaser caption here}\label{fig:teaser}\end{teaserfigure}
+\long\def\teaserfigure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
+\long\def\endteaserfigure{\par\endgroup\bigskip}
 \def\settopmatter#1{}
 \def\titlenote#1{}
 \def\authornote#1{}
