@@ -433,11 +433,21 @@ const AMSClassSubstrate = `
 % (which reads the control sequence, its parameter text and the body that follow),
 % then restore \protect once the assignment is done.
 \def\@unexpandable@protect{\noexpand\protect\noexpand}
-\def\gotex@restore@protect{\let\protect\gotex@@protect}
-\def\protected@edef{\let\gotex@@protect\protect\let\protect\@unexpandable@protect
-  \afterassignment\gotex@restore@protect\edef}
-\def\protected@xdef{\let\gotex@@protect\protect\let\protect\@unexpandable@protect
-  \afterassignment\gotex@restore@protect\xdef}
+% ⛔ LaTeX's OWN NAMES, not private ones. This pair was \gotex@@protect /
+% \gotex@restore@protect — structurally identical to latex.ltx:1355-1371, and
+% invisible to anything that calls the kernel's names directly. A class does:
+% 2607.18707 skipped \restore@protect FOUR times, tripped the runaway guard, and came
+% out as ONE page out of 62KB of source. \restore@protect is one line, so what was
+% missing was a NAME and not a mechanism.
+\def\restore@protect{\let\protect\@@protect}
+\def\protected@edef{\let\@@protect\protect\let\protect\@unexpandable@protect
+  \afterassignment\restore@protect\edef}
+\def\protected@xdef{\let\@@protect\protect\let\protect\@unexpandable@protect
+  \afterassignment\restore@protect\xdef}
+% The two switches latex.ltx sets \protect with (lines 1353-1354): \string while a
+% display is written out, \@typeset@protect while typesetting.
+\def\set@display@protect{\let\protect\string}
+\def\set@typeset@protect{\let\protect\@typeset@protect}
 % \DeclareTextCommand\cs{encoding}{body}: amsart uses only the no-optional-arg
 % form; bind \cs to its body and ignore the encoding.
 \def\DeclareTextCommand#1#2#3{\def#1{#3}}
