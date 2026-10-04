@@ -65,9 +65,10 @@ typesettable content instead of one hard error:
 Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
 report what was dropped. On a **1000-source arXiv sweep** (measured 2026-10-04),
 strict mode compiles almost none end-to-end — each hits a package command in the
-preamble — while lenient mode produces a multi-page PDF for all but **five** of
-the 71 sources the sweep flags as truncated; those five still stop at a single
-page (tracked in #517). It is a preview aid, not a fidelity claim — the roadmap
+preamble — while lenient mode produces a multi-page PDF for all but **one** of
+the 71 sources the sweep flags as truncated; that one still stops at a single page
+(tracked in #517, which also records its diagnosis). The same sweep counted twelve
+such papers when the series began. It is a preview aid, not a fidelity claim — the roadmap
 below is how the gaps close for real.
 
 ### Loading real classes and packages
