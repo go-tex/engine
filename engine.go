@@ -1356,8 +1356,8 @@ func (e *Engine) getXToken() (tok, bool) {
 			// Flattening math source resolves NOTATION, so a macro whose body is an
 			// ASSIGNMENT stays a token: expanding it yields the assignment's tokens,
 			// and the engine then expands the very name it was about to redefine. See
-			// macroBodyAssigns — the self-redefining idiom never terminates.
-			if e.mathFlatten && e.macroBodyAssigns(t.cs) {
+			// macroRedefinesItself — the self-redefining idiom never terminates.
+			if e.mathFlatten && e.macroRedefinesItself(t.cs) {
 				return t, true
 			}
 			// A \protected macro stays a token while an \edef (or \message,

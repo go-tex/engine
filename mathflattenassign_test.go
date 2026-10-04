@@ -10,9 +10,14 @@ import (
 
 // ⛔ Flattening math source resolves NOTATION, and an assignment is not notation.
 //
-// A macro whose replacement text IS an assignment must stay a token while
-// flattenMathBody expands: expanding it hands back the assignment's own tokens, and
-// the engine then expands the very name the assignment was about to redefine.
+// A macro whose replacement text begins by REDEFINING ITSELF must stay a token while
+// flattenMathBody expands: expanding it hands back the assignment's own tokens, and the
+// engine then expands the very name the assignment was about to replace.
+//
+// ⛔ The test is SELF-reference, not "the body assigns". A first version refused every
+// assignment-bodied macro, and the equation census caught what the page count could not:
+// \@forloop became a new trigger costing 23 equations, a NET +20 dropped equations over
+// the 154-paper list, while pages showed 4 up and none down.
 //
 // The self-redefining idiom makes that non-terminating. quantumarticle.cls:1108-1109
 // is the textbook form — nothing the first time, a comma after that:
