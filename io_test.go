@@ -8,6 +8,7 @@ import (
 
 func TestInputSplicesFile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("TEXINPUTS", dir) // a read outside the search roots is refused (readpolicy.go)
 	// Use forward slashes: the path is embedded into TeX source, where a
 	// backslash (the Windows separator) is the escape char. TeX and Go's
 	// os.ReadFile both accept "/" on every platform, including Windows.
@@ -26,6 +27,7 @@ func TestInputSplicesFile(t *testing.T) {
 
 func TestInputAddsTexExtension(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("TEXINPUTS", dir) // a read outside the search roots is refused (readpolicy.go)
 	os.WriteFile(filepath.Join(dir, "m.tex"), []byte(`\def\hi{HELLO}`), 0644)
 	e := New()
 	// Forward slashes: this path is embedded into TeX source (see above).
@@ -40,6 +42,7 @@ func TestInputAddsTexExtension(t *testing.T) {
 // ignored, not processed (which can hang the engine).
 func TestEndinputStopsFile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("TEXINPUTS", dir) // a read outside the search roots is refused (readpolicy.go)
 	inc := filepath.ToSlash(filepath.Join(dir, "inc.tex"))
 	// After \endinput, the second \def and the stray text must not take effect.
 	os.WriteFile(inc, []byte(`\def\a{X}\endinput`+"\n"+`\def\a{Y} garbage \] ^_ line`), 0644)
@@ -60,7 +63,9 @@ func TestEndinputStopsFile(t *testing.T) {
 // rather than expanding it and truncating the name at the tilde. This exercises
 // the same path on every OS by putting a ~ in a directory name.
 func TestInputTildeInFileName(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "runner~1")
+	root := t.TempDir()
+	t.Setenv("TEXINPUTS", root) // a read outside the search roots is refused (readpolicy.go)
+	dir := filepath.Join(root, "runner~1")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

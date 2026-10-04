@@ -45,7 +45,7 @@ type loadFrame struct {
 // texInputDirs is the ordered search path for \usepackage/\documentclass/\input
 // files: the current directory (the document's dir — the CLI chdirs there), then
 // any colon-separated dirs in TEXINPUTS or GOTEX_TEXMF.
-func (e *Engine) texInputDirs() []string {
+func texInputDirs() []string {
 	dirs := []string{"."}
 	for _, env := range []string{"TEXINPUTS", "GOTEX_TEXMF"} {
 		for _, d := range filepath.SplitList(os.Getenv(env)) {
@@ -77,8 +77,8 @@ func (e *Engine) findTeXFile(name string, exts []string) ([]byte, string, bool) 
 		if data, ok := e.writtenTeXFile(c); ok {
 			return data, c, true
 		}
-		for _, d := range e.texInputDirs() {
-			if data, err := os.ReadFile(filepath.Join(d, c)); err == nil {
+		for _, d := range texInputDirs() {
+			if data, err := readDocFile(filepath.Join(d, c)); err == nil {
 				return data, filepath.Join(d, c), true
 			}
 		}

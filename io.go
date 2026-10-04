@@ -272,16 +272,16 @@ func (e *Engine) readInput(file string) ([]byte, error) {
 		}
 		if filepath.IsAbs(c) {
 			e.noteRead(c)
-			data, e2 := os.ReadFile(c)
+			data, e2 := readDocFile(c)
 			if e2 == nil {
 				return data, nil
 			}
 			err = e2
 			continue
 		}
-		for _, d := range e.texInputDirs() {
+		for _, d := range texInputDirs() {
 			e.noteRead(filepath.Join(d, c))
-			data, e2 := os.ReadFile(filepath.Join(d, c))
+			data, e2 := readDocFile(filepath.Join(d, c))
 			if e2 == nil {
 				return data, nil
 			}

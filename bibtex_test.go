@@ -332,9 +332,16 @@ func TestSortEntriesPlain(t *testing.T) {
 
 // writeBib writes a two-entry .bib into a temp dir and returns the base path
 // (without the .bib extension) for use in \bibliography{base}.
+// ⛔ It CHDIRS into the temp directory and returns a bare base name, rather than
+// handing the engine an absolute path. A read outside the search roots is refused
+// now (readpolicy.go), and a caller that wants a file read says where it is —
+// here by compiling in its directory, which is what the CLI does and what
+// \bibliography{refs} means in a real document. Returning the absolute path made
+// six tests fail with "bibliography file not found", and they were right to.
 func writeBib(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	t.Chdir(dir)
 	path := filepath.Join(dir, "refs.bib")
 	content := `@book{knuth,
 		author = {Donald E. Knuth},
@@ -351,10 +358,11 @@ func writeBib(t *testing.T) string {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Forward slashes: the returned base path is embedded into TeX source
-	// (\bibliography{base}), where a backslash (the Windows separator) is the
-	// escape char. TeX and Go's os.ReadFile both accept "/" on every platform.
-	return filepath.ToSlash(filepath.Join(dir, "refs"))
+	// A bare base name, read relative to the directory this helper chdir'd into.
+	// It used to return the absolute path; forward slashes mattered then, because
+	// the path was embedded into TeX source where a backslash is the escape char.
+	// "refs" has no separator at all, so that concern is gone with it.
+	return "refs"
 }
 
 // runTwoPass mimics api.go's two-pass compile for a raw LaTeX-kernel run: an aux

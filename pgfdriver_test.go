@@ -36,9 +36,17 @@ func TestInputMissingFile(t *testing.T) {
 	}
 }
 
-// An absolute path is read as given, not joined onto the search path.
+// An absolute path is read as given, not joined onto the search path — which is
+// what this test has always pinned, and still does.
+//
+// ⛔ It now declares its directory on TEXINPUTS. A read outside the search roots
+// is refused (readpolicy.go), and this test's intent was the RESOLUTION rule
+// ("absolute means absolute"), not permission to leave the tree: with the
+// directory on the path, the absolute name still resolves to exactly that file
+// and the assertion is unchanged. The second half is the other side of the rule.
 func TestInputAbsolutePath(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("TEXINPUTS", dir)
 	p := filepath.Join(dir, "abs.tex")
 	if err := os.WriteFile(p, []byte(`\message{ABS}`), 0o644); err != nil {
 		t.Fatal(err)
@@ -52,6 +60,24 @@ func TestInputAbsolutePath(t *testing.T) {
 	}
 	if out != "ABS" {
 		t.Errorf("absolute \\input = %q", out)
+	}
+	// And an absolute path OUTSIDE every search root is refused, which is the
+	// policy: a document must not read a file the caller did not offer. The file
+	// exists and is readable — only the path is not allowed — so this cannot pass
+	// for the wrong reason.
+	outside := t.TempDir()
+	q := filepath.Join(outside, "nope.tex")
+	if err := os.WriteFile(q, []byte(`\message{LEAKED}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := New().Run(`\input{` + filepath.ToSlash(q) + `}`); err == nil || out == "LEAKED" {
+		t.Errorf("a path outside the search roots was read: out=%q err=%v", out, err)
+	}
+	// The named opt-out restores it, so a batch that needs an outside tree can
+	// say so rather than discover a silent refusal.
+	t.Setenv("GOTEX_READ_ANY", "1")
+	if out, err := New().Run(`\message{}\input{` + filepath.ToSlash(q) + `}`); err != nil || out != "LEAKED" {
+		t.Errorf("GOTEX_READ_ANY=1: out=%q err=%v, want LEAKED", out, err)
 	}
 }
 
