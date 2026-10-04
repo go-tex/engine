@@ -357,7 +357,14 @@ func (e *Engine) doDblFloat(captype string) {
 	// the figure. Standard LaTeX places a double-column float only at a page top or on a
 	// float page (t/p — never a page bottom), so the bits are recorded but do not force a
 	// bottom band; they gate deferral to a float page (see the pager).
-	posToks, _ := e.scanOptBracketToks()
+	// Non-expanding, for the same reason \@float's own scan is (floatplace.go, and
+	// scanOptBracketToksNoExpand for the whole shape): the token after
+	// \begin{figure*} is routinely \begin{center}, and expanding it RUNS the
+	// centring environment here — its \begingroup lands before the float opens its
+	// own, so the matching \end{center} closes the FLOAT's group instead and takes
+	// \@captype with it. Every one of the corpus's remaining "\the@captype" leaks
+	// was a figure* in a two-column region.
+	posToks, _ := e.scanOptBracketToksNoExpand()
 	place := placementBits(posToks)
 	if !e.twoColumn || !twoColumnOptIn() {
 		// Not spanning here: either one-column, or a LIVE standard-class two-column

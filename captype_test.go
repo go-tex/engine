@@ -3,7 +3,10 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // refOf renders a document and returns what \ref{key} resolved to.
 func refOf(t *testing.T, src, key string) string {
@@ -127,5 +130,63 @@ func TestCaptypeSetOnEveryFloatPath(t *testing.T) {
 		if got := e.labels[k]; got != "1" {
 			t.Errorf("label[%q] = %q, want \"1\"", k, got)
 		}
+	}
+}
+
+// The STARRED float has its own [placement] scan (\@dblfloat, twocolumn.go) and
+// it needed the same treatment. The token after \begin{figure*} is routinely
+// \begin{center}, and expanding it runs the centring environment there: its
+// \begingroup lands before the float opens its own, so the matching
+// \end{center} closes the FLOAT's group and takes \@captype with it — the
+// restore trace shows it defined at group depth 3 and DELETED on the way back to
+// 2, before the \caption.
+//
+// Every one of the corpus's remaining "\the@captype" leaks after the unstarred
+// fix was a figure* in a two-column region: 31 occurrences over 9 papers became
+// 24, then 12, and four papers came fully clean.
+func TestStarredFloatPlacementLookaheadDoesNotExpand(t *testing.T) {
+	// A table*, so the type cannot be right by accident.
+	src := `\documentclass[twocolumn]{article}\hsize=300pt
+\begin{document}
+\begin{figure}\caption{moves the figure counter}\end{figure}
+\begin{table*}
+\begin{center}x\end{center}
+\caption{wide}\label{t}
+\end{table*}
+\end{document}`
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e.refTypes["t"], "table"; got != want {
+		t.Errorf("type = %q, want %q", got, want)
+	}
+	if got, want := e.labels["t"], "1"; got != want {
+		t.Errorf("number = %q, want %q (the TABLE counter)", got, want)
+	}
+	// A starred float's own [placement] is still read, and does not leak onto the
+	// page — the reason doDblFloat consumes it at all.
+	src2 := `\documentclass[twocolumn]{article}\hsize=300pt
+\begin{document}
+\begin{table*}[t]
+\begin{center}x\end{center}
+\caption{wide}\label{t}
+\end{table*}
+\end{document}`
+	e2 := New()
+	e2.LoadLaTeX()
+	e2.SetFont(spMock{})
+	if _, err := e2.Run(src2); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e2.refTypes["t"], "table"; got != want {
+		t.Errorf("with [t]: type = %q, want %q", got, want)
+	}
+	var b strings.Builder
+	collectChars(e2.mvl, &b)
+	if strings.Contains(b.String(), "[t]") {
+		t.Errorf("the [placement] leaked onto the page: %q", b.String())
 	}
 }
