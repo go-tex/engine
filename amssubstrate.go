@@ -453,8 +453,20 @@ const AMSClassSubstrate = `
 \def\DeclareTextCommand#1#2#3{\def#1{#3}}
 \def\DeclareTextSymbol#1#2#3{}
 \def\DeclareTextCommandDefault#1{\def#1}
-% \MakeTextUppercase behaves like \MakeUppercase (defined in the class kernel).
-\def\MakeTextUppercase{\MakeUppercase}
+% \MakeTextUppercase is textcase.sty's, and amsart TESTS for it: amsart.cls:429 does
+% \AtBeginDocument{\@ifundefined{MakeTextUppercase}{}{\let\uppercasenonmath\altucnm}},
+% so defining it at all puts amsart on its \altucnm path —
+% \def\altucnm#1{\MakeTextUppercase{\toks@{#1}}\edef#1{\the\toks@}} (:424). That idiom
+% needs \MakeTextUppercase to EXECUTE the \toks@ assignment inside its argument, which
+% \uppercase does (it upcases the character tokens and hands the list back to the mouth).
+% ⛔ It used to expand to \MakeUppercase, a name amsart itself only \lets to \uppercase
+% at :431 — so a document's own \let\MakeUppercase\relax (15 papers of 999, 7 in amsart)
+% disarmed THIS command too, \altucnm's \toks@ assignment never happened, and
+% \edef\@title{\the\toks@} closed a self-referential \@title: 2511.23047 spun \@title 400
+% times into the runaway guard and rendered ONE page of 22KB. Going through the primitive
+% keeps the two names independent, exactly as textcase and the kernel are.
+\def\MakeTextUppercase#1{\protected@edef\@gotexuctmp{#1}%
+  \expandafter\uppercase\expandafter{\@gotexuctmp}}
 % \textup: upright text — no series/shape machinery, so identity. Defining it (rather
 % than leaving it undefined and gobbled) is what lets amsart's \@seccntformat
 % (\textup{…the section number…}) actually emit the number in a heading.
