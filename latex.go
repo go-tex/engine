@@ -591,6 +591,11 @@ const MiniLaTeXKernel = `
 \def\item{\par\noindent\quad-- }
 \def\\{\penalty-10000 }
 \def\newline{\penalty-10000 }
+% \@normalcr is the kernel's INTERNAL name for \\ (latex.ltx:6453, \let\\\@normalcr),
+% and a class that line-breaks through the internal rather than through \\ found it
+% undefined: 2607.18707 skipped it three times. \let keeps the two in step whatever
+% \\ is bound to here.
+\expandafter\let\csname @normalcr\endcsname\\
 \def\LaTeXe{LaTeX2e}
 \def\ldots{...}
 \def\dots{...}
