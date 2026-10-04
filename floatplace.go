@@ -93,7 +93,11 @@ func (*floatNode) isNode() {}
 func (e *Engine) doFloatBegin() {
 	kind := e.readBraceNameX() // caption type: "figure" or "table"
 	place := "tbp"
-	if toks, ok := e.scanOptBracketToks(); ok {
+	// The lookahead must NOT expand: \@ifnextchar uses \futurelet. Expanding it
+	// runs a \begin{subfigure} that follows immediately, which reassigns
+	// \@currenvir and sends this float down the inline path with no \@captype —
+	// see scanOptBracketToksNoExpand for the whole shape.
+	if toks, ok := e.scanOptBracketToksNoExpand(); ok {
 		if s := placementBits(toks); s != "" {
 			place = s
 		}
