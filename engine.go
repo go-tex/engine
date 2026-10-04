@@ -93,8 +93,10 @@ type Engine struct {
 	beamerBands bool
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
-	importPath  string
-	importStack []string
+	importPath   string
+	readsOutside map[string]int // paths read from outside the document's tree (readaudit.go)
+	treeRootOnce string         // the working directory, captured once
+	importStack  []string
 	// coveringDepth counts the open \pgfsys@begininvisible groups: beamer wraps
 	// material an overlay has not reached in them, and while it is positive every
 	// glyph set is marked covered (metrics kept, no ink).
@@ -2290,6 +2292,12 @@ type Diagnostics struct {
 	// offered "\Argument of \@authoropt has an extra }" as an undefined command and
 	// a corpus census read a sentence as a macro. Same mistake, same fix.
 	ExtraBrace map[string]int
+	// ReadsOutsideTree counts the paths the DOCUMENT named that resolved outside the
+	// directory the engine started in — an absolute path, or one that walked out with
+	// ../ — by path. Reading a named file is what \input is for and this is not an
+	// error; it is the fact a host compiling third-party documents needs in order to
+	// refuse a result. Empty for every document that stays where it lives.
+	ReadsOutsideTree map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2359,6 +2367,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		FontsSubstituted: e.fontSubst,
 		FiguresDropped:   figuresDropped,
 		ExtraBrace:       extraBrace,
+		ReadsOutsideTree: e.readsOutside,
 	}
 }
 

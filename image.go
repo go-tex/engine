@@ -99,6 +99,11 @@ func (e *Engine) doIncludegraphics() {
 	// two-column mode the relative-width floats reserve real space (see
 	// scanGraphicsOpts) and a square over-reserves a wide figure's height, so the true
 	// aspect is what keeps a figure-heavy two-column page's count right.
+	// Noted by the NAME the document wrote, not by the path loadImage resolves to:
+	// loadImage is a free function with no engine to report through. An absolute name
+	// or one walking out with ../ is caught; a bare name that a search path resolves
+	// outside the tree is not, and that is a stated limit rather than an oversight.
+	e.noteRead(name)
 	data, format, iw, ih, dpiX, dpiY, err := loadImage(name, pdfAspectOptIn() || e.twoColumn)
 	if err != nil {
 		if e.tolerant() {

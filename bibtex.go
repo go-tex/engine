@@ -575,6 +575,7 @@ func (e *Engine) doBibliography() {
 	if !strings.HasSuffix(strings.ToLower(file), ".bib") {
 		file += ".bib"
 	}
+	e.noteRead(file)
 	data, err := os.ReadFile(file)
 	if err != nil {
 		if e.tolerant() {
