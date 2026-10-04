@@ -60,6 +60,7 @@ func (e *Engine) doFont() {
 	case e.scanKeyword("scaled"):
 		sizePt = 10.0 * float64(e.scanInt()) / 1000.0 // \scaled is in thousandths
 	}
+	e.noteRead(file)
 	data, err := os.ReadFile(file)
 	if err != nil {
 		if e.tolerant() {
@@ -270,6 +271,7 @@ func (e *Engine) readInput(file string) ([]byte, error) {
 			return data, nil
 		}
 		if filepath.IsAbs(c) {
+			e.noteRead(c)
 			data, e2 := os.ReadFile(c)
 			if e2 == nil {
 				return data, nil
@@ -278,6 +280,7 @@ func (e *Engine) readInput(file string) ([]byte, error) {
 			continue
 		}
 		for _, d := range e.texInputDirs() {
+			e.noteRead(filepath.Join(d, c))
 			data, e2 := os.ReadFile(filepath.Join(d, c))
 			if e2 == nil {
 				return data, nil

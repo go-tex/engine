@@ -63,7 +63,11 @@ typesettable content instead of one hard error:
   `\font` **file**, are ignored.
 
 Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
-report what was dropped. On a **1000-source arXiv sweep** (measured 2026-10-04),
+report what was dropped. `Diagnostics` also records the paths the document read from
+**outside its own directory** — an absolute path, or one that walked out with `../`,
+excluding the search directories the host itself configured. Reading a named file is
+what `\input` is for and it is not an error, but a service compiling a document it did
+not write is the one who can judge it, and nothing else in this package will tell it. On a **1000-source arXiv sweep** (measured 2026-10-04),
 strict mode compiles almost none end-to-end — each hits a package command in the
 preamble — while lenient mode produces a multi-page PDF for all but **one** of
 the 71 sources the sweep flags as truncated; that one still stops at a single page

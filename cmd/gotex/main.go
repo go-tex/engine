@@ -228,6 +228,16 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  \\%s\n", e.count, e.name)
 		}
 	}
+	if n := totalCount(d.ReadsOutsideTree); n > 0 {
+		// Not an error: reading a named file is what \input is for, and the reference
+		// engine does the same. It is reported because a host compiling a document it
+		// did not write is the one who can judge it — see go-tex/engine#553.
+		fmt.Fprintf(w, "gotex: %d read(s) from OUTSIDE the document's directory — "+
+			"an absolute path or one walking out with ../:\n", n)
+		for _, e := range sortedByCount(d.ReadsOutsideTree) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if len(d.Skipped) == 0 {
 		fmt.Fprintln(w, "gotex: no undefined commands skipped")
 	} else {
