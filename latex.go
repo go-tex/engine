@@ -1341,6 +1341,21 @@ const MiniLaTeXKernel = `
 % Break hints and math-boldness / spacing switches: this engine does its own
 % page and line breaking and has no bold-math or spacing modes, so these are
 % accepted as no-ops. \pagebreak & co. gobble their optional [priority].
+% \vspace is a MACRO in LaTeX (\def\vspace{\@ifstar\@vspacer\@vspace}), and packages
+% DEPEND on that. lineno.sty installs its wrappers with
+%
+%   \def\@tempa#1#2{\expandafter\def\expandafter#2\expandafter{\expandafter
+%     \ifLineNumbers\expandafter#1\expandafter\fi#2}}
+%   \@tempa\@LN@changevadjust\vspace
+%
+% whose \expandafter chain expands #2 ONE step, so the new body holds the command's
+% OLD MEANING rather than its name. A primitive cannot be expanded: the body kept the
+% token \vspace and the wrapper called itself. Measured: 400 turns into the runaway
+% guard on three corpus papers of class aa with lineno — 2607.18707, 2607.28723 and
+% 2607.29488 — each stopping at ONE page. \pagebreak and \nopagebreak, which lineno
+% wraps the same way, were already macros here and never had the problem.
+\expandafter\let\csname gotex@vspace\endcsname\vspace
+\def\vspace{\gotex@vspace}
 \def\pagebreak{\@ifnextbracket\@gobbleoptonly\relax}
 \def\nopagebreak{\@ifnextbracket\@gobbleoptonly\relax}
 \def\linebreak{\@ifnextbracket\@gobbleoptonly\relax}
