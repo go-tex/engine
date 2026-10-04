@@ -698,3 +698,72 @@ func TestAutorefNamesAreHyperrefs(t *testing.T) {
 		}
 	}
 }
+
+// A type with no naming of its own inherits the one it falls back to, INCLUDING
+// a name the document gave that type. crefForms already held "section" under the
+// subsection key, which made this look unnecessary — but a default is not what a
+// document asking for an abbreviation gets. All four pairs are tectonic's:
+//
+//	\Crefname{section}{Sec.}{Secs.}   \Cref{subsec}   -> Sec. 1.1
+//	                                 \Cref{subsubsec} -> Sec. 1.1.1
+//	\Crefname{figure}{Fig.}{Figs.}   \Cref{subfig}    -> Fig. 1a
+//	\Crefname{table}{Tbl.}{Tbls.}    \Cref{subtab}    -> Tbl. 1a
+//
+// subfigure and subtable were left out of the fallback when it was first written
+// ("rather than guessed at"); the oracle settled them, and they belong here.
+func TestCrefNameFallsBackThroughTheDocumentsOwnNames(t *testing.T) {
+	e := newTypedRefEngine()
+	e.labels = map[string]string{
+		"s": "1", "ss": "1.1", "sss": "1.1.1", "f": "1", "sf": "1a", "tb": "1", "stb": "1a",
+	}
+	e.refTypes = map[string]string{
+		"s": "section", "ss": "subsection", "sss": "subsubsection",
+		"f": "figure", "sf": "subfigure", "tb": "table", "stb": "subtable",
+	}
+	e.crefNames = map[string]crefForm{
+		"section": {lower: "sec.", upper: "Sec.", lowerP: "secs.", upperP: "Secs."},
+		"figure":  {lower: "fig.", upper: "Fig.", lowerP: "figs.", upperP: "Figs."},
+		"table":   {lower: "tbl.", upper: "Tbl.", lowerP: "tbls.", upperP: "Tbls."},
+	}
+	for _, c := range []struct {
+		key, wantLower, wantUpper string
+	}{
+		{"s", "sec. 1", "Sec. 1"},
+		{"ss", "sec. 1.1", "Sec. 1.1"},
+		{"sss", "sec. 1.1.1", "Sec. 1.1.1"},
+		{"f", "fig. 1", "Fig. 1"},
+		{"sf", "fig. 1a", "Fig. 1a"},
+		{"tb", "tbl. 1", "Tbl. 1"},
+		{"stb", "tbl. 1a", "Tbl. 1a"},
+	} {
+		if got := e.crefOne(c.key, false); got != c.wantLower {
+			t.Errorf("cref %q = %q, want %q", c.key, got, c.wantLower)
+		}
+		if got := e.crefOne(c.key, true); got != c.wantUpper {
+			t.Errorf("Cref %q = %q, want %q", c.key, got, c.wantUpper)
+		}
+	}
+	// With nothing named, the defaults still answer — and an unnamed type still
+	// reaches its parent's default rather than printing a bare number.
+	e2 := newTypedRefEngine()
+	e2.labels = map[string]string{"stb": "1a", "sap": "A.1"}
+	e2.refTypes = map[string]string{"stb": "subtable", "sap": "subappendix"}
+	if got, want := e2.crefOne("stb", true), "Table 1a"; got != want {
+		t.Errorf("unnamed subtable = %q, want %q", got, want)
+	}
+	if got, want := e2.crefOne("sap", true), "Appendix A.1"; got != want {
+		t.Errorf("unnamed subappendix = %q, want %q", got, want)
+	}
+}
+
+// A theorem heading reached through the fallback too: naming the parent type is
+// how a document renames a whole family at once.
+func TestCrefThmNameThroughFallback(t *testing.T) {
+	e := newTypedRefEngine()
+	e.labels = map[string]string{"x": "1a"}
+	e.refTypes = map[string]string{"x": "subfigure"}
+	e.crefThmNames = map[string]crefForm{"figure": {lower: "panel", upper: "Panel"}}
+	if got, want := e.crefOne("x", true), "Panel 1a"; got != want {
+		t.Errorf("Cref = %q, want %q", got, want)
+	}
+}
