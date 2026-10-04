@@ -35,7 +35,20 @@ func (e *Engine) doLongtable() {
 	e.scanOptBracketToks()
 	aligns, pwidths, vrules := e.scanColSpec()
 	items := e.collectTabularBody("longtable")
+	// A longtable carries its own \caption, and it is a TABLE's. The real package
+	// is a float-like environment that sets \@captype (longtable.sty's
+	// \LT@array does \let\@captype\LT@captype with "table"); here the body is
+	// collected and typeset as cells, so nothing had set it and
+	// \csname the\@captype\endcsname froze over an UNDEFINED \@captype — the
+	// literal text "\the@captype" reached the page and every \ref to that table
+	// printed it: "more details in Table \the@captype". Five corpus papers write
+	// a longtable, eight in all, and 2303.18017 printed it six times.
+	//
+	// Scoped, so a longtable inside a figure cannot leave "table" behind.
+	e.beginGroup()
+	e.define("@captype", &meaning{kind: mMacro, body: stringToToks("table")}, false)
 	e.place(e.buildTabularBox(aligns, pwidths, vrules, longtableRows(items)))
+	e.endGroup()
 }
 
 // longtableRows reduces a collected longtable body to the rows a single-page
