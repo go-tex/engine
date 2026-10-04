@@ -27,10 +27,10 @@ func TestTheoremHeadingKeepsItsCommands(t *testing.T) {
 		}
 		got := pageChars(e)
 		if !strings.Contains(got, c.want) {
-			t.Errorf("%s: la page porte %q, elle doit porter %q", c.name, got, c.want)
+			t.Errorf("%s: the page carries %q, it must carry %q", c.name, got, c.want)
 		}
 		if strings.Contains(got, c.absent) {
-			t.Errorf("%s: la page porte %q, qui contient %q", c.name, got, c.absent)
+			t.Errorf("%s: the page carries %q, which contains %q", c.name, got, c.absent)
 		}
 	}
 }

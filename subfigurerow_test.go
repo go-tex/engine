@@ -51,11 +51,11 @@ func TestSubfigurePanelsShareALine(t *testing.T) {
 		}
 		ys = append(ys, y)
 	}
-	t.Logf("y de SUITE pour 1/2/3 panneaux: %v", ys)
+	t.Logf("y of NEXT for 1/2/3 panels: %v", ys)
 	for i := 1; i < len(ys); i++ {
 		if d := ys[i] - ys[0]; d > 1 || d < -1 {
-			t.Errorf("ajouter un panneau a descendu SUITE de %.2f (y = %v); "+
-				"les panneaux doivent partager une ligne", d, ys)
+			t.Errorf("adding a panel pushed NEXT down by %.2f (y = %v); "+
+				"the panels must share one row", d, ys)
 		}
 	}
 }

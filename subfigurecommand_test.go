@@ -28,7 +28,7 @@ func TestSubfigureCommandFormDoesNotSwallowTheDocument(t *testing.T) {
 	}
 	for _, want := range []string{"A", "B", "Gauche", "Droite", "(a)", "(b)", "Toutesdeux"} {
 		if !strings.Contains(got, want) {
-			t.Errorf("la page porte %q, il y manque %q", got, want)
+			t.Errorf("the page carries %q, which is missing %q", got, want)
 		}
 	}
 }

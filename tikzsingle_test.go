@@ -39,11 +39,11 @@ func TestTikzSingleMatchesBracedForm(t *testing.T) {
 	}
 	sans, ouverts := run(`X\tikz \draw (0,0)--(1,1);`)
 	if ouverts != 0 {
-		t.Errorf("la forme sans accolades laisse %d groupes ouverts, attendu 0", ouverts)
+		t.Errorf("the brace-less form leaves %d groups open, want 0", ouverts)
 	}
 	avec, ouvertsB := run(`X\tikz{\draw (0,0)--(1,1);}`)
 	if ouvertsB != 0 {
-		t.Errorf("la forme avec accolades laisse %d groupes ouverts, attendu 0", ouvertsB)
+		t.Errorf("the braced form leaves %d groups open, want 0", ouvertsB)
 	}
 	if sans != avec {
 		t.Errorf("the two forms render differently\n  without braces: %d bytes\n  with braces:    %d bytes", len(sans), len(avec))

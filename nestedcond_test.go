@@ -45,12 +45,12 @@ func TestConditionalInsideAConditionalOperand(t *testing.T) {
 			"[l]",
 		},
 		{
-			"sans imbrication, rien ne change",
+			"with no nesting, nothing changes",
 			`\message{[\if aa EGAL\else DIFF\fi][\if ab EGAL\else DIFF\fi]}`,
 			"[ EGAL][DIFF]",
 		},
 		{
-			"l'interne prend SA branche vraie : son \\else ET son \\fi restent",
+			"the inner one takes ITS true branch: its \\else AND its \\fi stay",
 			`\def\zn{3}\def\zp{\if 3\zn u\else l\fi}\message{[\if l\zp EGAL\else DIFF\fi]}`,
 			"[DIFF]",
 		},

@@ -17,9 +17,9 @@ import (
 // go-tex/engine#372.
 func TestStripMathLayout(t *testing.T) {
 	for _, tc := range []struct{ name, in, want string }{
-		{"la source est GARDÉE: voir TestFormulaSourceIsSearchable", `x^{2}`, `x^{2}`},
+		{"the source is KEPT: see TestFormulaSourceIsSearchable", `x^{2}`, `x^{2}`},
 		{"un indice aussi", `y_{i}`, `y_{i}`},
-		{"accolade ÉCHAPPÉE, qui est dessinée", `\{a\}`, "{a}"},
+		{"ESCAPED brace, which is drawn", `\{a\}`, "{a}"},
 		{"bascule de style sans argument", `\displaystyle z`, "z"},
 		{"bascule de fonte", `\text{\normalfont q}`, `\text{q}`},
 		{"un symbole garde son name", `\Omega`, `\Omega`},

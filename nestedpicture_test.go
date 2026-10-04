@@ -22,7 +22,7 @@ func TestUnmapAnswersTheMapsInForce(t *testing.T) {
 
 	for _, c := range []struct{ name, stream, want string }{
 		{
-			"au sommet, rien n'est en vigueur",
+			"at the top level, nothing is in force",
 			`{?unmap}`,
 			``,
 		},

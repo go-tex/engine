@@ -51,11 +51,11 @@ func TestSetfontsizeLeadingFollowsTheSizeAndComesBack(t *testing.T) {
 		{"S", 11, `\small`},
 		{"F", 9.5, `\footnotesize`},
 		{"L", 18, `\Large`},
-		{"A", 12, `retour au corps de texte`},
-		{"X", 9.5, `\footnotesize après un retour`},
-		{"B", 12, `retour depuis \footnotesize`},
-		{"Y", 18, `\Large après un retour`},
-		{"C", 12, `retour depuis \Large`},
+		{"A", 12, `back to the body size`},
+		{"X", 9.5, `\footnotesize after a return`},
+		{"B", 12, `back from \footnotesize`},
+		{"Y", 18, `\Large after a return`},
+		{"C", 12, `back from \Large`},
 	} {
 		v, ok := got[w.key]
 		if !ok {
@@ -97,7 +97,7 @@ func TestSetfontsizeLeadingMovesTheLines(t *testing.T) {
 		{"NORMALUN", "NORMALDEUX", 11.96, `\normalsize (témoin, déjà juste)`},
 		{"PETITUN", "PETITDEUX", 9.46, `\footnotesize`},
 		{"GRANDUN", "GRANDDEUX", 17.93, `\Large`},
-		{"RETOURUN", "RETOURDEUX", 11.96, `retour au corps de texte`},
+		{"RETOURUN", "RETOURDEUX", 11.96, `back to the body size`},
 	} {
 		ya, oka := markerY(svg, c.a)
 		yb, okb := markerY(svg, c.b)
@@ -141,7 +141,7 @@ func TestSetfontsizeLeadingKeepsTheLinespread(t *testing.T) {
 	}{
 		{"ETIREUN", "ETIREDEUX", 17.93, `1.5 x \normalsize`},
 		{"SPETITUN", "SPETITDEUX", 14.20, `1.5 x \footnotesize`},
-		{"SRETOURUN", "SRETOURDEUX", 17.93, `1.5 rétabli après le groupe`},
+		{"SRETOURUN", "SRETOURDEUX", 17.93, `1.5 restored after the group`},
 	} {
 		ya, oka := markerY(svg, c.a)
 		yb, okb := markerY(svg, c.b)

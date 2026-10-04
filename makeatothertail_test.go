@@ -26,7 +26,7 @@ func TestPackageEndingWithMakeatotherLeavesNothingBehind(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if got := pageChars(e); got != "Bonjour" {
-		t.Errorf("la page porte %q, want %q", got, "Bonjour")
+		t.Errorf("the page carries %q, want %q", got, "Bonjour")
 	}
 	if len(e.loadStack) != 0 {
 		t.Errorf("%d load frame(s) still stacked: \\@gotex@endload did not run",

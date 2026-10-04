@@ -44,10 +44,10 @@ func TestBibliographyReadsTheJobBBL(t *testing.T) {
 	}
 	got := pageChars(e)
 	if !strings.Contains(got, "TeXbook") {
-		t.Errorf("la page porte %q — la bibliographie du .bbl manque", got)
+		t.Errorf("the page carries %q — the .bbl bibliography is missing", got)
 	}
 	if strings.Contains(got, "Jamais") {
-		t.Errorf("la page porte le .bib alors qu'un .bbl existe: %q", got)
+		t.Errorf("the page carries the .bib although a .bbl exists: %q", got)
 	}
 }
 
@@ -74,6 +74,6 @@ func TestBibliographyFallsBackToTheBib(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if got := pageChars(e); !strings.Contains(got, "TeXbook") {
-		t.Errorf("la page porte %q — le repli sur le .bib ne marche plus", got)
+		t.Errorf("the page carries %q — the fallback to the .bib no longer works", got)
 	}
 }

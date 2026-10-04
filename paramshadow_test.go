@@ -54,9 +54,9 @@ func TestNoParameterIsBothAPrimitiveAndAListedParam(t *testing.T) {
 	sort.Strings(bad)
 	if len(bad) > 0 {
 		t.Errorf("%d name(s) both a primitive and a listed parameter:\n  %s\n"+
-			"Le vainqueur dépend de l'ORDRE de chargement (loadTeXParams à "+
-			"primitives.go:209), donc la primitive peut être masquée sans bruit. "+
-			"Retirer le name de la liste, ou l'ajouter à allowedBoth avec sa raison.",
+			"The winner depends on LOAD ORDER (loadTeXParams at "+
+			"primitives.go:209), so the primitive can be shadowed with no noise. "+
+			"Remove the name from the list, or add it to allowedBoth with its reason.",
 			len(bad), strings.Join(bad, "\n  "))
 	}
 }
@@ -93,9 +93,9 @@ func TestEngineParametersAreNotShadowed(t *testing.T) {
 			continue
 		}
 		if m.kind != mPrim {
-			t.Errorf(`\%s a pour sens kind=%d, pas une primitive: un \newdimen/\newskip `+
-				`du substrat ou une entrée de texparams le MASQUE, donc une assignation `+
-				`écrit dans un registre et le champ du moteur ne bouge jamais`, n, int(m.kind))
+			t.Errorf(`\%s has meaning kind=%d, not a primitive: a \newdimen/\newskip in the `+
+				`substrate, or a texparams entry, SHADOWS it — so an assignment writes to a `+
+				`register and the engine's own field never moves`, n, int(m.kind))
 		}
 	}
 }

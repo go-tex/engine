@@ -15,10 +15,10 @@ func TestColorTableCommandsEatExactlyTheirArguments(t *testing.T) {
 	for _, tc := range []struct{ name, src, want string }{
 		{"cellcolor simple", `A\cellcolor{gray}B`, "AB"},
 		{"cellcolor avec modèle", `A\cellcolor[rgb]{1,0,0}B`, "AB"},
-		{"cellcolor NE mange PAS les débordements", `A\cellcolor{gray}[2pt]B`, "A[2pt]B"},
+		{"cellcolor does NOT eat the overflow", `A\cellcolor{gray}[2pt]B`, "A[2pt]B"},
 		{"rowcolor simple", `A\rowcolor{gray}B`, "AB"},
 		{"rowcolor avec modèle", `A\rowcolor[rgb]{1,0,0}B`, "AB"},
-		{"rowcolor mange un débordement", `A\rowcolor{gray}[2pt]B`, "AB"},
+		{"rowcolor eats an overflow", `A\rowcolor{gray}[2pt]B`, "AB"},
 		{"rowcolor mange les deux", `A\rowcolor{gray}[2pt][3pt]B`, "AB"},
 		{"columncolor mange les deux", `A\columncolor{gray}[2pt][3pt]B`, "AB"},
 	} {

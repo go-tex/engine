@@ -48,7 +48,7 @@ func TestUnboxUnpacksARegister(t *testing.T) {
 		{"the register is emptied", `\setbox0=\hbox{A}\setbox2=\hbox{\unhbox0}\setbox1=\hbox{\unhbox0 Z}`, "Z"},
 		{"\\unhcopy ne vide pas", `\setbox0=\hbox{A}\setbox1=\hbox{\unhcopy0 \unhcopy0}`, "AA"},
 		{"registre vide : rien", `\setbox1=\hbox{\unhbox3 X}`, "X"},
-		{"une vbox ne s'ouvre pas avec \\unhbox", `\setbox0=\vbox{A}\setbox1=\hbox{\unhbox0 X}`, "X"},
+		{"a vbox does not open with \\unhbox", `\setbox0=\vbox{A}\setbox1=\hbox{\unhbox0 X}`, "X"},
 		{"nested content preserved", `\setbox0=\hbox{\hbox{A}}\setbox1=\hbox{\unhbox0 B}`, "AB"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestUnvboxUnpacksAVerticalRegister(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"accumulation verticale", `\setbox0=\vbox{A}\setbox0=\vbox{\unvbox0 B}\setbox1=\vbox{\unvbox0}`, "AB"},
 		{"\\unvcopy ne vide pas", `\setbox0=\vbox{A}\setbox1=\vbox{\unvcopy0 \unvcopy0}`, "AA"},
-		{"une hbox ne s'ouvre pas avec \\unvbox", `\setbox0=\hbox{A}\setbox1=\vbox{\unvbox0 X}`, "X"},
+		{"an hbox does not open with \\unvbox", `\setbox0=\hbox{A}\setbox1=\vbox{\unvbox0 X}`, "X"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()

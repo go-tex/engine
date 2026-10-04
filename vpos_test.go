@@ -56,7 +56,7 @@ func TestTabularHonoursItsVerticalPosition(t *testing.T) {
 	// what says a wrong anchor was never a sizing defect.
 	for _, p := range [][2]string{{"CH", "CD"}, {"TH", "TD"}, {"BH", "BD"}} {
 		if d := (got[p[0]] + got[p[1]]) - 36.0; d > 0.02 || d < -0.02 {
-			t.Errorf("total %s+%s = %.2fpt, attendu 36.0pt: l'ancrage ne doit pas changer la TAILLE",
+			t.Errorf("total %s+%s = %.2fpt, expected 36.0pt: the anchor must not change the SIZE",
 				p[0], p[1], got[p[0]]+got[p[1]])
 		}
 	}
@@ -98,13 +98,13 @@ func TestMinipageHonoursItsVerticalPosition(t *testing.T) {
 	}
 	// [b] keeps the reference at the last line's baseline: height = total - its depth.
 	if d := (got["BH"] + got["BD"]) - total; d > 0.02 || d < -0.02 {
-		t.Errorf("[b] total %.2f contre %.2f: l'ancrage ne doit pas changer la taille",
+		t.Errorf("[b] total %.2f against %.2f: the anchor must not change the size",
 			got["BH"]+got["BD"], total)
 	}
 	// [c] centres on the math axis, above the baseline: height > half the total.
 	if got["CH"] <= total/2 {
 		t.Errorf("[c] height %.2f is not above half the total %.2f: "+
-			"latex.ltx centre sur l'AXE, pas sur la ligne de base", got["CH"], total)
+			"latex.ltx centres on the AXIS, not on the baseline", got["CH"], total)
 	}
 }
 
@@ -137,8 +137,8 @@ func TestMakeboxKeepsTheHorizontalPositionSet(t *testing.T) {
 	t.Logf("x de ZZ: [l] %.2f  [c] %.2f  [r] %.2f", xl, xc, xr)
 	if !(xl < xc && xc < xr) {
 		t.Errorf("[l] %.2f, [c] %.2f, [r] %.2f must be strictly increasing "+
-			"dans une boîte de 60pt; des valeurs égales veulent dire que la lettre "+
-			"n'atteint pas l'alignement", xl, xc, xr)
+			"in a 60pt box; equal values mean the letter does not reach the "+
+			"alignment", xl, xc, xr)
 	}
 }
 
