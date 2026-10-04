@@ -46,7 +46,6 @@ package engine
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 )
@@ -543,7 +542,7 @@ func (e *Engine) readJobBBL() ([]byte, bool) {
 	if e.jobName == "" {
 		return nil, false
 	}
-	data, err := os.ReadFile(e.jobName + ".bbl")
+	data, err := readDocFile(e.jobName + ".bbl")
 	if err != nil {
 		return nil, false
 	}
@@ -576,7 +575,7 @@ func (e *Engine) doBibliography() {
 		file += ".bib"
 	}
 	e.noteRead(file)
-	data, err := os.ReadFile(file)
+	data, err := readDocFile(file)
 	if err != nil {
 		if e.tolerant() {
 			e.recordMissingFile("bibliography")

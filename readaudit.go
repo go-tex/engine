@@ -42,7 +42,10 @@ func (e *Engine) noteRead(path string) {
 	// /…/texmf/size10.clo — a class file the host pointed the engine at — and a signal that
 	// fires on the host's own configuration is one a host learns to ignore, which is worse
 	// than no signal. What this records is the DOCUMENT reaching outside what it was given.
-	for _, d := range e.texInputDirs() {
+	// (texInputDirs is a package function since readpolicy.go: the roots come from the
+	// environment and the working directory, so it needs no engine — and the refusal
+	// and this report then judge against ONE definition of "inside".)
+	for _, d := range texInputDirs() {
 		if ad, err := filepath.Abs(d); err == nil && pathWithin(ad, abs) {
 			return
 		}

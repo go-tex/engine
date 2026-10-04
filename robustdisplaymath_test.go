@@ -51,6 +51,7 @@ func TestInputBodyAfterMaketitleSurvivesAmsart(t *testing.T) {
 
 	const marker = "INPUTAFTERMAKETITLE"
 	dir := t.TempDir()
+	t.Setenv("TEXINPUTS", dir) // a read outside the search roots is refused (readpolicy.go)
 	inputPath := filepath.Join(dir, "gotex_maketitle_input.tex")
 	if err := os.WriteFile(inputPath, []byte(marker+" renders now\n"), 0o644); err != nil {
 		t.Fatal(err)
