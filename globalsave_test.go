@@ -43,7 +43,7 @@ func TestGlobalAssignmentKeepsGroupMarks(t *testing.T) {
 			"L",
 		},
 		{
-			"trois niveaux, le global au plus profond",
+			"three levels, the global one deepest",
 			`\begingroup\def\g{L}\def\h{A}\begingroup\def\h{B}\begingroup\let\h\empty\global\def\g{G}\endgroup\h\endgroup\endgroup`,
 			"B",
 		},

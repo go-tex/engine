@@ -34,9 +34,9 @@ func TestKernelMacrosAreDefined(t *testing.T) {
 func TestKernelDeclarationsConsumeTheirArguments(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
 		{"DeclareMathSymbol", `\DeclareMathSymbol{0}\mathalpha{numbers}{"30}`},
-		{"pdfstringdefDisableCommands", `\pdfstringdefDisableCommands{\def\x{ne doit pas paraitre}}`},
+		{"pdfstringdefDisableCommands", `\pdfstringdefDisableCommands{\def\x{must not appear}}`},
 		{"@checkend", `\@checkend{document}`},
-		{"@input absent", `\@input{ce-fichier-n-existe-pas.tex}`},
+		{"@input absent", `\@input{this-file-does-not-exist.tex}`},
 	} {
 		e, err := compile([]byte(`\documentclass{article}\begin{document}\makeatletter `+
 			c.src+`x\end{document}`), Options{})
@@ -44,7 +44,7 @@ func TestKernelDeclarationsConsumeTheirArguments(t *testing.T) {
 			t.Fatalf("%s: %v", c.name, err)
 		}
 		if got := pageChars(e); got != "x" {
-			t.Errorf("%s: la page porte %q, want %q", c.name, got, "x")
+			t.Errorf("%s: the page carries %q, want %q", c.name, got, "x")
 		}
 	}
 }

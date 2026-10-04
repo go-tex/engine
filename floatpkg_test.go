@@ -25,7 +25,7 @@ func TestNewFloatTypeRendersBodyAndCaption(t *testing.T) {
 	}
 	got := pageChars(e)
 	if !strings.Contains(got, "Corpsduprogramme.") {
-		t.Errorf("le corps du flottant est perdu: %q", got)
+		t.Errorf("the float's body is lost: %q", got)
 	}
 	if !strings.Contains(got, "Program1:Légende") {
 		t.Errorf("the caption must be numbered \"Program 1: Légende\": %q", got)

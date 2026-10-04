@@ -80,7 +80,7 @@ func TestOffinterlineskipLeavesNoGlue(t *testing.T) {
 	t.Logf("%v", got)
 	h1, norm, off := got["H1"], got["NORM"], got["OFF"]
 	if h1 <= 0 || norm <= 0 || off <= 0 {
-		t.Fatalf("une des trois valeurs manque: %v", got)
+		t.Fatalf("one of the three values is missing: %v", got)
 	}
 	if d := off - 3*h1; d > 0.02 || d < -0.02 {
 		t.Errorf(`\offinterlineskip left %.2fpt of glue: %.2f against 3 x %.2f = %.2f`,

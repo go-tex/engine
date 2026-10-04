@@ -230,7 +230,7 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	size := e.mathSize()
 	svg, m, drawn, err := e.renderMathResolvingMacros(r, src, display, size)
 	if drawn != "" {
-		src = drawn // ce qui a été DESSINÉ, pas ce qui a été tapé: c'est la phrase du calque texte
+		src = drawn // what was DRAWN, not what was typed: this is the text layer's sentence
 	}
 	if err != nil {
 		if e.tolerant() {

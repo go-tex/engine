@@ -94,7 +94,7 @@ func TestSearchPathBeatsResolve(t *testing.T) {
 	}}
 	out := runWithResolve(t, opt, "\\usepackage{zzboth}\\message{[\\zzhostword]}")
 	if out != "[DISQUE]" {
-		t.Errorf("sortie = %q, attendu %q — le chemin de recherche doit primer", out, "[DISQUE]")
+		t.Errorf("output = %q, want %q — the search path must take precedence", out, "[DISQUE]")
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 // figure* and 11 for table*. The class here is one of those emulated ones: the real
 // article.cls, which the engine embeds, has always defined them through \@dblfloat.
 func TestStarredFloatsAreFloats(t *testing.T) {
-	for _, c := range []struct{ env, veut string }{
+	for _, c := range []struct{ env, want string }{
 		{"figure*", "Figure1:Légende"},
 		{"table*", "Table1:Légende"},
 	} {
@@ -29,8 +29,8 @@ func TestStarredFloatsAreFloats(t *testing.T) {
 		if strings.Contains(got, "[t]") {
 			t.Errorf("%s: the placement key is typeset: %q", c.env, got)
 		}
-		if !strings.Contains(got, c.veut) {
-			t.Errorf("%s: la page porte %q, elle doit porter %q", c.env, got, c.veut)
+		if !strings.Contains(got, c.want) {
+			t.Errorf("%s: the page carries %q, it must carry %q", c.env, got, c.want)
 		}
 	}
 }

@@ -53,6 +53,6 @@ func TestTabularStillSplitsItsOwnCells(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if got := pageChars(e); !strings.Contains(got, "APRÈS") || !strings.Contains(got, "d") {
-		t.Errorf("la page porte %q", got)
+		t.Errorf("the page carries %q", got)
 	}
 }

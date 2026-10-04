@@ -29,7 +29,7 @@ func TestPrevdepthReadsTheLastBoxDepth(t *testing.T) {
 	t.Logf("%v", got)
 	d, okd := got["D"]
 	if !okd || d <= 0 {
-		t.Fatalf(`\dp\hbox{ppp} = %v: sans jambage ce test ne mesure rien`, got["D"])
+		t.Fatalf(`\dp\hbox{ppp} = %v: with no descender this test measures nothing`, got["D"])
 	}
 	for _, k := range []string{"UN", "DEUX"} {
 		v, ok := got[k]
@@ -63,14 +63,14 @@ func TestNointerlineskipSuppressesTheInterlineGlue(t *testing.T) {
 	t.Logf("%v", got)
 	ctl, raw, nil_ := got["CTL"], got["RAW"], got["NIL"]
 	if ctl <= 0 || raw <= 0 || nil_ <= 0 {
-		t.Fatalf("une des trois hauteurs manque: %v", got)
+		t.Fatalf("one of the three heights is missing: %v", got)
 	}
 	if raw >= ctl {
 		t.Errorf(`\prevdepth=-1000pt did not suppress the glue: %.2fpt against %.2fpt without`, raw, ctl)
 	}
 	if d := nil_ - raw; d > 0.01 || d < -0.01 {
 		t.Errorf(`\nointerlineskip (%.2fpt) and \prevdepth=-1000pt (%.2fpt) must agree: `+
-			`la macro EST cette assignation`, nil_, raw)
+			`the macro IS that assignment`, nil_, raw)
 	}
 }
 
@@ -99,11 +99,11 @@ func TestRemovelastskipNeedsItsGlueTerminated(t *testing.T) {
 	t.Logf("%v", got)
 	ctl, bare, rel := got["CTL"], got["BARE"], got["REL"]
 	if ctl <= 0 || bare <= 0 || rel <= 0 {
-		t.Fatalf("une des trois hauteurs manque: %v", got)
+		t.Fatalf("one of the three heights is missing: %v", got)
 	}
 	if d := bare - ctl; d > 0.01 || d < -0.01 {
 		t.Errorf(`\vskip 20pt \removelastskip removed something (%.2f against %.2f): `+
-			`la référence ne le fait pas non plus, la macro s'expanse pendant la relecture de la glue`, bare, ctl)
+			`the reference does not either: the macro expands while the glue is re-read`, bare, ctl)
 	}
 	if d := ctl - rel; d < 19.9 || d > 20.1 {
 		t.Errorf(`\vskip 20pt\relax\removelastskip removed %.2fpt, want the \vskip's 20pt`, d)

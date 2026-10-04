@@ -191,7 +191,7 @@ func TestSetfontsizeOnlyNormalsizeRestatesTheClassSize(t *testing.T) {
 	}
 	if e.classNormalsizePt != norm {
 		t.Errorf("a \\small moved the class reference size: %v -> %v; "+
-			"toute l'échelle des tailles se mesure contre elle", norm, e.classNormalsizePt)
+			"the whole size scale is measured against it", norm, e.classNormalsizePt)
 	}
 }
 

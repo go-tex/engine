@@ -72,7 +72,7 @@ func TestTikzRenderRectangle(t *testing.T) {
 		`fill="none"`,         // an unfilled \draw
 	} {
 		if !strings.Contains(svg, want) {
-			t.Errorf("le rectangle ne contient pas %q :\n%s", want, svg)
+			t.Errorf("the rectangle does not contain %q:\n%s", want, svg)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func TestTikzRenderFilledColour(t *testing.T) {
 	}
 	// The corner is at 1cm on each axis.
 	if want := `L 28.45274 28.45274`; !strings.Contains(svg, want) {
-		t.Errorf("le coin du rectangle rempli (%q) est absent :\n%s", want, svg)
+		t.Errorf("the filled rectangle's corner (%q) is absent:\n%s", want, svg)
 	}
 }
 

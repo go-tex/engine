@@ -18,7 +18,7 @@ func TestAmsgenExpandafterShorthands(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	if got := pageChars(e); got != "x" {
-		t.Errorf("la page porte %q, want %q", got, "x")
+		t.Errorf("the page carries %q, want %q", got, "x")
 	}
 	// \@nx is \noexpand: inside an \edef it must keep the following command whole.
 	e2, err := compile([]byte(`\documentclass{article}\begin{document}\makeatletter
@@ -27,6 +27,6 @@ func TestAmsgenExpandafterShorthands(t *testing.T) {
 		t.Fatalf("compile (\\@nx): %v", err)
 	}
 	if got := pageChars(e2); got != "OUI" {
-		t.Errorf("\\@nx: la page porte %q, want %q (le \\def suivant doit gagner)", got, "OUI")
+		t.Errorf("\\@nx: the page carries %q, want %q (the following \\def must win)", got, "OUI")
 	}
 }

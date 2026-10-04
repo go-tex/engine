@@ -84,7 +84,7 @@ func TestEPSPlaceholderKeepsItsAspect(t *testing.T) {
 	walk(e.mvl)
 	walk(e.parList)
 	if got == nil {
-		t.Fatal("aucun cadre de remplacement sur la page")
+		t.Fatal("no placeholder frame on the page")
 	}
 	// 400 × 100 bp asked for at 200pt wide is 50pt tall (the bp→pt correction is
 	// under a percent and cancels in the ratio). Measured on the OUTER box: the frame

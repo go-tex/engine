@@ -73,7 +73,7 @@ func TestInputExpandsItsFileName(t *testing.T) {
 // map points hundreds of lines past the real place.
 func TestInputDoesNotShiftSourceLines(t *testing.T) {
 	dir := t.TempDir()
-	body := strings.Repeat("% une ligne de commentaire\n", 40) + `\def\rien{}`
+	body := strings.Repeat("% one comment line\n", 40) + `\def\rien{}`
 	if err := os.WriteFile(filepath.Join(dir, "gros.tex"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

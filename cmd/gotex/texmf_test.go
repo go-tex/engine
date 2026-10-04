@@ -70,8 +70,8 @@ func TestBundlesForRecognisesPackages(t *testing.T) {
 		{"pgfplots tire pgf", `\documentclass{article}\usepackage{pgfplots}`, []string{"pgf", "pgfplots"}},
 		{"RequirePackage", `\RequirePackage{pgf}`, []string{"pgf"}},
 		{"avec options", `\usepackage[compat=1.18]{pgfplots}`, []string{"pgf", "pgfplots"}},
-		{"liste séparée par des virgules", `\usepackage{amsmath, pgf ,xcolor}`, []string{"pgf"}},
-		{"les deux, sans répétition", `\documentclass{beamer}\usepackage{pgfplots}\usepackage{pgf}`,
+		{"comma-separated list", `\usepackage{amsmath, pgf ,xcolor}`, []string{"pgf"}},
+		{"both, with no repetition", `\documentclass{beamer}\usepackage{pgfplots}\usepackage{pgf}`,
 			[]string{"translator", "beamer", "pgf", "pgfplots"}},
 		{"commenté", "% \\usepackage{pgfplots}\n", nil},
 		{"paquet inconnu", `\usepackage{fancyhdr}`, nil},
@@ -116,7 +116,7 @@ func TestAttachOfflineReportsAndCarriesOn(t *testing.T) {
 	var errb bytes.Buffer
 	attachTeXMF(&opt, []byte(`\documentclass{beamer}`), true, &errb)
 	if opt.Resolve != nil {
-		t.Error("hors ligne sans cache: Resolve devrait rester nil")
+		t.Error("offline with no cache: Resolve should stay nil")
 	}
 	if msg := errb.String(); !strings.Contains(msg, "indisponible") {
 		t.Errorf("le message n'explique pas le repli: %q", msg)
@@ -178,12 +178,12 @@ func TestSeveralPackagesOnOneLine(t *testing.T) {
 		name, src string
 		want      []string
 	}{
-		{"deux sur une ligne", `\usepackage{pgf}\usepackage{beamer}`, []string{"pgf", "translator", "beamer"}},
+		{"two on one line", `\usepackage{pgf}\usepackage{beamer}`, []string{"pgf", "translator", "beamer"}},
 		{"trois, dont un inconnu", `\usepackage{amsmath}\usepackage{pgfplots}\usepackage{pgf}`,
 			[]string{"pgf", "pgfplots"}},
-		{"un commenté au milieu", `\usepackage{pgf}% \usepackage{beamer}`, []string{"pgf"}},
-		{"pourcent échappé, pas un commentaire", `\def\x{100\%}\usepackage{pgf}`, []string{"pgf"}},
-		{"commentaire sur une ligne, paquet sur la suivante", "% rien\n\\usepackage{pgf}", []string{"pgf"}},
+		{"one commented out in the middle", `\usepackage{pgf}% \usepackage{beamer}`, []string{"pgf"}},
+		{"escaped percent, not a comment", `\def\x{100\%}\usepackage{pgf}`, []string{"pgf"}},
+		{"comment on one line, package on the next", "% rien\n\\usepackage{pgf}", []string{"pgf"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := names(c.src); !eq(got, c.want...) {

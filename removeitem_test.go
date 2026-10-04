@@ -59,7 +59,7 @@ func TestRemoveItemHonoursTheTypeGuard(t *testing.T) {
 	}
 	if d := w["E"] - w["D"]; d < 9.99 || d > 10.01 {
 		t.Errorf(`\unskip touched a KERN: \hbox{x\kern10pt\unskip y} is %.2fpt `+
-			`de plus que \hbox{xy}, attendu les 10pt du kern`, d)
+			`more than \hbox{xy}, expected the kern's 10pt`, d)
 	}
 }
 
@@ -96,11 +96,11 @@ func TestUnpenaltyRemovesThePenaltyAndOnlyTheTail(t *testing.T) {
 		y["AVANT"], y["APRES"], y["DEUXA"], y["DEUXB"])
 	if d := y["APRES"] - y["AVANT"]; d > 1 || d < -1 {
 		t.Errorf(`\unpenalty did not remove the penalty: AFTER is %.2fpt below BEFORE, `+
-			`donc la coupure forcée a tenu`, d)
+			`so the forced break held`, d)
 	}
 	if d := y["DEUXB"] - y["DEUXA"]; d < 1 {
 		t.Errorf(`the CONTROL penalty vanished: TWOB is %.2fpt from TWOA, `+
-			`attendu une ligne d'écart`, d)
+			`expected one line of gap`, d)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestUnskipInVerticalModeTakesTheTailAndOnlyTheTail(t *testing.T) {
 			}
 			if d := ctl - c.wantControl; d > 1 || d < -1 {
 				t.Errorf("gap AFTER->CONTROL %.2f, want %.0f: the control \\vskip "+
-					"a été touché alors qu'il n'est pas en queue", ctl, c.wantControl)
+					"was touched although it is not last", ctl, c.wantControl)
 			}
 		})
 	}

@@ -32,7 +32,7 @@ func TestHalignRowsTakeInterlineGlue(t *testing.T) {
 	t.Logf("%v", got)
 	h, u, bl := got["H"], got["U"], got["B"]
 	if h <= 0 || u <= 0 || bl <= 0 {
-		t.Fatalf("une des trois valeurs manque: %v", got)
+		t.Fatalf("one of the three values is missing: %v", got)
 	}
 	inc := (h - u) / 2
 	if d := inc - bl; d > 0.01 || d < -0.01 {
@@ -55,12 +55,12 @@ func TestInterlineGlueHasBothBranches(t *testing.T) {
 	e.SetFont(spMock{})
 
 	if _, ok := e.interlineGlue(ignoreDepth, 0); ok {
-		t.Error("prev_depth = ignore_depth doit donner AUCUNE glue (§679 le teste en premier)")
+		t.Error("prev_depth = ignore_depth must give NO glue (§679 tests it first)")
 	}
 	// Ordinary case: the gap makes the baselines \baselineskip apart.
 	g, ok := e.interlineGlue(0, 5*unity)
 	if !ok {
-		t.Fatal("une profondeur ordinaire doit donner de la glue")
+		t.Fatal("an ordinary depth must give glue")
 	}
 	if want := e.baselineskip - 5*unity; g.spec.width != want {
 		t.Errorf("glue = %d, attendu \\baselineskip - hauteur = %d", g.spec.width, want)
