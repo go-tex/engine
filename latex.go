@@ -596,6 +596,19 @@ const MiniLaTeXKernel = `
 % undefined: 2607.18707 skipped it three times. \let keeps the two in step whatever
 % \\ is bound to here.
 \expandafter\let\csname @normalcr\endcsname\\
+% orcidlink's \orcidlink{<id>} sets the ORCID logo as a tikz picture sized to the
+% current X height (orcidlink.sty:51-59), and the identifier itself is NEVER typeset —
+% it only goes into the \href target and into the empty second branch of
+% \texorpdfstring.
+%
+% ⛔ Undefined, it was skipped — and skipping RELEASES the argument, so the bare
+% identifier was set next to the author's name: "Author0009-0003-9684-6966 wrote this"
+% here against "Author wrote this" from tectonic. Measured on 999 papers: 3147 uses.
+%
+% The logo is a tikz picture this engine does not draw, as it draws none; what changes is
+% that the identifier stops being typeset. Consuming the argument is therefore the whole
+% of the fix, and it is what the reference's own PDF-string branch does.
+\newcommand\orcidlink[1]{}
 \def\LaTeXe{LaTeX2e}
 \def\ldots{...}
 \def\dots{...}
