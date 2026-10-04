@@ -127,18 +127,37 @@ format and image type, with its status, plus every remaining gap — lives at
   `elsarticle` and the `aastex6x` family fall back to content-preserving
   emulation. Any other resolvable `.cls` is loaded and run as real TeX.
 - **Packages with native handling:** `amsmath` (equation/align/gather/multline/…),
-  `amssymb`, `amsthm`, `graphicx`, `xcolor`, `hyperref`, `geometry`, `fancyhdr`,
+  `amssymb`, `amsthm`, `thmtools` (`\declaretheorem`, including its comma list of
+  names and both of its counter keys), `graphicx`, `xcolor`, `hyperref`,
+  `geometry`, `fancyhdr`,
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
-  `subcaption`, `algorithm`/`algorithmic`, `listings`, `minted`, `siunitx`,
+  `subcaption`, `algorithm`/`algorithmic`, `listings` (including `caption=`,
+  `label=` and `captionpos=`, so a listing is numbered, captioned and referable),
+  `minted`, `siunitx`,
+  `cleveref` (`\cref`/`\Cref` with cleveref's own default naming, its
+  `capitalise` and `noabbrev` options, `\crefname`/`\Crefname` and
+  `\crefformat`), `caption`'s `\captionsetup{name=}`, `longtable`, `url`,
   paragraph columns (`p{}`, with `m`/`b` treated as `p`),
   `numprint`, `makeidx`, `verbatim`, BibTeX. Any other resolvable `.sty` runs as
   real TeX macros through the full LaTeX2e option mechanism.
+- **Opt-in and working:** PDF-figure rasterization. `GOTEX_PDFRENDER=1` wires
+  `go-tex/pdfrender` into the CLI and a vector `.pdf` figure typesets as a real
+  raster instead of a framed placeholder — measured on one corpus paper, 21
+  figures reported as empty boxes become 0. It is off by default so the engine
+  core, and the `js/wasm` build with it, carries no PDF renderer.
+- **Partly:** `biblatex`. Biber's data `.bbl` is parsed and its entries are
+  typeset — on the two corpus papers that ship one, 30 of 30 and 15 of 17 titles
+  are present and no raw field data reaches the page. Its citation commands are
+  **not** there: `\textcite`, `\parencite`, `\autocite`, `\footcite` and
+  `\smartcite` are undefined and print the bare key, and the citation and
+  bibliography *styles* are not modelled.
 - **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
   float pagination (`GOTEX_FLOATS`), two-column reprint layouts
-  (`GOTEX_TWOCOLUMN`), PDF-figure rasterization (needs the `go-tex/pdfrender`
-  module), `biblatex`, EPS graphics (an `.eps` is *measured* from its
+  (`GOTEX_TWOCOLUMN`), EPS graphics (an `.eps` is *measured* from its
   `%%BoundingBox`, so its placeholder has the right shape, but it is not drawn),
-  and the XeTeX/LuaTeX Unicode engines / `fontspec`.
+  `rotating`'s sideways floats (`sidewaystable`/`sidewaysfigure` are undefined,
+  so the body sets inline and its caption carries no number), and the
+  XeTeX/LuaTeX Unicode engines / `fontspec`.
 
 ## Status & roadmap to parity
 
