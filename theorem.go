@@ -329,3 +329,144 @@ func foldFirst(s string, upper bool) string {
 	}
 	return string(r)
 }
+
+// doDeclaretheorem implements thmtools' \declaretheorem[<keys>]{<names>}[<keys>], which
+// is a key-value front end onto \newtheorem. Read from thm-kv.sty rather than guessed,
+// because three of its details are not guessable:
+//
+//  1. {<names>} is a COMMA LIST — \declaretheorem{theorem,lemma} declares both
+//     (thm-kv.sty:337, \@for\thmt@tmp:=#2\do).
+//  2. the two counter keys map to the two DIFFERENT optional arguments of \newtheorem,
+//     and getting them the wrong way round gives numbering that looks plausible and is
+//     wrong. thm-kv.sty:362 emits exactly
+//
+//     \newtheorem {<env>} [<sibling>]? {<name>} [<parent>]?        numbered
+//     \newtheorem*{<env>} {<name>}                                 not numbered
+//
+//     so sibling/numberlike/sharenumber is \newtheorem's SHARED counter (before the
+//     heading) and parent/numberwithin/within is its WITHIN counter (after it).
+//  3. the default heading is the environment name with its FIRST LETTER uppercased, not
+//     the whole word: thm-kv.sty:354 is \thmt@setthmname{\thmt@modifycase #1} with NO
+//     braces, and \thmt@modifycase defaults to \MakeUppercase (:42, \ExecuteOptions),
+//     which takes a single token as an undelimited argument.
+//
+// Measured before it was written: 219 corpus papers use \declaretheorem, 1735 times.
+// Skipped, the environments it declares arrive undefined — which costs the heading and
+// its number, not the body (26 glyph paths with \newtheorem against 17 without, the nine
+// being "Theorem 1."), so this is a fidelity gap and not content loss.
+//
+// The style, qed and hook keys are formatting that the engine has no model for; they are
+// read and dropped rather than refused, so a declaration carrying them still numbers.
+func (e *Engine) doDeclaretheorem() {
+	pre, _ := e.scanOptBracketToks()
+	names := strings.TrimSpace(e.toksToString(e.readBraceToks()))
+	post, _ := e.scanOptBracketToks() // thmtools accepts keys on either side
+	keys := strings.TrimSpace(e.toksToString(pre))
+	if p := strings.TrimSpace(e.toksToString(post)); p != "" {
+		if keys != "" {
+			keys += ","
+		}
+		keys += p
+	}
+	heading, sibling, parent := "", "", ""
+	numbered := true
+	for _, kv := range splitTopLevelComma(keys) {
+		k, v := splitKeyValue(kv)
+		switch k {
+		case "name", "title", "heading":
+			heading = v
+		case "sibling", "numberlike", "sharenumber":
+			sibling = v
+		case "parent", "numberwithin", "within":
+			parent = v
+		case "numbered":
+			// "unless unique" numbers only when the environment occurs more than once,
+			// which needs a whole-document count; numbering it is the closer of the two.
+			numbered = v != "no" && v != "false"
+		}
+	}
+	var b strings.Builder
+	for _, name := range splitTopLevelComma(names) {
+		if name == "" {
+			continue
+		}
+		head := heading
+		if head == "" {
+			head = upperFirstRune(name)
+		}
+		if !numbered {
+			b.WriteString(`\newtheorem*{` + name + `}{` + head + `}`)
+			continue
+		}
+		b.WriteString(`\newtheorem{` + name + `}`)
+		if sibling != "" {
+			b.WriteString(`[` + sibling + `]`)
+		}
+		b.WriteString(`{` + head + `}`)
+		if parent != "" {
+			b.WriteString(`[` + parent + `]`)
+		}
+	}
+	if s := b.String(); s != "" {
+		e.push(tokenizeTeX(s))
+	}
+}
+
+// splitTopLevelComma splits on commas that are not inside braces, so name={A, B} and
+// \declaretheorem{a,b} both read correctly, and trims each field as keyval does.
+func splitTopLevelComma(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range s {
+		switch r {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, strings.TrimSpace(s[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	out = append(out, strings.TrimSpace(s[start:]))
+	return out
+}
+
+// splitKeyValue splits "key=value" at the first top-level '=' and strips one layer of
+// braces from the value, which is how keyval passes name={Some Heading}.
+func splitKeyValue(s string) (string, string) {
+	depth := 0
+	for i, r := range s {
+		switch r {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case '=':
+			if depth == 0 {
+				k := strings.TrimSpace(s[:i])
+				v := strings.TrimSpace(s[i+1:])
+				if len(v) >= 2 && v[0] == '{' && v[len(v)-1] == '}' {
+					v = v[1 : len(v)-1]
+				}
+				return k, v
+			}
+		}
+	}
+	return strings.TrimSpace(s), ""
+}
+
+// upperFirstRune uppercases the first rune only — \MakeUppercase of an UNDELIMITED
+// argument takes one token, which is what thmtools relies on for its default heading.
+func upperFirstRune(s string) string {
+	for i, r := range s {
+		return strings.ToUpper(string(r)) + s[i+len(string(r)):]
+	}
+	return s
+}

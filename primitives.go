@@ -2268,7 +2268,8 @@ func (e *Engine) loadMore() {
 			e.beginParagraph(false)
 		}
 	})
-	e.prim("newtheorem", func(e *Engine) { e.doNewtheorem() })    // amsthm \newtheorem{env}{Heading}[within]/[shared]
+	e.prim("newtheorem", func(e *Engine) { e.doNewtheorem() })
+	e.prim("declaretheorem", func(e *Engine) { e.doDeclaretheorem() })  // thmtools' key-value front end (see doDeclaretheorem)    // amsthm \newtheorem{env}{Heading}[within]/[shared]
 	e.prim("newtheorem*", func(e *Engine) { e.doNewtheorem() })   // starred form: same here (number is still generated)
 	e.prim("theoremstyle", func(e *Engine) { e.readBraceName() }) // style selector accepted; only "plain" is modelled
 	// LaTeX counter interface. Counters are \count registers aliased \c@<name>;
