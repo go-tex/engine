@@ -880,7 +880,22 @@ const MiniLaTeXKernel = `
 % package, or writes \renewcommand\captionfont{\small} itself, is honoured here for
 % free, and the 48 that want a smaller caption have somewhere to say so.
 \def\captionfont{}
-\def\caption#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
+% The TYPE is checked first, because without one this macro used to put TeX
+% SOURCE on the page: \@captype undefined makes \csname c@\@captype\endcsname
+% into \c@, which is undefined and therefore \relax, and \advance\relax stops
+% BEFORE its keyword — so the literal "by1" was typeset and the caption read
+% "by1: X". Real LaTeX raises "\caption outside float", so there is no correct
+% number to print; lenient, the caption's TEXT is what the document wanted on the
+% page and that is kept. go-tex/engine#558.
+%
+% ⛔ The branch is only safe because doSCfloat no longer expands the body while
+% looking for its optionals (sidecap.go): with the expanding scan, this test ran
+% BEFORE \figure had set \@captype and every sidecap caption lost its number.
+% That is the order to check if this ever regresses.
+\def\caption#1{\expandafter\gotex@caption@dispatch\csname c@\@captype\endcsname{#1}}
+\def\gotex@caption@dispatch#1#2{\ifx#1\relax\gotex@caption@untyped{#2}\else\gotex@caption@typed{#2}\fi}
+\def\gotex@caption@untyped#1{\par\vskip\abovecaptionskip{\captionfont #1}\par\vskip\belowcaptionskip}
+\def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 % A theorem's reference type is the ENVIRONMENT's name, not the word "theorem"

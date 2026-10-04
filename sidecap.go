@@ -24,7 +24,21 @@ package engine
 // doSCfloat consumes SCfigure/SCtable's [relwidth] and [pos] optional arguments and
 // hands off to the plain float macro base ("figure" or "table").
 func (e *Engine) doSCfloat(base string) {
-	e.scanOptBracketToks() // [relwidth]
-	e.scanOptBracketToks() // [pos]
+	// ⛔ NO-EXPAND, and the reason is visible on the page. The expanding scan
+	// expands the next token to decide whether it is a "[", so with no optional
+	// present it EXPANDED THE BODY'S FIRST TOKEN before \figure had run — before
+	// \def\@captype{figure}. Witness, base engine:
+	//
+	//	\begin{SCfigure}\@ifundefined{@captype}{UNDEF}{DEF}\end{SCfigure}   UNDEF
+	//	\begin{figure}\@ifundefined{@captype}{UNDEF}{DEF}\end{figure}       DEF
+	//	\begin{SCfigure}\relax\@ifundefined{@captype}{UNDEF}{DEF}\end{...}  DEF
+	//
+	// One token of distance was enough to change the answer. Captions survived it
+	// only by accident: \caption expands one step, the scan sees \par instead of
+	// "[", pushes the expansion back, and the tokens then EXECUTE after \figure
+	// with \@captype in place. Anything that decides something DURING that
+	// expansion reads the wrong state — which is what blocks the guard in #558.
+	e.scanOptBracketToksNoExpand() // [relwidth]
+	e.scanOptBracketToksNoExpand() // [pos]
 	e.push([]tok{csTok(base)})
 }
