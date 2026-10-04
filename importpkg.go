@@ -41,6 +41,27 @@ func (e *Engine) doImport(sub bool) {
 	}
 	data, err := e.readInput(path + file)
 	if err != nil {
+		// ⛔ \import RESETS \import@path, but import.sty keeps the enclosing directories
+		// in the SEARCH path at the same time:
+		//
+		//\tprotected@edef\input@path{{\import@path}#2}   % #2 is \input@path's CURRENT value
+		//
+		// so the list accumulates while the path itself is reset. Honouring only the reset
+		// is why a nested \import{./}{x} failed: inside chapters/01-intro/main.tex it looked
+		// for ./x relative to the working directory, not to the file doing the importing.
+		// Measured on 2601.22691, which imports five chapters that each import their own
+		// sections: 9 of its 14 \import calls were recorded as a skipped command, and the
+		// paper came out at 2 pages of 132KB.
+		for i := len(e.importStack) - 1; i >= 0 && err != nil; i-- {
+			if d := e.importStack[i]; d != "" {
+				data, err = e.readInput(d + path + file)
+			}
+		}
+	}
+	if err != nil && e.importPath != "" {
+		data, err = e.readInput(e.importPath + path + file)
+	}
+	if err != nil {
 		// Fall back to the bare name: a paper that ships its parts flat still reads,
 		// and a genuinely missing file is recorded like any other skipped input.
 		if data, err = e.readInput(file); err != nil {
