@@ -99,19 +99,105 @@ func (e *Engine) doMakebox() *boxNode {
 // values so surrounding material sees the stated vertical extent regardless of the
 // content's own metrics.
 func (e *Engine) doRaisebox() *boxNode {
-	lift := e.readBraceDimen()
-	ht, hasHt := e.scanOptBracketDimen()
-	dp, hasDp := e.scanOptBracketDimen()
+	// The lift and the optional [ht][dp] are read as TOKENS and scanned LATER,
+	// because LaTeX lets them speak about the content's own metrics:
+	//
+	//	\raisebox{-.5\height}{x}
+	//
+	// \height, \depth, \width and \totalheight are bound by \raisebox itself
+	// (ltboxes.dtx: \setbox\@tempboxa\hbox{#4} then \def\height{\ht\@tempboxa}),
+	// so they are only meaningful once the content is packed — which happens
+	// after the lift has been read off the input.
+	//
+	// They did not exist in the engine at all, and the cost was not a wrong lift.
+	// \scanDimen met an undefined control sequence where it wanted a unit and read
+	// ON, swallowing the content group and unbalancing the float it sat in: a
+	// \caption later in that float then had no \@captype and the literal text
+	// "\the@captype" reached the page. Seven corpus papers write one of these 102
+	// times, 14 of them directly inside a \raisebox.
+	liftToks := e.readBraceToksRaw()
+	// An EMPTY bracket means "take the natural metric", which is what
+	// scanOptBracketDimen used to report as absent. Reading the optionals as
+	// tokens loses that, and an empty list would otherwise set the height to 0pt.
+	htToks, hasHt := e.scanOptBracketToks()
+	dpToks, hasDp := e.scanOptBracketToks()
+	hasHt = hasHt && len(htToks) > 0
+	hasDp = hasDp && len(dpToks) > 0
 	list, _ := e.grabHboxList()
 	b := hpackSP(list, packNatural, 0)
-	b.shift = -lift
+
+	// The bindings are scoped, so a \raisebox inside another's content cannot
+	// leave its own metrics behind for the outer one to read.
+	e.beginGroup()
+	e.bindBoxMetrics(b)
+	b.shift = -e.dimenFromToks(liftToks)
 	if hasHt {
-		b.height = ht
+		b.height = e.dimenFromToks(htToks)
 	}
 	if hasDp {
-		b.depth = dp
+		b.depth = e.dimenFromToks(dpToks)
 	}
+	e.endGroup()
 	return b
+}
+
+// bindBoxMetrics binds \height, \depth, \width and \totalheight to b's metrics,
+// as internal dimens — not as macros expanding to "12.34pt", because the whole
+// point is that they appear with a COEFFICIENT: "-.5\height" is a factor times an
+// internal dimen, and "-.512.34pt" is not a dimension at all.
+func (e *Engine) bindBoxMetrics(b *boxNode) {
+	if e.boxMetricDims == nil {
+		if e.allocDim+4 > 256 {
+			return
+		}
+		e.boxMetricDims = map[string]int{}
+		for _, name := range boxMetricNames {
+			e.boxMetricDims[name] = e.allocDim
+			e.allocDim++
+		}
+	}
+	// ⛔ The NAMES are bound LOCALLY — the caller scopes this with a group — and
+	// not once and globally. \width and \depth are names a document may well use
+	// for something of its own: two corpus papers define one of them, and
+	// 2407.18384 writes \depth(\Phi) sixty times for a neural network's depth. A
+	// global binding would have replaced that macro with a dimen register the
+	// first time any \raisebox ran. Neither paper happens to use \raisebox, so
+	// nothing measured it — which is exactly why it is written down here.
+	//
+	// The REGISTERS are allocated once, because an index is not a binding.
+	for name, v := range map[string]int{
+		"height":      b.height,
+		"depth":       b.depth,
+		"width":       b.width,
+		"totalheight": b.height + b.depth,
+	} {
+		e.define(name, &meaning{kind: mDimenRef, code: e.boxMetricDims[name]}, false)
+		e.setDimen(e.boxMetricDims[name], v, false)
+	}
+}
+
+// boxMetricNames is the four \raisebox binds, in allocation order.
+var boxMetricNames = []string{"height", "depth", "width", "totalheight"}
+
+// dimenFromToks scans a saved token list as a dimension, with the input MARKED
+// and restored around the scan. That is what keeps a malformed lift from reaching
+// the document: TeX's dimen scanner looks past the last digit for a unit, and the
+// defect this function exists to avoid is exactly a scan that ran on into live
+// input and swallowed the content group with it.
+//
+// A \relax terminator was tried here as well and measured to change NOTHING —
+// neither the corpus, nor the rendered shift of a unitless \raisebox{3}{x}
+// followed by the letters "pt", which is the sharpest witness for it. The mark is
+// doing the work, so the terminator is not carried.
+func (e *Engine) dimenFromToks(toks []tok) int {
+	if len(toks) == 0 {
+		return 0
+	}
+	m := e.markInput()
+	e.push(append([]tok(nil), toks...))
+	d := e.scanDimen()
+	e.restoreInput(m)
+	return d
 }
 
 // doNewsavebox implements \newsavebox{\name}: it allocates the next free \box

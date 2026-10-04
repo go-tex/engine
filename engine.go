@@ -278,8 +278,11 @@ type Engine struct {
 	negateNextIf int // pending \unless prefixes (e-TeX): reverse the next conditional
 	allocCnt     int // next free \count register handed out by \newcount
 	allocDim     int // next free \dimen register handed out by \newdimen
-	allocSkp     int // next free \skip register handed out by \newskip
-	allocBox     int // next free \box register handed out by \newsavebox
+	// boxMetricDims holds the \dimen registers \height / \depth / \width /
+	// \totalheight are bound to inside \raisebox (see bindBoxMetrics).
+	boxMetricDims map[string]int
+	allocSkp      int // next free \skip register handed out by \newskip
+	allocBox      int // next free \box register handed out by \newsavebox
 
 	// token registers (see toks.go): \toks<n> / \newtoks-allocated registers store
 	// a token list each. A class's title/mark machinery (amsart's \andify, \toks@,
