@@ -159,6 +159,46 @@ format and image type, with its status, plus every remaining gap — lives at
   so the body sets inline and its caption carries no number), and the
   XeTeX/LuaTeX Unicode engines / `fontspec`.
 
+## Compiling a document you did not write
+
+A `.tex` is a program and this package is its interpreter. Lenient mode is
+offered above as a preview for "a real third-party paper", the fidelity work runs
+the engine over arXiv sources in bulk, and the playground runs it on whatever a
+visitor pastes. Three properties are therefore held on purpose rather than by
+accident, each with a test that fails if it stops being true:
+
+- **A document cannot run a process.** No `os/exec`, no `syscall.Exec` — TeX's
+  `\write18` shell escape has no implementation here. Asserted by a scan of the
+  package's own source, since there is no API that could express the property.
+- **A document cannot write a file.** No `os.Create`, `os.WriteFile`,
+  `os.Remove`, `os.Rename`… in the engine package. (`cmd/` is deliberately out of
+  scope: the CLI writes the PDF it was asked for.)
+- **A document cannot read a file outside the search roots.** `\input`,
+  `\include`, `\usepackage`, `\documentclass` and `\bibliography` resolve only
+  under the working directory and the `TEXINPUTS`/`GOTEX_TEXMF` entries — the
+  same search path the engine already looked in. This is TeX Live's
+  `openin_any=p` policy. `GOTEX_READ_ANY=1` is a named opt-out for a macro tree
+  deliberately kept outside the document.
+
+What that does **not** cover, stated rather than glossed over:
+
+- `\font` and `\includegraphics` read by absolute path, because each *decodes*
+  its file and the engine loads system fonts from `/System/Library/Fonts`. A file
+  that is neither a font nor an image yields an error and no content, so nothing
+  is spliced into the page — but the *shape* of that error still tells a document
+  whether a path exists.
+- The first two properties are read off the source, not enforced at runtime: they
+  say the package contains no such call, which is what makes a commit that adds
+  one fail the test and have to argue the case.
+- The **CLI** may use the network. `gotex` fetches the TeXMF bundles a document
+  asks for (`\usepackage{pgf}` and friends) unless `-offline` is given, so the
+  document influences what is downloaded. The engine package itself opens no
+  connection.
+
+`govulncheck` reports no called vulnerability under the pinned toolchain
+(`go 1.27.1`); a 1.26.4 build of the same code called six, among them an
+`encoding/xml` recursion bomb reachable from an SVG figure.
+
 ## Status & roadmap to parity
 
 Each stage is gated by an objective oracle:
