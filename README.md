@@ -33,7 +33,10 @@ LaTeX engine (`tectonic`).
 - **Conditionals** — `\if`, `\ifnum`, `\ifx`, `\ifcat`, `\ifodd`, `\ifcase`,
   `\iftrue`/`\iffalse`, with `\else`/`\or`/`\fi` and nesting.
 - **Registers & arithmetic** — `\count`, `\advance`, `\multiply`, `\chardef`,
-  `\catcode`, read via `\the`/`\count`.
+  `\catcode`, read via `\the`/`\count`; TeX's own number syntaxes in any
+  numeric slot (`"FF`, `'17`, `` `A ``) and the glyph metrics
+  `\fontcharht`/`\fontchardp`/`\fontcharwd`/`\fontcharic`, which are internal
+  dimensions wherever one is read.
 - **Grouping** — `{…}`, `\begingroup`/`\endgroup`, save/restore of meanings,
   registers, and catcodes; `\global` escapes the current group.
 
@@ -60,11 +63,12 @@ typesettable content instead of one hard error:
   `\font` **file**, are ignored.
 
 Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
-report what was dropped. On a sample of **54 real arXiv sources**, strict mode
-compiled 0 end-to-end (each hit a package command in the preamble); lenient mode
-produces a multi-page PDF for **all 54**, with real, selectable prose text. It is
-a preview aid, not a fidelity claim — the roadmap below is how the gaps close for
-real.
+report what was dropped. On a **1000-source arXiv sweep** (measured 2026-10-04),
+strict mode compiles almost none end-to-end — each hits a package command in the
+preamble — while lenient mode produces a multi-page PDF for all but **five** of
+the 71 sources the sweep flags as truncated; those five still stop at a single
+page (tracked in #517). It is a preview aid, not a fidelity claim — the roadmap
+below is how the gaps close for real.
 
 ### Loading real classes and packages
 
@@ -115,19 +119,21 @@ format and image type, with its status, plus every remaining gap — lives at
 
 - **Classes (real embedded):** `article`, `report`, `book`, `amsart`. `beamer`
   runs its real class when resolvable. `revtex4-x`, `acmart`, `IEEEtran`,
-  `elsarticle` fall back to content-preserving emulation. Any other resolvable
-  `.cls` is loaded and run as real TeX.
+  `elsarticle` and the `aastex6x` family fall back to content-preserving
+  emulation. Any other resolvable `.cls` is loaded and run as real TeX.
 - **Packages with native handling:** `amsmath` (equation/align/gather/multline/…),
   `amssymb`, `amsthm`, `graphicx`, `xcolor`, `hyperref`, `geometry`, `fancyhdr`,
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
   `subcaption`, `algorithm`/`algorithmic`, `listings`, `minted`, `siunitx`,
+  paragraph columns (`p{}`, with `m`/`b` treated as `p`),
   `numprint`, `makeidx`, `verbatim`, BibTeX. Any other resolvable `.sty` runs as
   real TeX macros through the full LaTeX2e option mechanism.
 - **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
   float pagination (`GOTEX_FLOATS`), two-column reprint layouts
   (`GOTEX_TWOCOLUMN`), PDF-figure rasterization (needs the `go-tex/pdfrender`
-  module), clickable PDF links, `biblatex`, EPS graphics, paragraph table
-  columns, and the XeTeX/LuaTeX Unicode engines / `fontspec`.
+  module), `biblatex`, EPS graphics (an `.eps` is *measured* from its
+  `%%BoundingBox`, so its placeholder has the right shape, but it is not drawn),
+  and the XeTeX/LuaTeX Unicode engines / `fontspec`.
 
 ## Status & roadmap to parity
 
@@ -142,8 +148,9 @@ Each stage is gated by an objective oracle:
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
    assets, with kerning and ligatures.
 5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
-   text) and self-contained **SVG** pages; the SVG carries a source map for
-   click-to-line.
+   text, and clickable `/Link` annotations for `\href` URIs and `\hyperlink`
+   in-document jumps) and self-contained **SVG** pages; the SVG carries a source
+   map for click-to-line.
 6. ✅ **Real classes** — `\documentclass{article|report|book|amsart}` loads and
    runs the genuine embedded LaTeX class (see above), reproducing the reference
    engine's prose on the fidelity gate — in native builds **and** in `js/wasm`.
@@ -152,10 +159,12 @@ Next: real TikZ/pgf (behind `GOTEX_PGF` today), float pagination and two-column
 reprint layouts out of their env flags, PDF-figure rasterization and clickable
 PDF links, a broader real-document conformance corpus (PDF-diff vs pdftex/xetex),
 and the TRIP test — see the [capability reference](https://go-tex.github.io/docs/)
-for the complete list of gaps. Coverage ~91%;
+for the complete list of gaps.
 the meaningful gate is the conformance ratchet plus the fidelity check against a
-real LaTeX engine, not a fixed coverage figure. Pure Go, CGO=0, `go vet` clean,
-green across three 64-bit arches under qemu plus `js/wasm` and `wasip1/wasm`.
+real LaTeX engine, not a fixed coverage figure — CI enforces an 80% floor and
+measures 91.0% today. Pure Go, CGO=0, `go vet` clean, green on the host plus
+four cross arches under qemu — **s390x** (big-endian), `ppc64le`, `riscv64` and
+`loong64` — and on `js/wasm` and `wasip1/wasm`.
 
 ## License
 
