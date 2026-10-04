@@ -210,7 +210,10 @@ func TestLstlistingUnknownKeysIgnored(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
-	src := "\\begin{lstlisting}[language=Go,caption=Hi,basicstyle=x]\n" +
+	// caption= is no longer among the ignored keys — it is typeset, as tectonic
+	// does (see TestLstlistingCaptionAndLabel) — so this witness carries only keys
+	// that genuinely change nothing.
+	src := "\\begin{lstlisting}[language=Go,basicstyle=x,numberstyle=y]\n" +
 		"code\n" +
 		"more\n" +
 		"\\end{lstlisting}"

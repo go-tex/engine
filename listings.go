@@ -11,11 +11,17 @@ package engine
 // content is set in the tt font when one is bound (Options.MonoFont / \tt), else
 // the current font.
 //
-// lstlisting accepts an optional "[key=value,…]" argument. Two keys change the
-// output: numbers=left prepends a right-aligned line number to each line, and
-// frame=single draws a thin rule around the whole block. Any other key
-// (language=…, caption=…, basicstyle=…, …) is accepted and silently ignored so a
-// real-world listing does not choke. In particular, LANGUAGE-AWARE SYNTAX
+// lstlisting accepts an optional "[key=value,…]" argument. Four keys change the
+// output: numbers=left prepends a right-aligned line number to each line,
+// frame=single draws a thin rule around the whole block, and caption= / label=
+// are CONTENT — the caption is numbered and typeset above the block and the label
+// becomes a cross-reference target. Any other key (language=…, basicstyle=…, …)
+// is accepted and silently ignored so a real-world listing does not choke.
+//
+// caption= and label= used to be ignored with the rest, which was a deliberate
+// simplification and is measurably wrong: tectonic sets "Listing 1: …" above the
+// block, and without the label every \ref to a listing printed "??" — 21 of them
+// over 8 corpus papers, against 4 in the references. In particular, LANGUAGE-AWARE SYNTAX
 // HIGHLIGHTING IS OUT OF SCOPE: language= is parsed but never colourises the code;
 // per-language tokenising and colouring is a future enhancement.
 
@@ -30,6 +36,18 @@ import (
 type lstOptions struct {
 	numbers bool // numbers=left (any value other than "" / "none" turns numbering on)
 	frame   bool // frame=single (any value other than "" / "none" draws a frame)
+	// caption=… and label=… are CONTENT, not styling: the caption is typeset
+	// ("Listing 1: …", above the block, which is where listings puts it) and the
+	// label becomes a real cross-reference target. Ignoring them left 21 "??" on
+	// the page across 8 corpus papers — 29 labelled listings referred to 31 times
+	// — against 4 in the references.
+	caption    string
+	hasCaption bool
+	label      string
+	// captionpos=b puts the caption BELOW the block; listings' default is t.
+	// 2208.11395 asks for b and its reference has the caption under the code —
+	// 16 corpus papers set the key.
+	captionBelow bool
 	// listings, unlike every other block this renderer serves, does NOT build on
 	// \trivlist: listings.sty:1694 defaults aboveskip and belowskip to
 	// \medskipamount and applies them as plain \vspace (:1724, :1777). fancyvrb —
@@ -52,7 +70,7 @@ func parseLstOptions(s string) lstOptions {
 	if strings.TrimSpace(s) == "" {
 		return o
 	}
-	for _, part := range strings.Split(s, ",") {
+	for _, part := range splitLstOptions(stripTeXComments(s)) {
 		key, val, _ := strings.Cut(part, "=")
 		key = strings.TrimSpace(key)
 		val = strings.TrimSpace(val)
@@ -62,9 +80,76 @@ func parseLstOptions(s string) lstOptions {
 			o.numbers = on
 		case "frame":
 			o.frame = on
+		case "caption":
+			o.caption, o.hasCaption = stripOneBracePair(val), true
+		case "label":
+			o.label = stripOneBracePair(val)
+		case "captionpos":
+			o.captionBelow = strings.HasPrefix(stripOneBracePair(val), "b")
 		}
 	}
 	return o
+}
+
+// splitLstOptions splits on commas at BRACE LEVEL ZERO. A plain strings.Split cut
+// caption={un listing, avec virgule} in half and read "avec virgule}" as another
+// key — harmless while caption was ignored, and wrong the moment it is typeset.
+func splitLstOptions(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range s {
+		switch r {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, s[start:])
+}
+
+// stripTeXComments removes TeX comments from a raw option list: a % starts one
+// and it runs to the end of the line, taking the newline with it. The option
+// block is read as RAW BYTES, so the comment arrives intact — and a comment eats
+// the key that follows it on the next line:
+//
+//	basicstyle=\tiny, %or \small or \footnotesize etc.
+//	caption={"Task-pool", function handling …},
+//
+// 2208.11395 writes exactly that, and its caption ended up inside a segment whose
+// key was "%or \small or \footnotesize etc." — so the listing had no caption, no
+// number, and the \ref to it printed "??".
+//
+// An escaped \% is not a comment.
+func stripTeXComments(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && (i == 0 || s[i-1] != '\\') {
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			continue // the newline goes with the comment, as TeX does
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// stripOneBracePair removes one matched outer {…}, so caption={a, b} and
+// caption=a give the same text.
+func stripOneBracePair(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && v[0] == '{' && v[len(v)-1] == '}' {
+		return strings.TrimSpace(v[1 : len(v)-1])
+	}
+	return v
 }
 
 // scanRawOptBracket reads an optional "[...]" straight from the raw base input at
@@ -232,6 +317,15 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 	// A right-aligned gutter wide enough for the largest line number, when numbering.
 	digits := len(strconv.Itoa(len(lines)))
 
+	// The caption goes ABOVE the block, which is where listings puts it
+	// (listings.sty's default captionpos=t), and it is numbered by the lstlisting
+	// counter through \refstepcounter — so the number, \@currentlabel and the
+	// reference type all come from the one mechanism every other numbered thing
+	// uses. tectonic renders the witness "Listing 1: un listing, avec virgule".
+	if !o.captionBelow {
+		e.emitLstCaption(o)
+	}
+
 	e.mvlAppendBlockGap(o.medskipSurround) // a little space above the block
 	if o.frame {
 		// Collect the line boxes into a vbox with interline glue, then wrap the vbox
@@ -258,6 +352,9 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 		}
 	}
 	e.mvlAppendBlockGap(o.medskipSurround)
+	if o.captionBelow {
+		e.emitLstCaption(o)
+	}
 }
 
 // lstText returns the literal text of one listing line, optionally prefixed with a
@@ -313,4 +410,40 @@ func (e *Engine) setInlineVerbatim() {
 		e.beginParagraph(true)
 	}
 	e.parList = append(e.parList, e.verbNodes(text, font, e.curSrcLine)...)
+}
+
+// emitLstCaption typesets "Listing N: <caption>" and registers label= as a
+// cross-reference target. Nothing happens without a caption=, because listings
+// numbers only captioned listings.
+//
+// It runs through \refstepcounter{lstlisting} rather than stepping a register
+// here, so \@currentlabel and \@currentreftype are set by the same hook as every
+// other numbered construct (counters.go). The reference TYPE is therefore
+// "lstlisting", and cleveref's own \crefalias{lstlisting}{listing}
+// (cleveref.sty:3123) is what turns it into "listing 1" / "Listing 1" — see
+// crefTypeFallback.
+func (e *Engine) emitLstCaption(o lstOptions) {
+	if !o.hasCaption {
+		return
+	}
+	var b []tok
+	add := func(ts ...tok) { b = append(b, ts...) }
+	add(csTok("refstepcounter"), chTok('{', catBegin))
+	add(stringToToks("lstlisting")...)
+	add(chTok('}', catEnd))
+	// \lstlistingname is listings' own name for it, so a document that renames it
+	// is honoured exactly as \figurename is.
+	// \nobreakspace, not a '~' character token: a literal tilde is typeset as a
+	// tilde, and the caption read "Listing~1:" on the page.
+	add(csTok("par"), csTok("noindent"), chTok('{', catBegin), csTok("bf"),
+		csTok("lstlistingname"), csTok("nobreakspace"), csTok("thelstlisting"),
+		chTok(':', catOther), chTok('}', catEnd), chTok(' ', catSpace))
+	add(stringToToks(o.caption)...)
+	if o.label != "" {
+		add(csTok("label"), chTok('{', catBegin))
+		add(stringToToks(o.label)...)
+		add(chTok('}', catEnd))
+	}
+	add(csTok("par"))
+	e.execToks(b)
 }

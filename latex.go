@@ -447,6 +447,15 @@ const MiniLaTeXKernel = `
 % environments). Both the UPPERCASE (algorithmic) and MixedCase (algorithmicx)
 % spellings are installed. Without this the whole block is an undefined environment,
 % dropped — an algorithm is a tall block, so its loss shifts every following page.
+% listings' own counter and name for a captioned lstlisting. A caption= option
+% numbers the listing — listings.sty allocates \c@lstlisting and sets
+% \lstlistingname to "Listing" — and a label= option then points at that number.
+% Neither existed here, so \refstepcounter{lstlisting} had nothing to step and
+% every \ref to a labelled listing printed "??": 21 of them over 8 corpus papers,
+% against 4 in the references.
+\newcount\c@lstlisting
+\long\def\thelstlisting{\the\c@lstlisting}
+\providecommand\lstlistingname{Listing}
 \newcount\c@algorithm
 \long\def\thealgorithm{\the\c@algorithm}
 \def\fnum@algorithm{Algorithm \thealgorithm}
