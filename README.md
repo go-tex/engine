@@ -1,7 +1,7 @@
 # engine — go-tex
 
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
-[![Go](https://img.shields.io/badge/go-1.26.4%2B-00ADD8)](https://go.dev/dl/)
+[![Go](https://img.shields.io/badge/go-1.27%2B-00ADD8)](https://go.dev/dl/)
 [![status](https://img.shields.io/badge/status-engine%20core%20(in%20progress)-orange)](#status)
 
 **A pure-Go (no cgo) TeX engine aimed at functional parity with a TeX

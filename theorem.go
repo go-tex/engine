@@ -336,6 +336,7 @@ func foldFirst(s string, upper bool) string {
 //
 //  1. {<names>} is a COMMA LIST — \declaretheorem{theorem,lemma} declares both
 //     (thm-kv.sty:337, \@for\thmt@tmp:=#2\do).
+//
 //  2. the two counter keys map to the two DIFFERENT optional arguments of \newtheorem,
 //     and getting them the wrong way round gives numbering that looks plausible and is
 //     wrong. thm-kv.sty:362 emits exactly
@@ -345,6 +346,7 @@ func foldFirst(s string, upper bool) string {
 //
 //     so sibling/numberlike/sharenumber is \newtheorem's SHARED counter (before the
 //     heading) and parent/numberwithin/within is its WITHIN counter (after it).
+//
 //  3. the default heading is the environment name with its FIRST LETTER uppercased, not
 //     the whole word: thm-kv.sty:354 is \thmt@setthmname{\thmt@modifycase #1} with NO
 //     braces, and \thmt@modifycase defaults to \MakeUppercase (:42, \ExecuteOptions),

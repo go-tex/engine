@@ -12,6 +12,19 @@ jobs:
       - uses: actions/setup-go@v7
         with: { go-version: stable }
       - run: go vet ./...
+      # ⛔ gofmt was not gated, and two files reached main unformatted: a trailing
+      # comment duplicated onto a line it did not belong to, and doc-comment list
+      # items that Go 1.27's gofmt separates with a blank //. Neither is visible to
+      # `go vet`, and a local gofmt only sees them once the local toolchain has moved
+      # — which is why "it is clean here" is not an answer. Reported as a diff so the
+      # fix is in the log rather than only the failure.
+      - name: gofmt
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "::error::these files are not gofmt'd:"; gofmt -l .
+            gofmt -d .
+            exit 1
+          fi
       - run: go build ./...
       - name: test + conformance ratchet
         shell: bash
