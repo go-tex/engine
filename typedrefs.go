@@ -464,6 +464,24 @@ func crefTypeFallback(typ string) string {
 		return "figure"
 	case "subtable":
 		return "table"
+	// The aliases cleveref installs ITSELF when the packages are loaded
+	// (cleveref.sty:3123-3135): a counter whose name is a package's internal
+	// spelling reports the type a reader knows it by. \refstepcounter records the
+	// COUNTER's name, so without these a captioned lstlisting referred to with
+	// \cref printed a bare number where tectonic gives "listing 1".
+	//
+	// 9 of the 19 corpus papers that use \cref or \autoref load algorithm2e or
+	// listings. algorithm2e's own `algorithm` environment already reports
+	// `algorithm` here, measured — the alias is for the `algocf` counter the real
+	// package allocates.
+	case "lstlisting":
+		return "listing"
+	case "algocf":
+		return "algorithm"
+	case "lstnumber", "algocfline", "AlgoLine":
+		return "line"
+	case "IEEEsubequation":
+		return "subequation"
 	}
 	return typ
 }
