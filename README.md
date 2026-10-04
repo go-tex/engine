@@ -123,7 +123,9 @@ format and image type, with its status, plus every remaining gap — lives at
   `elsarticle` and the `aastex6x` family fall back to content-preserving
   emulation. Any other resolvable `.cls` is loaded and run as real TeX.
 - **Packages with native handling:** `amsmath` (equation/align/gather/multline/…),
-  `amssymb`, `amsthm`, `graphicx`, `xcolor`, `hyperref`, `geometry`, `fancyhdr`,
+  `amssymb`, `amsthm`, `thmtools` (`\declaretheorem`, including its comma list of
+  names and both of its counter keys), `graphicx`, `xcolor`, `hyperref`,
+  `geometry`, `fancyhdr`,
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
   `subcaption`, `algorithm`/`algorithmic`, `listings` (including `caption=`,
   `label=` and `captionpos=`, so a listing is numbered, captioned and referable),
