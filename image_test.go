@@ -120,7 +120,8 @@ func TestGraphicsSize(t *testing.T) {
 		{144, 72, 0, 0, 0.5, 144, 144, int(float64(natSP(144, 144))*0.5 + 0.5), int(float64(natSP(72, 144))*0.5 + 0.5)},
 		{144, 72, 100 * unity, 0, 0, 144, 144, 100 * unity, 50 * unity}, // aspect from natural (2:1)
 		{144, 72, 0, 50 * unity, 0, 144, 144, 100 * unity, 50 * unity},  // aspect from natural
-		{0, 0, 0, 0, 0, 300, 300, 0, 0}, // zero pixels → zero box
+		// zero pixels → zero box
+		{0, 0, 0, 0, 0, 300, 300, 0, 0},
 	}
 	for _, c := range cases {
 		w, h := graphicsSize(c.iw, c.ih, c.wReq, c.hReq, c.scale, c.dpiX, c.dpiY)
