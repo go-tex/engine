@@ -166,7 +166,7 @@ format and image type, with its status, plus every remaining gap — lives at
 A `.tex` is a program and this package is its interpreter. Lenient mode is
 offered above as a preview for "a real third-party paper", the fidelity work runs
 the engine over arXiv sources in bulk, and the playground runs it on whatever a
-visitor pastes. Three properties are therefore held on purpose rather than by
+visitor pastes. Four properties are therefore held on purpose rather than by
 accident, each with a test that fails if it stops being true:
 
 - **A document cannot run a process.** No `os/exec`, no `syscall.Exec` — TeX's
@@ -181,6 +181,17 @@ accident, each with a test that fails if it stops being true:
   same search path the engine already looked in. This is TeX Live's
   `openin_any=p` policy. `GOTEX_READ_ANY=1` is a named opt-out for a macro tree
   deliberately kept outside the document.
+- **A document cannot exhaust memory or run forever.** A macro that expands
+  exponentially — ten macros, each ten copies of the next — asks for 10¹⁰
+  characters while taking *few* expansion steps and keeping a *shallow* input
+  stack, so the step and depth ceilings could not see it: it reached **15.96 GB**
+  and was still growing. One paragraph is now bounded (200 000 nodes, against a
+  largest-real-paragraph of 8 881 measured over the fidelity corpus) and the run
+  **ends** rather than recovering, as TeX's capacity error does. The rest was the
+  hyphenator: a document with no space in it is one enormous word and Liang's
+  algorithm is quadratic in a word's length, so TeX's own limit applies — no word
+  longer than 63 letters is hyphenated (`tex.web` §891). The same file now fails
+  in **0.06 s at ~90 MB**.
 
 What that does **not** cover, stated rather than glossed over:
 
