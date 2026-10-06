@@ -98,7 +98,7 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("base %s  %s\nhead %s  %s\n%d papers\n\n", base, shortCommit(baseCommit), head, shortCommit(headCommit), len(papers))
+	fmt.Printf("base %s  %s\nhead %s  %s\n%d papers%s\n\n", base, shortCommit(baseCommit), head, shortCommit(headCommit), len(papers), renderNote())
 	if baseCommit == headCommit {
 		fmt.Println("⚠ both sides resolve to the same commit: nothing can move.")
 	}
@@ -153,7 +153,7 @@ func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int) 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s  %s\n%d papers\n\n", head, shortCommit(commit), len(papers))
+	fmt.Printf("%s  %s\n%d papers%s\n\n", head, shortCommit(commit), len(papers), renderNote())
 
 	type row struct {
 		id       string
@@ -207,6 +207,22 @@ func plural(broken int) string {
 		return ""
 	}
 	return fmt.Sprintf(", %d produced no readable PDF and are NOT scored", broken)
+}
+
+// renderNote puts the measurement's CONFIGURATION in its own report.
+//
+// ⛔ PDF figures are opt-in (GOTEX_PDFRENDER=1), and 83 of the 154 corpus papers
+// have one — more than half the population is set with an empty placeholder box
+// unless it is on. 2312.05895 is the clearest case: it ends with twelve
+// \includepdf calls for a 12-page supplement and measures 15 pages against the
+// reference's 27 with the renderer off, and 27 against 27 with it on. A number
+// produced in one configuration and read in the other is not a small error; it
+// sent me chasing a defect that was a flag.
+func renderNote() string {
+	if os.Getenv("GOTEX_PDFRENDER") == "1" {
+		return "  (GOTEX_PDFRENDER=1: PDF figures rasterised)"
+	}
+	return "  (GOTEX_PDFRENDER unset: PDF figures are empty boxes — 83 of 154 corpus papers have one)"
 }
 
 // contains reports whether commit anc is an ancestor of (or equal to) desc.
