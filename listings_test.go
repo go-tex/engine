@@ -361,7 +361,7 @@ func TestListingInsideMinipageKeepsTheDocument(t *testing.T) {
 	}
 	e.SetFont(spMock{})
 	src := `\documentclass{article}\begin{document}` +
-		"\\begin{minipage}{200pt}\n\\begin{lstlisting}\ncode ici\n\\end{lstlisting}\n\\end{minipage}\n" +
+		"\\begin{minipage}{200pt}\n\\begin{lstlisting}\ncode here\n\\end{lstlisting}\n\\end{minipage}\n" +
 		`APRES\par\end{document}`
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
@@ -373,7 +373,7 @@ func TestListingInsideMinipageKeepsTheDocument(t *testing.T) {
 	if strings.Contains(txt, `\end{document}`) {
 		t.Errorf("\\end{document} was typeset as text: %q", txt)
 	}
-	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), "codeici") {
+	if !strings.Contains(strings.ReplaceAll(txt, " ", ""), "codehere") {
 		t.Errorf("the listing's own content is missing: %q", txt)
 	}
 }
