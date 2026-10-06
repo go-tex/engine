@@ -192,8 +192,12 @@ What that does **not** cover, stated rather than glossed over:
   one fail the test and have to argue the case.
 - The **CLI** may use the network. `gotex` fetches the TeXMF bundles a document
   asks for (`\usepackage{pgf}` and friends) unless `-offline` is given, so the
-  document influences what is downloaded. The engine package itself opens no
-  connection.
+  document influences what is downloaded — but only names a closed registry knows
+  become bundles, so it cannot aim the fetch somewhere of its own choosing. To
+  decide which bundles are needed the CLI also reads the document's **class file**,
+  one level deep and by NAME only: a `\documentclass` argument carrying a path
+  separator is not read, because that read happens a layer above the engine's own
+  policy. The engine package itself opens no connection.
 
 `govulncheck` reports no called vulnerability under the pinned toolchain
 (`go 1.27.1`); a 1.26.4 build of the same code called six, among them an
