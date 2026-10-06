@@ -440,3 +440,34 @@ func hasFillGlue(nodes []node) bool {
 	}
 	return false
 }
+
+// \caption records a figure/table entry at LEVEL 1 (latex.go:779), but article's
+// \l@figure and \l@table are \@dottedtocline{1}{1.5em}{2.3em} (article.cls:554,
+// 562) — the \l@subsection shape, dotted and indented. Only a CONTENTS entry at
+// level 1 is \l@section's undotted one. Reading the level and ignoring the kind
+// would set every list of figures in bold with no leader at all.
+func TestTOCFigureEntriesTakeTheDottedShape(t *testing.T) {
+	sec := tocShapeFor("toc", 1)
+	if sec.dotted || sec.indent != 0 {
+		t.Errorf("a level-1 contents entry = %+v, want \\l@section: undotted at indent 0", sec)
+	}
+	for _, kind := range []string{"figure", "table"} {
+		got := tocShapeFor(kind, 1)
+		if !got.dotted || got.indent != 1.5 || got.numWidth != 2.3 {
+			t.Errorf("a level-1 %s entry = %+v, want \\@dottedtocline{1}{1.5em}{2.3em}", kind, got)
+		}
+	}
+	// And a list of figures really does carry a leader end to end.
+	src := []byte(`\documentclass{article}
+\begin{document}
+\listoffigures
+\begin{figure}\caption{Alpha}\end{figure}
+\end{document}`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasDotLeader(e.mvl) {
+		t.Error("no dot leader in the list of figures; \\l@figure is \\@dottedtocline")
+	}
+}

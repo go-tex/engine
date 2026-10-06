@@ -225,6 +225,22 @@ func (e *Engine) tocDotCell() int {
 	return w + ptToSP(2*tocDotSep/18*float64(f.sizePt()))
 }
 
+// tocShapeFor picks the row of tocLevelShape an entry is set with. A contents
+// entry ("toc") takes its own level, so level 1 is \l@section — the one undotted,
+// unindented row. A figure or table entry does NOT: \l@figure and \l@table are
+// \@dottedtocline{1}{1.5em}{2.3em} (article.cls:554,562), the same shape as
+// \l@subsection, even though \caption records them at level 1 (latex.go:779).
+// Reading the level alone would set a list of figures in bold with no leader.
+func tocShapeFor(kind string, level int) struct {
+	indent, numWidth float64
+	dotted           bool
+} {
+	if kind != "toc" {
+		level = 2
+	}
+	return tocLevelShape[min(max(level, 1), len(tocLevelShape))-1]
+}
+
 // emitTOCEntryTokens appends one line per entry to b, shaped by the entry's level
 // (see tocLevelShape): an empty box for the indent, the number left-aligned in a
 // box of the level's width, the title, then either a dot leader or — for a section
@@ -232,8 +248,7 @@ func (e *Engine) tocDotCell() int {
 // Shared by \tableofcontents and \@starttoc.
 func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 	for _, en := range entries {
-		level := min(max(en.level, 1), len(tocLevelShape))
-		shape := tocLevelShape[level-1]
+		shape := tocShapeFor(en.kind, en.level)
 		if !shape.dotted {
 			// \l@section opens with \addvspace{1.0em}: a section entry stands apart
 			// from the sub-entries of the section above it.

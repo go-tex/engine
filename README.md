@@ -104,8 +104,11 @@ aliases), `\newcommand*`/`\DeclareOldFontCommand`, the rubber-glue and
 figure/table captions, `\@starttoc` bridged to the engine's two-pass contents
 table, and — the keystone — **stable source lines** (loading a 644-line class no
 longer shifts the line numbers the editor maps glyphs back to). A real
-`\documentclass{article}` document typesets a numbered title, a dotted
-`\tableofcontents`, numbered sections, and numbered figure/table captions, and it
+`\documentclass{article}` document typesets a numbered title, a
+`\tableofcontents` shaped like `article.cls`'s own — `\l@section`'s indent ladder
+and `\addvspace`, no dot leader on section entries, and `\@dottedtocline`'s
+`\@dotsep` tile rather than `\dotfill`'s narrower one on the levels below —
+numbered sections, and numbered figure/table captions, and it
 reproduces the reference engine's prose on the fidelity gate. Because the class
 files are `go:embed`ed and the resolver needs no filesystem, **the real classes
 also run in the `js/wasm` build — genuine LaTeX class rendering in the browser,
