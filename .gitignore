@@ -8,3 +8,7 @@ page.png
 # repositories, so a "git add -A" records nineteen gitlinks in one stroke — which
 # is how this line came to be written.
 /.claude/
+
+# test binaries left by `go test -cpuprofile`, which is how a 29MB engine.test
+# nearly went into a commit
+*.test

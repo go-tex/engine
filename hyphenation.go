@@ -122,6 +122,10 @@ func (e *Engine) hyphenPenalty() int {
 // hyphenateList returns a copy of a paragraph's horizontal list with discretionary
 // hyphen nodes inserted at every legal break inside each word. A word is a maximal
 // run of characters (font kerns between them are kept as interior material).
+// maxHyphenatableLength is TeX's own ceiling on the length of a word it will
+// try to hyphenate (tex.web §891). Longer words are set unhyphenated.
+const maxHyphenatableLength = 63
+
 func (e *Engine) hyphenateList(list []node) []node {
 	h := e.activeHyphenator()
 	if h == nil {
@@ -156,8 +160,21 @@ func (e *Engine) hyphenateList(list []node) []node {
 			break
 		}
 		breakAfter := map[int]bool{}
-		for _, t := range h.Points(string(letters)) {
-			breakAfter[t] = true
+		// ⛔ TeX DOES NOT HYPHENATE A WORD LONGER THAN max_hyphenatable_length
+		// (tex.web §891: "if l > max_hyphenatable_length then goto done1"), and
+		// neither does this — which is faithfulness and, here, also a bound.
+		//
+		// Liang's algorithm looks up every substring of the word, so its cost is
+		// QUADRATIC in the word's length. A document with no space in it hands this
+		// one enormous "word": profiled on a macro that expands exponentially,
+		// 98.6% of the engine's time was inside Hyphenator.Points, hashing pattern
+		// lookups, and the run never ended. A real word is tens of letters; the
+		// longest paragraph in the whole fidelity corpus is 8_881 nodes and no word
+		// in it comes near this limit.
+		if len(letters) <= maxHyphenatableLength {
+			for _, t := range h.Points(string(letters)) {
+				breakAfter[t] = true
+			}
 		}
 		seen := 0
 		for _, wn := range wordNodes {
