@@ -6,6 +6,7 @@ require (
 	github.com/go-gfx/gfx v0.34.1
 	github.com/go-opentype/opentype v0.15.0
 	github.com/go-pdfkit/pdfkit v0.14.0
+	github.com/go-pdfkit/reader v0.6.0
 	github.com/go-tex/math v0.50.0
 	github.com/go-tex/pdfrender v0.3.2
 	github.com/go-tex/texmf v0.7.0
@@ -29,7 +30,6 @@ require (
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/shape v0.5.0 // indirect
 	github.com/go-pdfkit/pdffont v0.3.1 // indirect
-	github.com/go-pdfkit/reader v0.6.0 // indirect
 	github.com/go-pdfkit/render v0.67.0 // indirect
 	github.com/go-richdoc/richdoc v0.4.0 // indirect
 	github.com/go-typeset/bidi v0.3.0 // indirect
