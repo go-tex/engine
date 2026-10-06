@@ -107,8 +107,11 @@ func (e *Engine) layoutSegment(hlist []node) {
 		// If the line was broken at a discretionary, append a hyphen. Copy the
 		// segment first: it aliases list's backing array, so appending in place
 		// would overwrite the next line's first node.
+		discBreak := false
 		if ln.End < len(list) {
-			if d, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil && d.pre != "" {
+			d, isDisc := list[ln.End].(discNode)
+			discBreak = isDisc
+			if isDisc && e.curFont != nil && d.pre != "" {
 				seg = append([]node{}, seg...)
 				for _, r := range d.pre {
 					w, h, dd := e.curFont.charDimsSP(r)
@@ -133,6 +136,68 @@ func (e *Engine) layoutSegment(hlist []node) {
 				e.contribute(n)
 			}
 		}
+		// And the penalty comes last of the three. tex.web:17329-17336 lists the
+		// steps of "Justify the line ending at breakpoint cur_p" in order: package
+		// the box, "Append the new box to the current vertical list, followed by the
+		// list of special nodes taken out of the box by the packager", then "Append a
+		// penalty node, if a nonzero penalty is appropriate".
+		e.appendInterlinePenalty(i, len(lines), discBreak)
+	}
+}
+
+// appendInterlinePenalty puts TeX's between-lines penalty after a line, which is
+// how a paragraph tells the page builder where it would rather not be cut.
+//
+//	@<Append a penalty node, if a nonzero penalty is appropriate@>=
+//	if cur_line+1<>best_line then
+//	  begin pen:=inter_line_penalty;
+//	  if cur_line=prev_graf+1 then pen:=pen+club_penalty;
+//	  if cur_line+2=best_line then pen:=pen+final_widow_penalty;
+//	  if disc_break then pen:=pen+broken_penalty;
+//	  if pen<>0 then
+//	    begin r:=new_penalty(pen);
+//	    link(tail):=r; tail:=r;
+//	    end;
+//	  end                                              tex.web:17445-17455
+//
+// ⛔ THE WIDOW TEST IS cur_line+2=best_line, NOT +1. An earlier version of this
+// comment — and the pull request that carried it — quoted "+1", which is the
+// GUARD's condition (cur_line+1<>best_line, the last line gets no penalty at all)
+// and not the widow's. The code has always had it right (i == n-2 is the
+// second-to-last line), but a citation that does not match the code is a trap for
+// whoever reads it next, and this file has paid for that before.
+//
+// Without these penalties the page builder could break anywhere between two lines
+// at no cost, so a paragraph's FIRST line could sit alone at the foot of a page and
+// its LAST line alone at the head of the next — the orphan and the widow that
+// \clubpenalty and \widowpenalty exist to price. The page builder already reads
+// penalty nodes (pagebuilder.go: ≥10000 forbids the break, otherwise the value is
+// the cost); nothing was putting any there.
+//
+// ⛔ The last line gets none: TeX's loop prices the breaks BETWEEN lines, and what
+// follows the last line is the paragraph's own glue.
+//
+// ⚠ final_widow_penalty is a PARAMETER of line_break (tex.web:16054, :17246), and
+// the caller passes \displaywidowpenalty instead of \widowpenalty when the
+// paragraph is being broken because a display follows. This call site cannot see
+// that, so it always uses \widowpenalty — 150 against 50, on the last line before a
+// display only.
+func (e *Engine) appendInterlinePenalty(i, n int, disc bool) {
+	if i >= n-1 {
+		return
+	}
+	pen := e.namedInt("interlinepenalty")
+	if i == 0 {
+		pen += e.namedInt("clubpenalty")
+	}
+	if i == n-2 {
+		pen += e.namedInt("widowpenalty")
+	}
+	if disc {
+		pen += e.namedInt("brokenpenalty")
+	}
+	if pen != 0 {
+		e.mvl = append(e.mvl, penaltyNode{penalty: pen})
 	}
 }
 
