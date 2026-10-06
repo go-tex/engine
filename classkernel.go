@@ -202,11 +202,15 @@ const LaTeX2eClassKernel = `
 \newskip\@dblfpbot
 \newskip\@dblfpsep
 % ── penalty / counter registers ─────────────────────────────────────────────
-\newcount\clubpenalty
-\newcount\widowpenalty
-\newcount\interlinepenalty
-\newcount\predisplaypenalty
-\newcount\postdisplaypenalty
+% ⛔ NO \newcount FOR THESE FIVE. They are TeX parameters the engine already
+% holds with LaTeX's values (texparams.go: widow 150, club 150, interline 0,
+% predisplay 10000, postdisplay 0), and a \newcount here allocates a REGISTER of
+% the same name that shadows the parameter — \the\widowpenalty then reads 0 and
+% every assignment writes to the register the engine never looks at. Measured
+% against tectonic on \documentclass[11pt]{book}: club 10000/0, widow 150/0,
+% predisplay 10000/0, broken 100/0, and \displaywidowpenalty — the one name NOT
+% allocated here — was already right at 50. The same trap is documented a few
+% lines below for \lineskip and in amssubstrate.go for \tolerance.
 \newcount\@lowpenalty \@lowpenalty=51
 \newcount\@medpenalty \@medpenalty=151
 \newcount\@highpenalty \@highpenalty=301

@@ -238,7 +238,7 @@ const AMSClassSubstrate = `
 \dimendef\dimen@ii=2
 \skipdef\skip@=0
 % ── penalty / spacing parameters a class assigns ────────────────────────────
-\newcount\brokenpenalty
+% \brokenpenalty is a TeX parameter too (texparams.go: 100) — see classkernel.go.
 % TeX's own defaults (tex.web §240, and LaTeX leaves both alone). They were a
 % fresh \newcount each, so the register read 0 or an arbitrary 10000 and SHADOWED
 % the engine's correct values (texparams.go has tolerance 200, engine.go
