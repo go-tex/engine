@@ -52,7 +52,7 @@ func main() {
 		list    = flag.String("list", "", "corpus list: one paper path per line")
 		refs    = flag.String("refs", "", "reference page counts, one per line, PAIRED BY POSITION with -list")
 		repo    = flag.String("repo", ".", "the engine repository to build from")
-		base    = flag.String("base", "origin/main", "revision to compare against")
+		base    = flag.String("base", "origin/main", "revision to compare against; empty ranks -head alone, worst-first")
 		head    = flag.String("head", "HEAD", "revision under test")
 		texmf   = flag.String("texmf", "", "value for GOTEX_TEXMF when compiling papers")
 		timeout = flag.Duration("timeout", 300*time.Second, "per-paper compile timeout")
@@ -63,6 +63,13 @@ func main() {
 	if *list == "" || *refs == "" {
 		fmt.Fprintln(os.Stderr, "gotex-abdiff: -list and -refs are required")
 		os.Exit(2)
+	}
+	if *base == "" {
+		if err := rank(*list, *refs, *repo, *head, *texmf, *timeout, *top); err != nil {
+			fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if err := run(*list, *refs, *repo, *base, *head, *texmf, *timeout, *top, *keep); err != nil {
 		fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)
@@ -95,6 +102,17 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 	if baseCommit == headCommit {
 		fmt.Println("⚠ both sides resolve to the same commit: nothing can move.")
 	}
+	// ⛔ HEAD MUST CONTAIN BASE, or the comparison also carries whatever landed on
+	// base meanwhile — with the sign reversed, which reads as a regression in the
+	// change under test. Measured the hard way: a branch cut before a 44-page
+	// improvement merged reported "Σ 293 -> 336 (+43)" for a change that touches
+	// nothing those papers use. The commits printed above are what made it
+	// visible; this says it outright.
+	if !contains(repo, baseCommit, headCommit) {
+		fmt.Printf("⛔ %s is NOT an ancestor of %s: this comparison includes everything\n"+
+			"   that landed on the base since the head was cut, with its sign reversed.\n"+
+			"   Rebase the head onto the base and run again.\n\n", base, head)
+	}
 
 	results := make([]result, 0, len(papers))
 	for i, p := range papers {
@@ -106,6 +124,99 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 	}
 	progressDone()
 	return report(results, top, keep)
+}
+
+// rank measures ONE revision and lists the papers worst-first by how far their
+// page count is from the reference's.
+//
+// It is the other half of the loop this tool serves: a comparison says whether a
+// change helped, and a ranking says what to look at next. Doing it with the A/B
+// path and a throwaway second revision would work and would compile every paper
+// twice for an answer that needs one side.
+//
+// ⛔ A paper that produces no readable PDF is listed FIRST, with its error, and
+// is not scored. It is worse than any page deviation and it must not vanish into
+// a total.
+func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int) error {
+	papers, err := loadCorpus(list, refs)
+	if err != nil {
+		return err
+	}
+	work, err := os.MkdirTemp("", "abdiff-rank-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(work)
+
+	bin := filepath.Join(work, "gotex")
+	commit, err := buildSide(repo, head, bin)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s  %s\n%d papers\n\n", head, shortCommit(commit), len(papers))
+
+	type row struct {
+		id       string
+		got, ref int
+		err      error
+	}
+	rows := make([]row, 0, len(papers))
+	for i, p := range papers {
+		n, err := compileAndCount(bin, p.Dir, texmf, filepath.Join(work, "r.pdf"), timeout)
+		rows = append(rows, row{p.ID, n, p.RefPage, err})
+		progress(i+1, len(papers))
+	}
+	progressDone()
+
+	var broken int
+	for _, r := range rows {
+		if r.err != nil {
+			broken++
+			fmt.Printf("  NO PDF  %-14s %v\n", r.id, r.err)
+		}
+	}
+	var sum, exact int
+	scored := make([]row, 0, len(rows))
+	for _, r := range rows {
+		if r.err != nil {
+			continue
+		}
+		scored = append(scored, r)
+		sum += abs(r.got - r.ref)
+		if r.got == r.ref {
+			exact++
+		}
+	}
+	fmt.Printf("\nscored            %d paper(s)%s\n", len(scored), plural(broken))
+	fmt.Printf("Σ|page deviation| %d\n", sum)
+	fmt.Printf("exact pagination  %d\n\n", exact)
+	sort.Slice(scored, func(i, j int) bool {
+		return abs(scored[i].got-scored[i].ref) > abs(scored[j].got-scored[j].ref)
+	})
+	for i, r := range scored {
+		if i >= top {
+			break
+		}
+		fmt.Printf("  %-14s %3d  (reference %3d)  %+d\n", r.id, r.got, r.ref, r.got-r.ref)
+	}
+	return nil
+}
+
+func plural(broken int) string {
+	if broken == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", %d produced no readable PDF and are NOT scored", broken)
+}
+
+// contains reports whether commit anc is an ancestor of (or equal to) desc.
+func contains(repo, anc, desc string) bool {
+	if anc == desc {
+		return true
+	}
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", anc, desc)
+	cmd.Dir = repo
+	return cmd.Run() == nil
 }
 
 // compileAndCount runs one side on one paper and parses the PDF it wrote.
