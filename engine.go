@@ -456,6 +456,29 @@ type Engine struct {
 const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
 	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
+	// maxParNodes bounds the material ONE paragraph may hold. The step and depth
+	// ceilings above count expansion; they do not count what the expansion
+	// PRODUCES, so a document whose macros nest ten deep and ten wide — the
+	// "billion laughs" shape — asks for 10^10 characters while taking few steps
+	// and keeping a shallow stack. Measured on this engine before the ceiling: the
+	// run reached 15.96 GB of resident memory in 30 seconds and was still
+	// growing, with no guard due to fire. The reference engine stops: tectonic
+	// fails the same file in 14.5 s at 4.3 GB with TeX's own capacity error, which
+	// is the behaviour to match — a bounded failure, not an unbounded one.
+	//
+	// THE NUMBER IS MEASURED, not chosen. Instrumenting the engine to record the
+	// largest paragraph it builds, over all 154 papers of the fidelity corpus:
+	//
+	//	largest    8_881 nodes   (2308.07586)
+	//	then       6_142, 5_937, 4_984, 4_921
+	//	median     1_476
+	//
+	// So 200_000 is twenty-two times the largest paragraph any real document in
+	// the corpus builds, and three orders of magnitude below what the attack
+	// wants. A first version used 5_000_000 — bounded, and still 1.6 GB and
+	// minutes of work, because the cost of the paragraph is superlinear in its
+	// size: at 10_000 the same file returns in 5 seconds and 28 MB.
+	maxParNodes = 200_000
 	// tightLoopSteps is the no-progress ceiling: expansion steps taken with no new
 	// base input consumed. A non-terminating expansion churns the input stack
 	// without ever reading further, so it hits this in a fraction of a second,
@@ -1374,6 +1397,10 @@ func (e *Engine) getXToken() (tok, bool) {
 			// is executed. That is the whole point of the prefix.
 			if m.protected && e.expandDepth > 0 {
 				return t, true
+			}
+			if len(e.parList) > maxParNodes {
+				e.tripCapacity()
+				return tok{}, false
 			}
 			if e.stepOverrun() || len(e.lists) > maxInputDepth {
 				e.tripRunaway()
@@ -2447,6 +2474,25 @@ func (e *Engine) tripRunaway() {
 	if !e.tolerant() {
 		e.fail("runaway expansion: aborted after too many macro expansions (possible infinite loop)")
 	}
+}
+
+// tripCapacity ends the run because one paragraph grew past maxParNodes.
+//
+// ⛔ IT STOPS EVEN IN LENIENT MODE, which the runaway guard does not. Lenient is
+// "recover and carry on", and that is right for a missing macro: the document
+// still has content to typeset. It is wrong for a capacity blow-up, because the
+// thing that overflowed is still there to overflow again — measured, the engine
+// trips, clears its input, refills and trips again, so memory stays bounded by
+// the ceiling while the RUN never ends. At 200_000 nodes it used 89 MB and still
+// had to be killed at 90 seconds; at 5_000_000, 1.6 GB and the same.
+//
+// The reference does the same thing: TeX raises "capacity exceeded" and halts.
+func (e *Engine) tripCapacity() {
+	e.runaway = true
+	e.lists = nil
+	e.noBase = true
+	e.fail(fmt.Sprintf("capacity exceeded: one paragraph grew past %d nodes "+
+		"(a macro that expands exponentially, or a runaway that produces text)", maxParNodes))
 }
 
 // printInputStack prints what the mouth was about to READ when the guard fired.
