@@ -64,9 +64,20 @@ func bundlesForReading(src []byte, readFile func(string) ([]byte, error)) []texm
 	if m := classRe.FindSubmatch(src); m != nil {
 		class := string(m[1])
 		names = append(names, class)
-		if data, err := readFile(trimSpace(class) + ".cls"); err == nil {
-			for _, m := range packageRe.FindAllSubmatch(stripComments(data), -1) {
-				names = append(names, commaRe.Split(string(m[1]), -1)...)
+		// ⛔ A CLASS NAME IS A NAME, NOT A PATH. This scan runs BEFORE the engine and
+		// reads the file itself, so it is outside the engine's read policy
+		// (readpolicy.go, #551): \documentclass{../outside/evil} made it read a .cls
+		// the document had not shipped and act on it — measured, the bundle list came
+		// back carrying pgf@3.1.12 from that file. The disclosure is small (the file's
+		// CONTENT never reaches the page, and only names the texmf registry knows
+		// become bundles, so a document cannot point the fetch at a URL of its own),
+		// but the read is one the engine would refuse, and a class name with a
+		// separator in it is not a thing LaTeX resolves either.
+		if name := trimSpace(class); isPlainName(name) {
+			if data, err := readFile(name + ".cls"); err == nil {
+				for _, m := range packageRe.FindAllSubmatch(stripComments(data), -1) {
+					names = append(names, commaRe.Split(string(m[1]), -1)...)
+				}
 			}
 		}
 	}
@@ -89,6 +100,21 @@ func bundlesForReading(src []byte, readFile func(string) ([]byte, error)) []texm
 		}
 	}
 	return out
+}
+
+// isPlainName reports whether a class name is a NAME — no path separator, no
+// parent reference. LaTeX resolves a class by name through its search path, so a
+// name carrying a path is not something it would resolve either.
+func isPlainName(s string) bool {
+	if s == "" || s == ".." || s == "." {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' || s[i] == '\\' {
+			return false
+		}
+	}
+	return true
 }
 
 // trimSpace trims ASCII whitespace, which is all a package list can hold.
