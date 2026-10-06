@@ -118,8 +118,8 @@ func TestAttachOfflineReportsAndCarriesOn(t *testing.T) {
 	if opt.Resolve != nil {
 		t.Error("offline with no cache: Resolve should stay nil")
 	}
-	if msg := errb.String(); !strings.Contains(msg, "indisponible") {
-		t.Errorf("le message n'explique pas le repli: %q", msg)
+	if msg := errb.String(); !strings.Contains(msg, "unavailable") {
+		t.Errorf("the message does not explain the fallback: %q", msg)
 	}
 }
 

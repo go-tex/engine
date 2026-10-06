@@ -125,7 +125,7 @@ func attachTeXMF(opt *engine.Options, src []byte, offline bool, stderr io.Writer
 			Log:     func(s string) { fmt.Fprintln(stderr, "gotex: "+s) },
 		})
 		if err != nil {
-			fmt.Fprintf(stderr, "gotex: %s@%s indisponible (%v) — rendu sans lui\n",
+			fmt.Fprintf(stderr, "gotex: %s@%s unavailable (%v) — rendering without it\n",
 				b.Name, b.Version, err)
 			continue
 		}

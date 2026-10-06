@@ -17,22 +17,22 @@ import (
 // Every expectation is tectonic's, from the witness this was built on:
 //
 //	TOP
-//	Listing 1: un listing, avec virgule
-//	code ici
+//	Listing 1: a listing, with a comma
+//	code here
 //	MID
-//	Listing 2: sans accolades
-//	autre
+//	Listing 2: no braces
+//	other
 //	A: 1 | listing 1 | Listing 1 | 2
 func TestLstlistingCaptionAndLabel(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
 	src := `\hsize=300pt
-\begin{lstlisting}[caption={un listing, avec virgule},label={l:x}]
-code ici
+\begin{lstlisting}[caption={a listing, with a comma},label={l:x}]
+code here
 \end{lstlisting}
-\begin{lstlisting}[caption=sans accolades,label=l:y]
-autre
+\begin{lstlisting}[caption=no braces,label=l:y]
+other
 \end{lstlisting}`
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
@@ -57,9 +57,9 @@ autre
 	collectChars(e.mvl, &b)
 	out := b.String()
 	// The comma inside braces belongs to the caption. A plain strings.Split on
-	// "," cut it in half and read "avec virgule}" as another key — harmless while
+	// "," cut it in half and read "with a comma}" as another key — harmless while
 	// the caption was ignored, and wrong the moment it is typeset.
-	for _, want := range []string{"Listing1:unlisting,avecvirgule", "Listing2:sansaccolades"} {
+	for _, want := range []string{"Listing1:alisting,withacomma", "Listing2:nobraces"} {
 		if !strings.Contains(strings.ReplaceAll(out, " ", ""), want) {
 			t.Errorf("caption %q missing from %q", want, out)
 		}

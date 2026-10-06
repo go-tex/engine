@@ -92,7 +92,7 @@ func parseLstOptions(s string) lstOptions {
 }
 
 // splitLstOptions splits on commas at BRACE LEVEL ZERO. A plain strings.Split cut
-// caption={un listing, avec virgule} in half and read "avec virgule}" as another
+// caption={a listing, with a comma} in half and read "with a comma}" as another
 // key — harmless while caption was ignored, and wrong the moment it is typeset.
 func splitLstOptions(s string) []string {
 	var out []string
@@ -321,7 +321,7 @@ func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions
 	// (listings.sty's default captionpos=t), and it is numbered by the lstlisting
 	// counter through \refstepcounter — so the number, \@currentlabel and the
 	// reference type all come from the one mechanism every other numbered thing
-	// uses. tectonic renders the witness "Listing 1: un listing, avec virgule".
+	// uses. tectonic renders the witness "Listing 1: a listing, with a comma".
 	if !o.captionBelow {
 		e.emitLstCaption(o)
 	}
