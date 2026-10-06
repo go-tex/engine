@@ -61,13 +61,16 @@ func (e *Engine) layoutSegment(hlist []node) {
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
 	}
-	for _, ln := range lines {
+	for i, ln := range lines {
 		seg := trimLeadingGlue(list[ln.Start:ln.End])
 		// If the line was broken at a discretionary, append a hyphen. Copy the
 		// segment first: it aliases list's backing array, so appending in place
 		// would overwrite the next line's first node.
+		discBreak := false
 		if ln.End < len(list) {
-			if d, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil && d.pre != "" {
+			d, isDisc := list[ln.End].(discNode)
+			discBreak = isDisc
+			if isDisc && e.curFont != nil && d.pre != "" {
 				seg = append([]node{}, seg...)
 				for _, r := range d.pre {
 					w, h, dd := e.curFont.charDimsSP(r)
@@ -77,6 +80,45 @@ func (e *Engine) layoutSegment(hlist []node) {
 		}
 		seg = e.applyLineSkips(seg)
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
+		e.appendInterlinePenalty(i, len(lines), discBreak)
+	}
+}
+
+// appendInterlinePenalty puts TeX's between-lines penalty after a line, which is
+// how a paragraph tells the page builder where it would rather not be cut
+// (tex.web §890):
+//
+//	pen := inter_line_penalty
+//	if cur_line = prev_graf+1 then pen := pen + club_penalty
+//	if cur_line+1 = best_line then pen := pen + widow_penalty
+//	if disc_break then pen := pen + broken_penalty
+//	if pen <> 0 then append a penalty node
+//
+// Without them the page builder could break anywhere between two lines at no
+// cost, so a paragraph's FIRST line could sit alone at the foot of a page and its
+// LAST line alone at the head of the next — the orphan and widow that
+// \clubpenalty and \widowpenalty exist to price. The page builder already reads
+// penalty nodes (pagebuilder.go: ≥10000 forbids the break, otherwise the value is
+// the cost); nothing was putting any there.
+//
+// ⛔ The last line gets none: TeX's loop prices the breaks BETWEEN lines, and what
+// follows the last line is the paragraph's own glue.
+func (e *Engine) appendInterlinePenalty(i, n int, disc bool) {
+	if i >= n-1 {
+		return
+	}
+	pen := e.namedInt("interlinepenalty")
+	if i == 0 {
+		pen += e.namedInt("clubpenalty")
+	}
+	if i == n-2 {
+		pen += e.namedInt("widowpenalty")
+	}
+	if disc {
+		pen += e.namedInt("brokenpenalty")
+	}
+	if pen != 0 {
+		e.mvl = append(e.mvl, penaltyNode{penalty: pen})
 	}
 }
 
