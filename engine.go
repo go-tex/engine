@@ -209,7 +209,14 @@ type Engine struct {
 	// typed cross-references (see typedrefs.go): recorded beside labels at \label
 	// time and carried through the two-pass compile exactly like labels.
 	refTypes map[string]string // \label → \@currentreftype, used by \autoref / \cref
-	refNames map[string]string // \label → \@currentlabelname (title), used by \nameref
+
+	// listings' document-wide options (\lstset) and named styles
+	// (\lstdefinestyle). Both were no-op macros, so a document that set its code
+	// size once at the top — which is how listings is normally used — had every
+	// block set at BODY size. See lstOptionsFor (listings.go).
+	lstDefaults string
+	lstStyles   map[string]string
+	refNames    map[string]string // \label → \@currentlabelname (title), used by \nameref
 	// crefNames holds a document's own \crefname/\Crefname, which override
 	// cleveref's defaults for one reference type. Nil until a document names one.
 	crefNames map[string]crefForm

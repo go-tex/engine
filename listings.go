@@ -44,6 +44,17 @@ type lstOptions struct {
 	caption    string
 	hasCaption bool
 	label      string
+	// basicstyle=… is the font the block is set in, and ignoring it was worth
+	// pages: 26 of the 154 corpus papers ask for a SMALLER size there
+	// (footnotesize 14, small 6, scriptsize 5, tiny 1) and got body size. On
+	// 2301.11256 the reference sets its code at a 9.46pt line pitch and this
+	// engine at 14.45 — 57 lines of code per page against 39, which is most of
+	// that paper's +8 pages. The value is kept as RAW SOURCE and executed as TeX
+	// inside the block's group, so \scriptsize, \ttfamily and \color all do
+	// whatever they already do here; nothing about font switching is reimplemented.
+	basicStyle string
+	// style=<name> selects a \lstdefinestyle, resolved in lstOptionsFor.
+	styleName string
 	// captionpos=b puts the caption BELOW the block; listings' default is t.
 	// 2208.11395 asks for b and its reference has the caption under the code —
 	// 16 corpus papers set the key.
@@ -86,9 +97,117 @@ func parseLstOptions(s string) lstOptions {
 			o.label = stripOneBracePair(val)
 		case "captionpos":
 			o.captionBelow = strings.HasPrefix(stripOneBracePair(val), "b")
+		case "basicstyle":
+			o.basicStyle = stripOneBracePair(val)
+		case "style":
+			o.styleName = stripOneBracePair(val)
 		}
 	}
 	return o
+}
+
+// styleToks turns a key's RAW VALUE into tokens, which for a style means turning
+// \scriptsize into a control sequence rather than eleven letters.
+//
+// ⛔ stringToToks does NOT do this: it makes character tokens only, so
+// basicstyle=\scriptsize arrived as the TEXT "\scriptsize" and was typeset —
+// an extra line on the page and no size change at all, which is exactly what the
+// first measurement showed.
+//
+// It is deliberately a small reader for key VALUES, not the engine's tokenizer:
+// a style value is font, size and colour switches with the odd brace, and TeX's
+// rule for those is the whole of what is implemented — a backslash takes the
+// letters that follow it (and the spaces after them, as TeX does), a backslash
+// before a non-letter takes that one character, and everything else is an
+// ordinary character token.
+func styleToks(s string) []tok {
+	var out []tok
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
+		switch {
+		case r == '\\' && i+1 < len(rs):
+			j := i + 1
+			if isASCIILetter(rs[j]) {
+				for j < len(rs) && isASCIILetter(rs[j]) {
+					j++
+				}
+				out = append(out, csTok(string(rs[i+1:j])))
+				for j < len(rs) && (rs[j] == ' ' || rs[j] == '\t') {
+					j++ // a control word swallows the spaces after it
+				}
+				i = j - 1
+				continue
+			}
+			out = append(out, csTok(string(rs[j])))
+			i = j
+		case r == '{':
+			out = append(out, chTok('{', catBegin))
+		case r == '}':
+			out = append(out, chTok('}', catEnd))
+		case r == ' ' || r == '\t' || r == '\n':
+			out = append(out, chTok(' ', catSpace))
+		case isASCIILetter(r):
+			out = append(out, chTok(r, catLetter))
+		default:
+			out = append(out, chTok(r, catOther))
+		}
+	}
+	return out
+}
+
+// lstOptionsFor composes the options a block actually gets: listings keeps
+// document-wide defaults (\lstset), named styles (\lstdefinestyle) and the
+// block's own [key=value] list, and a later assignment wins over an earlier one.
+//
+// ⛔ A style is pulled in WHERE IT IS NAMED, not at the end: \lstset{style=mystyle}
+// means "these keys, here", so a key the document sets after it must still win.
+// Flattening to one string in that order and parsing once gives exactly listings'
+// last-one-wins, with no second notion of precedence to keep in step.
+func (e *Engine) lstOptionsFor(local string) lstOptions {
+	var parts []string
+	add := func(s string) {
+		if strings.TrimSpace(s) == "" {
+			return
+		}
+		if n := parseLstOptions(s).styleName; n != "" {
+			if keys, ok := e.lstStyles[n]; ok {
+				parts = append(parts, keys)
+			}
+		}
+		parts = append(parts, s)
+	}
+	add(e.lstDefaults)
+	add(local)
+	return parseLstOptions(strings.Join(parts, ","))
+}
+
+// doLstset records \lstset's keys as the document-wide defaults. Successive calls
+// ACCUMULATE, as listings' own key-value store does — a document that sets a style
+// at the top and a numbering option later means both.
+func (e *Engine) doLstset() {
+	keys := e.scanRawBraceArg()
+	if strings.TrimSpace(keys) == "" {
+		return
+	}
+	if e.lstDefaults == "" {
+		e.lstDefaults = keys
+	} else {
+		e.lstDefaults += "," + keys
+	}
+}
+
+// doLstdefinestyle records \lstdefinestyle{name}{keys} for a later style=name.
+func (e *Engine) doLstdefinestyle() {
+	name := strings.TrimSpace(e.scanRawBraceArg())
+	keys := e.scanRawBraceArg()
+	if name == "" {
+		return
+	}
+	if e.lstStyles == nil {
+		e.lstStyles = map[string]string{}
+	}
+	e.lstStyles[name] = keys
 }
 
 // splitLstOptions splits on commas at BRACE LEVEL ZERO. A plain strings.Split cut
@@ -187,7 +306,7 @@ func (e *Engine) scanRawOptBracket() (string, bool) {
 func (e *Engine) doLstlisting() {
 	opts, _ := e.scanRawOptBracket()
 	content, line := e.readRawEnvBody(`\end{lstlisting}`)
-	e.renderVerbatimBlock(content, line, parseLstOptions(opts))
+	e.renderVerbatimBlock(content, line, e.lstOptionsFor(opts))
 }
 
 // readRawEnvBody copies the raw source from the cursor up to the literal end marker
@@ -308,6 +427,18 @@ func trimVerbEdges(s string) string {
 // frame. Shared by lstlisting and minted.
 func (e *Engine) renderVerbatimBlock(content string, firstLine int, o lstOptions) {
 	e.endParagraph() // flush any open paragraph before the block
+	// basicstyle= is run as TeX, inside a group, BEFORE anything is measured: the
+	// size switch it almost always carries moves \baselineskip and the tt font
+	// together, and both are already read from the engine's state further down
+	// (verbFont, interlineGlue). Measured on a witness, a verbatim block inside
+	// {\scriptsize …} already sets at the reference's 9.46pt pitch — so honouring
+	// the key needed no font plumbing at all, only reading it.
+	if o.basicStyle != "" {
+		e.beginGroup()
+		defer e.endGroup()
+		e.execToks(styleToks(o.basicStyle))
+		e.endParagraph() // the style may have opened one; keep the block's own state clean
+	}
 	font := e.verbFont()
 	if font == nil {
 		return

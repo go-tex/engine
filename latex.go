@@ -1164,8 +1164,6 @@ const MiniLaTeXKernel = `
 \def\@lstdeflbase[#1]#2{\@lstdeflbody}
 \long\def\@lstdeflbody#1{\@ifnextbracket\@lstdeflkeys\relax}
 \def\@lstdeflkeys[#1]{}
-\def\lstdefinestyle#1#2{}
-\def\lstset#1{}
 \def\microtypesetup#1{}
 \def\microtypecontext#1{}
 \def\zcsetup#1{}

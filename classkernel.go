@@ -701,8 +701,6 @@ const LaTeX2eClassKernel = `
 % strict-fails nor, lenient, typesets the option list as body text.
 \def\mathtoolsset#1{}
 \def\setkeys#1#2{}
-\def\lstset#1{}
-\def\lstdefinestyle#1#2{}
 \def\DeclareGraphicsExtensions#1{}
 \def\sisetup#1{}
 \def\setuptodonotes#1{}
