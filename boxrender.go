@@ -135,7 +135,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			if c.leader != leaderNone {
 				lg.close()
 			}
-			paintLeader(sb, c.leader, cx, baseline, w, font)
+			paintLeader(sb, c.leader, cx, baseline, w, spToPt(c.cell), font)
 			if c.leader == leaderNone {
 				// Ordinary inter-word glue: the space a reader would type.
 				lg.text.addSpace()
@@ -359,7 +359,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 // paintLeader draws a glue node's set width as a leader: leaderRule fills the
 // span with a thin baseline rule (\hrulefill), leaderDots tiles a row of dots
 // (\dotfill). leaderNone (ordinary glue) paints nothing. w is the set width (pt).
-func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w float64, font fontFace) {
+func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w, cell float64, font fontFace) {
 	if w <= 0 {
 		return
 	}
@@ -368,15 +368,19 @@ func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w float64, f
 		th := spToPt(defaultRule)
 		rect(sb, x, baseline-th, w, th)
 	case leaderDots:
-		paintDotLeader(sb, x, baseline, w, font)
+		paintDotLeader(sb, x, baseline, w, cell, font)
 	}
 }
 
-// dotLeaderGeom returns how many .44em dot cells fit across width w (pt) for a
-// font of design size emPt (pt), and the cell width. It yields zero cells for a
-// non-positive width or size, guarding the renderers against a zero-size font.
-func dotLeaderGeom(w, emPt float64) (n int, cell float64) {
-	cell = 0.44 * emPt // .44em dot box, as in latex.ltx
+// dotLeaderGeom returns how many dot cells fit across width w (pt) and the cell
+// width, for a font of design size emPt (pt). A positive cell is the caller's
+// own tile width (LaTeX's TOC leader); zero asks for plain TeX's .44em \dotfill
+// box. It yields zero cells for a non-positive width or size, guarding the
+// renderers against a zero-size font.
+func dotLeaderGeom(w, emPt, cell float64) (int, float64) {
+	if cell <= 0 {
+		cell = 0.44 * emPt // .44em dot box, as in plain.tex's \dotfill
+	}
 	if w <= 0 || cell <= 0 {
 		return 0, cell
 	}
@@ -385,7 +389,7 @@ func dotLeaderGeom(w, emPt float64) (n int, cell float64) {
 
 // paintDotLeader tiles '.' glyphs centred in successive .44em cells across
 // [x, x+w], approximating TeX's \dotfill (\leaders\hbox to .44em{\hss.\hss}).
-func paintDotLeader(sb *strings.Builder, x, baseline, w float64, font fontFace) {
+func paintDotLeader(sb *strings.Builder, x, baseline, w, cell float64, font fontFace) {
 	if font == nil {
 		return
 	}
@@ -393,7 +397,7 @@ func paintDotLeader(sb *strings.Builder, x, baseline, w float64, font fontFace) 
 	if d == "" {
 		return
 	}
-	n, cell := dotLeaderGeom(w, float64(font.sizePt()))
+	n, cell := dotLeaderGeom(w, float64(font.sizePt()), cell)
 	dotW := spToPt(func() int { w, _, _ := font.charDimsSP('.'); return w }())
 	for i := 0; i < n; i++ {
 		cx := x + float64(i)*cell + (cell-dotW)/2

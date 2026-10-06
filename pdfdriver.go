@@ -205,7 +205,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			cx += spToPt(c.width)
 		case glueNode:
 			w := spToPt(b.setWidth(c.spec))
-			d.leader(c.leader, cx, baseline, w)
+			d.leader(c.leader, cx, baseline, w, spToPt(c.cell))
 			cx += w
 		case charNode:
 			if !c.covered { // covered: it holds its place and draws nothing
@@ -489,14 +489,14 @@ func (d *pdfDraw) mathText(c mathNode, x, baseline float64) {
 
 // leader paints a glue node's set width as a \leaders-like fill: leaderRule draws
 // a thin baseline rule (\hrulefill), leaderDots tiles '.' glyphs (\dotfill).
-func (d *pdfDraw) leader(kind glueLeader, x, baseline, w float64) {
+func (d *pdfDraw) leader(kind glueLeader, x, baseline, w, cell float64) {
 	switch kind {
 	case leaderRule:
 		d.setColor(0)
 		th := spToPt(defaultRule)
 		d.rect(x, baseline-th, w, th)
 	case leaderDots:
-		n, cell := dotLeaderGeom(w, d.size)
+		n, cell := dotLeaderGeom(w, d.size, cell)
 		for i := 0; i < n; i++ {
 			d.p.Text(x+float64(i)*cell, d.y(baseline), ".")
 		}

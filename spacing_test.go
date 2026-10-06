@@ -229,20 +229,25 @@ func TestDotLeaderWithoutGlyph(t *testing.T) {
 	_ = e2.RenderBox(0, 1)
 }
 
-// dotLeaderGeom fits floor(w / .44em) cells and yields none for a non-positive
-// width or font size (the zero-size-font guard).
+// dotLeaderGeom fits floor(w / .44em) cells when the caller names no tile of its
+// own, floor(w / tile) when it does, and yields none for a non-positive width or
+// font size (the zero-size-font guard).
 func TestDotLeaderGeom(t *testing.T) {
-	if n, cell := dotLeaderGeom(45, 10); n != 10 || cell != 4.4 {
-		t.Errorf("dotLeaderGeom(45,10) = %d,%v want 10,4.4", n, cell)
+	if n, cell := dotLeaderGeom(45, 10, 0); n != 10 || cell != 4.4 {
+		t.Errorf("dotLeaderGeom(45,10,0) = %d,%v want 10,4.4", n, cell)
 	}
-	if n, _ := dotLeaderGeom(0, 10); n != 0 { // non-positive width
-		t.Errorf("dotLeaderGeom(0,10) n = %d want 0", n)
+	// A caller-supplied tile (LaTeX's contents leader) wins over the .44em box.
+	if n, cell := dotLeaderGeom(45, 10, 9); n != 5 || cell != 9 {
+		t.Errorf("dotLeaderGeom(45,10,9) = %d,%v want 5,9", n, cell)
 	}
-	if n, _ := dotLeaderGeom(-5, 10); n != 0 { // negative width
-		t.Errorf("dotLeaderGeom(-5,10) n = %d want 0", n)
+	if n, _ := dotLeaderGeom(0, 10, 0); n != 0 { // non-positive width
+		t.Errorf("dotLeaderGeom(0,10,0) n = %d want 0", n)
 	}
-	if n, _ := dotLeaderGeom(45, 0); n != 0 { // zero-size font
-		t.Errorf("dotLeaderGeom(45,0) n = %d want 0", n)
+	if n, _ := dotLeaderGeom(-5, 10, 0); n != 0 { // negative width
+		t.Errorf("dotLeaderGeom(-5,10,0) n = %d want 0", n)
+	}
+	if n, _ := dotLeaderGeom(45, 0, 0); n != 0 { // zero-size font
+		t.Errorf("dotLeaderGeom(45,0,0) n = %d want 0", n)
 	}
 }
 

@@ -184,26 +184,103 @@ func (e *Engine) doStartTOC() {
 	e.push(b.ts)
 }
 
-// emitTOCEntryTokens appends one dotted line per entry to b (see emitTOCList for
-// the line shape); shared by \tableofcontents and \@starttoc.
+// tocLevelShape is article.cls's contents ladder (texmf/article.cls:528-547): per
+// nesting level, the indent the entry hangs at and the width of the box its number
+// sits in, both in em of the entry's font. dotted is false for exactly one level —
+// \l@section sets its entry "#1\nobreak\hfil" with NO leader at all, and in bold;
+// every deeper level goes through \@dottedtocline, which is where the dots are.
+// Levels past the last row reuse it, as \@dottedtocline does for an unlisted depth.
+var tocLevelShape = []struct {
+	indent, numWidth float64 // em
+	dotted           bool
+}{
+	{0, 1.5, false},   // \l@section:       \@tempdima 1.5em, \bfseries, \hfil
+	{1.5, 2.3, true},  // \l@subsection:    \@dottedtocline{2}{1.5em}{2.3em}
+	{3.8, 3.2, true},  // \l@subsubsection: \@dottedtocline{3}{3.8em}{3.2em}
+	{7.0, 4.1, true},  // \l@paragraph:     \@dottedtocline{4}{7.0em}{4.1em}
+	{10.0, 5.0, true}, // \l@subparagraph:  \@dottedtocline{5}{10em}{5em}
+}
+
+// tocPnumWidth is \@pnumwidth (article.cls:499): the box the page number is set
+// right-aligned in, flush with the right margin. The leader (or the \hfil of a
+// section entry) stops where that box begins, which is why the dots of a real
+// contents list stop short of the margin rather than running up to the number.
+const tocPnumWidth = 1.55 // em
+
+// tocDotSep is \@dotsep (article.cls:501), in mu — 18mu is one em. LaTeX's
+// contents leader is \leaders\hbox{$\mkern\@dotsep mu\hbox{.}\mkern\@dotsep mu$},
+// so one tile is the dot plus 2 x 4.5mu = half an em of surrounding kern.
+const tocDotSep = 4.5
+
+// tocDotCell returns the width in sp of one tile of that leader for the current
+// font. It is about twice the .44em box plain TeX's \dotfill tiles, which is the
+// whole point: a contents list set with \dotfill has visibly too many dots.
+// Zero when no font is current, leaving the renderers on the \dotfill tile.
+func (e *Engine) tocDotCell() int {
+	f := e.curFont
+	if f == nil {
+		return 0
+	}
+	w, _, _ := f.charDimsSP('.')
+	return w + ptToSP(2*tocDotSep/18*float64(f.sizePt()))
+}
+
+// emitTOCEntryTokens appends one line per entry to b, shaped by the entry's level
+// (see tocLevelShape): an empty box for the indent, the number left-aligned in a
+// box of the level's width, the title, then either a dot leader or — for a section
+// entry — plain \hfil, and last the page number right-aligned in a \@pnumwidth box.
+// Shared by \tableofcontents and \@starttoc.
 func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 	for _, en := range entries {
+		level := min(max(en.level, 1), len(tocLevelShape))
+		shape := tocLevelShape[level-1]
+		if !shape.dotted {
+			// \l@section opens with \addvspace{1.0em}: a section entry stands apart
+			// from the sub-entries of the section above it.
+			b.cs("addvspace")
+			b.text("1em")
+		}
 		b.cs("par")
 		b.cs("noindent")
-		if en.level > 1 {
-			// Indent nested entries with an empty hbox spacer: unlike leading glue
-			// (\quad/\hspace), a box is not discarded at the start of a broken line.
-			b.spacer((en.level - 1) * 18)
+		// A group, so the bold of a section entry does not leak into the next one.
+		b.begin()
+		if shape.indent > 0 {
+			// Indent with an empty hbox: unlike leading glue (\quad/\hspace), a box
+			// is not discarded at the start of a broken line.
+			b.boxTo(shape.indent)
+			b.end()
 		}
+		if !shape.dotted {
+			b.cs("bfseries")
+		}
+		// The number sits left-aligned in a box of the level's width, so the title
+		// starts at the same place whether or not the entry carries a number.
+		b.boxTo(shape.numWidth)
 		if en.number != "" {
 			b.text(en.number)
-			b.cs("quad")
 		}
+		b.cs("hfil")
+		b.end()
 		b.text(en.title)
-		b.cs("dotfill")
+		b.cs("nobreak")
+		if shape.dotted {
+			b.cs("@tocdotfill")
+		} else {
+			// \hfill, where LaTeX writes \hfil: LaTeX also sets \parfillskip
+			// -\@pnumwidth, so its \hfil is the only stretch on the line. Ours is
+			// not — the paragraph's own \parfillskip (0pt plus 1fil) would share
+			// the space with an \hfil and leave the page number mid-line. One
+			// order higher outranks it and flushes the number to the margin.
+			b.cs("hfill")
+		}
+		b.cs("nobreak")
+		b.boxTo(tocPnumWidth)
+		b.cs("hfil")
 		if en.page > 0 {
 			b.text(strconv.Itoa(en.page))
 		}
+		b.end()
+		b.end()
 		b.cs("par")
 	}
 	b.cs("par")
@@ -223,14 +300,22 @@ func (b *tocTokens) cs(name string) { b.ts = append(b.ts, csTok(name)) }
 func (b *tocTokens) begin() { b.ts = append(b.ts, chTok('{', catBegin)) }
 func (b *tocTokens) end()   { b.ts = append(b.ts, chTok('}', catEnd)) }
 
-// spacer appends an empty \hbox of the given width in points — a fixed,
-// non-discardable horizontal space usable at the start of a line (where glue
-// would be dropped by the line breaker).
+// spacer appends an empty \hbox of the given width in points (see boxTo for why
+// a box and not glue). The index uses it; the contents ladder works in em.
 func (b *tocTokens) spacer(pt int) {
 	b.cs("hbox")
 	b.text("to " + strconv.Itoa(pt) + "pt")
 	b.begin()
 	b.end()
+}
+
+// boxTo opens "\hbox to <em>em{": the caller appends the box's content and closes
+// it with end(). An empty one is a fixed, non-discardable horizontal space usable
+// at the start of a line, where glue would be dropped by the line breaker.
+func (b *tocTokens) boxTo(em float64) {
+	b.cs("hbox")
+	b.text("to " + strconv.FormatFloat(em, 'f', -1, 64) + "em")
+	b.begin()
 }
 
 // text appends the runes of s as character tokens, each with its live catcode

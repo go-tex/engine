@@ -311,8 +311,14 @@ func TestTOCPagesSettleAcrossReruns(t *testing.T) {
 		sections  int
 		wantFirst int // page the first section falls on
 	}{
-		{"contents on one page", 30, 2},
-		{"contents spilling onto a second", 45, 3},
+		// Counted in tectonic on these very documents: 18 sections give 19 pages
+		// (one of contents), 30 give 32 and 45 give 47 (two of contents each).
+		// The first row USED to say 30 sections, one contents page — an expectation
+		// written by hand, which pinned a contents list of ours that was too tight
+		// because every \section entry was missing \l@section's \addvspace{1.0em}.
+		{"contents on one page", 18, 2},
+		{"contents spilling onto a second", 30, 3},
+		{"and still two at 45", 45, 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e, err := compile(doc(c.sections), Options{})
@@ -333,4 +339,104 @@ func TestTOCPagesSettleAcrossReruns(t *testing.T) {
 			}
 		})
 	}
+}
+
+// article.cls sets a \section contents entry with NO dot leader at all —
+// \l@section is "#1\nobreak\hfil\nobreak\hb@xt@\@pnumwidth{\hss #2}"
+// (texmf/article.cls:528-543) — and reaches for \@dottedtocline only from
+// \l@subsection down. A contents list whose sections are dotted is a list that
+// does not look like LaTeX's, measurably: against tectonic the dots ran across
+// every section line here before this was fixed.
+func TestTOCSectionEntriesCarryNoDotLeader(t *testing.T) {
+	sections := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\section{Gamma}
+\end{document}`)
+	e, err := compile(sections, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasDotLeader(e.mvl) {
+		t.Error("a contents list of \\section entries alone carries a dot leader; LaTeX's \\l@section has none")
+	}
+	// The same document with one subsection must have one: \l@subsection IS
+	// \@dottedtocline, so this is the control that the leader still works.
+	withSub := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\subsection{Beta}
+\end{document}`)
+	e2, err := compile(withSub, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasDotLeader(e2.mvl) {
+		t.Error("no dot leader on a \\subsection entry; \\@dottedtocline sets one")
+	}
+}
+
+// \@dottedtocline tiles \hbox{$\mkern\@dotsep mu.\mkern\@dotsep mu$}: one dot
+// plus 2 x 4.5mu, which is half an em of kern around it. Plain TeX's \dotfill
+// tiles a .44em box instead — less than half as wide — so a contents list set
+// with \dotfill shows roughly twice as many dots as LaTeX's. Measured against
+// tectonic on an 11pt article: 8.49pt between dots there, 4.82pt here.
+func TestTOCDotCellIsTheDotsepTile(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	// spMock: '.' is 5pt wide at a 10pt design size, so the tile is 5 + 10/2.
+	if got, want := e.tocDotCell(), 10*unity; got != want {
+		t.Errorf("tocDotCell() = %d sp, want %d (dot + 2x\\@dotsep)", got, want)
+	}
+	if dotfill := ptToSP(0.44 * 10); e.tocDotCell() <= dotfill {
+		t.Errorf("the contents tile (%d sp) is no wider than \\dotfill's (%d sp)", e.tocDotCell(), dotfill)
+	}
+	// No font: fall back to the renderers' own \dotfill tile rather than zero.
+	if got := New().tocDotCell(); got != 0 {
+		t.Errorf("tocDotCell() with no font = %d, want 0", got)
+	}
+}
+
+// The fill that pushes a section entry's page number to the right margin must
+// outrank the paragraph's own \parfillskip. LaTeX cancels \parfillskip
+// (\parfillskip -\@pnumwidth) and fills with \hfil; the engine does not, so an
+// \hfil there SHARES the space with \parfillskip and strands the page number
+// mid-line — which is exactly what it did, 134pt short of the margin.
+func TestTOCSectionFillOutranksParfillskip(t *testing.T) {
+	src := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\end{document}`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasFillGlue(e.mvl) {
+		t.Error("no order-2 fill on the section entry: an \\hfil would leave the page number mid-line")
+	}
+}
+
+// hasFillGlue reports whether any glue node with order-2 (fill) stretch and no
+// leader is present, walking boxes recursively.
+func hasFillGlue(nodes []node) bool {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case glueNode:
+			if v.leader == leaderNone && v.spec.stretchOrder == 2 && v.spec.stretch > 0 {
+				return true
+			}
+		case *boxNode:
+			if hasFillGlue(v.list) {
+				return true
+			}
+		case frameNode:
+			if v.inner != nil && hasFillGlue(v.inner.list) {
+				return true
+			}
+		}
+	}
+	return false
 }

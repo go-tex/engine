@@ -30,6 +30,10 @@ type kernNode struct {
 type glueNode struct { // \hskip/\vskip and the fil glues
 	spec   glueSpec
 	leader glueLeader // if set, the glue's set width is painted as a leader
+	// cell is the width of one leader tile in sp. Zero means the tile plain TeX's
+	// \dotfill uses (\hbox to .44em); LaTeX's TOC leader is wider (see tocDotCell),
+	// and it has to be measured where the font is known, not at render time.
+	cell int
 }
 
 // glueLeader marks a glue node that should be rendered as \leaders-like fill:
