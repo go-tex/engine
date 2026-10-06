@@ -73,12 +73,27 @@ func (e *Engine) doFootnote() {
 // attaches it to the vertical list. Split out of doFootnote so \footnotetext can reach it:
 // the two halves of a footnote are separable in LaTeX and were not here.
 func (e *Engine) queueFootnoteText(n int, text []tok) {
-	// Body = \footnotesize "N. " + text, set as a mini-paragraph to the body
-	// width (the size is scoped to the sandbox by typesetGroupToVbox).
-	label := []tok{csTok("footnotesize")}
+	// Body = \footnotesize "N. " + text, set as a mini-paragraph to the body width.
+	//
+	// ⛔ IN BRACES, because typesetGroupToVbox saves the vertical-list state and the
+	// current font and NOT the leading — a documented property other callers rely
+	// on (subfigure.go) — while \footnotesize moves \baselineskip. So every
+	// footnote left the BODY set at the note's leading, for the whole rest of the
+	// document: measured in book at 12pt, \the\baselineskip read 14.5pt before the
+	// note and 12.0pt after it, and with \baselinestretch{1.25} 18.125 -> 15.0.
+	//
+	// The braces are the engine's own grouping, which restores it: a plain
+	// {\footnotesize …} written in a document always came back correctly, and that
+	// is what said the SANDBOX was not the place to fix this. Scoping it here keeps
+	// the other six callers — floats, minipage, multicols, parbox, subfigure,
+	// two-column spans — exactly as they were; putting a group inside the sandbox
+	// broke multicols, whose body crosses it with groups open.
+	label := []tok{chTok('{', catBegin), csTok("footnotesize")}
 	label = append(label, numberToks(n)...)
 	label = append(label, chTok('.', catOther), chTok(' ', catSpace))
-	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(append(label, text...)))
+	body := append(label, text...)
+	body = append(body, chTok('}', catEnd))
+	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(body))
 }
 
 // emitFootnoteMark drops the raised reference number at the current point.
