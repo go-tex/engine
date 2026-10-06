@@ -203,17 +203,19 @@ func TestLstlistingFrameAndNumbers(t *testing.T) {
 	}
 }
 
-// Unknown keys (language, caption, basicstyle, …) are accepted and ignored: the
-// block still renders, with no frame and no numbers. language= is deliberately not
+// Unknown keys (language, numberstyle, …) are accepted and ignored: the block
+// still renders, with no frame and no numbers. language= is deliberately not
 // colourised (highlighting is out of scope).
 func TestLstlistingUnknownKeysIgnored(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
 	// caption= is no longer among the ignored keys — it is typeset, as tectonic
-	// does (see TestLstlistingCaptionAndLabel) — so this witness carries only keys
-	// that genuinely change nothing.
-	src := "\\begin{lstlisting}[language=Go,basicstyle=x,numberstyle=y]\n" +
+	// does (see TestLstlistingCaptionAndLabel) — and neither is basicstyle=, which
+	// is now RUN as the style it is (see TestListingsBasicStyleIsApplied), so a
+	// literal "x" there would be typeset exactly as LaTeX typesets it. This witness
+	// carries only keys that genuinely change nothing.
+	src := "\\begin{lstlisting}[language=Go,numberstyle=y]\n" +
 		"code\n" +
 		"more\n" +
 		"\\end{lstlisting}"

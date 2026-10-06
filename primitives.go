@@ -2316,6 +2316,10 @@ func (e *Engine) loadMore() {
 	// doLstlisting, defined here for safety) and \lstinline<delim>…<delim>.
 	e.prim("lstlisting", func(e *Engine) { e.doLstlisting() })
 	e.prim("endlstlisting", func(e *Engine) {})
+	// listings' key-value store: both were no-op macros, so a document that set
+	// its code size once at the top got body size in every block (listings.go).
+	e.prim("lstset", func(e *Engine) { e.doLstset() })
+	e.prim("lstdefinestyle", func(e *Engine) { e.doLstdefinestyle() })
 	e.prim("lstinline", func(e *Engine) { e.doLstinline() })
 	// minted package: Pygments-highlighted code (see minted.go). With no shell-escape
 	// / Pygments available the faithful fallback is verbatim, exactly as minted's own

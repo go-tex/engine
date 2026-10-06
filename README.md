@@ -131,8 +131,10 @@ format and image type, with its status, plus every remaining gap — lives at
   names and both of its counter keys), `graphicx`, `xcolor`, `hyperref`,
   `geometry`, `fancyhdr`,
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
-  `subcaption`, `algorithm`/`algorithmic`, `listings` (including `caption=`,
-  `label=` and `captionpos=`, so a listing is numbered, captioned and referable),
+  `subcaption`, `algorithm`/`algorithmic`, `listings` (`caption=`, `label=` and
+  `captionpos=`, so a listing is numbered, captioned and referable; and
+  `basicstyle=` through `\lstset`, `\lstdefinestyle` and `style=`, so code set
+  at `\footnotesize` or `\scriptsize` takes the room it takes in the reference),
   `minted`, `siunitx`,
   `cleveref` (`\cref`/`\Cref` with cleveref's own default naming, its
   `capitalise` and `noabbrev` options, `\crefname`/`\Crefname` and
