@@ -32,12 +32,18 @@ func TestAFootnoteDoesNotLeakItsLeading(t *testing.T) {
 		}
 		// The last paragraph's interline glue: walk the vertical list and keep the
 		// glue that sits between two line boxes.
+		// ⛔ A PENALTY MAY SIT BETWEEN the line and its glue — tex.web §890 puts one
+		// there — so the walk must step over penalties rather than treat them as
+		// "something else happened". A first version reset on them and reported
+		// "no interline glue found" the moment that was implemented.
 		var last int
 		prevBox := false
 		for _, n := range e.mvl {
 			switch v := n.(type) {
 			case *boxNode:
 				prevBox = true
+			case penaltyNode:
+				// transparent: keeps prevBox as it was
 			case glueNode:
 				if prevBox && v.spec.width > 0 {
 					last = v.spec.width
