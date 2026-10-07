@@ -311,8 +311,14 @@ func TestTOCPagesSettleAcrossReruns(t *testing.T) {
 		sections  int
 		wantFirst int // page the first section falls on
 	}{
-		{"contents on one page", 30, 2},
-		{"contents spilling onto a second", 45, 3},
+		// Counted in tectonic on these very documents: 18 sections give 19 pages
+		// (one of contents), 30 give 32 and 45 give 47 (two of contents each).
+		// The first row USED to say 30 sections, one contents page — an expectation
+		// written by hand, which pinned a contents list of ours that was too tight
+		// because every \section entry was missing \l@section's \addvspace{1.0em}.
+		{"contents on one page", 18, 2},
+		{"contents spilling onto a second", 30, 3},
+		{"and still two at 45", 45, 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e, err := compile(doc(c.sections), Options{})
@@ -332,5 +338,230 @@ func TestTOCPagesSettleAcrossReruns(t *testing.T) {
 				t.Errorf("contents list places the last section on page %d, want %d", got, want)
 			}
 		})
+	}
+}
+
+// article.cls sets a \section contents entry with NO dot leader at all —
+// \l@section is "#1\nobreak\hfil\nobreak\hb@xt@\@pnumwidth{\hss #2}"
+// (texmf/article.cls:528-543) — and reaches for \@dottedtocline only from
+// \l@subsection down. A contents list whose sections are dotted is a list that
+// does not look like LaTeX's, measurably: against tectonic the dots ran across
+// every section line here before this was fixed.
+func TestTOCSectionEntriesCarryNoDotLeader(t *testing.T) {
+	sections := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\section{Gamma}
+\end{document}`)
+	e, err := compile(sections, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasDotLeader(e.mvl) {
+		t.Error("a contents list of \\section entries alone carries a dot leader; LaTeX's \\l@section has none")
+	}
+	// The same document with one subsection must have one: \l@subsection IS
+	// \@dottedtocline, so this is the control that the leader still works.
+	withSub := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\subsection{Beta}
+\end{document}`)
+	e2, err := compile(withSub, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasDotLeader(e2.mvl) {
+		t.Error("no dot leader on a \\subsection entry; \\@dottedtocline sets one")
+	}
+}
+
+// \@dottedtocline tiles \hbox{$\mkern\@dotsep mu.\mkern\@dotsep mu$}: one dot
+// plus 2 x 4.5mu, which is half an em of kern around it. Plain TeX's \dotfill
+// tiles a .44em box instead — less than half as wide — so a contents list set
+// with \dotfill shows roughly twice as many dots as LaTeX's. Measured against
+// tectonic on an 11pt article: 8.49pt between dots there, 4.82pt here.
+func TestTOCDotCellIsTheDotsepTile(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	// spMock: '.' is 5pt wide at a 10pt design size, so the tile is 5 + 10/2.
+	if got, want := e.tocDotCell(), 10*unity; got != want {
+		t.Errorf("tocDotCell() = %d sp, want %d (dot + 2x\\@dotsep)", got, want)
+	}
+	if dotfill := ptToSP(0.44 * 10); e.tocDotCell() <= dotfill {
+		t.Errorf("the contents tile (%d sp) is no wider than \\dotfill's (%d sp)", e.tocDotCell(), dotfill)
+	}
+	// No font: fall back to the renderers' own \dotfill tile rather than zero.
+	if got := New().tocDotCell(); got != 0 {
+		t.Errorf("tocDotCell() with no font = %d, want 0", got)
+	}
+}
+
+// The fill that pushes a section entry's page number to the right margin must
+// outrank the paragraph's own \parfillskip. LaTeX cancels \parfillskip
+// (\parfillskip -\@pnumwidth) and fills with \hfil; the engine does not, so an
+// \hfil there SHARES the space with \parfillskip and strands the page number
+// mid-line — which is exactly what it did, 134pt short of the margin.
+func TestTOCSectionFillOutranksParfillskip(t *testing.T) {
+	src := []byte(`\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Alpha}
+\end{document}`)
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasFillGlue(e.mvl) {
+		t.Error("no order-2 fill on the section entry: an \\hfil would leave the page number mid-line")
+	}
+}
+
+// hasFillGlue reports whether any glue node with order-2 (fill) stretch and no
+// leader is present, walking boxes recursively.
+func hasFillGlue(nodes []node) bool {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case glueNode:
+			if v.leader == leaderNone && v.spec.stretchOrder == 2 && v.spec.stretch > 0 {
+				return true
+			}
+		case *boxNode:
+			if hasFillGlue(v.list) {
+				return true
+			}
+		case frameNode:
+			if v.inner != nil && hasFillGlue(v.inner.list) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// \caption records a figure/table entry at LEVEL 1 (latex.go:779), but article's
+// \l@figure and \l@table are \@dottedtocline{1}{1.5em}{2.3em} (article.cls:554,
+// 562) — the \l@subsection shape, dotted and indented. Only a CONTENTS entry at
+// level 1 is \l@section's undotted one. Reading the level and ignoring the kind
+// would set every list of figures in bold with no leader at all.
+func TestTOCFigureEntriesTakeTheDottedShape(t *testing.T) {
+	e := compiledWithClass(t, "article")
+	sec := e.tocShapeFor(tocEntry{kind: "toc", level: 1})
+	if sec.dotted || sec.indent != 0 || !sec.bold {
+		t.Errorf("a level-1 contents entry = %+v, want article's \\l@section: bold, undotted, indent 0", sec)
+	}
+	for _, kind := range []string{"figure", "table"} {
+		got := e.tocShapeFor(tocEntry{kind: kind, level: 1})
+		if !got.dotted || got.indent != 1.5 || got.numWidth != 2.3 {
+			t.Errorf("a level-1 %s entry = %+v, want \\@dottedtocline{1}{1.5em}{2.3em}", kind, got)
+		}
+	}
+	// And a list of figures really does carry a leader end to end.
+	src := []byte(`\documentclass{article}
+\begin{document}
+\listoffigures
+\begin{figure}\caption{Alpha}\end{figure}
+\end{document}`)
+	e2, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasDotLeader(e2.mvl) {
+		t.Error("no dot leader in the list of figures; \\l@figure is \\@dottedtocline")
+	}
+}
+
+// compiledWithClass returns a render engine with that class file loaded, so the
+// \l@<name> macros a contents entry's shape is read from are the real ones.
+func compiledWithClass(t *testing.T, class string) *Engine {
+	t.Helper()
+	e, err := compile([]byte("\\documentclass{"+class+"}\n\\begin{document}x\\end{document}"), Options{})
+	if err != nil {
+		t.Fatalf("compiling a %s document: %v", class, err)
+	}
+	return e
+}
+
+// The LEVEL does not decide a contents entry's shape; the loaded CLASS does.
+// article's \l@section is hand-written — bold, \hfil, no leader (article.cls:528)
+// — while book's and report's \l@section, at the very same level 1, is
+// \@dottedtocline{1}{1.5em}{2.3em} (book.cls:635, report.cls:629). Reading the
+// level alone set a thesis's contents list in article's shape, which cost three
+// pages on corpus paper 2402.04711 (\documentclass{book}) when measured against
+// the reference. Nothing but the class file can tell the two apart.
+func TestTOCShapeComesFromTheClassNotTheLevel(t *testing.T) {
+	for _, c := range []struct {
+		class            string
+		dotted           bool
+		indent, numWidth float64
+	}{
+		{"article", false, 0, 1.5},
+		{"book", true, 1.5, 2.3},
+		{"report", true, 1.5, 2.3},
+	} {
+		t.Run(c.class, func(t *testing.T) {
+			got := compiledWithClass(t, c.class).tocShapeFor(tocEntry{kind: "toc", level: 1})
+			if got.dotted != c.dotted || got.indent != c.indent || got.numWidth != c.numWidth {
+				t.Errorf("%s level-1 entry = %+v, want dotted=%v indent=%v numWidth=%v",
+					c.class, got, c.dotted, c.indent, c.numWidth)
+			}
+		})
+	}
+	// The deeper levels differ between the two families too: article indents a
+	// subsection by 1.5em, book by 3.8em (book.cls:636).
+	if got := compiledWithClass(t, "book").tocShapeFor(tocEntry{kind: "toc", level: 2}); got.indent != 3.8 || got.numWidth != 3.2 {
+		t.Errorf("book level-2 entry = %+v, want \\@dottedtocline{2}{3.8em}{3.2em}", got)
+	}
+	if got := compiledWithClass(t, "article").tocShapeFor(tocEntry{kind: "toc", level: 2}); got.indent != 1.5 || got.numWidth != 2.3 {
+		t.Errorf("article level-2 entry = %+v, want \\@dottedtocline{2}{1.5em}{2.3em}", got)
+	}
+}
+
+// The two lengths are READ OUT of the class's \@dottedtocline, not restated here.
+// A class that writes them some other way still gets its leader: only the lengths
+// fall back, never the dots.
+func TestDottedTocLineReadsTheClassLengths(t *testing.T) {
+	e := compiledWithClass(t, "book")
+	indent, numWidth, haveDims, dotted := e.dottedTocLine("subsection")
+	if !dotted || !haveDims || indent != 3.8 || numWidth != 3.2 {
+		t.Errorf("dottedTocLine(subsection) = %v,%v,%v,%v want 3.8,3.2,true,true", indent, numWidth, haveDims, dotted)
+	}
+	// \l@chapter is hand-written: not a \@dottedtocline at all.
+	if _, _, _, dotted := e.dottedTocLine("chapter"); dotted {
+		t.Error("\\l@chapter read as a \\@dottedtocline; it is the bold, leaderless one")
+	}
+	// A name the class never defines.
+	if _, _, _, dotted := e.dottedTocLine("nosuchsection"); dotted {
+		t.Error("an undefined \\l@nosuchsection read as a \\@dottedtocline")
+	}
+}
+
+func TestEmOfToks(t *testing.T) {
+	toks := func(s string) []tok {
+		var ts []tok
+		for _, r := range s {
+			ts = append(ts, chTok(r, catOther))
+		}
+		return ts
+	}
+	for _, c := range []struct {
+		in   string
+		want float64
+		ok   bool
+	}{
+		{"1.5em", 1.5, true}, {"10em", 10, true}, {"3.8em", 3.8, true},
+		{"2.3pt", 0, false}, // a unit the entry's font size cannot convert here
+		{"em", 0, false}, {"", 0, false}, {"-1em", 0, false}, {"1.5", 0, false},
+	} {
+		got, ok := emOfToks(toks(c.in))
+		if got != c.want || ok != c.ok {
+			t.Errorf("emOfToks(%q) = %v,%v want %v,%v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+	// A control sequence among the characters is not a length we can read.
+	if _, ok := emOfToks([]tok{csTok("@tempdima")}); ok {
+		t.Error("emOfToks read a control sequence as a length")
 	}
 }

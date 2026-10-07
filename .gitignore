@@ -1,8 +1,17 @@
 *.wasm
 page.svg
 page.png
+
+# `go build ./cmd/x` with no -o drops the binary HERE, named after the directory.
+# One entry per command, and TestNoBinaryIsTracked derives this list from cmd/ and
+# fails if a new command is not covered — a line naming a binary dies at the next
+# rename, which is how a 3.5MB gotex-linediff and a 5.8MB gotex were committed.
 /gotex
 /gotex-wasm
+/gotex-abdiff
+/gotex-coverage
+/gotex-linediff
+/gotex-refdiff
 
 # Claude Code keeps its per-session worktrees here. They are real git
 # repositories, so a "git add -A" records nineteen gitlinks in one stroke — which

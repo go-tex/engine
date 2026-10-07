@@ -2445,6 +2445,12 @@ func (e *Engine) loadStomach() {
 	e.prim("dotfill", func(e *Engine) {
 		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderDots})
 	})
+	// \@tocdotfill: the contents-list leader, which is NOT \dotfill — LaTeX tiles
+	// a wider box there (see tocDotCell). The engine builds its contents lists in
+	// Go (toc.go), so this is the one place that emits it.
+	e.prim("@tocdotfill", func(e *Engine) {
+		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderDots, cell: e.tocDotCell()})
+	})
 	e.prim("@ifstar", func(e *Engine) { e.doIfstar() })
 	e.prim("hrule", func(e *Engine) { e.contribute(e.scanRule(true)) })
 	e.prim("vrule", func(e *Engine) { e.place(e.scanRule(false)) })
