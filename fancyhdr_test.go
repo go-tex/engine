@@ -90,3 +90,62 @@ func TestScanFancyPos(t *testing.T) {
 	check("[]", 7) // empty bracket ⇒ all
 	check("nobracket", 0)
 }
+
+// book.cls and report.cls say \pagestyle{headings} in their preamble, so
+// \@oddhead is defined for the WHOLE document. A page that asks for "plain" —
+// every chapter opening, and the first page of the contents list — must still be
+// plain: its folio belongs centred at the FOOT, not in the running head at the
+// top. The assembler used to take the running-head path whenever \@oddhead
+// existed, whatever style was in force. Measured against tectonic on an 11pt
+// book: the folio centred at x=277.49 near the bottom of the page there, and it
+// came out at x=100.90 near the top here.
+func TestThisPageStylePlainBeatsAClassWideRunningHead(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{book}
+\begin{document}
+\chapter{One}
+Body.
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The control: without a class-wide \@oddhead this test would pass for the
+	// wrong reason, because there would be no running head to lose to.
+	if !e.hasLatexHead() {
+		t.Fatal("book.cls defined no \\@oddhead here; the interaction under test cannot arise")
+	}
+	pages := e.Pages()
+	if len(pages) == 0 {
+		t.Fatal("no pages")
+	}
+	top := pages[0].list
+	if len(top) < 2 {
+		t.Fatalf("the page has %d items", len(top))
+	}
+	// The plain style ends the page with vertical fil and the folio box, so the
+	// folio is the LAST thing on the page. The running-head style would put it in
+	// a box at the very top instead.
+	last, ok := top[len(top)-1].(*boxNode)
+	if !ok || !boxDraws(last, '1') {
+		t.Errorf("the last item on the page is %T and does not hold the folio; a plain page ends with it", top[len(top)-1])
+	}
+	if first, ok := top[0].(*boxNode); ok && boxDraws(first, '1') {
+		t.Error("the folio is in a box at the TOP of the page: the running head won over \\thispagestyle{plain}")
+	}
+}
+
+// boxDraws reports whether the box draws that character anywhere inside it.
+func boxDraws(b *boxNode, ch rune) bool {
+	for _, n := range b.list {
+		switch v := n.(type) {
+		case charNode:
+			if v.ch == ch {
+				return true
+			}
+		case *boxNode:
+			if boxDraws(v, ch) {
+				return true
+			}
+		}
+	}
+	return false
+}

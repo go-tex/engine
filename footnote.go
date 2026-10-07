@@ -267,7 +267,17 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	// "fancy" always assembles head and foot; a LaTeX page style that declared
 	// \@oddhead takes the same path, since the only difference is where the fields
 	// came from (see latexHead). \pagestyle{headings} lands here.
-	if style == "fancy" || e.hasLatexHead() {
+	//
+	// ⛔ The \@oddhead test has to be read TOGETHER with the style in force, not
+	// instead of it. book.cls and report.cls say \pagestyle{headings} in their
+	// preamble, so \@oddhead is defined for the whole document — and a page asking
+	// for "plain" came down this path anyway, which put its folio in the running
+	// head at the TOP where the class wants it centred at the FOOT. That is not a
+	// rare page: every chapter opening in every book and report is a
+	// \thispagestyle{plain} page, and so is the first page of its contents list.
+	// Measured against tectonic on an 11pt book: the folio centred at y=694.40
+	// there, flush left at y=102.89 here.
+	if style == "fancy" || (style != "plain" && e.hasLatexHead()) {
 		return e.assembleFancyPage(vlist)
 	}
 	// "plain": a centred page number pushed to the foot with vertical fil, filling

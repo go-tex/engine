@@ -66,6 +66,60 @@ func (e *Engine) doTOCEntry() {
 	})
 }
 
+// tocAddLevels are the only names \addcontentsline records, and the levels they
+// take. \chapter and \part are not \@startsection-based in any class — they call
+// \addcontentsline themselves (book.cls:318,359) — so nothing else records them,
+// and a book's contents list came out with no chapters in it at all.
+//
+// Everything else is dropped on purpose. A class calls \addcontentsline for its
+// sections and its captions too, and both of those already reach the table by
+// their own route (\@gxnum in classprims.go and the redefined \caption), so
+// recording them here would put every section in the list twice.
+var tocAddLevels = map[string]int{"part": -1, "chapter": 0}
+
+// numberlineEnd is what \numberline{N} leaves after the number (classkernel.go),
+// so the recorder can tell the entry's number from its title. A class writes the
+// two as one argument: "\numberline{3}The Third Chapter".
+const numberlineEnd = `\gotex@numberlineend`
+
+// doAddContentsLine implements \addcontentsline{kind}{name}{text} for the names
+// in tocAddLevels. The number, when the class supplied one, arrives inside the
+// text wrapped in \numberline and is split back out here, so it lands in its own
+// box in the contents list instead of running into the title.
+func (e *Engine) doAddContentsLine() {
+	kind := trimSpaces(e.readBraceGroupString())
+	name := trimSpaces(e.readBraceGroupString())
+	text, plain := e.readTitleGroupBoth()
+	level, ok := tocAddLevels[name]
+	if kind != "toc" || !ok {
+		return
+	}
+	number, title := splitNumberline(text)
+	// The plain rendering (for a PDF bookmark) drops control sequences, so the
+	// marker is not in it and the number is simply glued to the front: "1One".
+	// Take it off by the number the detokenized text yielded.
+	plainTitle := trimSpaces(strings.TrimPrefix(trimSpaces(plain), number))
+	e.tocEntries = append(e.tocEntries, tocEntry{
+		kind:       "toc",
+		level:      level,
+		number:     number,
+		title:      title,
+		plainTitle: plainTitle,
+		marker:     len(e.mvl),
+	})
+}
+
+// splitNumberline separates "<number>\gotex@numberlineend<title>" into its two
+// halves. Text with no marker is all title and carries no number, which is what
+// an unnumbered chapter (\frontmatter, or \c@secnumdepth below zero) produces.
+func splitNumberline(s string) (number, title string) {
+	i := strings.Index(s, numberlineEnd)
+	if i < 0 {
+		return "", trimSpaces(s)
+	}
+	return trimSpaces(s[:i]), trimSpaces(s[i+len(numberlineEnd):])
+}
+
 // readTitleGroupBoth reads a {…} title group once and returns it two ways: the
 // detokenized string the on-page contents list re-typesets (like
 // readBraceGroupString), and a clean plain-text rendering for a PDF bookmark

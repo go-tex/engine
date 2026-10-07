@@ -1955,6 +1955,7 @@ func (e *Engine) loadMore() {
 	e.prim("eqref", func(e *Engine) { e.doEqref() })
 	e.prim("cite", func(e *Engine) { e.doCite() })
 	e.prim("@tocentry", func(e *Engine) { e.doTOCEntry() })
+	e.prim("@tocadd", func(e *Engine) { e.doAddContentsLine() })
 	e.prim("tableofcontents", func(e *Engine) { e.doTableOfContents() })
 	e.prim("listoffigures", func(e *Engine) { e.doListOfFigures() })
 	e.prim("listoftables", func(e *Engine) { e.doListOfTables() })

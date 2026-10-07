@@ -600,8 +600,19 @@ const LaTeX2eClassKernel = `
 \long\def\@mkboth#1#2{}
 \def\leftmark{\gotex@leftmark}
 \def\rightmark{\gotex@rightmark}
-% ── contents recording (the engine owns its own TOC; accept and drop) ────────
-\def\addcontentsline#1#2#3{}
+% ── contents recording ───────────────────────────────────────────────────────
+% The engine owns its own contents table (toc.go) and the \@startsection bridge
+% above records every sectioning level through \@tocentry. \chapter and \part are
+% the exception: they are NOT \@startsection-based in any class — they call
+% \addcontentsline themselves — so without this line a book's contents list comes
+% out with no chapters in it at all. \@tocadd is the Go side; it records only
+% {toc}{chapter} and {toc}{part}, and drops everything else, because every other
+% kind already reaches the table by its own route and would be recorded twice.
+\def\addcontentsline#1#2#3{\@tocadd{#1}{#2}{#3}}
+% \numberline{N} is how a class hands the entry's NUMBER inside its title text.
+% It expands to the number followed by a marker the recorder splits on, so the
+% number lands in its own box instead of running into the title.
+\def\numberline#1{#1\gotex@numberlineend}
 \long\def\addtocontents#1#2{}
 \def\addvspace#1{\vskip#1}
 \def\addpenalty#1{}
