@@ -26,6 +26,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -53,7 +54,7 @@ type reportOptions struct {
 	grep  string
 }
 
-func run(paths []string, opt reportOptions, w *os.File) error {
+func run(paths []string, opt reportOptions, w io.Writer) error {
 	var sb strings.Builder
 	for i, p := range paths {
 		lines, pageH, err := linesOf(p, opt)
@@ -68,7 +69,7 @@ func run(paths []string, opt reportOptions, w *os.File) error {
 			sb.WriteString(l.String() + "\n")
 		}
 	}
-	_, err := w.WriteString(sb.String())
+	_, err := io.WriteString(w, sb.String())
 	return err
 }
 

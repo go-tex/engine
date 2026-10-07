@@ -81,15 +81,21 @@ func PageRuns(doc *reader.Document, page int) ([]Run, error) {
 	}
 	fonts := pageFonts(doc, page)
 	st := newTextState()
-	var stack []matrix
+	var stack []textState
 	var runs []Run
 	for _, op := range ops {
 		switch op.Operator {
 		case "q":
-			stack = append(stack, st.ctm)
+			// q/Q save the whole graphics state, and the character, word and
+			// horizontal spacing are part of it — not only the matrix. Saving the
+			// matrix alone leaks a Tc set inside a q out past its Q, which widens
+			// every run after it by that spacing.
+			stack = append(stack, st)
 		case "Q":
 			if n := len(stack); n > 0 {
-				st.ctm, stack = stack[n-1], stack[:n-1]
+				tm, tlm := st.tm, st.tlm // the text matrices are NOT part of it
+				st, stack = stack[n-1], stack[:n-1]
+				st.tm, st.tlm = tm, tlm
 			}
 		case "cm":
 			if m, ok := matrixOf(op.Operands); ok {
