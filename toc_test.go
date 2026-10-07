@@ -565,3 +565,98 @@ func TestEmOfToks(t *testing.T) {
 		t.Error("emOfToks read a control sequence as a length")
 	}
 }
+
+// \chapter and \part are not \@startsection-based in any class: they call
+// \addcontentsline themselves (book.cls:318,359), which the engine used to
+// accept and drop. A book's contents list therefore came out with no chapters in
+// it — only the sections under them, with nothing to say which chapter they
+// belonged to.
+func TestChapterEntriesReachTheContentsList(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{book}
+\begin{document}
+\tableofcontents
+\chapter{One}
+\section{Alpha}
+\subsection{Beta}
+\chapter{Two}
+\section{Gamma}
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []tocEntry{
+		{level: 0, number: "1", title: "One"},
+		{level: 1, number: "1.1", title: "Alpha"},
+		{level: 2, number: "1.1.1", title: "Beta"},
+		{level: 0, number: "2", title: "Two"},
+		{level: 1, number: "2.1", title: "Gamma"},
+	}
+	if len(e.tocSource) != len(want) {
+		t.Fatalf("recorded %d entries, want %d: %+v", len(e.tocSource), len(want), e.tocSource)
+	}
+	for i, w := range want {
+		g := e.tocSource[i]
+		if g.level != w.level || g.number != w.number || g.title != w.title {
+			t.Errorf("entry %d = {level %d, %q, %q}, want {level %d, %q, %q}",
+				i, g.level, g.number, g.title, w.level, w.number, w.title)
+		}
+		// The number must not have been left glued to the front of the bookmark.
+		if g.plainTitle != w.title {
+			t.Errorf("entry %d bookmark title = %q, want %q", i, g.plainTitle, w.title)
+		}
+	}
+	// A chapter entry takes \l@chapter's shape: bold, no leader, a blank above.
+	ch := e.tocShapeFor(tocEntry{kind: "toc", level: 0})
+	if ch.dotted || !ch.bold || ch.vspaceBefore == 0 {
+		t.Errorf("a chapter entry = %+v, want book.cls:618 — bold, leaderless, spaced", ch)
+	}
+}
+
+// A class calls \addcontentsline for its sections and its captions too, and both
+// of those already reach the table by their own route (\@gxnum, and the
+// redefined \caption). Recording them here as well would put every section in
+// the contents list TWICE — which is the failure a bridge like this invites.
+func TestAddContentsLineRecordsOnlyWhatNothingElseDoes(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	src := `\hsize=300pt
+\@tocadd{toc}{section}{\numberline{9}Not me}
+\@tocadd{lof}{figure}{\numberline{9}Nor me}
+\@tocadd{lot}{table}{Nor me either}
+\@tocadd{toc}{chapter}{\numberline{7}But me}
+\@tocadd{toc}{part}{\numberline{III}And me}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.tocEntries) != 2 {
+		t.Fatalf("recorded %d entries, want 2: %+v", len(e.tocEntries), e.tocEntries)
+	}
+	for i, w := range []tocEntry{
+		{level: 0, number: "7", title: "But me"},
+		{level: -1, number: "III", title: "And me"},
+	} {
+		if g := e.tocEntries[i]; g.level != w.level || g.number != w.number || g.title != w.title {
+			t.Errorf("entry %d = {level %d, %q, %q}, want {level %d, %q, %q}",
+				i, g.level, g.number, g.title, w.level, w.number, w.title)
+		}
+	}
+}
+
+// \numberline{N} is how a class hands the number INSIDE the title text. An entry
+// with none — an unnumbered chapter, in \frontmatter or below \c@secnumdepth —
+// is all title, and must not have its first word taken for a number.
+func TestSplitNumberline(t *testing.T) {
+	for _, c := range []struct{ in, num, title string }{
+		{`7` + numberlineEnd + `The Seventh`, "7", "The Seventh"},
+		{`III` + numberlineEnd + ` Spaced `, "III", "Spaced"},
+		{`Preface`, "", "Preface"},
+		{``, "", ""},
+		{numberlineEnd + `No number at all`, "", "No number at all"},
+	} {
+		num, title := splitNumberline(c.in)
+		if num != c.num || title != c.title {
+			t.Errorf("splitNumberline(%q) = %q,%q want %q,%q", c.in, num, title, c.num, c.title)
+		}
+	}
+}
