@@ -84,3 +84,74 @@ func TestALongWordIsNotHyphenated(t *testing.T) {
 		t.Errorf("a %d-letter word got %d hyphenation points, want 0 (tex.web §891)", len(long), got)
 	}
 }
+
+// ⛔ And the same expansion routed into a MACRO rather than onto a page. The ceiling
+// above counts what expansion puts in a paragraph; \edef\boom{…} never builds one, so
+// the identical bomb passed it untouched. A paired witness, the same source bytes
+// differing only in the last line, measured on v0.234.1:
+//
+//	the expansion TYPESET      94 MB   0.06 s   maxParNodes fires
+//	the same in an \edef     5072 MB   1.66 s   nothing fires
+//
+// The reference stops both: tectonic fails the \edef form in 0.10 s at 236 MB with
+// "TeX capacity exceeded, sorry [main memory size=5000000]". With maxTokenList the
+// same file returns in half a second at ~99 MB.
+//
+// \boom is never USED here, deliberately: the cost is in holding the tokens, and a
+// test that typeset them would be testing the paragraph ceiling again.
+func TestADocumentCannotExhaustMemoryByBuildingAReplacementText(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`\documentclass{article}\makeatletter`)
+	b.WriteString(`\def\a{xxxxxxxxxx}`)
+	prev := 'a'
+	for _, c := range "bcdefghij" {
+		b.WriteString(`\def\` + string(c) + `{`)
+		for i := 0; i < 10; i++ {
+			b.WriteString(`\` + string(prev))
+		}
+		b.WriteString(`}`)
+		prev = c
+	}
+	b.WriteString(`\begin{document}\edef\boom{\j}X\end{document}`)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := compile([]byte(b.String()), Options{Lenient: true}); err == nil {
+			t.Error("no error for an \\edef that asks for 10^10 characters")
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("still running after 30s: the token ceiling did not bound the work")
+	}
+}
+
+// ⛔ The negative, which matters more: a ceiling that fires on a real document is worse
+// than none. The largest replacement text any of the 154 corpus papers builds is 2999
+// tokens (median 414), so a list two orders of magnitude above that must still pass —
+// this builds ~100 000 and has to come through untouched.
+func TestAReplacementTextTheSizeARealDocumentBuildsIsUntouched(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`\documentclass{article}\makeatletter`)
+	b.WriteString(`\def\a{xxxxxxxxxx}`) // 10
+	prev := 'a'
+	for _, c := range "bcde" { // 10 -> 100 -> 1000 -> 10_000 -> 100_000
+		b.WriteString(`\def\` + string(c) + `{`)
+		for i := 0; i < 10; i++ {
+			b.WriteString(`\` + string(prev))
+		}
+		b.WriteString(`}`)
+		prev = c
+	}
+	b.WriteString(`\begin{document}\edef\big{\e}\message{[LEN:\the\numexpr0\relax]}X\end{document}`)
+
+	e, err := compile([]byte(b.String()), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("a replacement text of ~100 000 tokens was refused: %v", err)
+	}
+	if d := e.Diagnostics(); d.Runaway {
+		t.Error("the guard fired on a list a real document could plausibly build")
+	}
+}

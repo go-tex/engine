@@ -479,6 +479,35 @@ const (
 	// minutes of work, because the cost of the paragraph is superlinear in its
 	// size: at 10_000 the same file returns in 5 seconds and 28 MB.
 	maxParNodes = 200_000
+	// maxTokenList bounds the material ONE replacement text may hold. maxParNodes
+	// above counts what expansion puts on a PAGE; this counts what it puts in a
+	// MACRO, and the two are different surfaces: \edef\boom{…} never builds a
+	// paragraph, so the same "billion laughs" expansion routed into a macro body
+	// passed the paragraph ceiling untouched. Measured on a paired witness, the
+	// same source bytes differing only in the last line:
+	//
+	//	the expansion TYPESET      94 MB   0.06 s   maxParNodes fires
+	//	the same in an \edef     5072 MB   1.66 s   nothing fires
+	//
+	// The reference stops both. tectonic fails the \edef form in 0.10 s at 236 MB
+	// with "TeX capacity exceeded, sorry [main memory size=5000000]", so this is a
+	// divergence to close rather than a comfort to add.
+	//
+	// THE NUMBER IS MEASURED, not chosen. Instrumenting expandList to record the
+	// largest replacement text it builds, over all 154 papers of the fidelity
+	// corpus, none unread:
+	//
+	//	largest    2_999 tokens   (2310.11517)
+	//	then       2_676, 2_220, 2_153, 1_925
+	//	median       414
+	//
+	// So 1_000_000 is 333 times the largest replacement text any real document in
+	// the corpus builds, and 67 times below what the attack wants. The multiple is
+	// larger than maxParNodes's 22 because the costs differ: a paragraph's cost is
+	// superlinear in its size, a token list's is linear — a million tokens is tens
+	// of megabytes, bounded and uninteresting. For scale, TeX's own main_memory is
+	// 5_000_000 words, so this is the conservative end of the same range.
+	maxTokenList = 1_000_000
 	// tightLoopSteps is the no-progress ceiling: expansion steps taken with no new
 	// base input consumed. A non-terminating expansion churns the input stack
 	// without ever reading further, so it hits this in a fraction of a second,
@@ -2493,6 +2522,17 @@ func (e *Engine) tripCapacity() {
 	e.noBase = true
 	e.fail(fmt.Sprintf("capacity exceeded: one paragraph grew past %d nodes "+
 		"(a macro that expands exponentially, or a runaway that produces text)", maxParNodes))
+}
+
+// tripTokenCapacity ends the run because one replacement text grew past
+// maxTokenList. It stops even in lenient mode for the reason tripCapacity does:
+// what overflowed is still there to overflow again.
+func (e *Engine) tripTokenCapacity() {
+	e.runaway = true
+	e.lists = nil
+	e.noBase = true
+	e.fail(fmt.Sprintf("capacity exceeded: one replacement text grew past %d tokens "+
+		"(a macro that expands exponentially inside \\edef, \\message or \\write)", maxTokenList))
 }
 
 // printInputStack prints what the mouth was about to READ when the guard fired.
