@@ -115,3 +115,80 @@ func TestSecondPassHyphenatesWhatTheFirstCannotSet(t *testing.T) {
 		t.Fatal("expected the hyphenated list from the second pass")
 	}
 }
+
+// \leftskip and \rightskip narrow the MEASURE the text is broken against; they
+// are not decoration added to a line that was already broken. TeX accounts for
+// them before it breaks (tex.web §827, background := left_skip + right_skip).
+//
+// Breaking against the whole \hsize and gluing them on afterwards makes every
+// line overfull by their two widths, and the hpack that follows shrinks the
+// inter-word glue to make it fit: the words come out touching and the paragraph
+// is set far wider than it asked for. Measured before this: with
+// \rightskip=100pt on a 343.73pt measure the text still reached x=463.94, 13.5pt
+// short of the margin instead of 100. After: 377.87, which is the margin less
+// 100 to a hundredth of a point.
+func TestLineSkipsNarrowTheMeasureBeforeBreaking(t *testing.T) {
+	const text = `A fairly long subsection title that has to wrap onto a second line to show where the right edge of the measure actually falls when it is set.`
+	width := func(src string) float64 {
+		t.Helper()
+		e, err := compile([]byte(`\documentclass{article}`+"\n"+`\begin{document}`+"\n"+src+"\n"+`\end{document}`), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var widest float64
+		for _, p := range e.Pages() {
+			for _, n := range p.list {
+				b, ok := n.(*boxNode)
+				if !ok {
+					continue
+				}
+				if w := lineInkWidth(b); w > widest {
+					widest = w
+				}
+			}
+		}
+		return widest
+	}
+	plain := width(`\noindent ` + text)
+	narrowed := width(`{\rightskip=100pt` + "\n" + `\noindent ` + text + `\par}`)
+	if plain <= 0 {
+		t.Fatal("the unconstrained paragraph drew nothing")
+	}
+	// 100pt of \rightskip must take 100pt off the text, give or take the word
+	// that no longer fits on the line.
+	if got := plain - narrowed; got < 80 || got > 120 {
+		t.Errorf("\\rightskip=100pt narrowed the text by %.2fpt (from %.2f to %.2f), want about 100",
+			got, plain, narrowed)
+	}
+	// \raggedright's \rightskip is 0pt plus 1fil: infinite stretch, NO width. It
+	// stops the lines being justified to the margin; it does not move the margin.
+	ragged := width(`{\rightskip=0pt plus 1fil` + "\n" + `\noindent ` + text + `\par}`)
+	if ragged < plain-20 {
+		t.Errorf("a width-less \\rightskip narrowed the measure to %.2f from %.2f; ragged setting must not move the margin", ragged, plain)
+	}
+}
+
+// lineInkWidth is how far right the characters of one line reach, which is the
+// quantity a reader compares against the margin — not the box's own width, which
+// is \hsize whatever the glue inside it does.
+func lineInkWidth(b *boxNode) float64 {
+	var x, widest float64
+	var walk func(nodes []node)
+	walk = func(nodes []node) {
+		for _, n := range nodes {
+			switch v := n.(type) {
+			case charNode:
+				x += spToPt(v.width)
+				widest = x
+			case kernNode:
+				x += spToPt(v.width)
+			case glueNode:
+				x += spToPt(b.setWidth(v.spec))
+			case *boxNode:
+				walk(v.list)
+			}
+		}
+	}
+	walk(b.list)
+	return widest
+}
