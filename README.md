@@ -102,7 +102,9 @@ aliases), `\newcommand*`/`\DeclareOldFontCommand`, the rubber-glue and
 `<factor><internal-dimen>` length scanner, numbered `\@startsection` with
 `\@tocentry`, `\secdef` via `\@dblarg` (so `\chapter` works), `\@float`
 figure/table captions, `\@starttoc` bridged to the engine's two-pass contents
-table, and — the keystone — **stable source lines** (loading a 644-line class no
+table, `\addcontentsline` bridged to it as well — `\chapter` and `\part` are the
+two entries no `\@startsection` records, which is why a book's contents list
+used to have no chapters in it — and — the keystone — **stable source lines** (loading a 644-line class no
 longer shifts the line numbers the editor maps glyphs back to). A real
 `\documentclass{article}` document typesets a numbered title, a
 `\tableofcontents` shaped by **the loaded class's own `\l@…` macros** — the
@@ -134,7 +136,10 @@ format and image type, with its status, plus every remaining gap — lives at
 - **Packages with native handling:** `amsmath` (equation/align/gather/multline/…),
   `amssymb`, `amsthm`, `thmtools` (`\declaretheorem`, including its comma list of
   names and both of its counter keys), `graphicx`, `xcolor`, `hyperref`,
-  `geometry`, `fancyhdr`,
+  `geometry`, `fancyhdr` (and the class page styles beside it: a
+  `\thispagestyle{plain}` page — every chapter opening in a book or report, and
+  the first page of its contents list — keeps its folio centred at the foot even
+  though the class declared a running head for the whole document),
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
   `subcaption`, `algorithm`/`algorithmic`, `listings` (`caption=`, `label=` and
   `captionpos=`, so a listing is numbered, captioned and referable; and
