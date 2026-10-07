@@ -447,12 +447,13 @@ func hasFillGlue(nodes []node) bool {
 // level 1 is \l@section's undotted one. Reading the level and ignoring the kind
 // would set every list of figures in bold with no leader at all.
 func TestTOCFigureEntriesTakeTheDottedShape(t *testing.T) {
-	sec := tocShapeFor("toc", 1)
-	if sec.dotted || sec.indent != 0 {
-		t.Errorf("a level-1 contents entry = %+v, want \\l@section: undotted at indent 0", sec)
+	e := compiledWithClass(t, "article")
+	sec := e.tocShapeFor(tocEntry{kind: "toc", level: 1})
+	if sec.dotted || sec.indent != 0 || !sec.bold {
+		t.Errorf("a level-1 contents entry = %+v, want article's \\l@section: bold, undotted, indent 0", sec)
 	}
 	for _, kind := range []string{"figure", "table"} {
-		got := tocShapeFor(kind, 1)
+		got := e.tocShapeFor(tocEntry{kind: kind, level: 1})
 		if !got.dotted || got.indent != 1.5 || got.numWidth != 2.3 {
 			t.Errorf("a level-1 %s entry = %+v, want \\@dottedtocline{1}{1.5em}{2.3em}", kind, got)
 		}
@@ -463,11 +464,104 @@ func TestTOCFigureEntriesTakeTheDottedShape(t *testing.T) {
 \listoffigures
 \begin{figure}\caption{Alpha}\end{figure}
 \end{document}`)
-	e, err := compile(src, Options{})
+	e2, err := compile(src, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasDotLeader(e.mvl) {
+	if !hasDotLeader(e2.mvl) {
 		t.Error("no dot leader in the list of figures; \\l@figure is \\@dottedtocline")
+	}
+}
+
+// compiledWithClass returns a render engine with that class file loaded, so the
+// \l@<name> macros a contents entry's shape is read from are the real ones.
+func compiledWithClass(t *testing.T, class string) *Engine {
+	t.Helper()
+	e, err := compile([]byte("\\documentclass{"+class+"}\n\\begin{document}x\\end{document}"), Options{})
+	if err != nil {
+		t.Fatalf("compiling a %s document: %v", class, err)
+	}
+	return e
+}
+
+// The LEVEL does not decide a contents entry's shape; the loaded CLASS does.
+// article's \l@section is hand-written — bold, \hfil, no leader (article.cls:528)
+// — while book's and report's \l@section, at the very same level 1, is
+// \@dottedtocline{1}{1.5em}{2.3em} (book.cls:635, report.cls:629). Reading the
+// level alone set a thesis's contents list in article's shape, which cost three
+// pages on corpus paper 2402.04711 (\documentclass{book}) when measured against
+// the reference. Nothing but the class file can tell the two apart.
+func TestTOCShapeComesFromTheClassNotTheLevel(t *testing.T) {
+	for _, c := range []struct {
+		class            string
+		dotted           bool
+		indent, numWidth float64
+	}{
+		{"article", false, 0, 1.5},
+		{"book", true, 1.5, 2.3},
+		{"report", true, 1.5, 2.3},
+	} {
+		t.Run(c.class, func(t *testing.T) {
+			got := compiledWithClass(t, c.class).tocShapeFor(tocEntry{kind: "toc", level: 1})
+			if got.dotted != c.dotted || got.indent != c.indent || got.numWidth != c.numWidth {
+				t.Errorf("%s level-1 entry = %+v, want dotted=%v indent=%v numWidth=%v",
+					c.class, got, c.dotted, c.indent, c.numWidth)
+			}
+		})
+	}
+	// The deeper levels differ between the two families too: article indents a
+	// subsection by 1.5em, book by 3.8em (book.cls:636).
+	if got := compiledWithClass(t, "book").tocShapeFor(tocEntry{kind: "toc", level: 2}); got.indent != 3.8 || got.numWidth != 3.2 {
+		t.Errorf("book level-2 entry = %+v, want \\@dottedtocline{2}{3.8em}{3.2em}", got)
+	}
+	if got := compiledWithClass(t, "article").tocShapeFor(tocEntry{kind: "toc", level: 2}); got.indent != 1.5 || got.numWidth != 2.3 {
+		t.Errorf("article level-2 entry = %+v, want \\@dottedtocline{2}{1.5em}{2.3em}", got)
+	}
+}
+
+// The two lengths are READ OUT of the class's \@dottedtocline, not restated here.
+// A class that writes them some other way still gets its leader: only the lengths
+// fall back, never the dots.
+func TestDottedTocLineReadsTheClassLengths(t *testing.T) {
+	e := compiledWithClass(t, "book")
+	indent, numWidth, haveDims, dotted := e.dottedTocLine("subsection")
+	if !dotted || !haveDims || indent != 3.8 || numWidth != 3.2 {
+		t.Errorf("dottedTocLine(subsection) = %v,%v,%v,%v want 3.8,3.2,true,true", indent, numWidth, haveDims, dotted)
+	}
+	// \l@chapter is hand-written: not a \@dottedtocline at all.
+	if _, _, _, dotted := e.dottedTocLine("chapter"); dotted {
+		t.Error("\\l@chapter read as a \\@dottedtocline; it is the bold, leaderless one")
+	}
+	// A name the class never defines.
+	if _, _, _, dotted := e.dottedTocLine("nosuchsection"); dotted {
+		t.Error("an undefined \\l@nosuchsection read as a \\@dottedtocline")
+	}
+}
+
+func TestEmOfToks(t *testing.T) {
+	toks := func(s string) []tok {
+		var ts []tok
+		for _, r := range s {
+			ts = append(ts, chTok(r, catOther))
+		}
+		return ts
+	}
+	for _, c := range []struct {
+		in   string
+		want float64
+		ok   bool
+	}{
+		{"1.5em", 1.5, true}, {"10em", 10, true}, {"3.8em", 3.8, true},
+		{"2.3pt", 0, false}, // a unit the entry's font size cannot convert here
+		{"em", 0, false}, {"", 0, false}, {"-1em", 0, false}, {"1.5", 0, false},
+	} {
+		got, ok := emOfToks(toks(c.in))
+		if got != c.want || ok != c.ok {
+			t.Errorf("emOfToks(%q) = %v,%v want %v,%v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+	// A control sequence among the characters is not a length we can read.
+	if _, ok := emOfToks([]tok{csTok("@tempdima")}); ok {
+		t.Error("emOfToks read a control sequence as a length")
 	}
 }

@@ -21,7 +21,10 @@ package engine
 // running two or three times. The numbers are never invented: an entry that
 // could not be placed reports page 0 (printed blank), not a fabricated value.
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // tocEntry is one recorded contents line. kind selects the list it belongs to:
 // "toc" for \tableofcontents (sections/subsections), "figure" for
@@ -184,21 +187,36 @@ func (e *Engine) doStartTOC() {
 	e.push(b.ts)
 }
 
-// tocLevelShape is article.cls's contents ladder (texmf/article.cls:528-547): per
-// nesting level, the indent the entry hangs at and the width of the box its number
-// sits in, both in em of the entry's font. dotted is false for exactly one level —
-// \l@section sets its entry "#1\nobreak\hfil" with NO leader at all, and in bold;
-// every deeper level goes through \@dottedtocline, which is where the dots are.
-// Levels past the last row reuse it, as \@dottedtocline does for an unlisted depth.
-var tocLevelShape = []struct {
-	indent, numWidth float64 // em
+// tocShape is how ONE contents entry is set: the indent it hangs at and the width
+// of the box its number sits in (both em of the entry's font), whether a dot
+// leader runs from the title to the page number, whether the title is bold, and
+// the \addvspace that precedes the entry (em).
+type tocShape struct {
+	indent, numWidth float64
 	dotted           bool
-}{
-	{0, 1.5, false},   // \l@section:       \@tempdima 1.5em, \bfseries, \hfil
-	{1.5, 2.3, true},  // \l@subsection:    \@dottedtocline{2}{1.5em}{2.3em}
-	{3.8, 3.2, true},  // \l@subsubsection: \@dottedtocline{3}{3.8em}{3.2em}
-	{7.0, 4.1, true},  // \l@paragraph:     \@dottedtocline{4}{7.0em}{4.1em}
-	{10.0, 5.0, true}, // \l@subparagraph:  \@dottedtocline{5}{10em}{5em}
+	bold             bool
+	vspaceBefore     float64
+}
+
+// tocFallbackLadder is article.cls's contents ladder (texmf/article.cls:528-547),
+// used only when NO class defines an \l@<name> for the level — the engine's own
+// LaTeX emulation (latex.go's \@nsection), which has no class file to read.
+// Levels past the last row reuse it, as \@dottedtocline does for an unlisted depth.
+var tocFallbackLadder = []tocShape{
+	{numWidth: 1.5, bold: true, vspaceBefore: 1}, // \l@section:    \@tempdima 1.5em, \bfseries, \hfil
+	{indent: 1.5, numWidth: 2.3, dotted: true},   // \l@subsection: \@dottedtocline{2}{1.5em}{2.3em}
+	{indent: 3.8, numWidth: 3.2, dotted: true},   // \l@subsubsection
+	{indent: 7.0, numWidth: 4.1, dotted: true},   // \l@paragraph
+	{indent: 10.0, numWidth: 5.0, dotted: true},  // \l@subparagraph
+}
+
+// tocLevelName names the sectioning command that recorded an entry at a given
+// level. \@startsection numbers them identically in article, report and book
+// (article.cls:390-410, book.cls:404-420), so the level alone picks the \l@<name>
+// the loaded class defines — which is the macro that decides the entry's shape.
+var tocLevelName = map[int]string{
+	-1: "part", 0: "chapter", 1: "section", 2: "subsection",
+	3: "subsubsection", 4: "paragraph", 5: "subparagraph",
 }
 
 // tocPnumWidth is \@pnumwidth (article.cls:499): the box the page number is set
@@ -225,39 +243,150 @@ func (e *Engine) tocDotCell() int {
 	return w + ptToSP(2*tocDotSep/18*float64(f.sizePt()))
 }
 
-// tocShapeFor picks the row of tocLevelShape an entry is set with. A contents
-// entry ("toc") takes its own level, so level 1 is \l@section — the one undotted,
-// unindented row. A figure or table entry does NOT: \l@figure and \l@table are
-// \@dottedtocline{1}{1.5em}{2.3em} (article.cls:554,562), the same shape as
-// \l@subsection, even though \caption records them at level 1 (latex.go:779).
-// Reading the level alone would set a list of figures in bold with no leader.
-func tocShapeFor(kind string, level int) struct {
-	indent, numWidth float64
-	dotted           bool
-} {
-	if kind != "toc" {
-		level = 2
+// tocShapeFor resolves how an entry is set by READING THE LOADED CLASS, not by
+// assuming one. The level is not enough on its own: article's \l@section is
+// hand-written (bold, \hfil, no leader) while book's and report's \l@section at
+// the SAME level is \@dottedtocline{1}{1.5em}{2.3em} (book.cls:635). Keying the
+// shape on the level alone set a thesis's contents list in article's shape and
+// cost three pages on a real corpus paper (2402.04711, \documentclass{book}).
+// A figure or table entry names its own \l@figure/\l@table, which every class
+// writes as \@dottedtocline even though \caption records them at level 1.
+func (e *Engine) tocShapeFor(en tocEntry) tocShape {
+	name := en.kind // "figure"/"table" ARE the \l@ names
+	if en.kind == "toc" {
+		name = tocLevelName[en.level]
 	}
-	return tocLevelShape[min(max(level, 1), len(tocLevelShape))-1]
+	indent, numWidth, haveDims, dotted := e.dottedTocLine(name)
+	fallback := tocFallbackLadder[min(max(en.level, 1), len(tocFallbackLadder))-1]
+	switch {
+	case dotted:
+		s := tocShape{indent: fallback.indent, numWidth: fallback.numWidth, dotted: true}
+		if haveDims {
+			s.indent, s.numWidth = indent, numWidth
+		}
+		return s
+	case e.eq["l@"+name] != nil:
+		// A hand-written \l@… — \l@part, \l@chapter, article's \l@section — which
+		// every class spells the same way: bold, \hfil instead of a leader, and a
+		// blank line before. Only \l@part is set apart (article.cls:509-526).
+		if name == "part" {
+			return tocShape{numWidth: 3, bold: true, vspaceBefore: 2.25}
+		}
+		return tocShape{numWidth: 1.5, bold: true, vspaceBefore: 1}
+	}
+	if en.kind != "toc" {
+		// No class: a list of figures still takes the \l@subsection shape, which is
+		// what \l@figure is in every class that defines one.
+		return tocFallbackLadder[1]
+	}
+	return fallback
 }
 
-// emitTOCEntryTokens appends one line per entry to b, shaped by the entry's level
-// (see tocLevelShape): an empty box for the indent, the number left-aligned in a
-// box of the level's width, the title, then either a dot leader or — for a section
-// entry — plain \hfil, and last the page number right-aligned in a \@pnumwidth box.
+// dottedTocLine reads the class's own \l@<name>: dotted reports whether it is a
+// \@dottedtocline, and indent/numWidth its second and third arguments when both
+// are a plain <number>em — which is how every class in the wild writes them
+// (article.cls:544-547, book.cls:635-639). A \@dottedtocline whose dimensions are
+// written some other way still counts as dotted; only its two lengths are lost,
+// and the caller falls back to article's for that level rather than to no leader.
+func (e *Engine) dottedTocLine(name string) (indent, numWidth float64, haveDims, dotted bool) {
+	m := e.eq["l@"+name]
+	if m == nil || m.kind != mMacro {
+		return 0, 0, false, false
+	}
+	i := indexOfCS(m.body, "@dottedtocline")
+	if i < 0 {
+		return 0, 0, false, false
+	}
+	_, j, ok1 := braceGroupAt(m.body, i+1) // the level, which the entry already carries
+	g2, k, ok2 := braceGroupAt(m.body, j)
+	g3, _, ok3 := braceGroupAt(m.body, k)
+	if !ok1 || !ok2 || !ok3 {
+		return 0, 0, false, true
+	}
+	indent, okA := emOfToks(g2)
+	numWidth, okB := emOfToks(g3)
+	return indent, numWidth, okA && okB, true
+}
+
+// indexOfCS returns the index of the first control-sequence token named name,
+// or -1.
+func indexOfCS(ts []tok, name string) int {
+	for i, t := range ts {
+		if t.cs == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// braceGroupAt reads the balanced {…} group starting at or after from, skipping
+// spaces before it, and returns its contents and the index just past its '}'.
+func braceGroupAt(ts []tok, from int) ([]tok, int, bool) {
+	i := from
+	for i < len(ts) && ts[i].cs == "" && ts[i].cat == catSpace {
+		i++
+	}
+	if i >= len(ts) || ts[i].cs != "" || ts[i].cat != catBegin {
+		return nil, from, false
+	}
+	depth, start := 1, i+1
+	for i++; i < len(ts); i++ {
+		if ts[i].cs != "" {
+			continue
+		}
+		switch ts[i].cat {
+		case catBegin:
+			depth++
+		case catEnd:
+			if depth--; depth == 0 {
+				return ts[start:i], i + 1, true
+			}
+		}
+	}
+	return nil, from, false
+}
+
+// emOfToks reads a "<number>em" dimension written as character tokens. It accepts
+// only em, the unit every class writes these two lengths in; anything else is
+// reported unreadable rather than silently converted at the wrong font size.
+func emOfToks(ts []tok) (float64, bool) {
+	var sb strings.Builder
+	for _, t := range ts {
+		if t.cs != "" {
+			return 0, false
+		}
+		if t.cat != catSpace {
+			sb.WriteRune(t.ch)
+		}
+	}
+	s := sb.String()
+	if !strings.HasSuffix(s, "em") {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(strings.TrimSuffix(s, "em"), 64)
+	if err != nil || v < 0 {
+		return 0, false
+	}
+	return v, true
+}
+
+// emitTOCEntryTokens appends one line per entry to b, shaped by what the loaded
+// class says about it (see tocShapeFor): an empty box for the indent, the number
+// left-aligned in a box of the level's width, the title, then either a dot leader
+// or plain \hfil, and last the page number right-aligned in a \@pnumwidth box.
 // Shared by \tableofcontents and \@starttoc.
 func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 	for _, en := range entries {
-		shape := tocShapeFor(en.kind, en.level)
-		if !shape.dotted {
-			// \l@section opens with \addvspace{1.0em}: a section entry stands apart
-			// from the sub-entries of the section above it.
+		shape := e.tocShapeFor(en)
+		if shape.vspaceBefore > 0 {
+			// \l@chapter opens with \vskip 1.0em and article's \l@section with
+			// \addvspace{1.0em}: the top entries stand apart from the ones under them.
 			b.cs("addvspace")
-			b.text("1em")
+			b.text(strconv.FormatFloat(shape.vspaceBefore, 'f', -1, 64) + "em")
 		}
 		b.cs("par")
 		b.cs("noindent")
-		// A group, so the bold of a section entry does not leak into the next one.
+		// A group, so the bold of a top-level entry does not leak into the next one.
 		b.begin()
 		if shape.indent > 0 {
 			// Indent with an empty hbox: unlike leading glue (\quad/\hspace), a box
@@ -265,7 +394,7 @@ func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 			b.boxTo(shape.indent)
 			b.end()
 		}
-		if !shape.dotted {
+		if shape.bold {
 			b.cs("bfseries")
 		}
 		// The number sits left-aligned in a box of the level's width, so the title

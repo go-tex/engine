@@ -105,9 +105,11 @@ figure/table captions, `\@starttoc` bridged to the engine's two-pass contents
 table, and — the keystone — **stable source lines** (loading a 644-line class no
 longer shifts the line numbers the editor maps glyphs back to). A real
 `\documentclass{article}` document typesets a numbered title, a
-`\tableofcontents` shaped like `article.cls`'s own — `\l@section`'s indent ladder
-and `\addvspace`, no dot leader on section entries, and `\@dottedtocline`'s
-`\@dotsep` tile rather than `\dotfill`'s narrower one on the levels below —
+`\tableofcontents` shaped by **the loaded class's own `\l@…` macros** — the
+indent and number-box widths are read out of its `\@dottedtocline` calls, so
+`article`'s leaderless bold `\l@section` and `book`'s dotted one at the very
+same level come out differently, and the leader tiles `\@dotsep` rather than
+`\dotfill`'s narrower box —
 numbered sections, and numbered figure/table captions, and it
 reproduces the reference engine's prose on the fidelity gate. Because the class
 files are `go:embed`ed and the resolver needs no filesystem, **the real classes
