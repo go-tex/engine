@@ -147,6 +147,15 @@ const LaTeX2eClassKernel = `
 \newdimen\fboxsep
 \newcount\col@number
 % ── list dimens / skips ─────────────────────────────────────────────────────
+% \list now EXECUTES its settings argument (classprims.go), which is where a
+% class states its margins — and where it reaches for macros that nothing used
+% to touch, because the argument was discarded unread. Two of them have to exist
+% before any class is loaded, or a document with no class file at all fails on
+% them: article's thebibliography settings call \@biblabel through \settowidth,
+% and \list itself asks for \@listi. A class that defines its own wins, since the
+% class file is read after this substrate.
+\providecommand\@biblabel[1]{[#1]}
+\providecommand\@listi{\leftmargin\leftmargini}
 \newdimen\leftmargin
 \newdimen\leftmargini
 \newdimen\leftmarginii

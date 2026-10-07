@@ -321,7 +321,22 @@ const LaTeX2eClassLead = `
 %
 % The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
 % run through \@trivlist directly and already match the reference.
-\def\list#1#2{\@trivlist}
+%
+% ⛔ \list's SECOND argument is where every class states the list's margins, and
+% it used to be thrown away. article.cls writes
+%   \newenvironment{quote}{\list{}{\rightmargin\leftmargin}\item\relax}{\endlist}
+% so a quotation came out with NO indentation at all — not too little, none.
+% Measured against tectonic: the reference sets a quote from x=158.67 to 452.58
+% on a 133.77-477.48 measure, and we set it from 133.77 to 477.50.
+%
+% \@listi first, because the settings READ \leftmargin (quote assigns it to
+% \rightmargin) — it has to hold the list's own margin before they run. It is
+% \@listi whatever the nesting, since \@listdepth is not tracked here: a nested
+% list takes the depth-1 margin, which is wrong by the difference between
+% \leftmargini and \leftmarginii and right by everything else.
+\def\list#1#2{\@trivlist\@listi\rightmargin\z@\itemindent\z@\listparindent\z@
+  #2\relax
+  \advance\leftskip\leftmargin \advance\rightskip\rightmargin}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -351,7 +366,12 @@ const LaTeX2eClassLead = `
 \def\@trivlist{\@topsepadd\topsep\ifvmode\advance\@topsepadd\partopsep\else\par\fi
   \addvspace\@topsepadd\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
-\def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
+% ⛔ \par BEFORE \endgroup. \leftskip and \rightskip are read when a paragraph is
+% BROKEN, not when its text is read, so ending the group first restores them and
+% the list's LAST paragraph is set at the full measure — which is why \itemize
+% (latex.go:264, "\par\endgroup") has always indented and \list had no way to.
+% LaTeX ends the paragraph inside the list's group for the same reason.
+\def\endtrivlist{\par\endgroup\addvspace\@topsepadd}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the
@@ -359,7 +379,18 @@ const LaTeX2eClassLead = `
 % its items a bare baseline apart: description gave 13.6pt where real LaTeX gives
 % 22.5. A trivlist with a single \item — a theorem, amsart's author block — is
 % unaffected, the flag suppressing the space on the first one.
-\def\@gotexitem[#1]{\par\@iteminterspace\noindent#1\ }
+% \itemindent moves an item's FIRST line relative to the list's left margin, and
+% it is how a class pulls a label back out into the margin: article's description
+% is \list{}{\itemindent-\leftmargin …}, so its term starts at the margin while
+% the rest of the item hangs at \leftmargin. An empty box first, so the (usually
+% negative) skip is not glue at the very start of a paragraph, where the line
+% breaker discards it.
+% The box is emitted only when there is something to skip: an empty box at the
+% head of the line also stops the line breaker discarding the glue behind it, and
+% with \itemindent=0 that turns the space after an empty label into 3.75pt of
+% real indent — which it measurably did to \begin{quote}.
+\def\@gotexitem[#1]{\par\@iteminterspace\noindent
+  \ifdim\itemindent=\z@\else\hbox{}\nobreak\hskip\itemindent\fi#1\ }
 `
 
 // leaveVMode is \leavevmode: in vertical mode it starts a paragraph, so the box
