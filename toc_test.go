@@ -660,3 +660,47 @@ func TestSplitNumberline(t *testing.T) {
 		}
 	}
 }
+
+// \@dottedtocline hangs the WHOLE entry at indent + numWidth and backs only its
+// FIRST line up by numWidth, so a title that wraps lines up under itself instead
+// of returning to the margin.
+//
+// Measured in the reference on corpus paper 2408.08199: entry 5.1 begins at
+// x=148.71 and its continuation at 171.63 — the margin plus 3.8em, the indent
+// plus the number-box width. Ours now lands at 148.72 and 171.63, the same to a
+// hundredth of a point. That measurement is the proof the layout is right; what
+// is asserted here is that the engine still ASKS for it, which is the part a
+// later edit can quietly drop.
+//
+// It could not be done until the line breaker took \leftskip off the measure
+// BEFORE breaking. With the skip glued on after, a \leftskip here stopped entries
+// wrapping at all: 5.1 ran 31pt past the right margin on one line, which is worse
+// than the margin-aligned wrap it replaced.
+func TestATocEntryAsksToHangUnderItsOwnTitle(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	if _, err := e.Run(`\documentclass{article}`); err != nil {
+		t.Fatal(err)
+	}
+	var b tocTokens
+	b.e = e
+	// article's \l@subsection is \@dottedtocline{2}{1.5em}{2.3em}.
+	e.emitTOCEntryTokens(&b, []tocEntry{{kind: "toc", level: 2, number: "1.1", title: "Alpha", page: 3}})
+	got := e.toksToString(b.ts)
+	for _, want := range []string{
+		`\leftskip =3.8em`, // the hang: indent + number box, on every line
+		`\hskip -2.3em`,    // the pull-back: one number box, on the first only
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the entry's tokens do not contain %q:\n%s", want, got)
+		}
+	}
+	// A \section entry in article hangs at nothing and pulls back by its own
+	// number box, so the two must not be the same number.
+	b.ts = nil
+	e.emitTOCEntryTokens(&b, []tocEntry{{kind: "toc", level: 1, number: "1", title: "Alpha", page: 3}})
+	if got := e.toksToString(b.ts); !strings.Contains(got, `\leftskip =1.5em`) {
+		t.Errorf("a level-1 entry hangs at something other than its number box:\n%s", got)
+	}
+}

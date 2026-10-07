@@ -439,14 +439,30 @@ func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 			b.text(strconv.FormatFloat(shape.vspaceBefore, 'f', -1, 64) + "em")
 		}
 		b.cs("par")
-		b.cs("noindent")
-		// A group, so the bold of a top-level entry does not leak into the next one.
+		// A group, so the bold of a top-level entry — and its \leftskip — does not
+		// leak into the next one. It opens BEFORE \noindent and closes after the
+		// \par that breaks the entry, because \leftskip is read when the paragraph
+		// is broken: set inside a paragraph already begun, it moves nothing.
 		b.begin()
-		if shape.indent > 0 {
-			// Indent with an empty hbox: unlike leading glue (\quad/\hspace), a box
-			// is not discarded at the start of a broken line.
-			b.boxTo(shape.indent)
+		// \@dottedtocline hangs the WHOLE entry at indent + numWidth and backs the
+		// first line up by numWidth, so a title that wraps lines up under itself
+		// instead of returning to the margin. Measured in the reference on
+		// 2408.08199: the number of "5.1" at the margin + 1.5em, the continuation
+		// line "plicial Complex" at the margin + 3.8em, which is indent + numWidth.
+		// An empty box first, so the negative skip is not glue at the very start of
+		// the paragraph, where the line breaker would discard it.
+		hang := shape.indent + shape.numWidth
+		if hang > 0 {
+			b.assign("leftskip", hang)
+		}
+		b.cs("noindent")
+		if hang > 0 {
+			b.cs("hbox")
+			b.begin()
 			b.end()
+			b.cs("nobreak")
+			b.cs("hskip")
+			b.text("-" + emOf(shape.numWidth))
 		}
 		if shape.bold {
 			b.cs("bfseries")
@@ -478,8 +494,8 @@ func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 			b.text(strconv.Itoa(en.page))
 		}
 		b.end()
-		b.end()
 		b.cs("par")
+		b.end()
 	}
 	b.cs("par")
 	b.cs("medskip")
@@ -512,9 +528,19 @@ func (b *tocTokens) spacer(pt int) {
 // at the start of a line, where glue would be dropped by the line breaker.
 func (b *tocTokens) boxTo(em float64) {
 	b.cs("hbox")
-	b.text("to " + strconv.FormatFloat(em, 'f', -1, 64) + "em")
+	b.text("to " + emOf(em))
 	b.begin()
 }
+
+// assign appends "\<name>=<em>em", for the glue parameters an entry sets inside
+// its own group.
+func (b *tocTokens) assign(name string, em float64) {
+	b.cs(name)
+	b.text("=" + emOf(em))
+}
+
+// emOf prints a length in em, the unit the class states these in.
+func emOf(em float64) string { return strconv.FormatFloat(em, 'f', -1, 64) + "em" }
 
 // text appends the runes of s as character tokens, each with its live catcode
 // (so letters remain letters, spaces remain spaces, digits/punctuation other).
