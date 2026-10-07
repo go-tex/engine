@@ -252,6 +252,22 @@ measures 91.0% today. Pure Go, CGO=0, `go vet` clean, green on the host plus
 four cross arches under qemu — **s390x** (big-endian), `ppc64le`, `riscv64` and
 `loong64` — and on `js/wasm` and `wasip1/wasm`.
 
+## The instruments
+
+Fidelity work here is measured, not asserted, and each of these answers one
+question the others cannot. They are ordinary `go run ./cmd/…` programs.
+
+| | |
+|---|---|
+| `gotex-abdiff` | compiles a corpus of real papers at two revisions and reports Σ\|page deviation\| against the reference counts, naming every paper that moved. It builds each side in its own `git worktree`, checks that the head really descends from the base, and prints whether `GOTEX_PDFRENDER` was set — three measurements had been read the wrong way before it did. |
+| `gotex-refdiff` | compiles a sample of papers with `tectonic` and with the engine and scores each one: word recall (`what` text came out) or, with `-layout`, word displacement (`where` it landed). |
+| `gotex-linediff` | puts one page of two PDFs side by side **line by line** — where each line starts and ends, its baseline, face and size, and, when it holds a dot leader, how many tiles it draws and how far apart. This is the rung below a per-paper score: the sentence a defect is fixed from reads "our entry starts 1.58pt right of the reference's and its dots are twice as dense". It reads the PDFs with `go-pdfkit/reader` — no `qpdf`, no poppler, no MuPDF. |
+| `gotex-coverage` | the coverage floor CI enforces. |
+
+A dot leader is the case that makes the last one worth having: `Title. . . . 7`
+reads the same whether the tiles are 4.8pt apart or 8.5, so no text-level
+comparison can see the difference. The drawn positions can.
+
 ## License
 
 BSD-3-Clause — see [LICENSE](LICENSE). Copyright the go-tex/engine authors.
