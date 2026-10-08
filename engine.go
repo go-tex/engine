@@ -508,6 +508,39 @@ const (
 	// of megabytes, bounded and uninteresting. For scale, TeX's own main_memory is
 	// 5_000_000 words, so this is the conservative end of the same range.
 	maxTokenList = 1_000_000
+	// maxControlSequences bounds HOW MANY control sequences may exist. maxParNodes
+	// counts what expansion puts on a page and maxTokenList what it puts in one
+	// macro; this counts how many macros there are, and it is a third surface that
+	// neither of the other two can see. A loop that defines a new, SMALL macro per
+	// turn builds no paragraph and no long replacement text:
+	//
+	//	\loop\advance\n by1 \expandafter\def\csname c\the\n\endcsname{y}\repeat
+	//
+	// Measured on that witness, twenty million turns: 9_713 MB in 6.15 s before
+	// the expansion ceiling finally stopped it, and 12_430 MB with longer names.
+	// The ceiling that fired is maxExpandSteps, which is 60 million steps away —
+	// far too late to keep the memory bounded.
+	//
+	// THE NUMBER IS MEASURED, twice over. What real documents use: a bare engine
+	// holds 623 control sequences and 1_948 after LoadLaTeX; a \documentclass{book}
+	// with amsmath, amssymb, amsthm, graphicx, xcolor, hyperref, listings and
+	// booktabs reaches 2_065, and tikz+pgfplots, beamer, and acmart with eight more
+	// packages all land between 2_036 and 2_045. Nothing real goes near.
+	//
+	// And what each candidate ceiling actually bounds, on the witness above:
+	//
+	//	ceiling    short names   1024-char names
+	//	500_000       1_066 MB          1_848 MB
+	//	200_000         450 MB            736 MB
+	//	100_000         231 MB            420 MB
+	//	 50_000         130 MB            209 MB
+	//
+	// 100_000 is 48 times the heaviest real document and bounds the table at a few
+	// hundred megabytes. It is deliberately ABOVE TeX's own hash_size of 65_536 —
+	// which raises "TeX capacity exceeded, sorry [hash size=…]" — so a document the
+	// reference accepts is never refused here, where 50_000 would have been below
+	// it and could refuse one.
+	maxControlSequences = 100_000
 	// tightLoopSteps is the no-progress ceiling: expansion steps taken with no new
 	// base input consumed. A non-terminating expansion churns the input stack
 	// without ever reading further, so it hits this in a fraction of a second,
@@ -1070,6 +1103,12 @@ func (e *Engine) meaningOf(t tok) *meaning {
 }
 
 func (e *Engine) define(name string, m *meaning, global bool) {
+	// A NEW name is what grows the table; redefining one is free. See
+	// maxControlSequences for the witness and the number.
+	if _, exists := e.eq[name]; !exists && len(e.eq) >= maxControlSequences {
+		e.tripNameCapacity()
+		return
+	}
 	if global {
 		e.forgetSaved(0, 0, name)
 	} else if len(e.groups) > 0 {
@@ -2533,6 +2572,18 @@ func (e *Engine) tripTokenCapacity() {
 	e.noBase = true
 	e.fail(fmt.Sprintf("capacity exceeded: one replacement text grew past %d tokens "+
 		"(a macro that expands exponentially inside \\edef, \\message or \\write)", maxTokenList))
+}
+
+// tripNameCapacity ends the run because the document asked for more control
+// sequences than maxControlSequences. It stops even in lenient mode for the
+// reason tripCapacity does: what overflowed is still there to overflow again,
+// and here that is the \csname loop itself, which would keep asking.
+func (e *Engine) tripNameCapacity() {
+	e.runaway = true
+	e.lists = nil
+	e.noBase = true
+	e.fail(fmt.Sprintf("capacity exceeded: the document asked for more than %d control sequences "+
+		"(a loop defining one per turn, as \\expandafter\\def\\csname …\\endcsname does)", maxControlSequences))
 }
 
 // printInputStack prints what the mouth was about to READ when the guard fired.

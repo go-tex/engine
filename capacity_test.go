@@ -155,3 +155,60 @@ func TestAReplacementTextTheSizeARealDocumentBuildsIsUntouched(t *testing.T) {
 		t.Error("the guard fired on a list a real document could plausibly build")
 	}
 }
+
+// A THIRD capacity surface, which neither of the other two ceilings can see.
+// maxParNodes counts what expansion puts on a PAGE and maxTokenList what it puts
+// in ONE macro; a loop that defines a new, small macro per turn builds neither a
+// paragraph nor a long replacement text, and simply grows the table of names.
+//
+// Measured on this witness at twenty million turns, before the ceiling existed:
+// 9_713 MB in 6.15 s with short names, 12_430 MB with 1024-character ones. What
+// finally stopped it was maxExpandSteps, sixty million steps away — far too late
+// to keep the memory bounded. With the ceiling: 231 MB and 420 MB.
+func TestControlSequenceCeilingStopsANameLoop(t *testing.T) {
+	_, err := compile([]byte(`\documentclass{article}
+\begin{document}
+\newcount\n \n=0
+\loop\advance\n by1
+  \expandafter\def\csname c\the\n\endcsname{y}
+\ifnum\n<20000000 \repeat
+x
+\end{document}`), Options{Lenient: true})
+	if err == nil {
+		t.Fatal("a loop defining twenty million control sequences was accepted")
+	}
+	if !strings.Contains(err.Error(), "capacity exceeded") {
+		t.Errorf("the run stopped on %q, want a capacity refusal", err)
+	}
+	// A refusal that does not say WHICH capacity sends the next reader to the
+	// wrong ceiling.
+	if !strings.Contains(err.Error(), "control sequences") {
+		t.Errorf("the refusal does not name the surface: %q", err)
+	}
+}
+
+// …and the ceiling must leave real documents alone. The heaviest measured hold
+// about 2_000 control sequences: a \documentclass{book} with eight packages
+// reaches 2_065, and tikz+pgfplots, beamer and acmart land between 2_036 and
+// 2_045.
+func TestControlSequenceCeilingLeavesRealDocumentsAlone(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{book}
+\usepackage{amsmath,amssymb,amsthm,graphicx,xcolor,hyperref,listings,booktabs}
+\begin{document}
+\chapter{One}
+Body.
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(e.eq); n > maxControlSequences/10 {
+		t.Errorf("a book with eight packages holds %d control sequences; a ceiling of %d leaves too little headroom",
+			n, maxControlSequences)
+	}
+	// Deliberately above TeX's own hash_size, so a document the REFERENCE accepts
+	// is never refused here.
+	if maxControlSequences <= 65536 {
+		t.Errorf("the ceiling is %d, at or below TeX's hash_size of 65536: it could refuse a document TeX accepts",
+			maxControlSequences)
+	}
+}
