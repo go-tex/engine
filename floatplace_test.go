@@ -203,3 +203,122 @@ func TestFloatAnchoredInsideThePageRidesIt(t *testing.T) {
 		t.Errorf("the float did not ride the page it was written on: %q", txt)
 	}
 }
+
+// Every float-placement parameter is a thing the CLASS says, and all seven were
+// restated here with article's values whatever class was loaded. article.cls:
+// 121-126 and amsart.cls:1317-1324:
+//
+//	                 article   amsart
+//	topnumber              2        4
+//	bottomnumber           1        4
+//	totalnumber            3        4
+//	topfraction           .7      .97
+//	bottomfraction        .3      .97
+//	textfraction          .2      .03
+//	floatpagefraction     .5       .9
+//
+// Measured against tectonic on forty identical figures in amsart prose: the
+// reference puts FOUR floats on a page where we put three, 11 pages against 14.
+// With the parameters read: 11 against 11, four per page on both sides.
+func TestFloatParametersComeFromTheClass(t *testing.T) {
+	for _, c := range []struct {
+		class                            string
+		top, bot, total                  int
+		topFrac, textFrac, floatPageFrac float64
+	}{
+		{"article", 2, 1, 3, 0.7, 0.2, 0.5},
+		{"amsart", 4, 4, 4, 0.97, 0.03, 0.9},
+	} {
+		t.Run(c.class, func(t *testing.T) {
+			e, err := compile([]byte("\\documentclass{"+c.class+"}\n\\begin{document}x\\end{document}"), Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Defaults passed here are DELIBERATELY wrong, so a value that is not
+			// actually read shows up as the nonsense rather than as the right answer.
+			if got := e.floatCount("topnumber", -1); got != c.top {
+				t.Errorf("topnumber = %d, want %d", got, c.top)
+			}
+			if got := e.floatCount("bottomnumber", -1); got != c.bot {
+				t.Errorf("bottomnumber = %d, want %d", got, c.bot)
+			}
+			if got := e.floatCount("totalnumber", -1); got != c.total {
+				t.Errorf("totalnumber = %d, want %d", got, c.total)
+			}
+			if got := e.floatFraction("topfraction", -1); got != c.topFrac {
+				t.Errorf("topfraction = %v, want %v", got, c.topFrac)
+			}
+			if got := e.floatFraction("textfraction", -1); got != c.textFrac {
+				t.Errorf("textfraction = %v, want %v", got, c.textFrac)
+			}
+			if got := e.floatFraction("floatpagefraction", -1); got != c.floatPageFrac {
+				t.Errorf("floatpagefraction = %v, want %v", got, c.floatPageFrac)
+			}
+		})
+	}
+	// The two classes must not agree on everything, which is the whole point: a
+	// hardcoded value passes any single-class test.
+	a := compiledFor(t, "article")
+	b := compiledFor(t, "amsart")
+	if a.floatCount("topnumber", 0) == b.floatCount("topnumber", 0) {
+		t.Error("article and amsart report the same topnumber: the value is not coming from the class")
+	}
+}
+
+func compiledFor(t *testing.T, class string) *Engine {
+	t.Helper()
+	e, err := compile([]byte("\\documentclass{"+class+"}\n\\begin{document}x\\end{document}"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// A fraction outside (0,1] is not one, and a counter that cannot bound anything
+// is not a bound: both fall back rather than paginate on nonsense.
+func TestFloatParameterFallbacks(t *testing.T) {
+	e := compiledFor(t, "article")
+	if got := e.floatFraction("nosuchfraction", 0.42); got != 0.42 {
+		t.Errorf("an undefined fraction = %v, want the default 0.42", got)
+	}
+	if got := e.floatCount("nosuchcounter", 7); got != 7 {
+		t.Errorf("an undefined counter = %d, want the default 7", got)
+	}
+	e.define("badfraction", &meaning{kind: mMacro, body: stringToToks("12")}, true)
+	if got := e.floatFraction("badfraction", 0.42); got != 0.42 {
+		t.Errorf("a fraction of 12 was accepted as %v", got)
+	}
+	e.define("emptyfraction", &meaning{kind: mMacro, body: stringToToks("")}, true)
+	if got := e.floatFraction("emptyfraction", 0.42); got != 0.42 {
+		t.Errorf("an empty fraction was accepted as %v", got)
+	}
+}
+
+// …and that the placer actually USES them. Reading the parameters is not the
+// same as obeying them: a hardcoded `topMax := 2` passes every test above,
+// because those call floatCount directly. The end-to-end quantity is how many
+// pages a run of floats takes.
+//
+// Forty identical figures in amsart prose: the reference takes 11 pages and put
+// four floats on each of pages 2, 3 and 4. We took 14 pages and three per page
+// with the parameters restated; 11 and four with them read.
+func TestFloatParametersReachThePlacer(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("\\documentclass[10pt,reqno]{amsart}\n\\begin{document}\n")
+	for i := 0; i < 40; i++ {
+		b.WriteString("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor " +
+			"incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud " +
+			"exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n" +
+			"\\begin{figure}\\rule{4cm}{2cm}\\caption{Une legende}\\end{figure}\n\n")
+	}
+	b.WriteString("\\end{document}")
+	e, err := compile([]byte(b.String()), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 11 in the reference. Three per page instead of four cost three pages.
+	if n := len(e.Pages()); n > 12 {
+		t.Errorf("forty amsart floats took %d pages; the reference takes 11, and 14 is what "+
+			"article's totalnumber=3 gives when amsart says 4", n)
+	}
+}

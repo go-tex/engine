@@ -5,6 +5,7 @@ package engine
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -277,10 +278,15 @@ type anchoredFloat struct {
 // cost breaker so text is never over-packed or lost.
 func (e *Engine) pagesWithFloats() []*boxNode {
 	vsize := e.effectiveVsize()
-	topCap := vsize * 7 / 10  // \topfraction
-	botCap := vsize * 3 / 10  // \bottomfraction
-	textMin := vsize / 5      // \textfraction: a page mixing floats and text keeps this much text
-	floatPageMin := vsize / 2 // \floatpagefraction: a float page must be this full
+	// Read from the class, never restated here: see floatFraction below.
+	frac := func(name string, def float64) int { return int(float64(vsize) * e.floatFraction(name, def)) }
+	topCap := frac("topfraction", 0.7)
+	botCap := frac("bottomfraction", 0.3)
+	textMin := frac("textfraction", 0.2)      // a page mixing floats and text keeps this much text
+	floatPageMin := frac("floatpagefraction", 0.5) // a float page must be this full
+	topMax := e.floatCount("topnumber", 2)
+	botMax := e.floatCount("bottomnumber", 1)
+	totalMax := e.floatCount("totalnumber", 3)
 
 	// Split the floats out of the text stream, remembering each float's anchor.
 	var text []node
@@ -340,7 +346,7 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			}
 			var pageFloats []anchoredFloat
 			h := 0
-			for len(deferred) > 0 && len(pageFloats) < 3 {
+			for len(deferred) > 0 && len(pageFloats) < totalMax {
 				need := fh(deferred[0])
 				if len(pageFloats) > 0 {
 					need += e.floatSep()
@@ -365,7 +371,7 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 		var top, bottom []anchoredFloat
 		topH := 0
 		i := 0
-		for i < len(deferred) && len(top) < 2 {
+		for i < len(deferred) && len(top) < topMax && len(top) < totalMax {
 			af := deferred[i]
 			if !af.c.allowTop {
 				i++
@@ -391,7 +397,7 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 		// \bottomnumber (1).
 		botH := 0
 		i = 0
-		for i < len(deferred) && len(bottom) < 1 {
+		for i < len(deferred) && len(bottom) < botMax && len(top)+len(bottom) < totalMax {
 			af := deferred[i]
 			if !af.c.allowBot {
 				i++
@@ -460,14 +466,14 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			for _, af := range deferred {
 				h += fh(af)
 				cnt++
-				if cnt >= 3 {
+				if cnt >= totalMax {
 					break
 				}
 			}
 			if h >= floatPageMin && deferred[0].c.allowPage {
 				var pageFloats []anchoredFloat
 				ph := 0
-				for len(deferred) > 0 && len(pageFloats) < 3 {
+				for len(deferred) > 0 && len(pageFloats) < totalMax {
 					need := fh(deferred[0])
 					if len(pageFloats) > 0 {
 						need += e.floatSep()
@@ -609,4 +615,55 @@ func (e *Engine) notePageLimit() {
 		e.skippedCS = map[string]int{}
 	}
 	e.skippedCS["gotex@pagelimit"]++
+}
+
+// ── the class states these; we used to restate them ──────────────────────────
+//
+// ⛔ Every float-placement parameter is a thing the CLASS says, and all seven
+// were hardcoded here — with article's values, whatever class was loaded.
+// article.cls:121-126 and amsart.cls:1317-1324 say:
+//
+//	                 article   amsart   here, before
+//	topnumber              2        4              2
+//	bottomnumber           1        4              1
+//	totalnumber            3        4              3
+//	topfraction           .7      .97            0.7
+//	bottomfraction        .3      .97            0.3
+//	textfraction          .2      .03            0.2
+//	floatpagefraction     .5       .9            0.5
+//
+// Measured on a witness of forty identical figures in amsart prose: the
+// reference puts FOUR floats on a page and we put three, 11 pages against 14.
+// This is the same defect as the contents ladder and the list indent, one more
+// layer down: a number the class states, restated in our own code.
+//
+// The fractions are MACROS (\renewcommand\topfraction{.7}), not registers, so
+// the value is the macro's replacement text. The counts are LaTeX counters, and
+// \setcounter is a no-op on a counter nobody declared — which is why amsart's
+// \setcounter{topnumber}{4} did nothing at all until the class kernel declared
+// them.
+func (e *Engine) floatFraction(name string, def float64) float64 {
+	m := e.eq[name]
+	if m == nil || m.kind != mMacro {
+		return def
+	}
+	v, err := strconv.ParseFloat(strings.TrimSpace(e.toksToString(m.body)), 64)
+	// A fraction outside (0,1] is not one; fall back rather than paginate on it.
+	if err != nil || v <= 0 || v > 1 {
+		return def
+	}
+	return v
+}
+
+// floatCount reads a float-placement counter, or the article default when the
+// counter does not exist or holds a value that cannot bound anything.
+func (e *Engine) floatCount(name string, def int) int {
+	m := e.eq["c@"+name]
+	if m == nil || m.kind != mCountRef || m.code < 0 || m.code >= len(e.count) {
+		return def
+	}
+	if v := e.count[m.code]; v > 0 {
+		return v
+	}
+	return def
 }

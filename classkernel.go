@@ -146,6 +146,15 @@ const LaTeX2eClassKernel = `
 \newdimen\fboxrule
 \newdimen\fboxsep
 \newcount\col@number
+% ── float placement counters ────────────────────────────────────────────────
+% \setcounter is a NO-OP on a counter nobody declared, so amsart's
+% \setcounter{topnumber}{4} (amsart.cls:1317) did nothing at all and every class
+% kept article's values. The values set here ARE article's, which the class read
+% afterwards replaces when it wants others.
+\newcounter{topnumber}\setcounter{topnumber}{2}
+\newcounter{bottomnumber}\setcounter{bottomnumber}{1}
+\newcounter{totalnumber}\setcounter{totalnumber}{3}
+\newcounter{dbltopnumber}\setcounter{dbltopnumber}{2}
 % ── list dimens / skips ─────────────────────────────────────────────────────
 \newdimen\leftmargin
 \newdimen\leftmargini
