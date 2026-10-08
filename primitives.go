@@ -1725,6 +1725,13 @@ func (e *Engine) expandList(ts []tok) []tok {
 			break
 		}
 		out = append(out, t)
+		// Checked INSIDE the loop: after it, the list is already built and the
+		// memory already spent — the point of the ceiling is that it is never
+		// reached, not that it is reported afterwards.
+		if len(out) > maxTokenList {
+			e.tripTokenCapacity()
+			break
+		}
 	}
 	e.expandDepth--
 	e.noBase = saved

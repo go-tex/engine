@@ -201,7 +201,13 @@ accident, each with a test that fails if it stops being true:
   hyphenator: a document with no space in it is one enormous word and Liang's
   algorithm is quadratic in a word's length, so TeX's own limit applies — no word
   longer than 63 letters is hyphenated (`tex.web` §891). The same file now fails
-  in **0.06 s at ~90 MB**.
+  in **0.06 s at ~90 MB**. The same expansion routed into a *macro* rather than
+  onto a page took a second ceiling: `\edef\boom{…}` never builds a paragraph, so
+  it passed the first one untouched at **6.3 GB** while the typeset form stopped
+  at 97 MB. One replacement text is now bounded too (1 000 000 tokens, against a
+  largest-real-replacement-text of 2 999 measured over the same corpus), and that
+  file returns in **0.38 s at 99 MB** — against tectonic's 236 MB, where TeX's
+  `main_memory` answers the same shape.
 
 What that does **not** cover, stated rather than glossed over:
 
