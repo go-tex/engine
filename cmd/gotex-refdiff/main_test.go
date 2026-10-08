@@ -527,3 +527,25 @@ func equal(a, b []string) bool {
 	}
 	return true
 }
+
+// -gotex names the binary to measure, which is what makes this an A/B
+// instrument: the two sides of a change are two builds measured over the SAME
+// sample. Without it the only way to compare two revisions was to run the tool
+// from two checkouts, which also moves the sample whenever the corpus listing
+// differs between them.
+func TestGotexFlagNamesTheBinaryUnderTest(t *testing.T) {
+	corpus := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(corpus, "0001.00001"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	// A path that does not exist must be refused by name, not silently replaced
+	// by a fresh build of the checkout — which would measure the wrong engine.
+	missing := filepath.Join(t.TempDir(), "no-such-gotex")
+	if code := run([]string{"-corpus", corpus, "-gotex", missing}, &out, &errOut); code == 0 {
+		t.Errorf("a -gotex path that does not exist was accepted; stderr: %s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), missing) {
+		t.Errorf("the refusal does not name the path: %s", errOut.String())
+	}
+}

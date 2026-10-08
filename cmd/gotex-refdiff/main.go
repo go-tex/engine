@@ -60,6 +60,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	seed := fs.Int64("seed", 1, "random seed for the sample (reproducible)")
 	timeout := fs.Duration("timeout", 90*time.Second, "per-engine compile timeout for one paper")
 	layout := fs.Bool("layout", false, "geometric layout-diff mode: rank papers by how far matched words drift plus page-count and line-break divergence (needs pdftotext -bbox), instead of the default word-recall")
+	gotexPath := fs.String("gotex", "", "a gotex binary to measure instead of building this checkout's — run it twice, once per side of a change, with the same -seed and -n")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -91,11 +92,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// Build gotex once into the work dir and drive it as a subprocess: a real
 	// arXiv paper can make the engine fail hard, and a subprocess isolates that
 	// from the sampler (an in-process call would take the whole run down).
-	gotexBin := filepath.Join(work, "gotex")
-	if out, err := buildGotex(gotexBin); err != nil {
-		fmt.Fprintf(stderr, "gotex-refdiff: building gotex failed: %v\n%s", err, out)
+	//
+	// -gotex names a binary to use instead. That is what makes this an A/B
+	// instrument rather than a snapshot: the two sides of a change are two builds,
+	// and the sample is the same one as long as -seed and -n are. Without it the
+	// only way to compare was to run the tool from two checkouts, which also
+	// changes the sample when the corpus directory listing differs.
+	gotexBin := *gotexPath
+	if gotexBin == "" {
+		gotexBin = filepath.Join(work, "gotex")
+		if out, err := buildGotex(gotexBin); err != nil {
+			fmt.Fprintf(stderr, "gotex-refdiff: building gotex failed: %v\n%s", err, out)
+			return 1
+		}
+	} else if _, err := os.Stat(gotexBin); err != nil {
+		fmt.Fprintf(stderr, "gotex-refdiff: -gotex %s: %v\n", gotexBin, err)
 		return 1
 	}
+	fmt.Fprintf(stderr, "engine under test: %s\n", gotexBin)
 
 	if *layout {
 		pipe := realLayoutPipeline(gotexBin, *timeout)
