@@ -168,6 +168,17 @@ const LaTeX2eClassKernel = `
 \newdimen\labelsep
 \newdimen\itemindent
 \newdimen\listparindent
+% A default for the documents that load no class file at all: 24pt is what
+% \itemize, \enumerate and \description used to advance \leftskip by, written
+% into each of them. A class states it instead — size11.clo:325 sets 2.5em — and
+% the class file is read after this substrate, so stating it here changes nothing
+% for a real document and keeps the emulation path where it was.
+%
+% ⛔ 24pt is not 2.5em at any size but 9.6pt. Measured against tectonic, the
+% hanging indent of an itemize: 24.90pt at 10pt, 27.27 at 11pt, 29.89 at 12pt —
+% exactly 2.5em each time — against a flat 23.91 here, so the error GREW with the
+% body size: -1pt, -3.4pt, -6pt.
+\leftmargini=24pt
 \newskip\itemsep
 \newskip\parsep
 \newskip\topsep

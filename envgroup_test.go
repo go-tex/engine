@@ -342,3 +342,57 @@ func lineBacksUp(b *boxNode, width float64) bool {
 	}
 	return false
 }
+
+// \itemize, \enumerate and \description each advanced \leftskip by a hardcoded
+// 24pt. A class states that length instead — size11.clo:325 sets \leftmargini to
+// 2.5em — and 24pt is 2.5em at no body size anyone uses, so the error GREW with
+// the size. Measured against tectonic, the hanging indent of an itemize taken
+// from the margin:
+//
+//	        reference    before    after
+//	10pt      24.90       23.91     24.91
+//	11pt      27.27       23.91     27.40
+//	12pt      29.89       23.92     29.89
+//
+// The 11pt residual is the STIX em against Latin Modern's, not arithmetic.
+func TestListIndentFollowsTheClassNotAConstant(t *testing.T) {
+	indent := func(size string) float64 {
+		t.Helper()
+		e, err := compile([]byte(`\documentclass[`+size+`]{article}
+\begin{document}
+\begin{itemize}
+\item An item long enough that it wraps onto a second line, so its hanging indent can be read off the line that follows.
+\end{itemize}
+\end{document}`), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range e.Pages() {
+			for _, n := range p.list {
+				b, ok := n.(*boxNode)
+				if !ok || len(b.list) == 0 {
+					continue
+				}
+				if g, isGlue := b.list[0].(glueNode); isGlue && g.spec.width > 0 {
+					return spToPt(g.spec.width)
+				}
+			}
+		}
+		return 0
+	}
+	// 2.5em at each class size: 10pt, 10.95pt and 11.74pt of design size.
+	for _, c := range []struct {
+		size string
+		want float64
+	}{{"10pt", 25}, {"11pt", 27.5}, {"12pt", 30}} {
+		got := indent(c.size)
+		if got < c.want-1 || got > c.want+1 {
+			t.Errorf("%s: itemize hangs at %.2fpt, want about %.2f (2.5em, what the class states)", c.size, got, c.want)
+		}
+	}
+	// And the three sizes must not all be the SAME number, which is the whole
+	// defect: a constant passes any single-size test.
+	if indent("10pt") == indent("12pt") {
+		t.Errorf("10pt and 12pt hang at the same %.2fpt: the indent is not following the class", indent("10pt"))
+	}
+}

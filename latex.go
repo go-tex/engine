@@ -260,15 +260,15 @@ const MiniLaTeXKernel = `
 % the bracket that \@ifnextbracket has already confirmed is present.
 \def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
-\def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
+\def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip\leftmargini\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
 \def\enditemize{\par\endgroup\addvspace\@topsepadd}
-\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
+\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip\leftmargini\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
 \def\endenumerate{\par\@enumitemrec\endgroup\addvspace\@topsepadd}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
-\long\def\description{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
+\long\def\description{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip\leftmargini\def\item{\@descitem}\@enumitemopt{description}}
 \long\def\enddescription{\par\endgroup\addvspace\@topsepadd}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
