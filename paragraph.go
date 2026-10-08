@@ -56,7 +56,25 @@ func splitAtForcedBreaks(list []node) [][]node {
 // contributes the lines of one paragraph fragment to the main vertical list.
 func (e *Engine) layoutSegment(hlist []node) {
 	e.applyTwoColumnMeasure() // halve e.hsize to the column width on the first paragraph (two-column mode)
-	lineWidth := spToPt(e.hsize)
+	// The measure the TEXT is broken against is \hsize less the two skips that
+	// will be glued to every line (applyLineSkips). TeX reaches the same place
+	// from the other side: it starts each line's width accounting at
+	// background := left_skip.width + right_skip.width (tex.web §827) and breaks
+	// against \hsize, so the text itself never gets more than what is left.
+	//
+	// ⛔ Breaking against the whole \hsize and gluing the skips on afterwards
+	// makes every line overfull by exactly their two widths, and the hpack that
+	// follows then SHRINKS the inter-word glue to make it fit. The words come out
+	// touching and the paragraph is set far wider than it asked for: with
+	// \rightskip=100pt on a 343pt measure, the text still ran to within 13.5pt of
+	// the right margin — the only narrowing was whatever shrink the glue had.
+	// Every \quote and \quotation (leftskip and rightskip both 20pt, latex.go:550)
+	// was set 40pt too wide this way, as was every contents entry of a real class.
+	//
+	// A \rightskip with infinite stretch and no width — \raggedright's
+	// 0pt plus 1fil — narrows nothing, which is right: ragged setting does not
+	// move the margin, it only stops justifying to it.
+	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
 	list, lines, ok := e.breakSegment(hlist, lineWidth)
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
