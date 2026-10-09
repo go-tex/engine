@@ -282,7 +282,7 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 	frac := func(name string, def float64) int { return int(float64(vsize) * e.floatFraction(name, def)) }
 	topCap := frac("topfraction", 0.7)
 	botCap := frac("bottomfraction", 0.3)
-	textMin := frac("textfraction", 0.2)      // a page mixing floats and text keeps this much text
+	textMin := frac("textfraction", 0.2)           // a page mixing floats and text keeps this much text
 	floatPageMin := frac("floatpagefraction", 0.5) // a float page must be this full
 	topMax := e.floatCount("topnumber", 2)
 	botMax := e.floatCount("bottomnumber", 1)
