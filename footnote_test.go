@@ -213,3 +213,36 @@ Corps.`); err != nil {
 		t.Errorf("sans classe, le \\thanks est composé %d fois, une seule attendue", n)
 	}
 }
+
+// Un \thanks VIDE ne produit rien. eptcs.cls écrit \thanks\relax, et en faire une
+// note donne une marque et une ligne de pied que la référence n'a pas.
+//
+// ⛔ L'observable est la DIFFÉRENCE avec le même document sans \thanks, pas la
+// présence d'un chiffre: le premier jet cherchait « 1 » et trouvait le FOLIO.
+func TestEmptyThanksProducesNothing(t *testing.T) {
+	page := func(author string) string {
+		t.Helper()
+		e, err := compile([]byte(`\documentclass{article}
+\title{T}
+\author{`+author+`}
+\begin{document}
+\maketitle
+Corps.
+\end{document}`), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pageText(e)
+	}
+	plain := page("A")
+	for _, arg := range []string{"{}", `\relax`} {
+		if got := page("A\\thanks" + arg); got != plain {
+			t.Errorf("\\thanks%s a changé la page: %.120q contre %.120q", arg, got, plain)
+		}
+	}
+	// Contrôle positif, sans quoi le test passerait aussi si \thanks était
+	// redevenu un avaleur.
+	if got := page("A\\thanks{Mot temoin ici}"); !strings.Contains(got, "temoin") {
+		t.Errorf("le contrôle positif ne passe pas: %.120q", got)
+	}
+}
