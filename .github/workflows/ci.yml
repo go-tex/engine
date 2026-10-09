@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
-        with: { go-version: '1.27.1' }
+        with: { go-version: '1.27.2' }
       - run: go vet ./...
       # ⛔ gofmt was not gated, and two files reached main unformatted: a trailing
       # comment duplicated onto a line it did not belong to, and doc-comment list
@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
-        with: { go-version: '1.27.1' }
+        with: { go-version: '1.27.2' }
       # Bounded on purpose. On 2026-08-19 this step sat on an unreachable Ubuntu
       # mirror for over an hour, in several repositories at once, and the lane
       # reported "in progress" the whole time — a hung lane is indistinguishable
@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
-        with: { go-version: '1.27.1' }
+        with: { go-version: '1.27.2' }
       - run: GOOS=${{ matrix.goos }} GOARCH=wasm go build ./...
   fidelity:
     name: fidelity vs real LaTeX (tectonic)
@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
-        with: { go-version: '1.27.1' }
+        with: { go-version: '1.27.2' }
       - name: install poppler
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: install tectonic
