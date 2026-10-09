@@ -246,7 +246,13 @@ const LaTeX2eClassLead = `
 % aborting on \@thanks. (\@starttoc is a Go primitive bridging to the engine's
 % two-pass contents table, so it is not defined here.)
 \def\@thanks{}
-\def\thanks#1{}
+% ⛔ Un \thanks VIDE ne produit rien. eptcs.cls écrit \thanks\relax, et en faire
+% une note donnait une marque et une ligne de pied que la référence n'a pas:
+% 2311.08855 passait de 19 pages à 20. \relax autant que le vide.
+\def\gotex@threlax{\relax}
+\def\thanks#1{\def\gotex@th{#1}%
+  \ifx\gotex@th\@empty\else\ifx\gotex@th\gotex@threlax\else
+  \g@addto@macro\@thanks{\footnote{#1}}\fi\fi}
 % ── float environments (figure/table via the class's \@float) ────────────────
 % \@float{type}[placement] starts a centred float block and records \@captype so
 % \caption numbers it; \end@float closes it. \@dblfloat is the two-column (figure*/
