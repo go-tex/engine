@@ -3,16 +3,16 @@ module github.com/go-tex/engine
 go 1.27.1
 
 require (
-	github.com/go-gfx/gfx v0.34.1
+	github.com/go-gfx/gfx v0.35.0
 	github.com/go-opentype/opentype v0.15.0
 	github.com/go-pdfkit/pdfkit v0.14.0
-	github.com/go-pdfkit/reader v0.6.0
+	github.com/go-pdfkit/reader v0.7.0
 	github.com/go-tex/math v0.50.0
 	github.com/go-tex/pdfrender v0.3.2
 	github.com/go-tex/texmf v0.7.0
 	github.com/go-typeset/hyphenation v1.0.0
 	github.com/go-typeset/linebreak v1.2.0
-	golang.org/x/text v0.42.0
+	golang.org/x/text v0.43.0
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/go-images/gif v0.1.0 // indirect
 	github.com/go-images/images v0.0.0-20260927173152-87444e36aac4 // indirect
 	github.com/go-images/jpeg v0.2.0 // indirect
-	github.com/go-images/jpeg2000 v0.13.2 // indirect
+	github.com/go-images/jpeg2000 v0.13.3 // indirect
 	github.com/go-images/png v0.1.0 // indirect
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/shape v0.5.0 // indirect
