@@ -271,7 +271,7 @@ question the others cannot. They are ordinary `go run ./cmd/…` programs.
 | | |
 |---|---|
 | `gotex-abdiff` | compiles a corpus of real papers at two revisions and reports Σ\|page deviation\| against the reference counts, naming every paper that moved. It builds each side in its own `git worktree`, checks that the head really descends from the base, and prints whether `GOTEX_PDFRENDER` was set — three measurements had been read the wrong way before it did. |
-| `gotex-refdiff` | compiles a sample of papers with `tectonic` and with the engine and scores each one: word recall (`what` text came out) or, with `-layout`, word displacement (`where` it landed). |
+| `gotex-refdiff` | compiles a sample of papers with `tectonic` and with the engine and scores each one: word recall (`what` text came out) or, with `-layout`, word displacement (`where` it landed). `-gotex` names the binary to measure, so two revisions can be put side by side over the **same** sample; `-list` draws that sample from a named corpus list instead of walking a raw arXiv directory, where the papers the REFERENCE cannot compile score "ref-unavailable" — a 30-paper run came back 30 of 30 unavailable on both sides of a change, which reads exactly like "no difference". |
 | `gotex-linediff` | puts one page of two PDFs side by side **line by line** — where each line starts and ends, its baseline, face and size, and, when it holds a dot leader, how many tiles it draws and how far apart. This is the rung below a per-paper score: the sentence a defect is fixed from reads "our entry starts 1.58pt right of the reference's and its dots are twice as dense". It reads the PDFs with `go-pdfkit/reader` — no `qpdf`, no poppler, no MuPDF. |
 | `gotex-coverage` | the coverage floor CI enforces. |
 
