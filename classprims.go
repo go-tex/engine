@@ -246,7 +246,7 @@ const LaTeX2eClassLead = `
 % aborting on \@thanks. (\@starttoc is a Go primitive bridging to the engine's
 % two-pass contents table, so it is not defined here.)
 \def\@thanks{}
-\def\thanks#1{}
+\def\thanks#1{\g@addto@macro\@thanks{\footnote{#1}}}
 % ── float environments (figure/table via the class's \@float) ────────────────
 % \@float{type}[placement] starts a centred float block and records \@captype so
 % \caption numbers it; \end@float closes it. \@dblfloat is the two-column (figure*/
