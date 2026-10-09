@@ -163,6 +163,14 @@ format and image type, with its status, plus every remaining gap — lives at
   **not** there: `\textcite`, `\parencite`, `\autocite`, `\footcite` and
   `\smartcite` are undefined and print the bare key, and the citation and
   bibliography *styles* are not modelled.
+- **Float placement** takes its seven parameters from the **class**, not from
+  article's: `\topnumber`, `\bottomnumber` and `\totalnumber` are counters the
+  class kernel declares so a `\setcounter` of them takes (amsart's
+  `\setcounter{topnumber}{4}` used to be a no-op on an undeclared counter), and
+  `\topfraction`, `\bottomfraction`, `\textfraction` and `\floatpagefraction` are
+  read from their macros. Measured against the reference on forty figures in
+  amsart prose: four floats to a page on both sides, 11 pages each, where
+  article's hardcoded values gave three and 14.
 - **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
   float pagination (`GOTEX_FLOATS`), two-column reprint layouts
   (`GOTEX_TWOCOLUMN`), EPS graphics (an `.eps` is *measured* from its
