@@ -322,3 +322,31 @@ func TestFloatParametersReachThePlacer(t *testing.T) {
 			"article's totalnumber=3 gives when amsart says 4", n)
 	}
 }
+
+// The fractions have to EXIST, or a document that writes
+// \renewcommand\topfraction{0.85} — neurips_2021.sty:223 does — is renewing a
+// macro that is not there, and the engine's fallback to article's values is
+// accidental rather than stated. Under an emulated class they were undefined,
+// so acmart reported an empty \topfraction where amsart reported .97.
+func TestFloatFractionsExistUnderEveryClass(t *testing.T) {
+	for _, c := range []struct {
+		class string
+		top   float64
+	}{
+		{"article", 0.7},
+		{"amsart", 0.97}, // the class states its own
+		{"acmart", 0.7},  // emulated: article's, but DECLARED
+	} {
+		e, err := compile([]byte("\\documentclass{"+c.class+"}\n\\begin{document}x\\end{document}"), Options{})
+		if err != nil {
+			t.Fatalf("%s: %v", c.class, err)
+		}
+		if e.eq["topfraction"] == nil {
+			t.Errorf("%s: \\topfraction is undefined; \\renewcommand on it would not be a renewal", c.class)
+		}
+		// -1 as the default, so a value that is not read shows up as nonsense.
+		if got := e.floatFraction("topfraction", -1); got != c.top {
+			t.Errorf("%s: \\topfraction = %v, want %v", c.class, got, c.top)
+		}
+	}
+}
