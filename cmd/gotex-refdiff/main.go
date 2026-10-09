@@ -46,6 +46,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -60,22 +61,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 	seed := fs.Int64("seed", 1, "random seed for the sample (reproducible)")
 	timeout := fs.Duration("timeout", 90*time.Second, "per-engine compile timeout for one paper")
 	layout := fs.Bool("layout", false, "geometric layout-diff mode: rank papers by how far matched words drift plus page-count and line-break divergence (needs pdftotext -bbox), instead of the default word-recall")
+	gotexPath := fs.String("gotex", "", "a gotex binary to measure instead of building this checkout's — run it twice, once per side of a change, with the same -seed and -n")
+	list := fs.String("list", "", "a file of paper paths, one per line, to sample from instead of walking -corpus (the same list gotex-abdiff takes)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *corpus == "" {
-		fmt.Fprintln(stderr, "gotex-refdiff: -corpus is required")
+	if *corpus == "" && *list == "" {
+		fmt.Fprintln(stderr, "gotex-refdiff: one of -corpus or -list is required")
 		fs.PrintDefaults()
 		return 2
 	}
 
-	papers, err := discoverPapers(*corpus)
+	papers, err := choosePapers(*corpus, *list)
 	if err != nil {
 		fmt.Fprintf(stderr, "gotex-refdiff: %v\n", err)
 		return 1
 	}
 	if len(papers) == 0 {
-		fmt.Fprintf(stderr, "gotex-refdiff: no paper directories under %s\n", *corpus)
+		where := *corpus
+		if *list != "" {
+			where = *list
+		}
+		fmt.Fprintf(stderr, "gotex-refdiff: no paper directories from %s\n", where)
 		return 1
 	}
 	sample := samplePapers(papers, *n, *seed)
@@ -91,11 +98,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// Build gotex once into the work dir and drive it as a subprocess: a real
 	// arXiv paper can make the engine fail hard, and a subprocess isolates that
 	// from the sampler (an in-process call would take the whole run down).
-	gotexBin := filepath.Join(work, "gotex")
-	if out, err := buildGotex(gotexBin); err != nil {
-		fmt.Fprintf(stderr, "gotex-refdiff: building gotex failed: %v\n%s", err, out)
+	//
+	// -gotex names a binary to use instead. That is what makes this an A/B
+	// instrument rather than a snapshot: the two sides of a change are two builds,
+	// and the sample is the same one as long as -seed and -n are. Without it the
+	// only way to compare was to run the tool from two checkouts, which also
+	// changes the sample when the corpus directory listing differs.
+	gotexBin := *gotexPath
+	if gotexBin == "" {
+		gotexBin = filepath.Join(work, "gotex")
+		if out, err := buildGotex(gotexBin); err != nil {
+			fmt.Fprintf(stderr, "gotex-refdiff: building gotex failed: %v\n%s", err, out)
+			return 1
+		}
+	} else if _, err := os.Stat(gotexBin); err != nil {
+		fmt.Fprintf(stderr, "gotex-refdiff: -gotex %s: %v\n", gotexBin, err)
 		return 1
 	}
+	fmt.Fprintf(stderr, "engine under test: %s\n", gotexBin)
 
 	if *layout {
 		pipe := realLayoutPipeline(gotexBin, *timeout)
@@ -500,4 +520,43 @@ func runCmd(timeout time.Duration, name string, args ...string) error {
 // replaceExt replaces the extension of name with ext (e.g. "a.tex" -> "a.pdf").
 func replaceExt(name, ext string) string {
 	return name[:len(name)-len(filepath.Ext(name))] + ext
+}
+
+// choosePapers decides which papers the sample is drawn from: a named list when
+// one is given, otherwise every directory under the corpus root.
+//
+// ⛔ The list matters more than it looks. Walking a raw arXiv corpus draws papers
+// the REFERENCE cannot compile — a paper whose preamble calls \pdfglyphtounicode
+// stops XeTeX dead — and every one of those scores "ref-unavailable", which is
+// not a measurement. A 30-paper layout run over the raw directory came back with
+// 30 of 30 unavailable on BOTH sides of a change, which reads exactly like "no
+// difference" and says nothing at all. The curated list is the set that compiles
+// under both engines, and it is the same file gotex-abdiff is given, so the two
+// instruments speak about the same population.
+func choosePapers(corpus, list string) ([]string, error) {
+	if list == "" {
+		return discoverPapers(corpus)
+	}
+	b, err := os.ReadFile(list)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// The list names a paper's top-level .tex; the sampler works in directories.
+		d := filepath.Clean(filepath.Dir(line))
+		if !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	if len(dirs) == 0 {
+		return nil, fmt.Errorf("%s names no paper", list)
+	}
+	return dirs, nil
 }

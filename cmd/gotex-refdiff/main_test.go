@@ -527,3 +527,108 @@ func equal(a, b []string) bool {
 	}
 	return true
 }
+
+// -gotex names the binary to measure, which is what makes this an A/B
+// instrument: the two sides of a change are two builds measured over the SAME
+// sample. Without it the only way to compare two revisions was to run the tool
+// from two checkouts, which also moves the sample whenever the corpus listing
+// differs between them.
+func TestGotexFlagNamesTheBinaryUnderTest(t *testing.T) {
+	corpus := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(corpus, "0001.00001"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	// A path that does not exist must be refused by name, not silently replaced
+	// by a fresh build of the checkout — which would measure the wrong engine.
+	missing := filepath.Join(t.TempDir(), "no-such-gotex")
+	if code := run([]string{"-corpus", corpus, "-gotex", missing}, &out, &errOut); code == 0 {
+		t.Errorf("a -gotex path that does not exist was accepted; stderr: %s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), missing) {
+		t.Errorf("the refusal does not name the path: %s", errOut.String())
+	}
+}
+
+// -list draws the sample from a named corpus list instead of walking a raw arXiv
+// directory. It matters more than it looks: walking the raw corpus draws papers
+// the REFERENCE cannot compile — one whose preamble calls \pdfglyphtounicode
+// stops XeTeX dead — and each of those scores "ref-unavailable", which is not a
+// measurement. A 30-paper layout run over the raw directory came back 30 of 30
+// unavailable on BOTH sides of a change, which reads exactly like "no difference"
+// and says nothing at all.
+func TestChoosePapersFromAList(t *testing.T) {
+	dir := t.TempDir()
+	list := filepath.Join(dir, "papers.txt")
+	body := "# a comment\n\n" +
+		filepath.Join(dir, "1111.11111", "main.tex") + "\n" +
+		filepath.Join(dir, "2222.22222", "main.tex") + "\n" +
+		filepath.Join(dir, "2222.22222", "other.tex") + "\n" // same paper twice
+	if err := os.WriteFile(list, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := choosePapers("", list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(dir, "1111.11111"), filepath.Join(dir, "2222.22222")}
+	if len(got) != len(want) {
+		t.Fatalf("choosePapers returned %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("paper %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// A list naming nothing is an error, not an empty run that reports on zero
+	// papers and looks like a clean result.
+	empty := filepath.Join(dir, "empty.txt")
+	if err := os.WriteFile(empty, []byte("# nothing but a comment\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := choosePapers("", empty); err == nil {
+		t.Error("a list naming no paper was accepted")
+	}
+	if _, err := choosePapers("", filepath.Join(dir, "no-such-file")); err == nil {
+		t.Error("a list that does not exist was accepted")
+	}
+}
+
+// Neither -corpus nor -list is a usage error: without one there is nothing to
+// sample, and defaulting to the working directory would walk whatever happens to
+// be there.
+func TestCorpusOrListIsRequired(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run(nil, &out, &errOut); code != 2 {
+		t.Errorf("exit code %d with neither flag, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "-corpus or -list") {
+		t.Errorf("the message does not name both flags: %s", errOut.String())
+	}
+}
+
+// …and that run() actually USES the list. Testing choosePapers alone leaves the
+// wiring uncovered: a run that silently walked -corpus instead would sample the
+// papers the list exists to exclude, and nothing would say so. The sampling line
+// names the population it drew from, so it is the thing to look at.
+func TestRunSamplesFromTheListNotTheCorpus(t *testing.T) {
+	root := t.TempDir()
+	// A corpus of five papers, and a list naming two of them.
+	for _, id := range []string{"1111.1", "2222.2", "3333.3", "4444.4", "5555.5"} {
+		if err := os.MkdirAll(filepath.Join(root, id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list := filepath.Join(t.TempDir(), "two.txt")
+	body := filepath.Join(root, "1111.1", "main.tex") + "\n" + filepath.Join(root, "2222.2", "main.tex") + "\n"
+	if err := os.WriteFile(list, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	// A -gotex that does not exist stops the run right after the sampling line,
+	// which is all this test needs and costs no compiles.
+	run([]string{"-corpus", root, "-list", list, "-gotex", filepath.Join(root, "nope")}, &out, &errOut)
+	if !strings.Contains(errOut.String(), "of 2 papers") {
+		t.Errorf("the run sampled from the corpus, not the list:\n%s", errOut.String())
+	}
+}
