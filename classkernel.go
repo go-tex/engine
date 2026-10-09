@@ -146,6 +146,26 @@ const LaTeX2eClassKernel = `
 \newdimen\fboxrule
 \newdimen\fboxsep
 \newcount\col@number
+% ── float placement counters ────────────────────────────────────────────────
+% \setcounter is a NO-OP on a counter nobody declared, so amsart's
+% \setcounter{topnumber}{4} (amsart.cls:1317) did nothing at all and every class
+% kept article's values. The values set here ARE article's, which the class read
+% afterwards replaces when it wants others.
+\newcounter{topnumber}\setcounter{topnumber}{2}
+\newcounter{bottomnumber}\setcounter{bottomnumber}{1}
+\newcounter{totalnumber}\setcounter{totalnumber}{3}
+\newcounter{dbltopnumber}\setcounter{dbltopnumber}{2}
+% Et les fractions, qui vont avec. Elles n'existaient nulle part: un document sous
+% une classe émulée les trouvait INDÉFINIES, donc le repli vers les valeurs
+% d'article était accidentel et non énoncé — et un \renewcommand\topfraction du
+% document portait sur une macro qui n'était pas là. Les valeurs sont celles
+% d'article (article.cls:122-127), que la classe ou le paquet lu ensuite remplace.
+\providecommand\topfraction{.7}
+\providecommand\bottomfraction{.3}
+\providecommand\textfraction{.2}
+\providecommand\floatpagefraction{.5}
+\providecommand\dbltopfraction{.7}
+\providecommand\dblfloatpagefraction{.5}
 % ── list dimens / skips ─────────────────────────────────────────────────────
 \newdimen\leftmargin
 \newdimen\leftmargini
