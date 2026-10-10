@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // \footnote numbers its notes, drops a raised marker inline, and attaches each
 // note to the vertical list so the page builder can place it at the foot.
@@ -114,5 +117,132 @@ func TestFootnotePageAssembly(t *testing.T) {
 	}
 	if rules != 1 {
 		t.Errorf("assembled page has %d rules, want 1 (footnote separator)", rules)
+	}
+}
+
+// \thanks a DEUX moitiés, et n'en réparer qu'une déplace la perte.
+//
+// Il était défini pour jeter son argument (latex.go, classprims.go), et le
+// recensement des avaleurs le donnait sur 29 papiers. La sonde de contenu —
+// chercher les mots de l'argument dans le PDF de la référence ET dans le nôtre —
+// en comptait 5 vraies pertes.
+//
+// ⛔ Le rendre \footnote{#1} ne suffit pas: \thanks vit dans \author, que
+// \maketitle compose dans un \centerline, et une note dans une boîte n'atteint
+// pas la page. Mesuré: le mot restait absent. Il faut ACCUMULER à l'appel et
+// ÉMETTRE après le bloc de titre, ce que fait \maketitle.
+func TestThanksReachesThePage(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}
+\title{Un titre}
+\author{Une autrice\thanks{A fine university.}}
+\begin{document}
+\maketitle
+Corps.
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ⛔ Sur e.mvl on ne voit que la MARQUE: le texte d'une note vit dans la zone
+	// de pied que le constructeur de pages assemble. Chercher sur les PAGES.
+	if got := pageText(e); !strings.Contains(got, "university") {
+		t.Errorf("le texte du \\thanks n'atteint pas la page: %.200q", got)
+	}
+}
+
+// …et il ne doit pas rester collé d'un \maketitle au suivant: \@thanks est vidé
+// après émission, sinon le second titre réimprime la note du premier.
+func TestThanksIsEmittedOnce(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}
+\title{Un}
+\author{A\thanks{Mot unique ici}}
+\begin{document}
+\maketitle
+\title{Deux}
+\author{B}
+\maketitle
+Corps.
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(pageText(e), "unique"); n != 1 {
+		t.Errorf("le \\thanks est composé %d fois, une seule attendue", n)
+	}
+}
+
+// pageText rend le texte des PAGES assemblées, zone de pied comprise.
+func pageText(e *Engine) string {
+	var b strings.Builder
+	for _, p := range e.Pages() {
+		collectChars([]node{p}, &b)
+	}
+	return b.String()
+}
+
+// Et la voie SANS classe, que les deux tests ci-dessus ne touchent pas: avec un
+// \documentclass, c'est article.cls qui émet \@thanks et le vide (article.cls:187
+// et :193), et classprims.go qui définit \thanks. Les définitions de latex.go ne
+// servent qu'au document qui ne charge aucune classe — et trois mutations les ont
+// SURVÉCUES avant que ce test existe, parce que rien n'empruntait cette voie.
+func TestThanksWithoutAClass(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{})
+	src := `\hsize=300pt
+\title{Un titre}
+\author{Une autrice\thanks{A fine university.}}
+\maketitle
+Corps.`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if got := pageText(e); !strings.Contains(got, "university") {
+		t.Errorf("sans classe, le \\thanks n'atteint pas la page: %.200q", got)
+	}
+	// Et il n'est pas réémis par un second \maketitle.
+	e2 := New()
+	e2.LoadLaTeX()
+	e2.SetFont(spMock{})
+	if _, err := e2.Run(`\hsize=300pt
+\title{Un}\author{A\thanks{Mot unique ici}}\maketitle
+\title{Deux}\author{B}\maketitle
+Corps.`); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(pageText(e2), "unique"); n != 1 {
+		t.Errorf("sans classe, le \\thanks est composé %d fois, une seule attendue", n)
+	}
+}
+
+// Un \thanks VIDE ne produit rien. eptcs.cls écrit \thanks\relax, et en faire une
+// note donne une marque et une ligne de pied que la référence n'a pas.
+//
+// ⛔ L'observable est la DIFFÉRENCE avec le même document sans \thanks, pas la
+// présence d'un chiffre: le premier jet cherchait « 1 » et trouvait le FOLIO.
+func TestEmptyThanksProducesNothing(t *testing.T) {
+	page := func(author string) string {
+		t.Helper()
+		e, err := compile([]byte(`\documentclass{article}
+\title{T}
+\author{`+author+`}
+\begin{document}
+\maketitle
+Corps.
+\end{document}`), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pageText(e)
+	}
+	plain := page("A")
+	for _, arg := range []string{"{}", `\relax`} {
+		if got := page("A\\thanks" + arg); got != plain {
+			t.Errorf("\\thanks%s a changé la page: %.120q contre %.120q", arg, got, plain)
+		}
+	}
+	// Contrôle positif, sans quoi le test passerait aussi si \thanks était
+	// redevenu un avaleur.
+	if got := page("A\\thanks{Mot temoin ici}"); !strings.Contains(got, "temoin") {
+		t.Errorf("le contrôle positif ne passe pas: %.120q", got)
 	}
 }

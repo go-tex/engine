@@ -220,7 +220,7 @@ const MiniLaTeXKernel = `
 \def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
 \long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
 \long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
-\long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip}
+\long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip\@thanks\global\def\@thanks{}}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}
 % Per-level counters and depth trackers for nested itemize/enumerate. Because
@@ -1177,7 +1177,6 @@ const MiniLaTeXKernel = `
 % argument is optional.
 \def\gotex@optone{\@ifnextbracket\gotex@optone@a\@gobble}
 \long\def\gotex@optone@a[#1]#2{}
-\def\thanks#1{}
 \def\address#1{}
 % \email{a@b} is PRINTED in the title block by every class in this corpus that does not
 % define its own — measured against the reference PDFs: 57 of 68 \email values appear in
