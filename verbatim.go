@@ -160,7 +160,9 @@ func (e *Engine) verbNodes(s string, font fontFace, line int) []node {
 		// Stamp the current colour like ordinary text (see appendChar): \color
 		// applies to verbatim too, so \textcolor{red}{\verb|x|} — and a coloured
 		// \url under hyperref's colorlinks — reach the drivers in that colour.
-		out = append(out, charNode{ch: r, width: w, height: h, depth: d, srcLine: line, color: e.curColor})
+		// The face is the one the width came from — the typewriter font, when
+		// there is one. Without it the driver measured in mono and drew in roman.
+		out = append(out, charNode{ch: r, width: w, height: h, depth: d, srcLine: line, size: font.sizePt(), face: font, color: e.curColor})
 	}
 	return out
 }

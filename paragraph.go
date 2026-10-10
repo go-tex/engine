@@ -89,7 +89,7 @@ func (e *Engine) layoutSegment(hlist []node) {
 				seg = append([]node{}, seg...)
 				for _, r := range d.pre {
 					w, h, dd := e.curFont.charDimsSP(r)
-					seg = append(seg, charNode{ch: r, width: w, height: h, depth: dd})
+					seg = append(seg, charNode{ch: r, width: w, height: h, depth: dd, size: e.curFont.sizePt(), face: e.curFont})
 				}
 			}
 		}

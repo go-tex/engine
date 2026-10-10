@@ -163,7 +163,7 @@ func (e *Engine) footnoteMarker(n int) node {
 	var mk []node
 	for _, r := range strconv.Itoa(n) {
 		w, h, d := e.curFont.charDimsSP(r)
-		mk = append(mk, charNode{ch: r, width: w, height: h, depth: d, srcLine: e.curSrcLine})
+		mk = append(mk, charNode{ch: r, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont})
 	}
 	box := hpackSP(mk, packNatural, 0)
 	box.shift = -(e.curFont.sizePt() * unity * 2 / 5) // negative shift raises (superscript)

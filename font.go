@@ -128,6 +128,41 @@ type fontFace interface {
 	sizePt() int               // the face's design size in points
 }
 
+// faceProgram identifies the font PROGRAM behind a face, independently of the size
+// it is faced at: \large and \normalsize of one family share it. A PDF embeds one
+// subset per program, so a driver that keyed its fonts on the face would embed the
+// same family once per size a document uses.
+type faceProgram interface{ faceProgram() any }
+
+func (o *OpenTypeFont) faceProgram() any { return o.f }
+
+// programOf is a face's cache key: its program when it can name one, and the face
+// itself otherwise (a mock, nullFont — each its own key, which is correct if
+// wasteful, and neither is ever embedded).
+func programOf(f fontFace) any {
+	if p, ok := f.(faceProgram); ok {
+		return p.faceProgram()
+	}
+	return f
+}
+
+// charFace is the face a glyph must be DRAWN with, and the scale its outline needs
+// relative to that face.
+//
+// A node that names its own face is drawn with it at scale 1: the face carries the
+// size the glyph was measured at, so there is nothing left to scale. A node with
+// none falls back to the driver's single face, scaled to the glyph's recorded size
+// — which is how every glyph was drawn before charNode carried a face.
+func charFace(c charNode, driver fontFace) (fontFace, float64) {
+	if c.face != nil {
+		return c.face, 1
+	}
+	if driver == nil {
+		return nil, 1
+	}
+	return driver, glyphScale(c, driver)
+}
+
 // ptToSP rounds points to scaled points.
 func ptToSP(pt float64) int { return int(pt*float64(unity) + 0.5) }
 
