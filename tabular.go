@@ -55,6 +55,14 @@ type tabItem struct {
 	weight int
 	btrimL bool
 	btrimR bool
+	// noalign marks a \noalign{…} between two rows, with vmat holding its group's
+	// tokens. tex.web §785 makes that group VERTICAL material contributed to the
+	// enclosing vertical list, and halign.go honours it; this parser did not, so a
+	// table written \hline\noalign{\vskip .5mm} lost the skip — 64 uses over 8
+	// papers of the fidelity corpus, each a row of a table sitting tighter than the
+	// reference's.
+	noalign bool
+	vmat    []tok
 }
 
 // builtCell is one built table cell: its aligned node list plus how many columns
@@ -87,11 +95,20 @@ type tabBuilt struct {
 	weight int
 	btrimL bool
 	btrimR bool
+	// noalign carries the built vertical material of a \noalign{…} (see tabItem).
+	noalign bool
+	vmat    []node
 }
 
 // isRule reports whether this item is any horizontal rule (an \hline/\cline or a
 // booktabs \toprule/\midrule/\bottomrule/\cmidrule) rather than a data row.
 func (b tabBuilt) isRule() bool { return b.hline || b.cline || b.brule || b.bcmid }
+
+// isRow reports whether this item is a row of CELLS — the only kind with column
+// widths to measure and a row box to build. Every pass that sizes or stacks rows
+// asks this rather than !isRule(), so a \noalign's vertical material is not
+// mistaken for a row with no cells.
+func (b tabBuilt) isRow() bool { return !b.isRule() && !b.noalign }
 
 // doTabular typesets a tabular environment onto the current list. The syntax is
 // \begin{tabular}[pos]{cols}: the optional [t]/[b]/[c] vertical-placement group
@@ -194,6 +211,10 @@ func (e *Engine) buildTabularBox(aligns []byte, pwidths []int, vrules []bool, it
 		if it.bcmid {
 			built = append(built, tabBuilt{bcmid: true, cfrom: it.cfrom, cto: it.cto,
 				weight: it.weight, btrimL: it.btrimL, btrimR: it.btrimR})
+			continue
+		}
+		if it.noalign {
+			built = append(built, tabBuilt{noalign: true, vmat: e.buildCellVList(it.vmat)})
 			continue
 		}
 		var cells []builtCell
@@ -726,6 +747,22 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 				e.endEnvGroup()
 				return items
 			}
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "noalign":
+			// tex.web §785: \noalign may stand only where a row could begin, and its
+			// group is vertical material for the list between the rows. Collected
+			// here and built later, like every other item of the body.
+			endRow()
+			e.skipOptSpace()
+			if b, ok := e.getXToken(); ok {
+				if c, isChar := e.implicitChar(b); isChar {
+					b = c // \bgroup opens the group just as { does
+				}
+				if !b.cs_ && b.cat == catBegin {
+					items = append(items, tabItem{noalign: true, vmat: e.readGroupToks()})
+				} else {
+					e.back(b) // \noalign with no group contributes nothing
+				}
+			}
 		case depth == 0 && envDepth == 0 && t.cs_ && t.cs == "hline":
 			endRow() // flush any pending row, then record the rule
 			items = append(items, tabItem{hline: true})
@@ -930,7 +967,7 @@ func (e *Engine) assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrul
 	// occupies, since a span makes the cell index diverge from the column index.
 	colw := make([]int, ncol)
 	for _, b := range built {
-		if b.isRule() {
+		if !b.isRow() {
 			continue
 		}
 		col := 0
@@ -969,7 +1006,7 @@ func (e *Engine) assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrul
 	rowBoxes := make([]*boxNode, len(built))
 	maxW := 0
 	for i, b := range built {
-		if b.isRule() {
+		if !b.isRow() {
 			continue
 		}
 		rowBoxes[i] = buildTabRow(b.cells, ncol, colw, hasRule, vrule)
@@ -984,7 +1021,7 @@ func (e *Engine) assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrul
 	// block runs from the top of the multirow's own row to the bottom of its last
 	// spanned row, counting interior \hline/\cline rules (defaultRule each).
 	for i, b := range built {
-		if b.isRule() {
+		if !b.isRow() {
 			continue
 		}
 		for j := range b.cells {
@@ -1004,6 +1041,10 @@ func (e *Engine) assembleTabular(built []tabBuilt, ncol int, pwidths []int, vrul
 	var vlist []node
 	for i, b := range built {
 		switch {
+		case b.noalign:
+			// tex.web §785: the material goes into the enclosing vertical list as it
+			// stands, between the rows — which is exactly where it was written.
+			vlist = append(vlist, b.vmat...)
 		case b.hline:
 			vlist = append(vlist, ruleNode{width: maxW, height: defaultRule})
 		case b.cline:
@@ -1081,6 +1122,15 @@ func spannedExtent(built []tabBuilt, rowBoxes []*boxNode, start, n int) int {
 	total, seen := 0, 0
 	for k := start; k < len(built) && seen < n; k++ {
 		b := built[k]
+		if b.noalign {
+			// A \noalign between two spanned rows takes real vertical space, so the
+			// block a \multirow is centred over includes it.
+			if seen > 0 {
+				vb := vpackSP(b.vmat, packNatural, 0)
+				total += vb.height + vb.depth
+			}
+			continue
+		}
 		if b.isRule() {
 			if seen > 0 {
 				// booktabs rules add their own weight plus the breathing glue
