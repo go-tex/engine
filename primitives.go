@@ -2144,6 +2144,8 @@ func (e *Engine) loadMore() {
 	e.prim("nocite", func(e *Engine) { e.doNocite() })                       // record keys (or * = all) for \bibliography
 	e.prim("citep", func(e *Engine) { e.doCitep() })                         // natbib: "[n]"
 	e.prim("citet", func(e *Engine) { e.doCitet() })                         // natbib: "Author [n]"
+	e.prim("citeauthor", func(e *Engine) { e.doCiteauthor() })               // natbib: "Author"
+	e.prim("citenum", func(e *Engine) { e.doCitenum() })                     // natbib: "n", unbracketed
 	e.prim("bibliographystyle", func(e *Engine) { e.doBibliographyStyle() }) // accepted; only plain modelled
 	e.prim("bibliography", func(e *Engine) { e.doBibliography() })           // read .bib, emit thebibliography
 	e.prim("gotex@putbib", func(e *Engine) { e.doPutbib() })                 // bibunits: \input the current unit's bu<N>.bbl

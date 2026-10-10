@@ -535,6 +535,41 @@ func (e *Engine) doCitet() {
 	e.pushString(joinComma(parts))
 }
 
+// doCiteauthor implements natbib's \citeauthor{k}: the author label ALONE, with no
+// number and no brackets. It is the same label \citet prints, from the same aux
+// pass, so the two agree within a document — including on natbib's "et al.", which
+// this engine uses from two authors where natbib prints "A and B".
+//
+// It is prose, not apparatus: a sentence reads "as \citeauthor{jones} showed", and
+// a skipped \citeauthor leaves "as showed". 4 papers and 14 uses of the fidelity
+// corpus wrote it into a sentence that way.
+func (e *Engine) doCiteauthor() {
+	keys := splitComma(e.readBraceName())
+	e.recordCites(keys)
+	var parts []string
+	for _, k := range keys {
+		if author := e.bibAuthor[k]; author != "" {
+			parts = append(parts, author)
+		}
+	}
+	// Every key unresolved: say nothing rather than emit a stray separator. The
+	// reference prints its own placeholder here, which we have no equivalent of.
+	e.pushString(joinComma(parts))
+}
+
+// doCitenum implements natbib's \citenum{k}: the number alone, unbracketed, which
+// is what a document writes when it builds its own brackets — "[\citenum{a},
+// \citenum{b}]" or a superscript.
+func (e *Engine) doCitenum() {
+	keys := splitComma(e.readBraceName())
+	e.recordCites(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, e.refText(k))
+	}
+	e.pushString(joinComma(parts))
+}
+
 // readJobBBL reads \jobname.bbl, the formatted bibliography BibTeX writes and
 // LaTeX inputs. It answers false when the job has no name (a source compiled from
 // memory) or no .bbl sits beside it, which is when the .bib path takes over.
