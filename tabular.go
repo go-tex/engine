@@ -598,7 +598,7 @@ func (e *Engine) breakToVbox(hlist []node, width int) *boxNode {
 		if ln.End < len(list) {
 			if _, isDisc := list[ln.End].(discNode); isDisc && e.curFont != nil {
 				w, h, dd := e.curFont.charDimsSP('-')
-				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd})
+				seg = append(append([]node{}, seg...), charNode{ch: '-', width: w, height: h, depth: dd, size: e.curFont.sizePt(), face: e.curFont})
 			}
 		}
 		line := hpackSP(seg, packTo, width)

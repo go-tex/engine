@@ -2060,7 +2060,7 @@ func (e *Engine) charNodeFor(ch rune) (charNode, bool) {
 		return charNode{}, false
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine}, true
+	return charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont}, true
 }
 
 // appendChar appends a measured character to a horizontal list. First it applies
@@ -2085,7 +2085,7 @@ func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
-	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), color: e.curColor, covered: e.coveringDepth > 0})
+	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont, color: e.curColor, covered: e.coveringDepth > 0})
 }
 
 // lastChar returns the rune of the trailing character node, if the list ends in

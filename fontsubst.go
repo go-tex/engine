@@ -146,6 +146,12 @@ func (e *Engine) loadTextFontPackage(pkg string) bool {
 	}
 	if it := load(fam.it); it != nil {
 		e.bindFont("it", it)
+		// And the SLANTED face on the italic, which is NFSS's own substitution: a
+		// family with no slanted shape is served its italic (with a substitution
+		// warning, in LaTeX). No path in the engine bound "sl", so \slshape and
+		// \textsl changed NOTHING — measured on a witness where the reference uses
+		// three faces (Regular, Italic, Slant) and we used one.
+		e.bindFont("sl", it)
 	}
 	return true
 }

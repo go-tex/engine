@@ -143,23 +143,27 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += w
 		case charNode:
 			lg.set(c.srcLine)
-			if font != nil && !c.covered { // covered: it holds its place and draws nothing
-				if d := font.glyphPathAt(c.ch); d != "" {
+			// The glyph's OWN face, which is the one its width came from: a bold or
+			// typewriter run was measured in that face and drawn in the roman before
+			// charNode carried it (#590).
+			gf, gsc := charFace(c, font)
+			if gf != nil && !c.covered { // covered: it holds its place and draws nothing
+				if d := gf.glyphPathAt(c.ch); d != "" {
 					fill := ""
 					if c.color != 0 { // override the enclosing <g fill="black">
 						fill = ` fill="` + hexColor(c.color) + `"`
 					}
 					// The glyph path is at the render font's size; scale it to the
 					// glyph's own size (from \large/\small/…) about the baseline.
-					if sc := glyphScale(c, font); sc != 1 {
-						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(sc), d)
+					if gsc != 1 {
+						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s) scale(%s)" d="%s"/>`, fill, f(cx), f(baseline), f(gsc), d)
 					} else {
 						fmt.Fprintf(sb, `<path%s transform="translate(%s,%s)" d="%s"/>`, fill, f(cx), f(baseline), d)
 					}
 					// The character behind the outline just painted, for the
 					// selectable layer. Only a glyph that was drawn is recorded:
 					// the layer must describe what is on the page.
-					lg.text.addChar(c.ch, cx, spToPt(c.width), charSizePt(c, font))
+					lg.text.addChar(c.ch, cx, spToPt(c.width), charSizePt(c, gf))
 				}
 			}
 			cx += spToPt(c.width)

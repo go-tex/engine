@@ -62,6 +62,17 @@ type charNode struct { // a set character from the current font (metrics in sp)
 	srcLine              int    // 1-based source line this glyph came from (0 = unknown)
 	size                 int    // font size (px/pt) this glyph was set at (0 = base)
 	color                uint32 // 0xRRGGBB fill colour (0 = default black)
+	// face is the font this glyph was MEASURED with, which is also the one it must
+	// be DRAWN with. tex.web §134 gives a char_node exactly these two fields —
+	// "@d font == type {the font code in a char_node}" — and this one had only the
+	// character: the drivers each carried a single face for the whole document and
+	// redrew every glyph in it. Metrics were right and shapes were wrong, so
+	// \textbf, \textit, \texttt and \verb came back set in the roman (#590).
+	//
+	// nil means the driver's own face, which is what a synthetic glyph with no
+	// font to name (a test fixture) gets. The face already carries its SIZE, so a
+	// node that names one needs no separate size: see charFace.
+	face fontFace
 	// covered marks material beamer is hiding on THIS overlay: it keeps its
 	// metrics — the line and the page must look the same whether or not the step
 	// has arrived — and draws no ink. See doBeginInvisible.

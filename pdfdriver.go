@@ -33,6 +33,11 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		return fmt.Errorf("texengine: PDF font load: %w", err)
 	}
 	size := float64(ef.sizePt())
+	// One embedded subset per font PROGRAM, shared by every page and every size.
+	// A glyph names the face it was measured with (charNode.face), and the driver
+	// embeds that face on first sight; the render font is seeded here so a document
+	// that never switches produces exactly the PDF it produced before.
+	loaded := map[any]*pdfkit.Font{programOf(ef): face}
 	// \hypersetup{pdftitle=…,pdfauthor=…,pdfsubject=…,pdfkeywords=…} populates the
 	// PDF information dictionary, so a viewer's title bar and document properties —
 	// and reference managers — read the paper's real metadata rather than nothing
@@ -72,7 +77,7 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 		p := doc.AddPage(pdfkit.NewPageSize(pw*bigPointsPerTeXPoint, ph*bigPointsPerTeXPoint))
 		p.Transform(bigPointsPerTeXPoint, 0, 0, bigPointsPerTeXPoint, 0, 0)
 		p.SetFont(face, size)
-		d := &pdfDraw{p: p, face: face, size: size, cur: size, pageH: ph}
+		d := &pdfDraw{p: p, face: face, base: face, size: size, cur: size, pageH: ph, loaded: loaded}
 		if e.hasPageColor { // \pagecolor: fill the whole page behind the content
 			d.setColor(e.pageColor)
 			d.rect(0, 0, pw, ph)
@@ -100,8 +105,12 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 
 // pdfDraw carries the drawing state for one page.
 type pdfDraw struct {
-	p        *pdfkit.Page
-	face     *pdfkit.Font
+	p    *pdfkit.Page
+	face *pdfkit.Font // the face currently selected in the content stream
+	base *pdfkit.Font // the render font, used by a glyph that names none
+	// loaded is the document's embedded faces, keyed by font program and SHARED
+	// across pages: loading the same bytes twice embeds the same family twice.
+	loaded   map[any]*pdfkit.Font
 	size     float64 // base (\normalsize) size
 	cur      float64 // font size currently selected in the content stream
 	curColor uint32  // fill colour currently selected (0xRRGGBB; 0 = black)
@@ -120,6 +129,46 @@ func (d *pdfDraw) setSize(sz float64) {
 		d.p.SetFont(d.face, sz)
 		d.cur = sz
 	}
+}
+
+// setGlyphFont selects the face and size one glyph must be drawn in, embedding
+// that face on first sight. A face the driver cannot embed (a mock, nullFont)
+// leaves the current one in place rather than dropping the glyph: the box tree
+// already measured it, so it has a position on the page either way.
+func (d *pdfDraw) setGlyphFont(c charNode) {
+	want, sz := d.base, float64(c.size)
+	if c.face != nil {
+		if f, ok := d.embed(c.face); ok {
+			want, sz = f, float64(c.face.sizePt())
+		}
+	}
+	if sz <= 0 {
+		sz = d.size
+	}
+	if want != d.face || sz != d.cur {
+		d.face, d.cur = want, sz
+		d.p.SetFont(want, sz)
+	}
+}
+
+// embed returns the embedded PDF font for a face, loading it once per program.
+func (d *pdfDraw) embed(f fontFace) (*pdfkit.Font, bool) {
+	key := programOf(f)
+	if got, ok := d.loaded[key]; ok {
+		return got, got != nil
+	}
+	ef, ok := f.(embeddableFont)
+	if !ok {
+		d.loaded[key] = nil // remembered as unembeddable, so it is tried once
+		return nil, false
+	}
+	pf, err := pdfkit.LoadFont(ef.fontBytes())
+	if err != nil {
+		d.loaded[key] = nil
+		return nil, false
+	}
+	d.loaded[key] = pf
+	return pf, true
 }
 
 // setColor switches the PDF fill colour (used by both text and rectangles) when it
@@ -209,7 +258,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			cx += w
 		case charNode:
 			if !c.covered { // covered: it holds its place and draws nothing
-				d.setSize(float64(c.size))
+				d.setGlyphFont(c)
 				d.setColor(c.color)
 				d.drawCharMapped(cx, baseline, c.ch)
 			}

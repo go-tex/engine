@@ -58,6 +58,10 @@ const MiniLaTeXKernel = `
 % recurse into itself and swallow the rest of the input.
 \def\textbf#1{{\bfseries #1}}
 \def\textit#1{{\itshape #1}}
+% \textsl was missing, and the corpus asks for it: 5 papers, 50 uses, and the only
+% SHAPE command the census of undefined commands reports — every other \text… it
+% names is a textgreek or tipa symbol, one paper each.
+\def\textsl#1{{\slshape #1}}
 \def\texttt#1{{\ttfamily #1}}
 \def\textsf#1{{\sffamily #1}}
 \def\textrm#1{{\rmfamily #1}}

@@ -144,6 +144,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if err := e.bindOptionalFont("it", opt.ItalicFont, opt.size()); err != nil {
 		return nil, err
 	}
+	// The slanted face falls back to the italic one — NFSS's own substitution for a
+	// family with no slanted shape. Nothing bound "sl" before, so \slshape and
+	// \textsl selected nothing at all.
+	if err := e.bindOptionalFont("sl", opt.ItalicFont, opt.size()); err != nil {
+		return nil, err
+	}
 	if err := e.bindOptionalFont("tt", opt.MonoFont, opt.size()); err != nil {
 		return nil, err
 	}

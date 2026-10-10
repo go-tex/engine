@@ -251,7 +251,11 @@ Each stage is gated by an objective oracle:
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
-   assets, with kerning and ligatures.
+   assets, with kerning and ligatures. A **family** when one is given: roman,
+   bold, italic, slanted (NFSS's own substitution onto the italic), typewriter
+   and sans are each bound to a file, and a glyph is drawn with the face it was
+   measured with — `\textbf`, `\texttt` and `\verb` reach the page in their own
+   face, not only in their own widths.
 5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
    text, and clickable `/Link` annotations for `\href` URIs and `\hyperlink`
    in-document jumps) and self-contained **SVG** pages; the SVG carries a source
