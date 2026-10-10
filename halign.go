@@ -204,6 +204,24 @@ func (e *Engine) buildCellHList(toks []tok) []node {
 	return list
 }
 
+// buildCellVList builds a collected token list as VERTICAL material, the way
+// scanNoalign builds a \noalign read straight from the input. tabular collects its
+// whole body as tokens before building any of it, so its \noalign cannot be read
+// from the stream and is replayed here instead.
+//
+// The group is real, as tex.web §785's is: a \vskip, a font or a colour set inside
+// the \noalign stops at it.
+func (e *Engine) buildCellVList(toks []tok) []node {
+	seq := make([]tok, 0, len(toks)+1)
+	seq = append(seq, toks...)
+	seq = append(seq, chTok('}', catEnd)) // sentinel to terminate buildVBoxList
+	e.push(seq)
+	e.beginGroupKind(boxGroup)
+	list := e.buildVBoxList()
+	e.endGroup()
+	return list
+}
+
 // assembleAlignment computes column widths and stacks the repacked rows into a
 // vbox.
 func (e *Engine) assembleAlignment(cols []colTemplate, items []alignItem) *boxNode {
