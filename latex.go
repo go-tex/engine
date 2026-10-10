@@ -1293,7 +1293,23 @@ const MiniLaTeXKernel = `
 \def\printcontents{\@ifnextbracket\@gtxprintcontso\@gtxprintcont}
 \def\@gtxprintcontso[#1]{\@gtxprintcont}
 \def\@gtxprintcont#1#2#3{}
-\def\SetKwInput#1#2{}
+% \SetKwInput{\Cmd}{Label} (algorithm2e.sty) defines \Cmd{text} to print
+% "Label: text" as a line of the algorithm. It was a gobbler, and that left the
+% four commands algorithm2e DECLARES WITH IT undefined — \KwIn, \KwOut, \KwData
+% and \KwResult — because we emulate the package rather than loading its .sty.
+% An undefined \KwIn is skipped with its argument, and that argument is PROSE:
+% 2206.00339 writes about fifty words of it per use ("Right-hand side F of
+% Equation (3) defining the ODE system, start time …"), 13 uses over 6 papers.
+%
+% The reference prints the label and the text on one line, measured on a witness
+% with [ruled]algorithm2e: "Input: alpha beta gamma" / "Output: delta epsilon".
+% The label is bold here where algorithm2e uses \KwSty, which is bold by default;
+% a document that redefines \KwSty does not reach this.
+\def\SetKwInput#1#2{\def#1##1{\par\noindent\textbf{#2: }##1\par}}
+\SetKwInput{\KwIn}{Input}
+\SetKwInput{\KwOut}{Output}
+\SetKwInput{\KwData}{Data}
+\SetKwInput{\KwResult}{Result}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
 % is skipped and its braced argument is ORDINARY MATERIAL, so the keyword is TYPESET —
