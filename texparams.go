@@ -41,7 +41,11 @@ var texIntParams = map[string]int{
 	"binoppenalty": 700, "relpenalty": 500, "delimiterfactor": 901,
 	"maxdeadcycles": 25, "deadcycles": 0, "insertpenalties": 0, "badness": 0,
 	"defaulthyphenchar": -1, "defaultskewchar": -1, "holdinginserts": 0,
-	"fam": -1, "spacefactor": 1000, "prevgraf": 0, "hangafter": 1,
+	// \spacefactor is NOT here: it is a real primitive now (classprims.go), backed
+	// by the state TeX updates after every character. Listing it as well made it
+	// both a primitive and a parameter, and which one wins depends on load order —
+	// TestNoParameterIsBothAPrimitiveAndAListedParam exists for that and caught it.
+	"fam": -1, "prevgraf": 0, "hangafter": 1,
 	"errorstopmode": 0, "pausing": 0,
 }
 

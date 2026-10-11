@@ -596,7 +596,7 @@ func (e *Engine) buildBoxList() []node {
 				}
 			case catSpace:
 				if e.curFont != nil {
-					list = append(list, glueNode{spec: e.spaceGlue()})
+					list = append(list, glueNode{spec: e.spaceGlueForFactor(e.curFont)})
 				}
 			case catMath:
 				src, display := e.scanMathSource()
@@ -686,9 +686,20 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 			return c, true
 		}
 		return nil, true
-	case " ": // control space inside a box
+	case " ":
+		// Control space inside a box, and NOT space-factor adjusted: tex.web
+		// §20054 sends hmode+ex_space to append_normal_space, which takes the
+		// font's glue as it stands — app_space, where the factor is applied, is not
+		// on that path. "e.g.\ x" and "Fig.\ 3" are how a document asks for an
+		// ordinary space after a period, and ~ expands to \penalty10000\ so a tie
+		// inherits the same rule.
+		//
+		// ⛔ This was briefly changed along with the two interword sites when the
+		// space factor arrived, and the test for it caught the mistake: "x.\ x"
+		// came out the same width as "x. x" when it must be one extra_space
+		// narrower.
 		if e.curFont != nil {
-			return glueNode{spec: e.spaceGlue()}, true
+			return glueNode{spec: e.spaceGlueOf(e.curFont)}, true
 		}
 		return nil, true
 	case "hbox":

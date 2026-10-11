@@ -374,6 +374,12 @@ type Engine struct {
 	// was not found, keyed by the primitive. See scanLeftBrace.
 	alignAbandoned map[string]int
 
+	// sfcode is \sfcode, the space-factor code per character: only what a document
+	// assigned, with defaultSfcode supplying the rest. spaceFactor is TeX's
+	// space_factor, updated after every character set. See spacefactor.go.
+	sfcode      map[rune]int
+	spaceFactor int
+
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
 	// options queued by \PassOptionsTo*, and a depth that makes loading tolerant of
@@ -689,6 +695,8 @@ func New() *Engine {
 	for c := 'A'; c <= 'Z'; c++ {
 		e.catcode[c] = catLetter
 	}
+	// space_factor starts at 1000, as TeX starts every horizontal list (§1034).
+	e.spaceFactor = 1000
 	e.catcode['\\'] = catEsc
 	e.catcode['{'] = catBegin
 	e.catcode['}'] = catEnd
@@ -1368,6 +1376,10 @@ func (e *Engine) endGroup() {
 			e.everypar = s.oldtoks
 		case 10:
 			e.box[s.idx] = s.oldbox
+		case saveSfcode:
+			e.sfcode[rune(s.idx)] = s.oldi
+		case saveSpaceFactor:
+			e.spaceFactor = s.oldi
 		case saveHsize:
 			e.hsize = s.oldd
 		case saveVsize:
@@ -2048,7 +2060,7 @@ func (e *Engine) stepToken(t tok) bool {
 			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
 		case catSpace:
 			if e.inPar && e.curFont != nil {
-				e.parList = append(e.parList, glueNode{spec: e.spaceGlue()})
+				e.parList = append(e.parList, glueNode{spec: e.spaceGlueForFactor(e.curFont)})
 			}
 		case catMath:
 			e.doMath()
@@ -2103,6 +2115,10 @@ func (e *Engine) rawAppendChar(list []node, ch rune) []node {
 		}
 	}
 	w, h, d := e.curFont.charDimsSP(ch)
+	// Every character set moves the space factor (tex.web §1034's
+	// adjust_space_factor, at the top of the main loop), which is what makes the
+	// space AFTER this character depend on what it was.
+	e.adjustSpaceFactor(ch)
 	return append(list, charNode{ch: ch, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont, color: e.curColor, covered: e.coveringDepth > 0})
 }
 
@@ -2720,6 +2736,12 @@ func (e *Engine) scanInt() int {
 				}
 				if m.kind == mPrim && m.name == "catcode" {
 					return sign * int(e.catcode[rune(e.scanInt())])
+				}
+				if m.kind == mPrim && m.name == "sfcode" {
+					return sign * e.sfcodeOf(rune(e.scanInt()))
+				}
+				if m.kind == mPrim && m.name == "spacefactor" {
+					return sign * e.spaceFactor
 				}
 				if m.kind == mPrim {
 					if v, ok := e.groupQuery(m.name); ok {
