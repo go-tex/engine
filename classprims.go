@@ -39,12 +39,25 @@ func (e *Engine) loadClassPrims() {
 	e.prim("everypar", func(e *Engine) {
 		e.setEverypar(e.readToksValue())
 	})
-	// \sfcode<charcode>=<int>: space-factor code assignment. No space-factor model
-	// yet; consume the assignment as a no-op.
+	// \sfcode<charcode>=<int>: the space-factor code of a character. It is READ
+	// back too (\the\sfcode`\. and \ifnum\sfcode`\.=\@m, which is how LaTeX asks
+	// whether \frenchspacing is in force), so it is stored, group-scoped, and
+	// consulted by adjustSpaceFactor. See spacefactor.go.
 	e.prim("sfcode", func(e *Engine) {
-		e.scanInt()
+		r := rune(e.scanInt())
 		e.scanEquals()
-		e.scanInt()
+		e.setSfcode(r, e.scanInt(), false)
+	})
+	// \spacefactor: TeX's space_factor as an assignable internal integer. \@ is
+	// \spacefactor\@m — the one thing that makes a period after a capital end a
+	// sentence — and \- is \spacefactor\sfcode`\- (latex.ltx:6617).
+	e.prim("spacefactor", func(e *Engine) {
+		e.scanEquals()
+		v := e.scanInt()
+		if len(e.groups) > 0 {
+			e.save = append(e.save, saveItem{kind: saveSpaceFactor, oldi: e.spaceFactor})
+		}
+		e.spaceFactor = v
 	})
 	// \long: a \def prefix for macros whose arguments may contain \par. The engine
 	// does not distinguish long/short macros, so \long is an accepted no-op prefix.

@@ -314,10 +314,11 @@ const AMSClassSubstrate = `
 \newcount\@itemdepth
 \newskip\@topsep
 \newskip\@topsepadd
-% \spacefactor: TeX updates it per character; the engine does not, so model it as
-% a plain count seeded at 1000. \@addpunct only reads \ifnum\spacefactor>\@m, which
-% stays false — punctuation is added normally.
-\newcount\spacefactor \spacefactor=1000
+% \spacefactor is a real internal now (classprims.go), updated after every
+% character the way TeX updates it (§1034): a \newcount here would SHADOW the
+% primitive, and \@ would then set a register nothing reads. It used to be one,
+% with a comment saying the engine never updated it — which was true until
+% spacefactor.go. \@addpunct's \ifnum\spacefactor>\@m now answers for real.
 % \prevdepth is a real parameter now (see its prim and prevdepthParam): a
 % \newdimen here would SHADOW it, which is what kept it reading 0pt — the same
 % trap the \lastskip comment above documents.

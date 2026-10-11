@@ -1403,8 +1403,22 @@ const MiniLaTeXKernel = `
 \def\nolinebreak{\@ifnextbracket\@gobbleoptonly\relax}
 \def\boldmath{}
 \def\unboldmath{}
-\def\frenchspacing{}
-\def\nonfrenchspacing{}
+% \frenchspacing / \nonfrenchspacing, latex.ltx:554-557 verbatim. They were empty
+% because nothing read \sfcode; it is a real table now (spacefactor.go).
+\def\frenchspacing{\sfcode46=1000 \sfcode63=1000 \sfcode33=1000 \sfcode58=1000 \sfcode59=1000 \sfcode44=1000 }
+\def\nonfrenchspacing{\sfcode46=3000 \sfcode63=3000 \sfcode33=3000 \sfcode58=2000 \sfcode59=1500 \sfcode44=1250 }
+% latex.ltx:641 — a closing delimiter leaves the factor ALONE (sfcode 0), so
+% "end.)" still ends a sentence and "(Mr.)" does not start one.
+\sfcode41=0 \sfcode39=0 \sfcode93=0
+% ...and LaTeX's default is \nonfrenchspacing, which it runs when the format is
+% built. Without this line every sfcode would stay at INITEX's 1000 and the whole
+% table would be inert.
+\nonfrenchspacing
+% \@ is latex.ltx:6626 — \def\@{\spacefactor\@m{}} — and it exists for one
+% reason: every UPPERCASE letter has sfcode 999 (tex.web §232), so a period after
+% a capital does not end a sentence. "NASA\@. The" is how a document says that it
+% does. \@m is 1000.
+\def\@{\spacefactor1000 {}}
 % \qedhere (amsthm): the end-of-proof square requested mid-line/mid-display is
 % dropped here (the proof's trailing \qed still sets the mark).
 \def\qedhere{}

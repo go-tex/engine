@@ -763,6 +763,10 @@ const (
 	saveBaseBaselineskip = 16
 	saveLineskiplimit    = 17
 	saveLineskip         = 18
+	// \sfcode and \spacefactor: a table and a parameter, both group-scoped like
+	// \catcode and \hsize are. See spacefactor.go.
+	saveSfcode      = 19
+	saveSpaceFactor = 20
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -1178,6 +1182,14 @@ func (e *Engine) doThe() {
 				// saves the old value this way and restores it when it is done, so
 				// reading a catcode matters as much as setting one.
 				e.pushString(strconv.Itoa(int(e.catcode[rune(e.scanInt())])))
+				return
+			case m.kind == mPrim && m.name == "sfcode":
+				// \ifnum\sfcode`\.=\@m is how LaTeX asks whether \frenchspacing is
+				// in force (latex.ltx:6703), so this table is read as much as set.
+				e.pushString(strconv.Itoa(e.sfcodeOf(rune(e.scanInt()))))
+				return
+			case m.kind == mPrim && m.name == "spacefactor":
+				e.pushString(strconv.Itoa(e.spaceFactor))
 				return
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
@@ -2188,7 +2200,13 @@ func (e *Engine) loadMore() {
 		a := acc
 		e.prim(a, func(e *Engine) { e.doAccent(a) }) // accent commands: \'e → é, \c c → ç, …
 	}
-	e.prim(" ", func(e *Engine) { // control space: an explicit interword space
+	// Control space: an explicit interword space, and DELIBERATELY not
+	// space-factor adjusted. tex.web §20054 sends hmode+ex_space to
+	// append_normal_space, which takes the font's glue as it stands — the space
+	// factor is applied by app_space, which this path does not reach. So "e.g.\ x"
+	// gets an ordinary space even though the period raised the factor, which is
+	// exactly why a document writes it that way.
+	e.prim(" ", func(e *Engine) {
 		if e.curFont != nil {
 			e.placeHGlue(e.spaceGlue())
 		}
