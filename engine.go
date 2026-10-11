@@ -1754,14 +1754,15 @@ func (e *Engine) parEndsArgument(t tok) bool {
 }
 
 // isFileEndSentinel reports whether t is one of the control sequences the splicer
-// appends at the end of a loaded file (\gotexendinput / \@endofpackagehook /
+// appends at the end of a loaded file (\gotexendinput / \gotexatletter /
+// \@endofpackagehook /
 // \@endofclasshook, see io.go). These are hard "stop reading THIS file" markers.
 func isFileEndSentinel(t tok) bool {
 	if !t.cs_ {
 		return false
 	}
 	switch t.cs {
-	case "gotexendinput", "@endofpackagehook", "@endofclasshook", "@gotex@endload":
+	case "gotexendinput", "gotexatletter", "@endofpackagehook", "@endofclasshook", "@gotex@endload":
 		return true
 	}
 	return false
