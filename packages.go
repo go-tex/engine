@@ -813,7 +813,12 @@ func (e *Engine) doUsepackageLoad() {
 // doLoadClass implements \LoadClass[options]{class} (used by a class to build on a
 // base class). \LoadClassWithOptions passes the current class's options through.
 func (e *Engine) doLoadClass(withOptions bool) {
-	opts := e.scanBracketList()
+	// ⛔ Expanded HERE, once, so both halves of this function see the same list. The
+	// engine's own applyLoadClassBaseSize resolved a macro option itself and the list
+	// passed to the .cls did not, so acmart's \LoadClass[\ACM@fontsize]{amsart} set the
+	// font scale from 9pt and left amsart's TeX-level \@typesizes at 10pt: the body of
+	// every acmart paper was led at 12pt against the reference's 11pt.
+	opts := e.resolveOptionList(e.scanBracketList())
 	if withOptions {
 		if fr := e.curFrame(); fr != nil {
 			opts = append(opts, fr.passed...)
@@ -1370,6 +1375,24 @@ func (e *Engine) captionFontFromOptions(passed []string) {
 //
 // Only a single control sequence is resolved, and only one level: a size option is a name
 // or a macro holding one, never an expression.
+//
+// ⛔⛔ This resolves the option for the ENGINE's own decision, and for a long time that
+// was the only place it was resolved. The list handed to the loaded .cls stayed
+// unexpanded, so the loaded class never saw the size either: amsart received the literal
+// "\ACM@fontsize", matched no \DeclareOption, and kept its 10pt \@typesizes — which is
+// why \baselineskip read 12pt in the body of every acmart paper while this function had
+// correctly read 9pt a few lines earlier. The same expansion at one of two sites.
+//
+// Measured on 2304.01951 (sigconf, 9pt), the interline step on pages 2–9, both sides
+// through the same reader:
+//
+//	ours 11.96pt   reference 10.96pt   (\baselineskip read 12.0pt / 11.0pt)
+//
+// and the whole of it reproduces in two lines of TeX, which is the witness this fix is
+// tested against:
+//
+//	\LoadClass[9pt]{amsart}          → 11pt both sides   (amsart's own \DeclareOption ran)
+//	\LoadClass[\probesize]{amsart}   → 12pt ours, 11pt reference
 func (e *Engine) resolveSizeOption(o string) string {
 	o = strings.TrimSpace(o)
 	if !strings.HasPrefix(o, `\`) {
@@ -1380,6 +1403,23 @@ func (e *Engine) resolveSizeOption(o string) string {
 		return o
 	}
 	return strings.TrimSpace(e.toksToString(m.body))
+}
+
+// resolveOptionList expands every option that IS a macro, so the list the loaded class
+// receives says what the loading class meant.
+//
+// It is resolveSizeOption applied to the whole list, under a name that says what it is
+// for: the option does not have to be a size for the expansion to matter — a class that
+// states its format, its paper or its numbering through a macro has the same problem, and
+// nothing about the mechanism is specific to sizes. An option that is not a macro, or a
+// control sequence with no macro behind it, is handed through untouched: a .cls that
+// declares an option literally named like a control sequence still gets it.
+func (e *Engine) resolveOptionList(opts []string) []string {
+	out := make([]string, 0, len(opts))
+	for _, o := range opts {
+		out = append(out, e.resolveSizeOption(o))
+	}
+	return out
 }
 
 // IEEEtranNames is what IEEEtran calls its floats and its keyword block, plus the two
