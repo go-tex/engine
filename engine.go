@@ -694,14 +694,27 @@ func New() *Engine {
 	e.catcode['}'] = catEnd
 	e.catcode['$'] = catMath
 	e.catcode['&'] = catAlign
-	e.catcode['\n'] = catEOL
 	// Carriage return is TeX's end-of-line character: TeX turns the end of every
 	// input line into char 13 and gives it catcode 5. This engine reads a line
-	// ending as \n instead (see normalizeEOL), but char 13 keeps its catcode so
-	// that a package asking `\catcode`\^^M=12` — beamer does, to read a line
-	// verbatim — sees the value TeX shows, and CHANGES it, rather than assigning
-	// over a table entry that was already 12.
+	// ending as \n instead (see normalizeEOL), and mouthChar turns it into
+	// \endlinechar — 13 — so char 13's catcode is what actually governs the end of
+	// a line here too, and a package asking `\catcode`\^^M=12` (beamer does, to
+	// read a line verbatim) changes the thing that is really consulted.
 	e.catcode['\r'] = catEOL
+	// ⛔⛔ Char 10 is catcode 12, "other", as INITEX leaves it (tex.web §232 gives
+	// catcode 5 to \r ALONE). It used to be catEOL here, which cost nothing for
+	// line endings — mouthChar never hands char 10 to the catcode table, it hands
+	// \endlinechar — and broke ^^J, the only way a document can write char 10:
+	//
+	//	\the\catcode`\^^J    tectonic 12    this engine 5
+	//
+	// A ^^J followed by the source's own newline was then TWO ends of line, which
+	// is \par, and a \par inside a macro argument abandons the call (§392). So
+	// fancyhdr's \@fancywarning{… ^^J … ^^J …} — a warning whose text spans lines,
+	// which is how warnings are written — lost its call and left its PROSE in the
+	// input, typeset onto the page. Two corpus papers carried it onto page 1
+	// (go-tex/engine#607).
+	e.catcode['\n'] = catOther
 	e.catcode['#'] = catParam
 	e.catcode['^'] = catSup
 	e.catcode['_'] = catSub
