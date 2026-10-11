@@ -15,18 +15,73 @@ package engine
 // colTemplate is one preamble column: text before and after the entry (#).
 type colTemplate struct{ before, after []tok }
 
+// scanLeftBrace reads the MANDATORY left brace that opens a primitive's group,
+// after the spaces and \relax tokens tex.web §403's scan_left_brace reads past.
+//
+// ⛔ \halign returned SILENTLY when no brace followed, so
+//
+//	\halign\bgroup&\relax\hfil …##\relax\hfil …\cr      (IEEEtran.cls:4701)
+//
+// abandoned the whole alignment and let its body — the PREAMBLE included — be
+// typeset as ordinary text. A real paper's title page then carried a stray "#"
+// in front of its author list, and the two commands the preamble leaks,
+// \noalign and \everycr, were reported as undefined on a path where they are
+// nothing of the kind (go-tex/engine#602). \hbox and \vbox accept the implicit
+// brace; this is the one caller that does not, measured on probes of all four.
+//
+// ⛔⛔ The implicit brace is DELIBERATELY NOT ACCEPTED YET, and that is a measured
+// decision rather than an oversight. Accepting it enters IEEEtran's author
+// alignment, which this engine cannot yet build: the page then reads "0.511mm"
+// where the reference reads "A Name", because the template's v-part carries a
+// rule spec we mis-scan, and \everycr is still undefined. Trading a cosmetic "#"
+// for the author names themselves is a worse page, and content loss outranks a
+// stray character. What is missing is listed in #602; the brace is the LAST of
+// those to flip, not the first.
+//
+// So this reads §403's spaces and \relax, still requires a LITERAL {, and
+// TALLIES the refusal — an alignment dropped whole is exactly the kind of silent
+// loss every other field of Diagnostics exists to make visible, and nothing
+// reported it for as long as it has been happening.
+func (e *Engine) scanLeftBrace(prim string) bool {
+	for {
+		t, ok := e.getXToken()
+		if !ok {
+			e.noteAlignmentAbandoned(prim)
+			return false
+		}
+		if !t.cs_ {
+			switch t.cat {
+			case catBegin:
+				return true
+			case catSpace:
+				continue
+			}
+		} else if t.cs == "relax" {
+			continue // §403 reads past \relax, as it does past a space
+		}
+		e.back(t)
+		e.noteAlignmentAbandoned(prim)
+		return false
+	}
+}
+
+// noteAlignmentAbandoned records an alignment dropped for want of its brace.
+func (e *Engine) noteAlignmentAbandoned(prim string) {
+	if e.alignAbandoned == nil {
+		e.alignAbandoned = map[string]int{}
+	}
+	e.alignAbandoned[`\`+prim]++
+}
+
 // doHalign parses and lays out an \halign{…}. The result vbox is contributed to
 // the current vertical list.
 func (e *Engine) doHalign() {
 	e.endParagraph()
-	e.skipOptSpace()
-	if t, ok := e.getXToken(); !ok || !(t.cat == catBegin && !t.cs_) {
-		if ok {
-			e.back(t)
-		}
+	if !e.scanLeftBrace("halign") {
 		return
 	}
-	templates := e.parsePreamble()
+	cols, loopFrom := e.parsePreamble()
+	templates := alignTemplates{cols: cols, loopFrom: loopFrom}
 	var items []alignItem
 	for {
 		for {
@@ -102,10 +157,11 @@ func (e *Engine) scanNoalign() ([]node, bool) {
 
 // parsePreamble reads the template row (up to \cr), returning one entry per
 // column split at the # placeholder.
-func (e *Engine) parsePreamble() []colTemplate {
+func (e *Engine) parsePreamble() ([]colTemplate, int) {
 	var cols []colTemplate
 	var cur colTemplate
 	seenHash := false
+	loopFrom := -1
 	flush := func() {
 		cols = append(cols, cur)
 		cur = colTemplate{}
@@ -119,8 +175,20 @@ func (e *Engine) parsePreamble() []colTemplate {
 		switch {
 		case t.cs_ && (t.cs == "cr" || t.cs == "crcr"):
 			flush()
-			return cols
+			return cols, loopFrom
 		case !t.cs_ && t.cat == catAlign:
+			// tex.web §786, in the u_j scanner: a & met while the template is still
+			// EMPTY and no loop has been set does NOT separate a column — it marks
+			// the template that FOLLOWS as the one to repeat ("cur_loop"), which is
+			// how \halign{&T\cr …} gives every column the same template.
+			//
+			// ⛔ Read as a separator it produced an EMPTY column 0, and every cell
+			// then landed one column to the right of its template. IEEEtran's author
+			// block is written exactly this way (IEEEtran.cls:4701).
+			if loopFrom < 0 && !seenHash && len(cur.before) == 0 && len(cur.after) == 0 {
+				loopFrom = len(cols)
+				continue
+			}
 			flush()
 		case !t.cs_ && t.cat == catParam:
 			seenHash = true
@@ -130,24 +198,42 @@ func (e *Engine) parsePreamble() []colTemplate {
 			cur.before = append(cur.before, t)
 		}
 	}
-	return cols
+	return cols, loopFrom
+}
+
+// alignTemplates is a preamble that may repeat: a periodic one (tex.web §786)
+// lengthens itself from loopFrom whenever a row asks for a column it does not
+// have (§793's "Lengthen the preamble periodically").
+type alignTemplates struct {
+	cols     []colTemplate
+	loopFrom int // -1 when the preamble is not periodic
+}
+
+// at returns the template for column j, extending a periodic preamble as TeX
+// does. A row that overruns a NON-periodic preamble gets an empty template,
+// which is where TeX says "Extra alignment tab has been changed to \cr".
+func (t alignTemplates) at(j int) colTemplate {
+	if j < len(t.cols) {
+		return t.cols[j]
+	}
+	if t.loopFrom < 0 || t.loopFrom >= len(t.cols) {
+		return colTemplate{}
+	}
+	period := len(t.cols) - t.loopFrom
+	return t.cols[t.loopFrom+(j-t.loopFrom)%period]
 }
 
 // parseRow reads one row's cells (separated by &, ended by \cr). ended is true
 // when the alignment's closing brace or end of input was reached.
-func (e *Engine) parseRow(cols []colTemplate) ([][]node, bool) {
+func (e *Engine) parseRow(tpl alignTemplates) ([][]node, bool) {
 	var cells [][]node
 	var content []tok
 	col, depth := 0, 0
 	build := func() {
-		var toks []tok
-		if col < len(cols) {
-			toks = append(toks, cols[col].before...)
-		}
+		t := tpl.at(col)
+		toks := append([]tok{}, t.before...)
 		toks = append(toks, content...)
-		if col < len(cols) {
-			toks = append(toks, cols[col].after...)
-		}
+		toks = append(toks, t.after...)
 		cells = append(cells, e.buildCellHList(toks))
 		content = nil
 		col++
@@ -159,6 +245,13 @@ func (e *Engine) parseRow(cols []colTemplate) ([][]node, bool) {
 				build()
 			}
 			return cells, true
+		}
+		// An implicit brace is a brace here, as it is in the stomach and as
+		// align_state counts it in tex.web. Without this the \egroup that closes an
+		// alignment opened with \halign\bgroup was read as ORDINARY CELL MATERIAL,
+		// so the row never ended and the alignment ran to end of input.
+		if c, isChar := e.implicitChar(t); isChar {
+			t = c
 		}
 		switch {
 		case depth == 0 && t.cs_ && (t.cs == "cr" || t.cs == "crcr"):
@@ -224,8 +317,16 @@ func (e *Engine) buildCellVList(toks []tok) []node {
 
 // assembleAlignment computes column widths and stacks the repacked rows into a
 // vbox.
-func (e *Engine) assembleAlignment(cols []colTemplate, items []alignItem) *boxNode {
-	ncol := len(cols)
+func (e *Engine) assembleAlignment(tpl alignTemplates, items []alignItem) *boxNode {
+	// A periodic preamble lengthens itself, so the column count is the widest ROW
+	// and not the preamble's length. Taking len(cols) dropped every column past
+	// the first on \halign{&T\cr a&b&c\cr}.
+	ncol := len(tpl.cols)
+	for _, it := range items {
+		if n := len(it.row); n > ncol {
+			ncol = n
+		}
+	}
 	colw := make([]int, ncol)
 	for _, it := range items {
 		for j, cell := range it.row {

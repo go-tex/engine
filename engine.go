@@ -370,6 +370,10 @@ type Engine struct {
 	// it, keyed by the command that asked for one. See recordMissingFile.
 	filesMissing map[string]int
 
+	// alignAbandoned tallies alignments dropped whole because the mandatory brace
+	// was not found, keyed by the primitive. See scanLeftBrace.
+	alignAbandoned map[string]int
+
 	// class/package loading (see packages.go): the stack of files being \input as
 	// classes/packages (each restores @'s catcode when done), the loaded registry,
 	// options queued by \PassOptionsTo*, and a depth that makes loading tolerant of
@@ -2400,6 +2404,15 @@ type Diagnostics struct {
 	// error; it is the fact a host compiling third-party documents needs in order to
 	// refuse a result. Empty for every document that stays where it lives.
 	ReadsOutsideTree map[string]int
+	// AlignmentsAbandoned counts alignments dropped WHOLE because the mandatory
+	// left brace was not found, keyed by the primitive ("\\halign"). It has its own
+	// field for the reason every other alarm here does: nothing else could show it.
+	// The primitive is defined and the preamble's commands are defined, so Skipped
+	// stays empty; what reaches the page is the alignment's own source, preamble
+	// included. \halign\bgroup — IEEEtran.cls writes exactly that for its author
+	// block — put a stray "#" on a real paper's title page and made \noalign and
+	// \everycr look undefined (#602). nil/empty when every alignment was entered.
+	AlignmentsAbandoned map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2455,6 +2468,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 			mathDropped[k] = v
 		}
 	}
+	var alignAbandoned map[string]int
+	if len(e.alignAbandoned) > 0 {
+		alignAbandoned = make(map[string]int, len(e.alignAbandoned))
+		for k, v := range e.alignAbandoned {
+			alignAbandoned[k] = v
+		}
+	}
 	return Diagnostics{
 		Skipped:          skipped,
 		FilesMissing:     filesMissing,
@@ -2470,6 +2490,8 @@ func (e *Engine) Diagnostics() Diagnostics {
 		FiguresDropped:   figuresDropped,
 		ExtraBrace:       extraBrace,
 		ReadsOutsideTree: e.readsOutside,
+
+		AlignmentsAbandoned: alignAbandoned,
 	}
 }
 

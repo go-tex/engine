@@ -218,6 +218,18 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "        \\usepackage{%s} wanted %s\n", pkg, d.FontsSubstituted[pkg])
 		}
 	}
+	if n := totalCount(d.AlignmentsAbandoned); n > 0 {
+		// Its own line because nothing else shows it: the primitive is defined, its
+		// preamble's commands are defined, and what reaches the page is the
+		// alignment's own SOURCE. A census of undefined commands reads the leaked
+		// preamble and names whatever it finds there — \noalign and \everycr, on a
+		// path where neither is missing (go-tex/engine#602).
+		fmt.Fprintf(w, "gotex: %d alignment(s) dropped WHOLE for want of the mandatory { — "+
+			"the body, preamble included, was typeset as text:\n", n)
+		for _, e := range sortedByCount(d.AlignmentsAbandoned) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if n := totalCount(d.FilesMissing); n > 0 {
 		// Not a missing command: \input, \bibliography and \putbib all ran and
 		// found nothing to read. Saying so keeps them out of the undefined channel,
