@@ -310,13 +310,17 @@ func (e *Engine) loadTeXFile(data []byte, name, ext string, passed []string) {
 	// input: reading it BEFORE splicing the file would put the token that is not a
 	// "[" back on the token stack, ahead of the file about to be spliced into the
 	// character buffer — which silently swallowed everything after the \usepackage.
-	// \makeatletter before the tail, because the tail is TEXT and its catcodes are
+	// \gotexatletter OPENS the tail, because the tail is TEXT and its catcodes are
 	// those in force when it is READ, not when it is spliced. A package that ends
 	// with \makeatother — which is how most author-written .sty files end — turned
 	// \@endofpackagehook into \@ followed by the letters "endofpackagehook", and
 	// printed the name of the engine's own end-of-load marker on the page.
 	// endLoad restores the frame's saved catcode for @ immediately afterwards.
-	e.pushPackageLevel(pre + body + "\\makeatletter\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
+	//
+	// It carries no @ of its own, so \endinput's skip can LAND on it (io.go) —
+	// which a \makeatletter in the same place could not survive, since the skip
+	// jumps to a marker and a marker in front of the repair is not reachable.
+	e.pushPackageLevel(pre + body + "\\gotexatletter\\" + endHook + post + "\\@gotex@endload \\gotexeatdate ")
 }
 
 // normalizeEOL converts CRLF and lone CR line endings to LF. The engine's mouth

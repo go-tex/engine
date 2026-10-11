@@ -1817,6 +1817,11 @@ func (e *Engine) loadMore() {
 	e.prim("IfFileExists", func(e *Engine) { e.doIfFileExists() })
 	e.prim("InputIfFileExists", func(e *Engine) { e.doInputIfFileExists() })
 	e.prim("@gotex@endload", func(e *Engine) { e.endLoad() })
+	// \gotexatletter opens the tail the splicer appends after a loaded file: it
+	// makes @ a letter so the hook and the end-of-load marker behind it can be
+	// read, and it carries no @ itself so it reads the same whatever catcodes the
+	// file left behind. endLoad puts the frame's saved value back. See io.go.
+	e.prim("gotexatletter", func(e *Engine) { e.catcode['@'] = catLetter })
 	e.prim("gotexendinput", func(e *Engine) { e.endInput() })
 	e.prim("@starttoc", func(e *Engine) { e.doStartTOC() }) // a real class's TOC command bridges to the engine's entry table
 	// NFSS size-switch commands a class redefines \normalsize/\small/… to call.

@@ -20,8 +20,32 @@ import (
 // end-of-class hooks after a \usepackage / \documentclass (packages.go).
 // \endinput skips forward to the nearest one to stop reading the current file
 // (see classprims.go). They must match the tokens the splicers emit.
+// ⛔⛔ \gotexatletter OPENS the package/class tail, and that is where \endinput
+// must land — not on the hook behind it.
+//
+// The tail is spliced as TEXT, so its catcodes are the ones in force when it is
+// READ. A package that ends \makeatother — how most author-written .sty files
+// finish — leaves @ an ordinary character, and \@endofpackagehook is then read as
+// \@ followed by the LETTERS "endofpackagehook", which get typeset. A
+// \makeatletter in front of the tail repaired that, and \endinput was the hole in
+// the repair: \endinput does not read to end of file, it SKIPS FORWARD to a marker
+// (classprims.go) — straight over a \makeatletter sitting in front of one. So
+// \makeatother alone was clean, \endinput alone was clean, and the two together
+// put
+//
+//	endofpackagehookgotex@endload
+//
+// at the head of the body; two real corpus papers carried it onto page 1
+// (go-tex/engine#606).
+//
+// \gotexatletter carries no @, so it reads the same whatever the file left
+// behind, and it is a real control sequence — which \csname, the other way to
+// spell a name past its catcodes, is not: a runaway delimited argument is stopped
+// by RECOGNISING these tokens (isFileEndSentinel), and a \csname is not one of
+// them. Both requirements, one sentinel.
 var fileEndMarkers = [][]rune{
 	[]rune(`\gotexendinput`),
+	[]rune(`\gotexatletter`),
 	[]rune(`\@endofpackagehook`),
 	[]rune(`\@endofclasshook`),
 }
