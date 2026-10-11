@@ -403,6 +403,28 @@ const LaTeX2eClassKernel = `
 \newif\if@compatibility
 \newif\if@noskipsec
 \newif\if@mparswitch
+% latex.ltx:15037 declares \if@reversemargin false, and \reversemarginpar /
+% \normalmarginpar (latex.ltx:13155-13156) are the only things that set it.
+% Undefined, it was the most-reported missing conditional in the corpus: 5
+% papers, 222 occurrences, all of them fancyhdr.sty's
+%
+%	\def\fancy@Oolh{\if@reversemargin\hss\else\relax\fi}
+%
+% which loses its test and leaves a stray \else … \fi behind.
+%
+% ⚠ This changes no pixel, and the honest reason is worth writing down: the
+% engine emulates fancyhdr itself (fancyhdr.go) and never runs that .sty's
+% \@oddhead, so the macro whose test went missing is not on the drawing path at
+% all. What this buys is 222 fewer bogus reports — a census of missing commands
+% was being led here — and no unbalanced conditional left in the input. A
+% witness with an over-wide running head is byte-identical before and after.
+\newif\if@reversemargin
+% And the two commands that set it, which are the only ones that do. Three
+% corpus papers call \reversemarginpar, so this is not a guess at an API.
+% latex.ltx also does \global\@mparbottom\z@ in each; this engine has no
+% margin-par accumulator to reset, so that half has nothing to act on.
+\def\reversemarginpar{\@reversemargintrue}
+\def\normalmarginpar{\@reversemarginfalse}
 \newif\if@nobreak
 \newif\if@minipage
 \newif\if@titlepage
