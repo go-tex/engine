@@ -377,6 +377,22 @@ const LaTeX2eKernelHelpers = `
 \def\@spaces{}
 \def\@ehc{}
 \def\@ehd{}
+% \restorecr puts the end-of-line character back to catcode 5, which is what
+% latex.ltx:6648 does and the whole of what it does. It writes the character with
+% TeX's backtick notation; 13 is the same character and is what this format can
+% carry, since a backtick would close the Go string this text lives in (the same
+% reason \catcode64=11 is written that way above).
+%
+% It is the undo for \obeycr, and packages call it DEFENSIVELY before reading
+% something whose line endings matter — fancyhdr's \fancy@reset opens with
+% \restorecr\endlinechar=13 (fancyhdr.sty:322), once per head or foot built. That
+% is why the census of undefined commands counts 111 of them over 5 papers, and
+% the five are the same five that ship fancyhdr.
+%
+% \obeycr, its pair, is NOT defined here: nothing in the corpus calls it, and a
+% document that does gets the end of line at catcode 5 either way — which is the
+% state \restorecr exists to return to.
+\def\restorecr{\catcode13=5 }
 \def\wlog#1{\message{#1}}
 \long\def\typeout#1{\message{#1}}
 \def\PackageWarning#1#2{\message{Package #1 Warning: #2}}
