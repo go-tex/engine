@@ -18,6 +18,8 @@ full LPPL preamble at the top of the file (do not strip it).
 | `size12.clo`  | `\ProvidesFile{size12.clo}` | `2026-06-04 v1.4n` | generated from `classes.dtx` with option `12pt` |
 | `amsart.cls`  | `\ProvidesClass{amsart}` | `2020/05/29 v2.20.6` | generated from `amsclass.dtx` (CTAN amscls) with options `amsart,classes` |
 | `isomath.sty` | `\ProvidesPackage{isomath}` | `2012/09/04 v0.6.1` | CTAN `isomath`, © 2008, 2012 Günter Milde |
+| `environ.sty` | `\ProvidesPackage{environ}` | `2014/05/04 v0.3` | CTAN `environ`, © 2007 Will Robertson |
+| `trimspaces.sty` | `\ProvidesPackage{trimspaces}` | `2009/09/17 v1.1` | CTAN `trimspaces`, © 2009 Will Robertson |
 
 ## Provenance / how these were produced
 
@@ -151,3 +153,37 @@ embedded**. That is fine and is asserted by a test: the loader skips a
 still run. If a missing `\RequirePackage` ever became fatal, this package would stop
 working and those 56 equations would come back — silently, because a dropped equation
 does not fail a build.
+
+
+## `environ.sty` and `trimspaces.sty`
+
+Both are LPPL, both embedded **verbatim**, and neither needed a line of Go: they run
+entirely on macros the engine already had — `\Collect@Body` is 60 lines of `\@envbody`
+token-register work, and adding them introduced no new undefined command on any paper.
+
+### Why they are here
+
+`acmart.cls:284` does `\RequirePackage{environ}` and builds five of its environments on
+`\Collect@Body` — `abstract` (`:1661`), `translatedabstract` (`:457`), `sidebar` (`:959`),
+`marginfigure` (`:963`) and `margintable` (`:974`). **Nine corpus papers bundle the real
+`acmart.cls`**, so they use the class rather than this engine's acmart emulation, and for
+all nine `\Collect@Body` was undefined.
+
+⛔ The cost was not a missing environment, it was a missing LETTER. With `\Collect@Body`
+skipped, `\@saveabstract` grabbed the first TOKEN of the abstract as its argument and
+discarded it: on 2311.00921 the abstract began "**t**ructured dense matrices result from …"
+where the reference reads "**S**tructured". `Structured` went 0 → 1 against the reference's
+1. A single character is exactly the size of defect Σ and the channel census both miss.
+
+### Provenance: the tectonic bundle that built the reference PDFs
+
+Taken from the tectonic bundle cache, bundle
+`6ffe055852f8faf66c0acbe1a7fb27f87b869a90bad1204f3bf4d9683f597c7c` — the same files
+tectonic read when it produced `refpdf/`, which is the strongest provenance available
+here.
+
+⛔ **Not from a corpus paper's own directory**, and the check that says why: `2606.19617`
+bundles both, its `environ.sty` is byte-identical to the bundle's, and its
+`trimspaces.sty` is **not** — the paper's copy is missing the four-line `filecontents`
+header. Same version, same macros, different bytes. A file that ships inside a paper is
+whatever that author had; compare it against the bundle before trusting it as upstream.
