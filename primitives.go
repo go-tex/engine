@@ -2154,6 +2154,8 @@ func (e *Engine) loadMore() {
 	e.prim("gotex@classnormalsize", func(e *Engine) { e.doClassNormalsize() })
 	e.prim("includegraphics", func(e *Engine) { e.doIncludegraphics() })
 	e.prim("includepdf", func(e *Engine) { e.doIncludepdf() })      // pdfpages (includepdf.go)
+	e.prim("Collect@Body", func(e *Engine) { e.doCollectBody() })   // environ (collectbody.go)
+	e.prim("collect@body", func(e *Engine) { e.doCollectBody() })   // amsmath's older name
 	e.prim("graphicspath", func(e *Engine) { e.grabUndelimited() }) // {dir} search path — accepted, not modelled
 	// BibTeX bibliography (see bibtex.go): \nocite records keys, \citep/\citet are
 	// natbib's variants, \bibliographystyle is accepted, and \bibliography reads the
