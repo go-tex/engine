@@ -234,7 +234,11 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 		}
 		content = append(content, n)
 	}
-	vlist := append([]node{}, content...)
+	// \topskip above the page's first box (tex.web §1001, see topskip.go). This is
+	// the one place every page passes through — the single-list pager, the
+	// two-column pager and both float placers all assemble here — so the glue is
+	// put on once, and findPageBreak charges its height through the same function.
+	vlist := e.withTopskip(content)
 	if len(notes) > 0 {
 		// \skip\footins above the rule, then \footnoterule — which costs NOTHING
 		// net: \kern-3pt, a .4pt rule, \kern2.6pt (latex.ltx:13162-13163). The

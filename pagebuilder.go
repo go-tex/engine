@@ -171,7 +171,12 @@ func pageIsUnshippable(page []node) bool {
 // findPageBreak returns the exclusive end index of the page beginning at start.
 func (e *Engine) findPageBreak(list []node, start int) int {
 	vsize := e.effectiveVsize()
-	h := 0
+	// ⛔ The page starts with its \topskip glue, so its height is charged BEFORE
+	// anything else. Left out, the break is chosen for a page that is then handed
+	// one more glue node by assemblePage and overflows by that much — and the two
+	// sites would disagree about what the page holds. Both go through
+	// topskipGlueFor; TestTopskipHeightAndInsertionAgree asserts it.
+	h := e.topskipHeightAt(list, start)
 	sawFootnote := false
 	best := -1
 	least := math.Inf(1)
