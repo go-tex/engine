@@ -134,6 +134,20 @@ func (e *Engine) loadTeXParams() {
 		if name == "parfillskip" {
 			e.skip[e.allocSkp] = glueSpec{stretch: unity, stretchOrder: 1}
 		}
+		// \topskip is the second of these with a non-zero value in every format:
+		// 10pt in plain.tex and in size10.clo, and it sits above the FIRST box of
+		// every page (tex.web §1001, see topskip.go). Allocated at zero, every page
+		// starts about 3pt too high in ordinary prose — never a whole line, so no
+		// page count moves and nothing says so.
+		//
+		// ⛔ The default belongs HERE and not in the consumer. topskip.go first
+		// carried a fallback for "no register", which loadTeXParams makes
+		// unreachable — it always allocates one — so the fallback was an assertion
+		// rather than a guard, and reading a register holding 0 as "absent" would
+		// have overridden a document's deliberate \topskip=0pt.
+		if name == "topskip" {
+			e.skip[e.allocSkp] = glueSpec{width: 10 * unity}
+		}
 		e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true)
 		e.allocSkp++
 	}
