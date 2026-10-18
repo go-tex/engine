@@ -3272,8 +3272,30 @@ func (e *Engine) applyUnit(intPart, f int) int {
 		e.skipOneOptSpace()
 		return intPart // sp is already scaled; fraction is dropped
 	case key == "em" || key == "ex" || key == "mu":
-		// Font-relative units: 1em ≈ the font size (quad), 1ex ≈ half of it, and
+		// Font-relative units: 1em is the font's quad (\fontdimen6), 1ex its
+		// X-HEIGHT (\fontdimen5, tex.web §455 "The x-height for cur_font" and
+		// §10675: "param[5]=x_height is the size of one ex in the font"), and
 		// 18mu = 1em (TeXbook ch. 18 — the math unit, taken from family 2).
+		//
+		// ⛔⛔ 1ex WAS HALF THE FONT SIZE, and that is 16% too big. Measured
+		// against the reference at 10pt, Latin Modern:
+		//
+		//	        ours    reference
+		//	1ex     5.0pt     4.31pt
+		//	1em    10.0pt    10.0pt
+		//	3.5ex  17.5pt    15.085pt
+		//	2.3ex  11.5pt     9.913pt
+		//
+		// Every dimension a class states in ex was out by that much, and
+		// \@startsection states both of a heading's skips that way: article's
+		// \section is {-3.5ex plus -1ex minus -.2ex}{2.3ex plus .2ex}, so each
+		// heading took 4.00pt MORE vertical space than the reference gives it.
+		//
+		// ⭐ That error was hiding another one of the opposite sign. Our \@gxhead
+		// ended the heading's paragraph OUTSIDE the style group, worth −5.978pt per
+		// heading, so the two together left a visible symptom of only −1.99pt — see
+		// classprims.go and go-tex/engine#620. Fixing either one alone makes
+		// headings worse; both together land on the reference.
 		//
 		// TeX admits mu only in math glue and reports "Illegal unit of measure
 		// (mu inserted)" elsewhere (tex.web §8987); left unrecognised here the two
@@ -3289,7 +3311,11 @@ func (e *Engine) applyUnit(intPart, f int) int {
 		coeff := intPart*unity + f // the decimal coefficient × unity
 		switch key {
 		case "ex":
-			return coeff * size / 2
+			// coeff is in units of 1/unity, so the product is scaled back by it.
+			// Truncating is what TeX does (§455 goes through xn_over_d, which
+			// drops the remainder).
+			q, _ := xnOverD(coeff, e.exHeightSP(), unity)
+			return q
 		case "mu":
 			return coeff * size / 18
 		}

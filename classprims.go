@@ -201,11 +201,27 @@ const LaTeX2eClassLead = `
 % positive afterskip is a display heading — end the line and skip that far down; a
 % negative one is a run-in heading — leave horizontal space and let the body text
 % follow on the same line (\paragraph/\subparagraph).
+%
+% ⛔⛔ The \par goes INSIDE the style group, as LaTeX's own \@sect has it:
+%
+%	\begingroup #6\relax \@hangfrom{…\@svsec}\interlinepenalty\@M #8\@@par \endgroup
+%
+% so the heading's paragraph ends under the heading's \baselineskip and not the
+% body's. It was outside the group, and that cost 5.978pt per heading,
+% measured on a witness whose two ends are both body text so poppler's word-box
+% bias cancels (AVANTSEC→APRESSEC: 48.819 against the reference's 54.795).
+%
+% ⭐ That error was CANCELLING most of another one of the opposite sign: 1ex was
+% half the font size instead of the x-height, 16% too big, which made each
+% ex-stated heading skip 4.00pt too generous (see exheight.go). The visible
+% symptom was only 1.99pt per section, and fixing either alone makes headings
+% worse than leaving both — go-tex/engine#620 has the arithmetic:
+% −1.989 + 5.978 − 4.00 ≈ 0.
 \def\@gxhead#1#2#3{\@tempskipa#3\relax
   \ifdim\@tempskipa<\z@
     \noindent{#1 #2}\hskip-\@tempskipa
   \else
-    \noindent{#1 #2}\par\vskip\@tempskipa
+    \noindent{#1 #2\par}\vskip\@tempskipa
   \fi}
 % \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection
 % calls once it has read the star, the optional toc title and the title. This
