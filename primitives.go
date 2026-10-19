@@ -1823,6 +1823,17 @@ func (e *Engine) loadMore() {
 	// LaTeX2e option processing (see packages.go), driving real .cls/.sty loading.
 	e.prim("DeclareOption", func(e *Engine) { e.doDeclareOption() })
 	e.prim("ProcessOptions", func(e *Engine) { e.doProcessOptions() })
+	// \@options is the LaTeX 2.09 spelling, and base/ltclass.dtx keeps it as exactly
+	// that: "\@options is a synonym for \ProcessOptions* for upward compatibility
+	// with LaTeX 2.09 style files", \def\@options{\ProcessOptions*}. A class written
+	// to it processes its options ONLY through this name — aas.cls:6961 is its sole
+	// option processing — so skipping it means no option runs at all (#625).
+	//
+	// It goes through doProcessOptions, star peek and all. A version that skipped the
+	// peek (\@options carries no star of its own) was written and could not be given a
+	// witness: no real 2.09 style file writes a literal * after it, so nothing
+	// distinguished the two, and the distinction was dropped rather than shipped.
+	e.prim("@options", func(e *Engine) { e.doProcessOptions() })
 	e.prim("ExecuteOptions", func(e *Engine) { e.doExecuteOptions() })
 	e.prim("PassOptionsToPackage", func(e *Engine) { e.doPassOptionsTo() })
 	e.prim("PassOptionsToClass", func(e *Engine) { e.doPassOptionsTo() })
