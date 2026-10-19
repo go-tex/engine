@@ -67,13 +67,29 @@ report what was dropped. `Diagnostics` also records the paths the document read 
 **outside its own directory** — an absolute path, or one that walked out with `../`,
 excluding the search directories the host itself configured. Reading a named file is
 what `\input` is for and it is not an error, but a service compiling a document it did
-not write is the one who can judge it, and nothing else in this package will tell it. On a **1000-source arXiv sweep** (measured 2026-10-04),
-strict mode compiles almost none end-to-end — each hits a package command in the
-preamble — while lenient mode produces a multi-page PDF for all but **one** of
-the 71 sources the sweep flags as truncated; that one still stops at a single page
-(tracked in #517, which also records its diagnosis). The same sweep counted twelve
-such papers when the series began. It is a preview aid, not a fidelity claim — the roadmap
-below is how the gaps close for real.
+not write is the one who can judge it, and nothing else in this package will tell it.
+
+On a **1000-source arXiv sweep** (`measure trunc`, re-measured **2026-10-19**), strict
+mode compiles almost none end-to-end — each hits a package command in the preamble —
+while lenient mode flags **64** sources, and the engine's two alarms do not say the
+same thing:
+
+| | sources |
+|---|---:|
+| runaway guard tripped, alone | 2 |
+| groups still open at end of document, alone | 58 |
+| both | 4 |
+| **either** | **64** |
+| rendered as a SINGLE page | **1** |
+
+An aborted loop has lost content; groups left open may be only a leak — seven papers
+measured the same day carry that alarm and render 14 to 42 pages, and one leaves 20
+groups open over 17 pages. The number that is not a suspicion is the last row, and it
+is **one source in a thousand** (`2607.05497`, `aas.cls`, tracked in #625). The same
+sweep counted **twelve** when the series began, and #517 records each one's diagnosis.
+
+It is a preview aid, not a fidelity claim — the roadmap below is how the gaps close
+for real.
 
 ### Loading real classes and packages
 
