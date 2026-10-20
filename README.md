@@ -179,6 +179,24 @@ format and image type, with its status, plus every remaining gap — lives at
   **not** there: `\textcite`, `\parencite`, `\autocite`, `\footcite` and
   `\smartcite` are undefined and print the bare key, and the citation and
   bibliography *styles* are not modelled.
+- **The front matter stays on the sheet.** A vertical block that should fill a
+  title page — an author/affiliation list, an abstract — used to be emitted as one
+  horizontal list that was never line-broken, so everything past the right margin
+  was *drawn off the paper*: measured at up to **x=6619pt on a 612pt sheet**, with
+  author names, affiliations and e-mails outside it. No other channel can see that
+  — the page count cannot (the clearest witness is 15 pages against 15), the ink
+  count cannot (every glyph is emitted), `-report-skipped` cannot (nothing is
+  skipped) and the text layer carries the words. Four distinct causes, each with
+  its own witness: a macro standing for several `tabular` rows (`article.cls` sets
+  the author block as `\begin{tabular}[t]{c}\@author\end{tabular}` and `authblk`
+  builds `\@author` with `\\`), a bare `\endX` closing what `\X` opened
+  (`sagej.cls` writes `\def\endabstract{\endminipage\endlrbox}`), `calc`
+  expressions in a length argument (`{\textwidth-57.625mm}`), and `\cite`'s
+  optional note. Over the 154-paper corpus the papers drawing text past their own
+  page edge went **49 → 25** and the widest line **6619pt → 3356pt**, against a
+  control of 2 on the reference PDFs. ⚠ Not closed: 25 remain, and the top of that
+  list is a different population again (see
+  [#629](https://github.com/go-tex/engine/issues/629)).
 - **Float placement** takes its seven parameters from the **class**, not from
   article's: `\topnumber`, `\bottomnumber` and `\totalnumber` are counters the
   class kernel declares so a `\setcounter` of them takes (amsart's
