@@ -190,23 +190,44 @@ func (e *Engine) endMacroLeadsToEnd(name string) bool {
 	return false
 }
 
+// envShorthandHops bounds the chain expandsToCloseCS walks. A shorthand is often
+// built on another shorthand — lmcs papers define \def\ba{\begin{array}} and then
+// \def\bda{\begin{displaymath}\ba}, with the closing pair \def\ea{\end{array}} and
+// \def\eda{\ea\end{displaymath}} — so one hop is not enough and \eda reached the
+// maths scanner as a literal, hiding the \end{displaymath} behind it. Four hops
+// covers every shape in the corpus, and a bound is what stops \def\a{\b}\def\b{\a}.
+const envShorthandHops = 4
+
 // expandsToCloseCS reports whether the control sequence t is a parameterless
-// macro whose replacement text begins with the control sequence named close —
-// i.e. a user shorthand that stands in for a raw-token scanner's terminator
+// macro that REACHES the control sequence named close as the first token of its
+// replacement text, directly or through further parameterless macros — i.e. a user
+// shorthand that stands in for a raw-token scanner's terminator
 // (\newcommand\enq{\end{equation}} for a \end-hunting scanner, or
 // \newcommand\dclose{\]} for a \[…\] scanner that closes on \]). Such a macro is
 // read raw by an environment/argument body scanner, so without expanding it the
 // terminator token never surfaces and the scanner swallows the rest of the input.
-// The check is deliberately narrow — no parameters and body[0] == the exact close
-// cs — so ordinary content macros (\R, \mathbb, or a user \def that merely mentions
-// the close cs mid-body) are never expanded here, keeping the scanned source and
-// verbatim cells intact.
+//
+// The check is deliberately narrow at EVERY hop — no parameters, and the next hop
+// must be the FIRST token — so ordinary content macros (\R, \mathbb, or a user \def
+// that merely mentions the close cs mid-body) are never expanded here, keeping the
+// scanned source and verbatim cells intact. A chain that ends anywhere but on close
+// (a primitive, an undefined cs, a character) is not a shorthand.
 func (e *Engine) expandsToCloseCS(t tok, close string) bool {
-	m := e.meaningOf(t)
-	if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
-		return false
+	for hop := 0; hop < envShorthandHops; hop++ {
+		m := e.meaningOf(t)
+		if m == nil || m.kind != mMacro || len(m.params) != 0 || len(m.body) == 0 {
+			return false
+		}
+		first := m.body[0]
+		if !first.cs_ {
+			return false
+		}
+		if first.cs == close {
+			return true
+		}
+		t = first
 	}
-	return m.body[0].cs_ && m.body[0].cs == close
+	return false
 }
 
 // runsCsname reports whether t is the \csname primitive, which a body scanner that
