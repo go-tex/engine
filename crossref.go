@@ -3,7 +3,10 @@
 
 package engine
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // This file implements LaTeX's cross-reference mechanism (\label / \ref and its
 // variants). LaTeX resolves references through an auxiliary file written on one
@@ -149,12 +152,54 @@ func (e *Engine) refText(key string) string {
 // in the label table (via \label), so a \cite before the bibliography resolves on
 // the second pass. \nocite is a no-op here (it only affects a real .bib run).
 func (e *Engine) doCite() {
+	// ⛔ \cite TAKES AN OPTIONAL NOTE, and reading the braces first is how its
+	// arguments end up on the page. latex.ltx:
+	//
+	//	\def\cite{\@ifnextchar[{\@tempswatrue\@citex}{\@tempswafalse\@citex[]}}
+	//	\def\@citex[#1]#2{…\if@tempswa , #1\fi…}
+	//
+	// so the note is appended AFTER the key list, separated by ", " — \cite[p. 5]{k}
+	// sets "[1, p. 5]". Without the optional read, readBraceName met "[" instead of
+	// "{", returned nothing, and the whole "[etc.]{Zeilberger1990,chyzak98,…}" was
+	// typeset as text: one unbroken run 2665pt wide on a 478pt measure, with the
+	// words after it run together (go-tex/engine#629). 6621 papers of the arXiv pool
+	// write \cite[, 38 of the measured 154.
+	//
+	// natbib's \citep/\citet take TWO optionals, [pre][post]; with one it is the
+	// post-note, which is what LaTeX's \cite means by its single one. Reading up to
+	// two keeps both spellings off the page.
+	pre, post := e.readCiteNotes()
 	keys := splitComma(e.readBraceName())
 	e.recordCites(keys) // remember the keys so an auto \bibliography emits them
 	for i, k := range keys {
 		keys[i] = e.refText(k)
 	}
-	e.pushString("[" + joinComma(keys) + "]")
+	var b strings.Builder
+	b.WriteString("[")
+	if pre != "" {
+		b.WriteString(pre + " ")
+	}
+	b.WriteString(joinComma(keys))
+	if post != "" {
+		b.WriteString(", " + post)
+	}
+	b.WriteString("]")
+	e.pushString(b.String())
+}
+
+// readCiteNotes reads the one or two optional arguments a citation command takes.
+// With one bracket the text is the POST-note, as LaTeX's \cite means it; with two
+// they are natbib's pre- and post-notes in that order.
+func (e *Engine) readCiteNotes() (pre, post string) {
+	first, ok := e.scanOptBracketToks()
+	if !ok {
+		return "", ""
+	}
+	second, ok := e.scanOptBracketToks()
+	if !ok {
+		return "", strings.TrimSpace(e.toksToString(first))
+	}
+	return strings.TrimSpace(e.toksToString(first)), strings.TrimSpace(e.toksToString(second))
 }
 
 // needsTwoPass reports whether the source must be compiled twice: it defines a
