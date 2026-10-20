@@ -36,10 +36,23 @@ func main() {
 	page := flag.Int("page", 1, "page to read, 1-based")
 	above := flag.Float64("above", 0, "only lines whose baseline is this many points or less from the top of the page (0 = all)")
 	grep := flag.String("grep", "", "only lines whose text contains this")
+	walk := flag.Bool("align", false, "walk EVERY page and say where the two documents fall out of step")
 	flag.Parse()
 	if flag.NArg() < 1 || flag.NArg() > 2 {
-		fmt.Fprintln(os.Stderr, "usage: gotex-linediff [-page N] [-above PT] [-grep TEXT] <a.pdf> [b.pdf]")
+		fmt.Fprintln(os.Stderr, "usage: gotex-linediff [-page N] [-above PT] [-grep TEXT] <a.pdf> [b.pdf]\n"+
+			"       gotex-linediff -align <ref.pdf> <ours.pdf>   ← à QUELLE page la page de trop apparaît")
 		os.Exit(2)
+	}
+	if *walk {
+		if flag.NArg() != 2 {
+			fmt.Fprintln(os.Stderr, "gotex-linediff: -align prend deux PDF, la référence d'abord")
+			os.Exit(2)
+		}
+		if err := align(flag.Arg(0), flag.Arg(1), os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "gotex-linediff:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	opt := reportOptions{page: *page, above: *above, grep: *grep}
 	if err := run(flag.Args(), opt, os.Stdout); err != nil {
