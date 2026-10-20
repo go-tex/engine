@@ -840,7 +840,27 @@ func (e *Engine) doLoadClass(withOptions bool) {
 // ── LaTeX2e option processing ────────────────────────────────────────────────
 
 // doDeclareOption implements \DeclareOption{name}{code} and \DeclareOption*{code}:
-// it records the option's code on the current load frame.
+// it records the option's code on the current load frame, and — for the named form
+// — defines \ds@<name> with that code.
+//
+// \ds@<name> is not a private spelling: it is the mechanism. base/ltclass.dtx stores
+// the option there,
+//
+//	\long\def\@declareoption#1#2{%
+//	   \xdef\@declaredoptions{\@declaredoptions,#1}%
+//	   \toks@{#2}%
+//	   \expandafter\edef\csname ds@#1\endcsname{\the\toks@}}
+//
+// and \ProcessOptions reaches it through \@use@ption, which ends in
+// \csname ds@\detokenize\expandafter{\CurrentOption}\endcsname. So a class may apply
+// one of its own options by CALLING the macro, which aas.cls does for its paper size
+// (`\ds@letterpaper`, aas.cls:5547, between its declarations and its \@options).
+// Without the definition that line is an undefined command, skipped, and the paper
+// size is never set — see #625.
+//
+// The definition is LOCAL, as the kernel's \edef is. A class file is loaded on a load
+// FRAME (catcodes saved and restored), not inside a TeX group, so nothing closes
+// between the declaration and the call.
 func (e *Engine) doDeclareOption() {
 	fr := e.curFrame()
 	if e.peekStar() {
@@ -854,6 +874,9 @@ func (e *Engine) doDeclareOption() {
 	code := e.readBraceToksRaw()
 	if fr != nil {
 		fr.declared[name] = code
+	}
+	if name != "" {
+		e.define("ds@"+name, &meaning{kind: mMacro, body: code}, false)
 	}
 }
 
