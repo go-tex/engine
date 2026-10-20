@@ -896,7 +896,19 @@ const MiniLaTeXKernel = `
 % looking for its optionals (sidecap.go): with the expanding scan, this test ran
 % BEFORE \figure had set \@captype and every sidecap caption lost its number.
 % That is the order to check if this ever regresses.
-\def\caption#1{\expandafter\gotex@caption@dispatch\csname c@\@captype\endcsname{#1}}
+% ⛔ \caption* IS A CAPTION WITHOUT A NUMBER, and reading a mandatory #1 straight
+% away turns its star into the argument: "\caption*{Some text}" bound #1 to "*",
+% typeset "Figure 1: *", and left "{Some text}" to fall into the body as prose.
+% 382 papers of the arXiv pool write \caption* (go-tex/engine#636).
+%
+% The starred branch is the UNTYPED one, which already sets a caption's text with
+% no number, no counter step and no contents entry — which is exactly what
+% \caption* means. caption.sty documents it as "the caption without label and
+% without entry in the list of figures/tables", and the float package's \caption*
+% is the same.
+\def\caption{\@ifnextchar*{\gotex@caption@star}{\gotex@caption@plain}}
+\def\gotex@caption@star*#1{\gotex@caption@untyped{#1}}
+\def\gotex@caption@plain#1{\expandafter\gotex@caption@dispatch\csname c@\@captype\endcsname{#1}}
 \def\gotex@caption@dispatch#1#2{\ifx#1\relax\gotex@caption@untyped{#2}\else\gotex@caption@typed{#2}\fi}
 \def\gotex@caption@untyped#1{\par\vskip\abovecaptionskip{\captionfont #1}\par\vskip\belowcaptionskip}
 \def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
