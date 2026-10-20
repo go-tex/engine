@@ -514,12 +514,21 @@ func (e *Engine) doBibliographyStyle() { e.bibStyle = e.readBraceName() }
 
 // doCitep implements natbib's \citep{k}: a bracketed, comma-joined number list —
 // identical output to \cite in this numeric model.
-func (e *Engine) doCitep() { e.doCite() }
+// ⛔ The STAR is consumed here and not in doCite: LaTeX's own \cite has no starred
+// form, and giving it one would silently swallow a * that belongs to the document.
+// natbib adds it to \citep and \citet only.
+func (e *Engine) doCitep() {
+	if e.peekStar() {
+		e.recordSkippedLength("natbib:full-author-list")
+	}
+	e.doCite() // the one or two optional notes, then the keys
+}
 
 // doCitet implements natbib's \citet{k1,k2}: "Author [n]" per key, comma-joined,
 // where Author is the first-author surname (plus "et al." for multiple authors),
 // carried from the aux pass so a \citet before the bibliography resolves.
 func (e *Engine) doCitet() {
+	pre, post := e.readNatbibArgs()
 	keys := splitComma(e.readBraceName())
 	e.recordCites(keys)
 	var parts []string
@@ -532,7 +541,41 @@ func (e *Engine) doCitet() {
 			parts = append(parts, "["+num+"]")
 		}
 	}
-	e.pushString(joinComma(parts))
+	s := joinComma(parts)
+	if pre != "" {
+		s = pre + " " + s
+	}
+	if post != "" {
+		s += ", " + post
+	}
+	e.pushString(s)
+}
+
+// readNatbibArgs reads the STAR and the one or two optional notes every natbib
+// citation command takes, in that order.
+//
+// natbib's manual (natbib.pdf, "Basic commands"): "There also exist the starred
+// versions \citet* and \citep* that print the full author list, and not just the
+// abbreviated one. All of these may take one or two optional arguments to add some
+// text before and after the citation."
+//
+// ⛔ Neither was read, so both ended up on the page: the probe in
+// go-tex/engine#636 showed \citet*{k} setting "*k" as text, and \citet[chap. 2]{k}
+// takes the same route — readBraceName meets "[" instead of "{", returns nothing,
+// and the note AND the key list are typeset. 1870 papers of the arXiv pool write
+// \citet[ or \citep[.
+//
+// ⚠ The star's own meaning — the FULL author list rather than the abbreviated one
+// — is NOT implemented, and cannot be from what is carried here: e.bibAuthor holds
+// one surname plus "et al.", and natbib itself says "the starred versions can only
+// list the full authors if the .bst file supports it". The star is consumed so it
+// stops reaching the page; the distinction it asks for is recorded as missing
+// rather than silently ignored.
+func (e *Engine) readNatbibArgs() (pre, post string) {
+	if e.peekStar() {
+		e.recordSkippedLength("natbib:full-author-list")
+	}
+	return e.readCiteNotes()
 }
 
 // doCiteauthor implements natbib's \citeauthor{k}: the author label ALONE, with no
@@ -544,6 +587,7 @@ func (e *Engine) doCitet() {
 // a skipped \citeauthor leaves "as showed". 4 papers and 14 uses of the fidelity
 // corpus wrote it into a sentence that way.
 func (e *Engine) doCiteauthor() {
+	e.readNatbibArgs() // the star and the notes — see readNatbibArgs
 	keys := splitComma(e.readBraceName())
 	e.recordCites(keys)
 	var parts []string

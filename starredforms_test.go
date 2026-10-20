@@ -21,6 +21,9 @@ func TestAStarredFormAddsNothingToThePage(t *testing.T) {
 	for _, c := range []struct{ name, plain, star string }{
 		{`\ref`, `\ref{gotexsec}`, `\ref*{gotexsec}`},
 		{`\pageref`, `\pageref{gotexsec}`, `\pageref*{gotexsec}`},
+		{`\citet`, `\citet{gotexkey}`, `\citet*{gotexkey}`},
+		{`\citep`, `\citep{gotexkey}`, `\citep*{gotexkey}`},
+		{`\citeauthor`, `\citeauthor{gotexkey}`, `\citeauthor*{gotexkey}`},
 	} {
 		plain := pageOf(t, `\section{S}\label{gotexsec}`+c.plain)
 		star := pageOf(t, `\section{S}\label{gotexsec}`+c.star)
@@ -55,6 +58,28 @@ func TestCaptionStarHasNoNumberAndKeepsItsText(t *testing.T) {
 	num := pageOf(t, captype+`\caption{GOTEXCAPTION}`)
 	if !strings.Contains(num, "Figure1") {
 		t.Errorf("la légende NON étoilée a perdu son numéro: %q", num)
+	}
+}
+
+// natbib's citation commands "may take one or two optional arguments to add some
+// text before and after the citation" (natbib.pdf, Basic commands). \citep went
+// through \cite and already read them; \citet and \citeauthor did not, so
+// readBraceName met "[" instead of "{" and the note AND the key list were typeset.
+// 1870 papers of the arXiv pool write \citet[ or \citep[.
+func TestNatbibCitationsTakeTheirOptionalNotes(t *testing.T) {
+	const bib = `\begin{thebibliography}{9}\bibitem{gotexkey}Someone.\end{thebibliography}`
+	for _, c := range []struct{ name, src string }{
+		{`\citet`, `\citet[chap. 2]{gotexkey}`},
+		{`\citet` + " deux notes", `\citet[see][chap. 2]{gotexkey}`},
+		{`\citeauthor`, `\citeauthor[chap. 2]{gotexkey}`},
+	} {
+		got := pageOf(t, c.src+bib)
+		if strings.Contains(got, "gotexkey") {
+			t.Errorf("%s: la clé a fui sur la page: %q", c.name, got)
+		}
+		if strings.Contains(got, "][") {
+			t.Errorf("%s: les crochets ont fui sur la page: %q", c.name, got)
+		}
 	}
 }
 
