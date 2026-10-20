@@ -281,7 +281,17 @@ func (e *Engine) readBraceGlue() glueSpec {
 		}
 		return glueSpec{}
 	}
-	g := e.scanGlue()
+	// \setlength is the command calc exists to extend. The arithmetic is applied to
+	// the natural width only: calc's own documentation notes that TeX drops a glue's
+	// stretch and shrink when it is multiplied, and \setlength{\x}{\y+2pt} on a
+	// rubber length is vanishingly rare next to the rigid case this is for.
+	var g glueSpec
+	if w, ok := e.calcLeadDimen(); ok {
+		g.width = w
+	} else {
+		g = e.scanGlue()
+	}
+	g.width = e.calcTailDimen(g.width)
 	if c, ok := e.getXToken(); ok && !(c.cat == catEnd && !c.cs_) {
 		e.back(c)
 	}
