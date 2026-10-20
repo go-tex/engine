@@ -1666,7 +1666,13 @@ func (e *Engine) readBraceDimen() int {
 		}
 		return 0
 	}
-	d := e.scanDimen()
+	// calc makes this argument an arithmetic expression; without the package both
+	// hooks are inert and this is TeX's own behaviour (see calc.go).
+	d, ok := e.calcLeadDimen()
+	if !ok {
+		d = e.scanDimen()
+	}
+	d = e.calcTailDimen(d)
 	if c, ok := e.getXToken(); ok && !(c.cat == catEnd && !c.cs_) {
 		e.back(c)
 	}
