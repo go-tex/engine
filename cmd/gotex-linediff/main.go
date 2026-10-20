@@ -177,9 +177,23 @@ func lineOf(rs []Run, pageH float64) Line {
 	var prevEnd float64
 	for i, r := range rs {
 		// Neither engine draws a space glyph: a word break is a gap between two
-		// show operators. Put one back where the gap is wider than a sixth of the
-		// size, so the report reads as prose instead of as "Firstsection1".
-		if i > 0 && r.W > 0 && r.X-prevEnd > r.Size/6 {
+		// show operators. Put one back where the gap is wide enough, so the report
+		// reads as prose instead of as "Firstsection1".
+		//
+		// ⛔ The threshold was a SIXTH of the size, and an interword space in a
+		// JUSTIFIED line is routinely narrower than that: Computer Modern's is a
+		// third of the size with a third of that to shrink, so a tight line puts it
+		// at 22% and a very tight one below 17%. Measured on arXiv 2405.20319, whole
+		// two-column lines came back as "guage,weintroduceParSEL:Parameterized…"
+		// while poppler read the same line with its spaces — so the words had run
+		// together in the REPORT, not on the page, and reading it as a defect was one
+		// step away.
+		//
+		// A twentieth is below any shrunk space and above the kerning pairs, whose
+		// gaps are a few percent of the size. It is checked both ways in
+		// TestWordBreaksSurviveAShrunkenLine: a narrow justified measure, where the
+		// spaces are shrunk, and a word with a kern in it, which must NOT split.
+		if i > 0 && r.W > 0 && r.X-prevEnd > r.Size/20 {
 			sb.WriteByte(' ')
 		}
 		sb.WriteString(r.Text)
