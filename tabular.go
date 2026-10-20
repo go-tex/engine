@@ -793,6 +793,12 @@ func (e *Engine) collectTabularBody(env string) []tabItem {
 			endRow()
 		case depth == 0 && envDepth == 0 && !t.cs_ && t.cat == catAlign: // & cell separator
 			endCell()
+		case depth == 0 && envDepth == 0 && t.cs_ && t.cs != `\` && e.hidesRowSeparator(t):
+			// A macro whose replacement text carries the row separator. Read raw it
+			// is ONE cell, and every row it was meant to make collapses into it —
+			// which is how a paper's whole front matter ends up on a single line
+			// running off the side of the sheet. See hidesRowSeparator.
+			e.expandMacro(e.meaningOf(t))
 		default:
 			b := t
 			if c, implicit := e.implicitChar(t); implicit {
@@ -826,6 +832,52 @@ func (e *Engine) hidesTabularEnd(t tok) bool {
 	for _, b := range m.body {
 		if b.cs_ && e.expandsToEnd(b) {
 			return true
+		}
+	}
+	return false
+}
+
+// hidesRowSeparator reports whether t is a parameterless macro whose replacement
+// text carries \\ at its OWN top level — a macro that stands for SEVERAL ROWS.
+//
+// The body scanner reads raw, so such a macro arrives as one cell and every row it
+// was meant to make collapses into it. That is not a corner case: article.cls sets
+// the author block as
+//
+//	\begin{tabular}[t]{c}%
+//	  \@author
+//	\end{tabular}
+//
+// (article.cls:246-248) and \@author is exactly such a macro — authblk builds it by
+// appending "\\[\affilsep]" between the authors and each affiliation
+// (authblk.sty:154-155, 167), and this engine's own \affil does the same. Measured,
+// 49 of the 154 corpus papers drew a line past the right edge of their own page
+// because of it, up to x=6619pt on a 612pt sheet, with the author names,
+// affiliations and e-mails past the margin DRAWN OUTSIDE THE PAPER — glyphs emitted,
+// so no ink count, no page count and no skipped-command census could see it
+// (go-tex/engine#629).
+//
+// Narrow, like hidesTabularEnd beside it: no parameters, and the separator must be
+// at brace depth 0 of the body, so a macro holding a nested table or a braced group
+// that merely contains \\ is still passed through as a cell. Nesting below it is the
+// scanner's business, not this predicate's: once an inner \begin{tabular} is read,
+// envDepth is non-zero and its \\ is not a row separator anyway.
+func (e *Engine) hidesRowSeparator(t tok) bool {
+	m := e.meaningOf(t)
+	if m == nil || m.kind != mMacro || len(m.params) != 0 {
+		return false
+	}
+	depth := 0
+	for _, b := range m.body {
+		switch {
+		case b.cs_:
+			if b.cs == `\` && depth == 0 {
+				return true
+			}
+		case b.cat == catBegin:
+			depth++
+		case b.cat == catEnd:
+			depth--
 		}
 	}
 	return false
