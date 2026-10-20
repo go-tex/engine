@@ -64,6 +64,7 @@ func (e *Engine) doLrbox() {
 		end = n
 	}
 	body := e.collectEnvBody(end)
+	body = append(body, e.lrboxClosers(end)...)
 	if !ok {
 		return // invalid handle: the body is consumed (no leak), nothing to store
 	}
@@ -76,6 +77,41 @@ func (e *Engine) doLrbox() {
 	e.push(toks)
 	list, _ := e.grabHboxList()
 	e.setBoxScoped(reg, hpackSP(list, packNatural, 0), false)
+}
+
+// lrboxClosers returns the part of \end<name> that runs BEFORE \endlrbox — what the
+// environment opened INSIDE the box and must close inside it.
+//
+// sagej.cls writes its abstract as
+//
+//	\newbox\absbox
+//	\def\abstract{\lrbox\absbox\minipage{\textwidth}\section*{Abstract}}
+//	\def\endabstract{\endminipage\endlrbox}
+//
+// so the \minipage that gives the abstract its WIDTH is opened by \abstract and
+// closed by \endabstract. collectEnvBody stops at \end{abstract}, before the closing
+// half ever runs, so the minipage never ended and never constrained anything: the
+// whole abstract came out as one horizontal list at its natural width, ending at
+// x=6619pt on a 612pt sheet with most of it drawn off the paper (go-tex/engine#629,
+// where it is two of the 49 papers and the two widest lines in the corpus).
+//
+// Only the tokens before \endlrbox are taken, and only when \endlrbox is there at
+// all: that control sequence is what marks the boundary between "inside the box" and
+// "after it", and a closing macro that does not name it is not this shape — running
+// its tokens here would run them twice.
+func (e *Engine) lrboxClosers(name string) []tok {
+	m := e.eq["end"+name]
+	if m == nil || m.kind != mMacro || len(m.params) != 0 {
+		return nil
+	}
+	var inside []tok
+	for _, t := range m.body {
+		if t.cs_ && t.cs == "endlrbox" {
+			return inside // found the boundary: everything before it belongs in the box
+		}
+		inside = append(inside, t)
+	}
+	return nil // no \endlrbox: not this shape
 }
 
 // doMakebox implements \makebox[width][pos]{content}: with no [width] it packs the

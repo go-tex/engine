@@ -224,6 +224,37 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			// Narrow: only a parameterless macro whose body begins with \end (see
 			// expandsToEnd), so ordinary body macros pass through into the body verbatim.
 			e.expandMacro(e.meaningOf(t))
+		case depth == 0 && t.cs_ && t.cs == "end"+name:
+			// ⛔ \end{X} IS \endX. LaTeX2e pairs an environment by running \X and then
+			// \endX, so a class that composes one out of another writes the bare
+			// control sequences — sagej.cls:238-242 is
+			//
+			//	\def\abstract{\lrbox\absbox\minipage{\textwidth}…}
+			//	\def\endabstract{\endminipage\endlrbox}
+			//
+			// and the minipage that gives that abstract its WIDTH is closed by
+			// \endminipage, never by \end{minipage}. Hunting only the braced spelling,
+			// this scan ran past it and the minipage constrained nothing: the whole
+			// abstract came out as one horizontal list at its natural width, ending at
+			// x=6619pt on a 612pt sheet with most of it drawn off the paper
+			// (go-tex/engine#629 — the two widest lines in the corpus).
+			//
+			// Isolated: the same minipage inside \sbox, written \begin{minipage}{200pt}
+			// … \end{minipage}, breaks into three lines 325pt wide; written
+			// \minipage{200pt} … \endminipage it is one line 887pt wide.
+			//
+			// ⛔ And NO endEnvGroup here, unlike the \end{name} case below. That call
+			// exists because \end{name} would have run an \endgroup matching the one
+			// \begin{name} opened; a bare \X opened none, so closing one swallows the
+			// surrounding group instead. Measured: with the call, the overfull line
+			// went away and so did the whole abstract.
+			return body
+		case t.cs_ && t.cs == "end"+name:
+			depth-- // a nested instance closes; re-emit for the nested typeset
+			body = append(body, t)
+		case t.cs_ && t.cs == name:
+			depth++ // a nested instance opens in the same bare spelling
+			body = append(body, t)
 		case t.cs_ && t.cs == "end":
 			n := e.readBraceName()
 			switch {
