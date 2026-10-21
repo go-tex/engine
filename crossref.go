@@ -63,6 +63,7 @@ func (e *Engine) finalizeLabelPages() {
 // label page table gathered by the auxiliary pass. An unknown key — or a single
 // pass, which has no table yet — yields "??", LaTeX's unresolved marker.
 func (e *Engine) doPageref() {
+	e.peekStar() // hyperref's \pageref*: the page number without the hyperlink — see doRef
 	key := e.readBraceName()
 	if p, ok := e.labelPages[key]; ok && p > 0 {
 		e.pushString(strconv.Itoa(p))
@@ -129,6 +130,12 @@ func (e *Engine) crossRefsAgree(wasLabelPages map[string]int) bool {
 // doRef pushes the recorded reference text for a key back into the input. An
 // unknown or empty key yields "??", matching LaTeX's unresolved-reference marker.
 func (e *Engine) doRef() {
+	// hyperref's \ref*{key} is \ref without the hyperlink. This engine emits no
+	// hyperlinks, so consuming the star IS the whole implementation — and not
+	// consuming it made readBraceName meet "*" instead of "{", so the reference
+	// printed "??" and the key fell onto the page as text. 256 papers of the arXiv
+	// pool write \ref* (go-tex/engine#636).
+	e.peekStar()
 	key := e.readBraceName()
 	e.pushString(e.refText(key))
 }
