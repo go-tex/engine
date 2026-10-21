@@ -380,6 +380,29 @@ func (e *Engine) unbox(want boxKind, keep bool) {
 	if b == nil || b.kind != want {
 		return
 	}
+	// ⛔ A VBOX's contents are VERTICAL material: its items are finished lines, and
+	// they cannot join a horizontal list. place() routes to e.parList while a
+	// paragraph is open, so \unvbox inside one handed the lines to the line breaker,
+	// which glued them end to end and re-broke the result as a single paragraph.
+	//
+	// That is not hypothetical syntax. acmart writes it twice in its title machinery:
+	//
+	//	\noindent\unvbox\@tempboxa                      % acmart.cls:2303
+	//	\vbox{\noindent\unvbox\mktitle@bx\par\medskip…} % acmart.cls:2652
+	//
+	// \noindent opens a paragraph, so both took that path. On 2405.20319 the title and
+	// five author blocks came out as ONE line ending at x=3356pt on a 612pt sheet
+	// (go-tex/engine#629); removing the teaser — which is what makes the title box tall
+	// enough for :2303's \vsplit loop to run — brought that same line back to 298.44pt.
+	//
+	// ⚠ The oracle, not the rulebook, settles what to do here. tex.web §1110 calls
+	// \unvbox in horizontal mode an illegal case, which would mean ignoring it; the
+	// reference engine does NOT ignore it — a fifteen-line witness through tectonic
+	// keeps every line broken at its own measure. So the paragraph is ENDED and the
+	// lines go to the vertical list, which is what the reference PDFs show.
+	if want == vbox {
+		e.endParagraph()
+	}
 	list := b.list
 	if keep {
 		list = cloneBox(b).list
