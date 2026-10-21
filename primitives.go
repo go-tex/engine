@@ -427,7 +427,7 @@ func (e *Engine) doGlobal() {
 		e.doSettodim('h', true)
 	case "settodepth":
 		e.doSettodim('d', true)
-	case "hsize", "textwidth", "vsize", "parindent", "baselineskip":
+	case "hsize", "textwidth", "columnwidth", "vsize", "parindent", "baselineskip":
 		// \global\hsize=… : the engine's own dimension parameters are scoped like
 		// registers now, so the global flag has to reach the assignment or the
 		// enclosing group would put the old value back.
@@ -710,6 +710,8 @@ func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(
 		return func() int { return e.hsize }, func(v int) { e.setEngineDimen(saveHsize, &e.hsize, v, global) }, true
 	case "textwidth":
 		return func() int { return e.fullWidth() }, func(v int) { e.setTextWidth(v, global) }, true
+	case "columnwidth":
+		return func() int { return e.columnWidthValue() }, func(v int) { e.setColumnWidth(v, global) }, true
 	case "vsize":
 		return func() int { return e.vsize }, func(v int) { e.setEngineDimen(saveVsize, &e.vsize, v, global) }, true
 	case "parindent":
@@ -767,6 +769,9 @@ const (
 	// \catcode and \hsize are. See spacefactor.go.
 	saveSfcode      = 19
 	saveSpaceFactor = 20
+	// \columnwidth is its OWN \newdimen in LaTeX (latex.ltx:15020), not another name
+	// for the paragraph measure. See setColumnWidth.
+	saveColumnWidth = 21
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -1220,6 +1225,9 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "textwidth":
 				e.pushString(formatPt(e.fullWidth()))
+				return
+			case m.kind == mPrim && m.name == "columnwidth":
+				e.pushString(formatPt(e.columnWidthValue()))
 				return
 			case m.kind == mPrim && m.name == "vsize":
 				e.pushString(formatPt(e.vsize))
@@ -2255,8 +2263,13 @@ func (e *Engine) loadMore() {
 	// width=0.48\textwidth fills nearly a column and width=\textwidth spans the page.
 	// It reads e.fullWidth() and its assignment routes through setTextWidth (see
 	// twocolumn.go), which keeps the old \let\textwidth\hsize behaviour before the
-	// two-column measure is split. \columnwidth / \linewidth stay \let to \hsize.
+	// two-column measure is split. \linewidth stays \let to \hsize — it IS the current
+	// measure, and a minipage sets it from \hsize (latex.ltx:11861).
 	e.prim("textwidth", func(e *Engine) { e.scanEquals(); e.setTextWidth(e.scanDimen(), false) })
+	// \columnwidth is ONE COLUMN, and its own \newdimen in LaTeX (latex.ltx:15020).
+	// \hsize is set from it, never the reverse, so a class that sets \hsize for a
+	// block of front matter and then reads \columnwidth must still get the column.
+	e.prim("columnwidth", func(e *Engine) { e.scanEquals(); e.setColumnWidth(e.scanDimen(), false) })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveVsize, &e.vsize, e.scanDimen(), false) })
 	e.prim("baselineskip", func(e *Engine) {
 		e.scanEquals()

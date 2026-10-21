@@ -984,14 +984,18 @@ const MiniLaTeXKernel = `
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
 % Width lengths used as the target of \begin{tabularx}{...} (and tabular*):
-% \linewidth and \columnwidth are the CURRENT column measure, so they resolve to
-% \hsize wherever a rigid <dimen> is scanned. \textwidth is different — it is the
-% width of the whole text block (both columns and the gutter in two-column mode),
-% so it is its own engine dimension parameter (see \textwidth in primitives.go /
-% setTextWidth in twocolumn.go) that reads the full one-column width; in
-% single-column mode the two coincide, so nothing changes there.
+% \linewidth IS the current measure, so it resolves to \hsize wherever a rigid
+% <dimen> is scanned: a minipage sets it from \hsize (latex.ltx:11861) and so does
+% \begin{document} (6688).
+%
+% \textwidth and \columnwidth are NOT. Each is its own \newdimen in LaTeX
+% (\columnwidth at latex.ltx:15020) and each is its own engine dimension parameter
+% here: \textwidth is the whole text block — both columns and the gutter — and
+% \columnwidth is ONE column. \hsize is set FROM \columnwidth (6688, 15079, 15113),
+% never the reverse, which is what a class relies on when it sets \hsize for a block
+% of front matter and then asks how wide a column is (acmart.cls:2712 then :2718).
+% In single-column mode all three coincide, so nothing changes there.
 \let\linewidth\hsize
-\let\columnwidth\hsize
 % ─── sub-captions / \captionof / \captionsetup (feat/subcaption) ─────────────
 % A pragmatic subset of the caption / subcaption packages. Everything here is
 % pure macro glue that REUSES the existing counter, \caption and \parbox

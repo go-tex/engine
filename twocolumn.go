@@ -215,6 +215,40 @@ func (e *Engine) setTextWidth(v int, global bool) {
 	e.setEngineDimen(saveHsize, &e.hsize, v, global)
 }
 
+// columnWidthValue is \columnwidth. It is its OWN \newdimen in LaTeX
+// (latex.ltx:15020) and not another name for the paragraph measure — \hsize is set
+// FROM it (latex.ltx:6688, 15079, 15113), never the other way round. The two coincide
+// in the body of a document, which is why \let\columnwidth\hsize carried this engine
+// for a long time; they part company exactly where a class sets \hsize for a block of
+// front matter and then asks how wide a COLUMN is:
+//
+//	\hsize=\textwidth                 % acmart.cls:2712
+//	…
+//	\author@bx@wd=\columnwidth\relax  % acmart.cls:2718
+//
+// With the two conflated, every author box was the full text width, so the author
+// grid never wrapped: 2405.20319 drew its title and five author blocks as ONE line
+// ending at x=3356pt on a 612pt page (go-tex/engine#629).
+//
+// ⚠ Zero means "nobody has stated it yet", and then it answers with the paragraph
+// measure — which is what \let gave, so a document that never reaches \begin{document}'s
+// recompute (a probe, a fragment, a class that sets widths and stops) behaves exactly
+// as before rather than reading a column width of 0pt.
+func (e *Engine) columnWidthValue() int {
+	if e.columnWidth > 0 {
+		return e.columnWidth
+	}
+	return e.hsize
+}
+
+// setColumnWidth assigns \columnwidth. It does NOT touch the paragraph measure: in
+// LaTeX the flow is \columnwidth → \hsize, and the places that want both say both
+// (latex.ltx:6688 \hsize\columnwidth \linewidth\hsize; 11861 \textwidth\hsize
+// \columnwidth\hsize inside a minipage, which our minipage already pushes).
+func (e *Engine) setColumnWidth(v int, global bool) {
+	e.setEngineDimen(saveColumnWidth, &e.columnWidth, v, global)
+}
+
 // setMeasureFromTextWidth is the width half of LaTeX's \document (latex.ltx:6682):
 //
 //	\columnwidth\textwidth
@@ -239,6 +273,14 @@ func (e *Engine) setMeasureFromTextWidth() {
 	}
 	if w := e.fullWidth(); w > 0 && w != e.hsize {
 		e.setEngineDimen(saveHsize, &e.hsize, w, true)
+	}
+	// \columnwidth\textwidth (latex.ltx:6682), the one-column branch: the halving for
+	// two-column mode (6684-6686) belongs to the two-column machinery, which has
+	// already run when oneColHsize is set — and this function returned above in that
+	// case. The class's own stray \columnwidth is DISCARDED here exactly as its stray
+	// \hsize is, which is the whole point of the recompute.
+	if w := e.fullWidth(); w > 0 {
+		e.setColumnWidth(w, true)
 	}
 }
 
@@ -283,6 +325,7 @@ func (e *Engine) enterTwoColumnMeasure() {
 	}
 	if cw := (e.oneColHsize - e.columnsep) / 2; cw > 0 {
 		e.setEngineDimen(saveHsize, &e.hsize, cw, true)
+		e.setColumnWidth(cw, true) // \global\columnwidth, latex.ltx:15110-15112
 	}
 	e.twoColApplied = true
 }
@@ -454,6 +497,7 @@ func (e *Engine) startOneColumn() {
 		// Global for the same reason \twocolumn's is — latex.ltx:15076-15083 writes
 		// \global\columnwidth\textwidth / \global\hsize\columnwidth / \global\linewidth.
 		e.setEngineDimen(saveHsize, &e.hsize, e.oneColHsize, true)
+		e.setColumnWidth(e.oneColHsize, true)
 	}
 	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 1, colW: e.fullWidth()})
 }
