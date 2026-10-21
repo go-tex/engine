@@ -255,12 +255,34 @@ func (e *Engine) dblTextFloatSep() int {
 // (e.oneColHsize) for a later \onecolumn to restore. It is idempotent: the column
 // measure is always derived from the stored full width, so calling it again after a
 // \onecolumn restored e.hsize re-halves consistently rather than halving the halved.
+//
+// ⛔ The assignment is GLOBAL, as LaTeX's own is (latex.ltx:15108-15115):
+//
+//	\def \twocolumn {%
+//	  \clearpage
+//	  \global\columnwidth\textwidth
+//	  \global\advance\columnwidth-\columnsep
+//	  \global\divide\columnwidth\tw@
+//	  \global\hsize\columnwidth
+//	  \global\linewidth\columnwidth
+//
+// Every one of them carries \global, and that is not decoration: a class may call
+// \twocolumn from INSIDE a group, and in TeX a global assignment DISCARDS the values
+// the enclosing groups saved for that register, so the measure survives their \endgroup.
+// A plain assignment does not, and the save entry that outlives it need not be one this
+// function made — acmart sets \hsize=\textwidth itself at acmart.cls:2101, four lines
+// before calling \@printtopmatter, and both sit inside the \begingroup…\endgroup that
+// spans \maketitle (acmart.cls:2095-2191). The \endgroup then restored the FULL text
+// width, and every column of the body was line-broken at 505.89pt into a 241pt column:
+// the two columns were drawn one over the other and 250pt of each line fell off the
+// sheet. go-tex/engine#615, where it had hidden behind nine other hypotheses because
+// nothing in \twocolumn itself looks wrong.
 func (e *Engine) enterTwoColumnMeasure() {
 	if e.oneColHsize == 0 {
 		e.oneColHsize = e.hsize
 	}
 	if cw := (e.oneColHsize - e.columnsep) / 2; cw > 0 {
-		e.hsize = cw
+		e.setEngineDimen(saveHsize, &e.hsize, cw, true)
 	}
 	e.twoColApplied = true
 }
@@ -429,7 +451,9 @@ func (e *Engine) startOneColumn() {
 		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2, colW: e.hsize})
 	}
 	if e.oneColHsize > 0 {
-		e.hsize = e.oneColHsize
+		// Global for the same reason \twocolumn's is — latex.ltx:15076-15083 writes
+		// \global\columnwidth\textwidth / \global\hsize\columnwidth / \global\linewidth.
+		e.setEngineDimen(saveHsize, &e.hsize, e.oneColHsize, true)
 	}
 	e.colRegions = append(e.colRegions, colRegion{at: len(e.mvl), cols: 1, colW: e.fullWidth()})
 }
