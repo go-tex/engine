@@ -37,6 +37,22 @@ import "strings"
 // is ignored rather than made an error, since the engine has nothing to gain
 // from reproducing it.
 func (e *Engine) doCaptionsetup() {
+	// \captionsetup* — caption3.sty:237-243:
+	//
+	//	\newif\ifcaptionsetup@star
+	//	\newcommand*\captionsetup{\caption@teststar@\@captionsetup\@gobble\@firstofone}
+	//	\newcommand*\@captionsetup[1]{\captionsetup@startrue#1\captionsetup@starfalse…}
+	//
+	// All the star does is raise that flag, and the flag's one use is to SUPPRESS a
+	// warning: caption.sty:319 reads \ifcaptionsetup@star\else\@nameuse{caption@…
+	// type@warning}\fi. It changes nothing that is typeset — so it is consumed, and
+	// nothing else here changes.
+	//
+	// Unread, it was the argument: scanBracketList met "*" instead of "[", so the
+	// key list was never read and "*format=pnasformat" went on the page. paper.cls
+	// (PNAS) writes \captionsetup*{format=pnasformat} at :155, and 29 corpus papers
+	// write \captionsetup* (go-tex/engine#636).
+	e.peekStar()
 	types := e.scanBracketList()
 	opts := e.readBraceToksRaw()
 	if len(opts) == 0 {

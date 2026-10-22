@@ -1267,6 +1267,23 @@ const MiniLaTeXKernel = `
 % own names and bodies on page 1: "adja-page", then "#1 #2 (previous page)" with the
 % \hrulefill drawn across the sheet, pushing the title to page 2.
 \def\DeclareCaptionLabelFormat#1#2{}
+% \DeclareCaptionFormat[*]{<name>}[<single-line>]{<code>} — caption3.sty:696-706:
+%   \newcommand*\DeclareCaptionFormat{\caption@teststar\caption@declareformat…}
+%   \newcommand*\caption@declareformat[2]{\@dblarg{\caption@@declareformat#1{#2}}}
+%   \long\def\caption@@declareformat#1#2[#3]#4{…}
+% so: an optional star, the name, an OPTIONAL single-line variant that \@dblarg
+% defaults to the mandatory one, and the format body. paper.cls (PNAS) writes
+%   \DeclareCaptionFormat{pnasformat}{…#1#2#3}
+%   \captionsetup*{format=pnasformat}
+% and undefined, the first leaked its name and the second its star and key — page 1
+% of 2310.11517 reads "*format=pnasformat" in the body text. Caption FORMATS are not
+% modelled here (the caption head goes through \fnum@<type>, see doCaptionsetup), so
+% the declaration is consumed and nothing is kept: what matters is that it stops
+% reaching the page.
+\def\DeclareCaptionFormat{\@ifstar\@gtxdeclcapfmt\@gtxdeclcapfmt}
+\def\@gtxdeclcapfmt#1{\@ifnextbracket\@gtxdeclcapfmtopt\@gtxdeclcapfmtplain}
+\def\@gtxdeclcapfmtopt[#1]#2{}
+\def\@gtxdeclcapfmtplain#1{}
 % \DeclareVoidOption{<name>}{<code>} — kvoptions.sty:370, \newcommand*[2].
 \def\DeclareVoidOption#1#2{}
 % \ProcessKeyvalOptions — kvoptions.sty:619 is \@ifstar then the family name, so
