@@ -1306,6 +1306,26 @@ const MiniLaTeXKernel = `
 \def\@gtxdeclcapfmt#1{\@ifnextbracket\@gtxdeclcapfmtopt\@gtxdeclcapfmtplain}
 \def\@gtxdeclcapfmtopt[#1]#2{}
 \def\@gtxdeclcapfmtplain#1{}
+% mdframed's style registry. The frames themselves are not modelled, but these three
+% commands STORE a key list — they typeset nothing — and undefined they left their
+% arguments on the page:
+%
+%	\newrobustcmd*\mdfdefinestyle[2]{\csdef{mdf@definestyle@#1}{#2}}     % mdframed.sty:564
+%	\newrobustcmd*\mdfapptodefinestyle[2]{…\csappto{mdf@definestyle@#1}{,#2}}  % :567
+%	\newrobustcmd*{\mdfsetup}{\kvsetkeys{mdf}}                            % :386
+%
+% researchpaper.sty (PNAS) writes \mdfdefinestyle{pnassigstyle}{linewidth=0.7pt,…} at
+% :23, and page 1 of 2310.11517 carried "pnassigstylelinewidth=0.7pt,backgroundcolor=
+% pnasblueback…" as a 797pt line on a 612pt sheet (go-tex/engine#629). 144 papers of
+% the arXiv pool write one of them.
+\def\mdfdefinestyle#1#2{}
+\def\mdfapptodefinestyle#1#2{}
+\def\mdfsetup#1{}
+% And the environment they style. Its BODY is document content and must be set — the
+% PNAS significance statement lives in one — so only the optional key list is
+% consumed; the frame itself is not drawn. Undefined, "[style=pnassigstyle]" stood on
+% page 1 of 2310.11517 as ordinary text.
+\newenvironment{mdframed}[1][]{}{}
 % \DeclareVoidOption{<name>}{<code>} — kvoptions.sty:370, \newcommand*[2].
 \def\DeclareVoidOption#1#2{}
 % \ProcessKeyvalOptions — kvoptions.sty:619 is \@ifstar then the family name, so
