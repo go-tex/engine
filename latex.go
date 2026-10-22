@@ -224,7 +224,29 @@ const MiniLaTeXKernel = `
 \def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
 \long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
 \long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
-\long\def\maketitle{\par\bigskip\centerline{\@title}\smallskip\centerline{\@author}\smallskip\centerline{\@date}\bigskip\@thanks\global\def\@thanks{}}
+% \maketitle defers to the CLASS's \@maketitle when it has one, which is what
+% article.cls does (classes.dtx, \maketitle):
+%
+%	\if@twocolumn
+%	  \ifnum \col@number=\@ne \@maketitle \else \twocolumn[\@maketitle]\fi
+%	\else \newpage \global\@topnum\z@ \@maketitle \fi
+%
+% ⛔ Without this the class's own title layout NEVER RUNS. paper.cls (PNAS) redefines
+% only \@maketitle — 5104 papers of the arXiv pool define their own, 58 of the 154
+% measured — and the generic block below set \@author inside a \centerline, an \hbox
+% that nothing line-breaks. On 2310.11517 that hbox came out 1787.88pt wide on a 612pt
+% sheet, carrying one author and four affiliations (go-tex/engine#629).
+%
+% ⚠ The \centerline form is KEPT as the fallback for a document whose class defines no
+% \@maketitle at all — a bare \documentclass{article} through this engine's own
+% emulation, which is most of the test suite. Replacing it outright would have been a
+% change to every such document for the sake of the 58.
+\long\def\maketitle{\par
+  \@ifundefined{@maketitle}{\gotex@genericmaketitle}{%
+    \if@twocolumn\twocolumn[\@maketitle]\else\@maketitle\fi}%
+  \@thanks\global\def\@thanks{}}
+\long\def\gotex@genericmaketitle{\bigskip\centerline{\@title}\smallskip
+  \centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
 \def\cdot{\char183\relax}
 % Per-level counters and depth trackers for nested itemize/enumerate. Because
