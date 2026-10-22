@@ -183,8 +183,8 @@ func (e *Engine) isInternalDimen(t tok) bool {
 		return true
 	case mPrim:
 		switch m.name {
-		case "dimen", "skip", "wd", "ht", "dp", "hsize", "textwidth", "vsize", "parindent",
-			"baselineskip", "leftskip", "rightskip", "lastskip", "dimexpr":
+		case "dimen", "skip", "wd", "ht", "dp", "hsize", "textwidth", "columnwidth", "vsize",
+			"parindent", "baselineskip", "leftskip", "rightskip", "lastskip", "dimexpr":
 			return true
 		}
 		// The glyph-metric primitives are internal dimensions too: lmcs.cls writes
