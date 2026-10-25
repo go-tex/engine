@@ -75,6 +75,16 @@ func (e *Engine) layoutSegment(hlist []node) {
 	// 0pt plus 1fil — narrows nothing, which is right: ragged setting does not
 	// move the margin, it only stops justifying to it.
 	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
+	// ⛔ \parshape overrides both. tex.web §16676-16689: a shape's pair gives the left
+	// margin and the line length directly, and TeX consults it INSTEAD of \hsize and
+	// the hanging-indentation parameters. \list is what emits one — its last line is
+	// \parshape \@ne \@totalleftmargin \linewidth (latex.ltx:11453) — and \@trivlist
+	// has just set \leftskip to zero (11473), so a list's indentation arrives here and
+	// nowhere else.
+	shapeIndent, shapeLength, shaped := e.parshapeMeasure()
+	if shaped {
+		lineWidth = spToPt(shapeLength)
+	}
 	list, lines, ok := e.breakSegment(hlist, lineWidth)
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
@@ -93,7 +103,14 @@ func (e *Engine) layoutSegment(hlist []node) {
 				}
 			}
 		}
-		seg = e.applyLineSkips(seg)
+		if shaped {
+			// The shape's own margins, in place of \leftskip/\rightskip: an explicit
+			// indent on the left and whatever is left over on the right, so the line
+			// still packs to \hsize without stretching.
+			seg = e.applyShapeMargins(seg, shapeIndent, shapeLength)
+		} else {
+			seg = e.applyLineSkips(seg)
+		}
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
 	}
 }
@@ -106,6 +123,28 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 	}
 	if e.rightskip != (glueSpec{}) {
 		seg = append(append([]node{}, seg...), glueNode{spec: e.rightskip})
+	}
+	return seg
+}
+
+// applyShapeMargins wraps a line of a \parshape'd paragraph: the shape's indent on
+// the left, and the rest of \hsize on the right.
+//
+// ⛔ \leftskip and \rightskip are NOT added here. Under a shape TeX takes the margin
+// and the length from the shape itself, and LaTeX's list machinery has just set
+// \leftskip to zero (latex.ltx:11473) precisely because the shape is doing the work.
+// Adding both would indent twice.
+//
+// The right-hand filler is rigid: the line was broken to shapeLength, so what is left
+// of \hsize is exactly the right margin, and giving it stretch would let hpack pull
+// the text back out to the full measure — the defect applyLineSkips' comment above
+// records from the other direction.
+func (e *Engine) applyShapeMargins(seg []node, indent, length int) []node {
+	if indent > 0 {
+		seg = append([]node{glueNode{spec: glueSpec{width: indent}}}, seg...)
+	}
+	if rest := e.hsize - indent - length; rest > 0 {
+		seg = append(append([]node{}, seg...), glueNode{spec: glueSpec{width: rest}})
 	}
 	return seg
 }

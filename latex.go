@@ -1006,18 +1006,24 @@ const MiniLaTeXKernel = `
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
 % Width lengths used as the target of \begin{tabularx}{...} (and tabular*):
-% \linewidth IS the current measure, so it resolves to \hsize wherever a rigid
-% <dimen> is scanned: a minipage sets it from \hsize (latex.ltx:11861) and so does
-% \begin{document} (6688).
+% \linewidth, \textwidth and \columnwidth are each their OWN \newdimen in LaTeX —
+% \linewidth at latex.ltx:11414, \columnwidth at 15020 — and each is its own engine
+% dimension parameter here (see parshape.go for \linewidth, twocolumn.go for the
+% other two). An unset one reads as the current measure, which is what the old
+% \let gave, so nothing changes for a document that never states it.
 %
-% \textwidth and \columnwidth are NOT. Each is its own \newdimen in LaTeX
+% ⛔ \linewidth was \let to \hsize, and \list decrements it by BOTH margins
+% (latex.ltx:11450-11451) before handing it to \parshape. With the \let in place
+% that arithmetic shrank \hsize itself, so the text AROUND a list came out narrowed
+% by every list it contained.
+%
+% \textwidth and \columnwidth: each is its own \newdimen in LaTeX
 % (\columnwidth at latex.ltx:15020) and each is its own engine dimension parameter
 % here: \textwidth is the whole text block — both columns and the gutter — and
 % \columnwidth is ONE column. \hsize is set FROM \columnwidth (6688, 15079, 15113),
 % never the reverse, which is what a class relies on when it sets \hsize for a block
 % of front matter and then asks how wide a column is (acmart.cls:2712 then :2718).
 % In single-column mode all three coincide, so nothing changes there.
-\let\linewidth\hsize
 % ─── sub-captions / \captionof / \captionsetup (feat/subcaption) ─────────────
 % A pragmatic subset of the caption / subcaption packages. Everything here is
 % pure macro glue that REUSES the existing counter, \caption and \parbox

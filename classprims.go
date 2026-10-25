@@ -356,7 +356,50 @@ const LaTeX2eClassLead = `
 %
 % The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
 % run through \@trivlist directly and already match the reference.
-\def\list#1#2{\@trivlist}
+% ⛔ The SETTINGS argument used to be thrown away (\def\list#1#2{\@trivlist}), and it
+% is where every \list-based environment states its margins. article.cls:405 defines
+%
+%	\newenvironment{quote}{\list{}{\rightmargin\leftmargin}\item\relax}{\endlist}
+%
+% so a quotation got NO indentation at all — not too little, none. Measured against
+% tectonic, the quotation ran 133.77–477.50 where the reference sets it 158.67–452.58:
+% 24.9pt on each side, which is \leftmargini = 2.5em at 10pt (article.cls:325,
+% size10.clo:216). go-tex/engine#587.
+%
+% This follows latex.ltx:11433-11454 in its own order, and the order is the point: the
+% PER-DEPTH defaults run first (\@listi sets \leftmargin\leftmargini), then the
+% settings argument, which is therefore able to override them.
+%
+% ⚠ \parshape, not \leftskip. \@trivlist sets \leftskip to zero (latex.ltx:11473) and
+% the indentation comes from the last line here. See parshape.go.
+\newcount\@listdepth
+\newdimen\@totalleftmargin
+% \@biblabel#1{[#1]} — latex.ltx:13324. Running \list's settings argument is what
+% made this reachable: article.cls:568-569 writes
+%
+%	\list{\@biblabel{\@arabic\c@enumiv}}{\settowidth\labelwidth{\@biblabel{#1}}…}
+%
+% so the SETTINGS measure the label's width, and with the argument discarded the
+% macro was never needed. Four tests and a corpus case failed on it the moment the
+% argument started running — which is the argument working, not breaking.
+\def\@biblabel#1{[#1]}
+% LaTeX reports "Too deeply nested"; the depth is simply capped here, which is what
+% the \ifnum already does, and nothing further is lost.
+\def\@toodeep{}
+\def\list#1#2{%
+  \ifnum \@listdepth >5\relax \@toodeep \else \global\advance\@listdepth\@ne \fi
+  \rightmargin\z@ \listparindent\z@ \itemindent\z@
+  \csname @list\romannumeral\the\@listdepth\endcsname
+  \def\@itemlabel{#1}%
+  \@nmbrlistfalse
+  #2\relax
+  \@trivlist
+  \parskip\parsep \parindent\listparindent
+  \advance\linewidth -\rightmargin
+  \advance\linewidth -\leftmargin
+  \advance\@totalleftmargin \leftmargin
+  \parshape \@ne \@totalleftmargin \linewidth
+  \ignorespaces}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -364,7 +407,7 @@ const LaTeX2eClassLead = `
 % \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
 % \par those three stayed open past \end{itemize}, and every \end after them closed one
 % group too high.
-\def\endlist{\endtrivlist}
+\def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
@@ -386,7 +429,18 @@ const LaTeX2eClassLead = `
 \def\@trivlist{\@topsepadd\topsep\ifvmode\advance\@topsepadd\partopsep\else\par\fi
   \addvspace\@topsepadd\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
-\def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
+% ⛔ \par BEFORE \endgroup. latex.ltx:11509 ends the list's last paragraph while still
+% inside it — \ifhmode\unskip \par \else … \fi — and \endtrivlist contains no
+% \endgroup at all there: the group belongs to the environment, and LaTeX closes it
+% after this has run.
+%
+% The order matters because everything \list set up is group-scoped. With \endgroup
+% first, \parshape was restored before the final paragraph reached the line breaker,
+% so a \begin{quote} whose text had no explicit \par came out at the FULL measure —
+% 133.77–477.50 where the reference sets it 158.67–452.58 — while the same quotation
+% with a \par of its own was already correct. The same would hold for \parindent,
+% \parskip and the margins. go-tex/engine#587.
+\def\endtrivlist{\par\endgroup\addvspace\@topsepadd}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the

@@ -183,7 +183,7 @@ func (e *Engine) isInternalDimen(t tok) bool {
 		return true
 	case mPrim:
 		switch m.name {
-		case "dimen", "skip", "wd", "ht", "dp", "hsize", "textwidth", "columnwidth", "vsize",
+		case "dimen", "skip", "wd", "ht", "dp", "hsize", "textwidth", "columnwidth", "linewidth", "vsize",
 			"parindent", "baselineskip", "leftskip", "rightskip", "lastskip", "dimexpr":
 			return true
 		}

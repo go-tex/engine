@@ -427,7 +427,7 @@ func (e *Engine) doGlobal() {
 		e.doSettodim('h', true)
 	case "settodepth":
 		e.doSettodim('d', true)
-	case "hsize", "textwidth", "columnwidth", "vsize", "parindent", "baselineskip":
+	case "hsize", "textwidth", "columnwidth", "linewidth", "vsize", "parindent", "baselineskip":
 		// \global\hsize=… : the engine's own dimension parameters are scoped like
 		// registers now, so the global flag has to reach the assignment or the
 		// enclosing group would put the old value back.
@@ -712,6 +712,8 @@ func (e *Engine) engineDimenParam(t tok, global bool) (get func() int, set func(
 		return func() int { return e.fullWidth() }, func(v int) { e.setTextWidth(v, global) }, true
 	case "columnwidth":
 		return func() int { return e.columnWidthValue() }, func(v int) { e.setColumnWidth(v, global) }, true
+	case "linewidth":
+		return func() int { return e.lineWidthValue() }, func(v int) { e.setLineWidth(v, global) }, true
 	case "vsize":
 		return func() int { return e.vsize }, func(v int) { e.setEngineDimen(saveVsize, &e.vsize, v, global) }, true
 	case "parindent":
@@ -772,6 +774,11 @@ const (
 	// \columnwidth is its OWN \newdimen in LaTeX (latex.ltx:15020), not another name
 	// for the paragraph measure. See setColumnWidth.
 	saveColumnWidth = 21
+	// \linewidth is its own \newdimen in LaTeX (latex.ltx:11414), and \parshape lives
+	// at par_shape_loc in TeX's equivalents table (tex.web:4754) — both are
+	// group-scoped. See parshape.go.
+	saveLineWidth = 22
+	saveParshape  = 23
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -1228,6 +1235,9 @@ func (e *Engine) doThe() {
 				return
 			case m.kind == mPrim && m.name == "columnwidth":
 				e.pushString(formatPt(e.columnWidthValue()))
+				return
+			case m.kind == mPrim && m.name == "linewidth":
+				e.pushString(formatPt(e.lineWidthValue()))
 				return
 			case m.kind == mPrim && m.name == "vsize":
 				e.pushString(formatPt(e.vsize))
@@ -2270,6 +2280,11 @@ func (e *Engine) loadMore() {
 	// \hsize is set from it, never the reverse, so a class that sets \hsize for a
 	// block of front matter and then reads \columnwidth must still get the column.
 	e.prim("columnwidth", func(e *Engine) { e.scanEquals(); e.setColumnWidth(e.scanDimen(), false) })
+	// \linewidth is its own \newdimen in LaTeX (latex.ltx:11414) and \list decrements
+	// it by both margins before handing it to \parshape. It was \let to \hsize, so
+	// `\advance\linewidth -\leftmargin` shrank \hsize itself. See parshape.go.
+	e.prim("linewidth", func(e *Engine) { e.scanEquals(); e.setLineWidth(e.scanDimen(), false) })
+	e.prim("parshape", func(e *Engine) { e.doParshape() })
 	e.prim("vsize", func(e *Engine) { e.scanEquals(); e.setEngineDimen(saveVsize, &e.vsize, e.scanDimen(), false) })
 	e.prim("baselineskip", func(e *Engine) {
 		e.scanEquals()
