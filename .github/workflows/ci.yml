@@ -66,19 +66,45 @@ jobs:
       # from a slow one, and the default job timeout is six hours. These lanes
       # normally finish in one to four minutes; ten turns an apt outage into a
       # failure that can be read and re-run.
-      - name: install qemu-user-static
+      # ⛔ `qemu-user-static` is a VIRTUAL package on Ubuntu 26.04, and apt refuses to
+      # choose between its two providers:
+      #
+      #   E: Package 'qemu-user-static' has no installation candidate
+      #   Package qemu-user-static is a virtual package provided by:
+      #     qemu-user-binfmt-hwe 1:10.2.1+ds-1ubuntu4.4
+      #     qemu-user-binfmt     1:10.2.1+ds-1ubuntu3.3
+      #
+      # `ubuntu-latest` migrated to Ubuntu 26 from 2026-10-19, so these three lanes
+      # went red between a green main on 2026-10-23 and 2026-10-25 without anything
+      # being committed.
+      #
+      # ⚠ Installing a provider is NOT the fix: they register binfmt handlers, they do
+      # not ship the `qemu-<arch>-static` binaries this lane invokes. The lane would
+      # then take its `command -v` branch and go GREEN while testing nothing — worse
+      # than red. `qemu-user` ships the dynamic `qemu-<arch>`, which is all that is
+      # needed to run one Go test binary, so both names are installed and both are
+      # looked for.
+      - name: install qemu user-mode emulators
         timeout-minutes: 10
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
       - name: test under qemu
         run: |
           arch="${{ matrix.goarch }}"
           # Go's GOARCH names mostly match qemu's user binary names; loong64 does not.
-          q="qemu-${arch}-static"
-          [ "$arch" = loong64 ] && q="qemu-loongarch64-static"
-          if ! command -v "$q" >/dev/null 2>&1; then
-            echo "::warning::$q not available on this runner; skipping $arch"
-            exit 0
+          name="$arch"
+          [ "$arch" = loong64 ] && name=loongarch64
+          q=""
+          for cand in "qemu-${name}-static" "qemu-${name}"; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          # ⛔ A missing emulator FAILS the lane. It used to warn and exit 0, which is
+          # a lane that reports success for an architecture it never ran — the one
+          # outcome this matrix exists to rule out.
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for $arch (looked for qemu-${name}-static and qemu-${name})"
+            exit 1
           fi
+          echo "running $arch under $q"
           GOARCH="$arch" go test -exec="$q" ./...
   wasm:
     name: wasm (${{ matrix.goos }}/wasm)

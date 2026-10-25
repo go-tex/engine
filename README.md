@@ -186,20 +186,31 @@ format and image type, with its status, plus every remaining gap — lives at
   author names, affiliations and e-mails outside it. No other channel can see that
   — the page count cannot (the clearest witness is 15 pages against 15), the ink
   count cannot (every glyph is emitted), `-report-skipped` cannot (nothing is
-  skipped) and the text layer carries the words. Five distinct causes, each with
+  skipped) and the text layer carries the words. Seven distinct causes, each with
   its own witness: a macro standing for several `tabular` rows (`article.cls` sets
   the author block as `\begin{tabular}[t]{c}\@author\end{tabular}` and `authblk`
   builds `\@author` with `\\`), a bare `\endX` closing what `\X` opened
   (`sagej.cls` writes `\def\endabstract{\endminipage\endlrbox}`), `calc`
   expressions in a length argument (`{\textwidth-57.625mm}`), `\cite`'s optional
-  note, and **`\unvbox` inside a paragraph** — a vbox holds finished *lines*, and
+  note, **`\unvbox` inside a paragraph** — a vbox holds finished *lines*, and
   handing them to the line breaker glues them end to end and re-breaks the lot as
   one paragraph (acmart writes `\noindent\unvbox\mktitle@bx`, so its title and
-  every author block came out as a single line). Over the 154-paper corpus the
-  papers drawing text past their own page edge went **49 → 22** and the widest line
-  **6619pt → 1788pt**, against a control of 2 on the reference PDFs. ⚠ Not closed:
-  22 remain, and the top of that list is a different population again (see
-  [#629](https://github.com/go-tex/engine/issues/629)).
+  every author block came out as a single line) — **`\maketitle` never running the
+  class's own `\@maketitle`**, which left `\@author` in a `\centerline` no line
+  breaker touches, and a package whose key-list commands were undefined and left
+  their keys behind (`mdframed`, `caption`).
+
+  Over the 154-paper corpus **21 papers** still draw text past their own page edge
+  in their first two pages, the widest line at **1281pt**, against a floor of **0**
+  on the reference PDFs themselves. ⚠ That floor is 0 and not 2 because the
+  instrument changed: it lives in the measure harness now (`measure offpage`) and
+  filters text the PDF reader surfaces but that was never *typeset* — a `/Title`
+  string's octal escapes, hyperref's PostScript specials, pdfmark attributes,
+  `burl`'s PostScript definitions. Unfiltered the reference itself reports 12, one
+  of them at x=5135. The earlier series — 49 at v0.260.0, 23 at v0.261.0 — was taken
+  with a filter that left 2 there, so it is **not** directly comparable to these.
+  ⚠ Not closed: 21 remain, and the top of that list is a different population again
+  (see [#629](https://github.com/go-tex/engine/issues/629)).
 - **Float placement** takes its seven parameters from the **class**, not from
   article's: `\topnumber`, `\bottomnumber` and `\totalnumber` are counters the
   class kernel declares so a `\setcounter` of them takes (amsart's
