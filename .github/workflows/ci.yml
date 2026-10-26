@@ -105,7 +105,18 @@ jobs:
             exit 1
           fi
           echo "running $arch under $q"
-          GOARCH="$arch" go test -exec="$q" ./...
+          # ⛔ -timeout, because go test's default is 10 MINUTES PER PACKAGE and that
+          # is a native-hardware figure: these lanes run the tests through an
+          # interpreter. The engine package sat right against it and crossed on
+          # ordinary runner variance — riscv64 took 6m06s on #645 and 11m19s on #648,
+          # failing with `FAIL github.com/go-tex/engine 600.406s`, and a RE-RUN OF THE
+          # SAME COMMIT then passed. The non-emulated lanes rule out a real slowdown:
+          # ubuntu went 23m04s → 16m27s over those same two commits, faster.
+          #
+          # A lane that reds on variance teaches people to ignore reds, which costs
+          # more than the lane is worth. The native job above already carries
+          # `-timeout 30m` for the same reason on windows.
+          GOARCH="$arch" go test -timeout 30m -exec="$q" ./...
   wasm:
     name: wasm (${{ matrix.goos }}/wasm)
     runs-on: ubuntu-latest
