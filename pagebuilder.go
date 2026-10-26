@@ -13,47 +13,117 @@ import "math"
 // a break is discarded. \vsplit reuses the simpler height-limited splitVList.
 // (Insertions, \topskip and a token \output routine are future work.)
 
+// vKind is how a node moves TeX's page_total / page_depth pair.
+type vKind int
+
+const (
+	vNothing  vKind = iota // penalty, mark, whatsit: neither value moves
+	vBoxLike               // a box or rule (tex.web:19519-19520)
+	vGlueLike              // glue or kern (tex.web:19550)
+)
+
+// pageSoFar is TeX's page_total and page_depth (tex.web:19226-19229), which are
+// TWO numbers and not one.
+//
+// ⛔ page_depth IS NOT CHARGED AGAINST page_goal. The badness that decides the
+// break compares page_total alone (tex.web:19594-19599); the depth of the last box
+// on the page enters page_total only when the NEXT box or glue arrives
+// (tex.web:19519, 19550), and is capped at \maxdepth with the excess charged
+// (tex.web:19525-19529). vert_break does the same for \vsplit, with cur_height and
+// prev_dp (tex.web:18967, 19001) — and tex.web:18995 is the whole point in one
+// line: the box that comes out of the break is cur_height+prev_dp tall, while the
+// DECISION is taken on cur_height.
+//
+// Charging height+depth in one sum, as this did, loses a line on any page that
+// fills exactly. Measured on a witness with nothing unusual set (default \parskip,
+// ordinary prose, one column, article 10pt): \textheight 550pt, \baselineskip 12pt,
+// \topskip 10pt — all ten vertical registers read identical to the reference's from
+// inside both engines — and the reference puts 46 lines on page 2 because
+// 10 + 45×12 = 550 is EXACTLY the goal and equality is accepted. We stopped at 45,
+// with the first baseline matching to 0.02pt and the last exactly one \baselineskip
+// higher, because the 46th line's own ~1.9pt descender was charged as if it had to
+// fit above the bottom of the text block. It does not: that is what \maxdepth's 5pt
+// is for. (go-tex/engine#622)
+type pageSoFar struct {
+	total int // page_total: charged against \vsize
+	depth int // page_depth: NOT charged, capped at \maxdepth
+}
+
+// add moves the pair for one node, exactly as tex.web:19519-19529 and 19550 do.
+func (p *pageSoFar) add(n node, maxDepth int) {
+	h, d, kind := vHeightDepth(n)
+	switch kind {
+	case vBoxLike:
+		p.total += p.depth + h
+		p.depth = d
+		if p.depth > maxDepth {
+			p.total += p.depth - maxDepth
+			p.depth = maxDepth
+		}
+	case vGlueLike:
+		p.total += p.depth + h
+		p.depth = 0
+	}
+}
+
 // vContribution is a node's contribution to the running page height (sp).
+//
+// It is the height AND the depth together — the natural size of the material,
+// which is what a \vbox of it measures. The page breaker must not use it; it keeps
+// the two apart through pageSoFar, for the reason written there.
 func vContribution(n node) int {
+	h, d, _ := vHeightDepth(n)
+	return h + d
+}
+
+// vHeightDepth splits a node's vertical size into the height and the depth, and
+// says which of TeX's three cases the node falls in.
+func vHeightDepth(n node) (int, int, vKind) {
 	switch c := n.(type) {
 	case *boxNode:
-		return c.height + c.depth
+		return c.height, c.depth, vBoxLike
 	case spanNode: // a stray full-width band (normally lifted out by the two-column pager)
 		if c.box != nil {
-			return c.box.height + c.box.depth
+			return c.box.height, c.box.depth, vBoxLike
 		}
-		return 0
+		return 0, 0, vBoxLike
 	case ruleNode:
-		return c.height + c.depth
+		return c.height, c.depth, vBoxLike
 	case kernNode:
-		return c.width
+		return c.width, 0, vGlueLike
 	case glueNode:
-		return c.spec.width
+		return c.spec.width, 0, vGlueLike
 	case charNode:
-		return c.height + c.depth
+		return c.height, c.depth, vBoxLike
 	case mathNode:
-		return c.height + c.depth
+		return c.height, c.depth, vBoxLike
 	case imageNode:
-		return c.height + c.depth
+		return c.height, c.depth, vBoxLike
 	case frameNode:
-		return c.height() + c.depth()
+		return c.height(), c.depth(), vBoxLike
 	case decoNode:
-		return c.height() + c.depth()
+		return c.height(), c.depth(), vBoxLike
 	case transformNode:
-		return c.height() + c.depth()
+		return c.height(), c.depth(), vBoxLike
 	case linkNode:
-		return c.height() + c.depth()
+		return c.height(), c.depth(), vBoxLike
 	case internalLinkNode:
-		return c.height() + c.depth()
+		return c.height(), c.depth(), vBoxLike
 	case footnoteNode:
 		// The note's own height, so the page breaks early enough to leave room for
 		// the foot area even though the note is not painted inline (assemblePage
 		// lifts it to the page bottom). The space the foot area itself costs —
 		// \skip\footins — is charged ONCE per page, by findPageBreak, not here:
 		// see footinsSkip.
-		return c.body.height + c.body.depth
+		//
+		// ⛔ Charged as a BOX and not as glue: a note reserves vertical room, so its
+		// depth must be capped and carried like a box's. It is not painted here, so
+		// nothing downstream reads the depth — but routing it through vGlueLike would
+		// also ZERO page_depth, handing the page back the descender of the line the
+		// note hangs off.
+		return c.body.height, c.body.depth, vBoxLike
 	}
-	return 0
+	return 0, 0, vNothing
 }
 
 // Pages splits the main vertical list into pages using TeX's cost-based page
@@ -176,7 +246,10 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 	// one more glue node by assemblePage and overflows by that much — and the two
 	// sites would disagree about what the page holds. Both go through
 	// topskipGlueFor; TestTopskipHeightAndInsertionAgree asserts it.
-	h := e.topskipHeightAt(list, start)
+	// page_total starts at the \topskip glue's width; page_depth at zero, since
+	// glue zeroes it (tex.web:19550) and nothing has been contributed yet.
+	page := pageSoFar{total: e.topskipHeightAt(list, start)}
+	maxDepth := e.pageMaxDepth()
 	sawFootnote := false
 	best := -1
 	least := math.Inf(1)
@@ -185,7 +258,7 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			if pen <= -10000 {
 				return i // forced break
 			}
-			b := pageBadness(h, vsize)
+			b := pageBadness(page.total, vsize)
 			if math.IsInf(b, 1) { // already overfull at a legal break
 				if best >= 0 {
 					return best
@@ -196,7 +269,7 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 				least, best = c, i
 			}
 		}
-		h += vContribution(list[i])
+		page.add(list[i], maxDepth)
 		// \skip\footins is what the FIRST footnote of a page costs beyond its own
 		// height, and it is charged once for the page (tex.web:19638: page_goal is
 		// reduced by width(skip n) inside "Create a page insertion node", which runs
@@ -207,13 +280,31 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 		// it, and the body gave up 88.9pt against the reference's 35.9.
 		if _, isFn := list[i].(footnoteNode); isFn && !sawFootnote {
 			sawFootnote = true
-			h += e.footinsSkip()
+			page.total += e.footinsSkip()
 		}
-		if h > vsize && best >= 0 {
+		if page.total > vsize && best >= 0 {
 			return best
 		}
 	}
 	return len(list)
+}
+
+// pageMaxDepth is TeX's page_max_depth: \maxdepth as it stood when the page specs
+// were frozen (tex.web:19376 and freeze_page_specs).
+//
+// ⛔ Zero is a VALUE here, not a missing reading. INITEX leaves \maxdepth at 0pt
+// and plain.tex sets 4pt, article 5pt (size10.clo, .5\topskip); a cap of 0 charges
+// every descender immediately, which is what this engine did everywhere before.
+// So a default of 0 is both faithful and the control: the same document with
+// \maxdepth=0pt must paginate as it did, and only a document that sets \maxdepth
+// gains the line back.
+//
+// A NEGATIVE \maxdepth is legal (tex.web:18944-18946 raises it explicitly) and
+// needs no special case: the cap in pageSoFar.add then charges page_total MORE
+// than the box's depth, which is what TeX does.
+func (e *Engine) pageMaxDepth() int {
+	d, _ := e.namedDimen("maxdepth")
+	return d
 }
 
 // legalPageBreak reports whether index i is a legal page breakpoint and its

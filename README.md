@@ -295,7 +295,12 @@ Each stage is gated by an objective oracle:
 1. ✅ **Mouth + gullet** — tokenizer, `eqtb`, macros, expansion.
 2. ✅ **Stomach** — box/glue/penalty model in scaled points, h/v lists,
    Knuth–Plass line breaking with an emergency pass, cost-based page builder,
-   `\halign`.
+   `\halign`. The page builder keeps TeX's **two** page measurements apart:
+   `page_total`, which is what the break is decided on, and `page_depth`, which is
+   not charged against the goal and is capped at `\maxdepth` (`tex.web` 19519-19529,
+   19594-19599). Summing the two, as this did, refused a page that filled to exactly
+   `\textheight` over the descender of its own last line and cost it a line
+   (#622, #648).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
