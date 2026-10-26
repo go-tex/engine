@@ -287,6 +287,10 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 	topMax := e.floatCount("topnumber", 2)
 	botMax := e.floatCount("bottomnumber", 1)
 	totalMax := e.floatCount("totalnumber", 3)
+	flTrace("colht = %s, topfraction room = %s, bottomfraction room = %s, textmin = %s",
+		spToStr(vsize), spToStr(topCap), spToStr(botCap), spToStr(textMin))
+	flTrace("topnumber = %d, bottomnumber = %d, totalnumber = %d, floatsep = %s, textfloatsep = %s",
+		topMax, botMax, totalMax, spToStr(e.floatSep()), spToStr(e.textFloatSep()))
 
 	// Split the floats out of the text stream, remembering each float's anchor.
 	var text []node
@@ -298,6 +302,8 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			text = append(text, n)
 		}
 	}
+
+	flTrace("%d flottant(s) extraits du flux, %d nœud(s) de texte", len(floats), len(text))
 
 	var pages []*boxNode
 	var deferred []anchoredFloat // floats reached but not yet placed (FIFO)
@@ -320,9 +326,13 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 	for start < len(text) || len(deferred) > 0 || fi < len(floats) {
 		// Absorb every float whose anchor has been reached into the deferred queue.
 		for fi < len(floats) && floats[fi].at <= start {
+			flTrace("absorbé: flottant %d, ancre %d <= start %d, haut %s, place %q",
+				fi, floats[fi].at, start, spToStr(fh(floats[fi])), floats[fi].f.place)
 			deferred = append(deferred, floats[fi])
 			fi++
 		}
+		flTrace("tour: start=%d/%d, fi=%d/%d, en attente=%d, pages=%d",
+			start, len(text), fi, len(floats), len(deferred), len(pages))
 
 		// A float taller than any top/bottom area gets its own float page immediately —
 		// unless it was asked for with "!", which suppresses those fractions.
@@ -368,8 +378,36 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 
 		// Choose top floats: reached floats that allow top, within \topfraction and
 		// \topnumber (2), each taken from the FRONT of the queue so document order holds.
+		//
+		// ⛔⛔ THE GATE IS LaTeX'S \@toproom, AND THE SEPARATION IS CHARGED TO IT.
+		//
+		// ltoutput.dtx:6016-6018 refuses the float unless the room left STRICTLY exceeds
+		// its height:
+		//
+		//	\ifdim \@colroom>\@reqcolroom
+		//	  \ifdim #1>\ht\@currbox  \@tempswatrue
+		//
+		// with #1 = \@toproom, which starts at \topfraction\@colht and is decremented by
+		// the float's height PLUS \textfloatsep for the first one and \floatsep for each
+		// one after it (ltoutput.dtx:6009, \ifx#2\@empty \textfloatsep \else \floatsep).
+		//
+		// This charged \floatsep between floats and NOTHING for the first, so the top
+		// budget was 20pt more generous than LaTeX's — \textfloatsep's whole width. The
+		// reference's own fltrace output on a three-figure witness, which is what
+		// located it:
+		//
+		//	Space OK: \@toproom = 384.99832pt > 144.05998pt      ← figure 1 accepted
+		//	Fail---no room: \@toproom = 220.93834pt. Ht float: 224.05998pt   ← figure 2
+		//
+		// 384.998 − 220.938 = 164.06 = 144.06 + 20pt. We had 385 − 144.06 = 240.94,
+		// which admits a 224.06pt float; LaTeX, at 220.94, defers it to the next page.
+		//
+		// topUsed is kept apart from topH on purpose: topH is the float stack's own
+		// height, which assembleMixedPage and the \textfraction reserve below both need,
+		// and folding the separation into it would charge \textfloatsep twice.
 		var top, bottom []anchoredFloat
-		topH := 0
+		topH, topUsed := 0, 0
+		flTrace("***Start page %d: %d flottant(s) en attente", len(pages)+1, len(deferred))
 		i := 0
 		for i < len(deferred) && len(top) < topMax && len(top) < totalMax {
 			af := deferred[i]
@@ -377,18 +415,28 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 				i++
 				continue
 			}
-			need := fh(af)
+			sep := e.textFloatSep() // \textfloatsep for the first, \floatsep after it
 			if len(top) > 0 {
-				need += e.floatSep()
+				sep = e.floatSep()
 			}
 			cap := topCap
 			if af.c.urgent {
 				cap = vsize // "!" drops \topfraction; it must still fit the page
 			}
-			if topH+need > cap {
+			// \ifdim \@toproom > \ht\@currbox — strictly greater, so a float that
+			// exactly fills the remaining room is deferred, as LaTeX defers it.
+			if cap-topUsed <= fh(af) {
+				flTrace("Fail---no room: toproom = %s. Ht float: %s (top)",
+					spToStr(cap-topUsed), spToStr(fh(af)))
 				break
 			}
-			topH += need
+			flTrace("Space OK: toproom = %s > %s (top, sep %s)",
+				spToStr(cap-topUsed), spToStr(fh(af)), spToStr(sep))
+			topUsed += fh(af) + sep
+			if len(top) > 0 {
+				topH += e.floatSep()
+			}
+			topH += fh(af)
 			top = append(top, af)
 			deferred = append(deferred[:i], deferred[i+1:]...)
 		}
@@ -528,9 +576,46 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 				if botH > 0 {
 					wantReserve += e.textFloatSep()
 				}
-				if want <= topCap && wantReserve <= vsize-textMin {
+				// ⛔⛔ \@toproom, AND THE SEPARATION IS CHARGED TO IT.
+				//
+				// ltoutput.dtx:6016-6018 refuses the float unless the room LEFT strictly
+				// exceeds its height — \ifdim \@toproom>\ht\@currbox — and \@toproom is
+				// decremented by the height PLUS \textfloatsep for the first float of the
+				// column and \floatsep for each one after it (ltoutput.dtx:6009,
+				// \ifx#2\@empty \textfloatsep \else \floatsep).
+				//
+				// `want` charges \floatsep BETWEEN floats and nothing for the first, so
+				// the budget was 8pt more generous than LaTeX's, every time. The
+				// reference's own fltrace on a three-figure witness is what located it:
+				//
+				//	Space OK: \@toproom = 384.99832pt > 144.05998pt
+				//	Fail---no room: \@toproom = 220.93834pt. Ht float: 224.05998pt
+				//
+				// 384.998 − 220.938 = 164.06 = 144.06 + 20pt of \textfloatsep. Ours put
+				// the second figure at 144.06 + 12 + 224.06 = 380.12 against a 385pt cap
+				// and accepted it with 4.88pt to spare; LaTeX, charging 20pt instead of
+				// 12, reaches 388.12 and defers it to the next page.
+				used := topUsed + fh(af)
+				if len(top) > 0 {
+					used += e.floatSep()
+				} else {
+					used += e.textFloatSep()
+				}
+				room := topCap - topUsed
+				if af.c.urgent {
+					room = vsize - topUsed // "!" drops \topfraction
+				}
+				if room <= fh(af) {
+					flTrace("Fail---no room: toproom = %s. Ht float: %s (dans la page)",
+						spToStr(room), spToStr(fh(af)))
+					deferred = append(deferred, af)
+					continue
+				}
+				flTrace("Space OK: toproom = %s > %s (dans la page)",
+					spToStr(room), spToStr(fh(af)))
+				if wantReserve <= vsize-textMin {
 					top = append(top, af)
-					topH, reserve = want, wantReserve
+					topH, topUsed, reserve = want, used, wantReserve
 					pageVsize = vsize - reserve
 					if pageVsize < textMin {
 						pageVsize = textMin
