@@ -247,33 +247,57 @@ func TestMulticolsMissingEnd(t *testing.T) {
 
 // balanceVList slices a vertical list into n pieces whose heights are close, and the
 // pieces reassemble to the whole list in order.
+//
+// ⛔⛔ THE SLICES ARE NOT PRUNED, and that is asserted rather than left to a comment.
+// Pruning them shifted every column but the first down by \splittopskip, which the
+// oracle refuted on a two-column witness: it has ten shared baselines and the pruned
+// version had twenty offset ones. See balanceVList's own comment for the table.
 func TestBalanceVList(t *testing.T) {
+	e := New()
 	// Ten unit-height boxes (10pt each).
 	var list []node
 	for i := 0; i < 10; i++ {
 		list = append(list, &boxNode{kind: hbox, height: 10 * unity})
 	}
-	pieces := balanceVList(list, 2)
+	pieces := e.balanceVList(list, 2)
 	if len(pieces) != 2 {
 		t.Fatalf("got %d pieces, want 2", len(pieces))
 	}
-	total := len(pieces[0]) + len(pieces[1])
-	if total != 10 {
-		t.Errorf("pieces cover %d boxes, want 10", total)
+	if a, b := countBoxes(pieces[0]), countBoxes(pieces[1]); a != 5 || b != 5 {
+		t.Errorf("split = %d/%d boîtes, want 5/5", a, b)
+	}
+	// ⛔ No \splittopskip, and no glue of any kind, at the head of the second slice:
+	// the columns must start on a common baseline. A glue here is the misalignment the
+	// oracle refuted.
+	if _, isGlue := pieces[1][0].(glueNode); isGlue {
+		t.Errorf("la 2e tranche commence par une glue: les colonnes ne s'alignent plus — " +
+			"l'oracle a dix lignes de base PARTAGÉES, pas vingt décalées")
 	}
 	if len(pieces[0]) != 5 || len(pieces[1]) != 5 {
-		t.Errorf("split = %d/%d, want 5/5", len(pieces[0]), len(pieces[1]))
+		t.Errorf("tranches de %d et %d nœuds, want 5 et 5: rien ne doit être ajouté "+
+			"ni retiré", len(pieces[0]), len(pieces[1]))
 	}
+
 	// A single oversized item is placed alone rather than dropped.
 	tall := []node{
 		&boxNode{kind: hbox, height: 100 * unity},
 		&boxNode{kind: hbox, height: unity},
 		&boxNode{kind: hbox, height: unity},
 	}
-	tp := balanceVList(tall, 2)
-	if len(tp[0]) != 1 {
-		t.Errorf("oversized first item: piece 0 has %d items, want 1", len(tp[0]))
+	tp := e.balanceVList(tall, 2)
+	if got := countBoxes(tp[0]); got != 1 {
+		t.Errorf("oversized first item: piece 0 has %d boxes, want 1", got)
 	}
+}
+
+func countBoxes(list []node) int {
+	n := 0
+	for _, x := range list {
+		if _, ok := x.(*boxNode); ok {
+			n++
+		}
+	}
+	return n
 }
 
 // vlistHeight sums the vertical contributions of a list.
