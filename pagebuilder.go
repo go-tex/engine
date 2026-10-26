@@ -371,24 +371,57 @@ func trimTrailingGlue(page []node) []node {
 	return page
 }
 
-// splitVList splits a vertical list at the first legal break that keeps the
-// height within vsize, returning the taken part and the remainder (with a leading
-// glue/kern discarded, as at a page break).
-func splitVList(list []node, vsize int) ([]node, []node) {
-	h := 0
+// splitVList splits a vertical list at the first break that keeps the height within
+// vsize, returning the taken part and the remainder AS IT STANDS.
+//
+// It is TeX's vert_break, and the division of labour is TeX's too: vert_break chooses
+// the break and touches nothing, and it is vsplit that calls prune_page_top on the
+// remainder afterwards (tex.web:19059 then 19062). Keeping the pruning out of here is
+// not tidiness — multicols slices through this function as well, and its slices must
+// NOT be pruned. The oracle established that; balanceVList records it with the
+// numbers.
+//
+// The running height is page_total and page_depth kept apart, capped at
+// \splitmaxdepth: vert_break's cur_height and prev_dp with its d argument
+// (tex.web:18959-18968), and vsplit passes split_max_depth for that d
+// (tex.web:19059). Summing the two refuses a column that fills exactly, for the
+// reason written on pageSoFar.
+//
+// ⚠ The break is still FIRST-FIT and not vert_break's least-cost choice, so a
+// \penalty inside the list is not honoured. That is a second divergence with its own
+// witness (a \penalty that should move a break) and it is deliberately not addressed
+// here: two mechanisms in one change cannot be attributed, and this repository has
+// already paid for a fix in two halves whose halves were never mutated separately.
+func (e *Engine) splitVList(list []node, vsize int) ([]node, []node) {
+	maxDepth := e.splitMaxDepth()
+	var page pageSoFar
 	for i, n := range list {
-		c := vContribution(n)
-		_, isGlue := n.(glueNode)
-		_, isKern := n.(kernNode)
-		if h+c > vsize && h > 0 {
-			if isGlue || isKern {
+		probe := page
+		probe.add(n, maxDepth)
+		if probe.total > vsize && page.total > 0 {
+			// ⛔⛔ THE GLUE OR KERN AT THE BREAK IS DISCARDED, and removing this line
+			// is what misaligned multicols' columns. vert_break itself discards
+			// nothing — vsplit prunes afterwards — but multicols does not prune, so
+			// this is the only thing that keeps the leftover glue off the head of the
+			// next column. Taken out, the witness went from the oracle's ten SHARED
+			// baselines to twenty offset ones, median step 2.58pt instead of 11.96.
+			switch n.(type) {
+			case glueNode, kernNode:
 				return list[:i], list[i+1:]
 			}
 			return list[:i], list[i:]
 		}
-		h += c
+		page = probe
 	}
 	return list, nil
+}
+
+// splitMaxDepth is \splitmaxdepth, the cap vsplit passes to vert_break
+// (tex.web:19059). Zero is a value, not a missing reading, exactly as for \maxdepth:
+// see pageMaxDepth.
+func (e *Engine) splitMaxDepth() int {
+	d, _ := e.namedDimen("splitmaxdepth")
+	return d
 }
 
 // doVsplit handles \vsplit<n> to <dimen>: split box register n's vbox to the
@@ -405,7 +438,13 @@ func (e *Engine) doVsplit() *boxNode {
 	if src == nil {
 		return nil
 	}
-	top, rest := splitVList(src.list, h)
+	// vert_break chooses the break, and then vsplit prunes the remainder
+	// (tex.web:19059 then 19062) — in that order and here, not inside splitVList,
+	// because multicols shares the splitter and must not be pruned. The register then
+	// gets the list TeX would put there: no discarded glue, a \splittopskip above its
+	// first box, vpacked at its natural height (tex.web:19064).
+	top, rest := e.splitVList(src.list, h)
+	rest = e.prunePageTop(rest)
 	if len(rest) == 0 {
 		e.setBox(n, nil)
 	} else {

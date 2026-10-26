@@ -42,17 +42,37 @@ package engine
 // chose overflows once the glue arrives. Both call topskipGlueFor, and
 // TestTopskipHeightAndInsertionAgree asserts they cannot drift apart.
 func (e *Engine) topskipGlueFor(list []node) (glueNode, int, bool) {
+	// The register's own value, whatever it holds — including a deliberate 0pt. Its
+	// DEFAULT of 10pt is set where the register is allocated (loadTeXParams, beside
+	// \parfillskip's), not patched up here: a fallback in this function would be
+	// unreachable, since a register is always allocated, and it would have to read 0
+	// as "absent" to fire at all.
+	spec, _ := e.topskipSpec()
+	return glueAboveFirstBox(list, spec)
+}
+
+// splitTopskipGlueFor is \splittopskip's counterpart, for the top of a \vsplit
+// remainder (tex.web:18888-18893, "Insert glue for split_top_skip"). Same arithmetic,
+// a different register: ltplain.dtx:920-921 sets both to 10pt.
+func (e *Engine) splitTopskipGlueFor(list []node) (glueNode, int, bool) {
+	return glueAboveFirstBox(list, e.namedSkip("splittopskip"))
+}
+
+// glueAboveFirstBox is §1001's and prune_page_top's shared arithmetic: the glue that
+// goes above the first box or rule of a list, with its natural width reduced by that
+// box's HEIGHT and its stretch and shrink kept as stated.
+//
+// ⛔ ONE implementation, called by both. tex.web writes the same three lines twice
+// (19513-19514 for \topskip, 18891-18892 for \splittopskip) and two copies here would
+// be two places to get the "reduced by the height, floored at zero" wrong in — the
+// kind of divergence that only shows up in whichever of the two paths is measured
+// less.
+func glueAboveFirstBox(list []node, spec glueSpec) (glueNode, int, bool) {
 	for i, n := range list {
 		h, ok := topskipFirstHeight(n)
 		if !ok {
 			continue
 		}
-		// The register's own value, whatever it holds — including a deliberate 0pt.
-		// Its DEFAULT of 10pt is set where the register is allocated
-		// (loadTeXParams, beside \parfillskip's), not patched up here: a fallback
-		// in this function would be unreachable, since a register is always
-		// allocated, and it would have to read 0 as "absent" to fire at all.
-		spec, _ := e.topskipSpec()
 		if spec.width > h {
 			spec.width -= h
 		} else {

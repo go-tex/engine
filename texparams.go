@@ -148,6 +148,22 @@ func (e *Engine) loadTeXParams() {
 		if name == "topskip" {
 			e.skip[e.allocSkp] = glueSpec{width: 10 * unity}
 		}
+		// \splittopskip is the third, and it is 10pt for the same reason and in the
+		// same place: ltplain.dtx:920-921 sets \topskip=10pt and \splittopskip=10pt
+		// on the line after it, so every LaTeX document has both. It plays the part
+		// \topskip plays on a page, for the top of a \vsplit remainder
+		// (tex.web:18857-18893, prune_page_top): the glue above the first box, with
+		// its natural width reduced by that box's height.
+		//
+		// ⛔ Allocated at zero and never read is how it stood, and the symptom is the
+		// one \topskip had — every column after the first starts too high, by less
+		// than a line, so no page count moves and nothing says so. Here it compounds:
+		// a \vsplit remainder also kept the glue that prune_page_top deletes, which
+		// pushes the SAME column back DOWN by an unrelated amount. Two errors of
+		// opposite sign on one measurement.
+		if name == "splittopskip" {
+			e.skip[e.allocSkp] = glueSpec{width: 10 * unity}
+		}
 		e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true)
 		e.allocSkp++
 	}

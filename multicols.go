@@ -67,7 +67,7 @@ func (e *Engine) doMulticols() {
 
 	// Slice the single-column vertical list into N balanced pieces and pack each
 	// as a column vbox fixed to the column measure.
-	pieces := balanceVList(whole.list, n)
+	pieces := e.balanceVList(whole.list, n)
 	cols := make([]*boxNode, n)
 	maxTotal := 0
 	for i, p := range pieces {
@@ -101,7 +101,34 @@ func (e *Engine) doMulticols() {
 // each piece it targets (remaining height / columns still to fill) and takes the
 // largest prefix that fits at a legal break; the last column takes whatever is
 // left. See the file comment for the best-effort caveat.
-func balanceVList(list []node, n int) [][]node {
+//
+// ⛔⛔ THE SLICES ARE NOT PRUNED, AND THE ORACLE IS WHAT SAYS SO.
+//
+// \vsplit prunes its remainder (tex.web:19062), and applying that here — to the
+// slices after the first — is what a reading of vsplit suggests. It is wrong. It
+// shifts every column but the first down by \splittopskip, and multicol's columns
+// start on a COMMON baseline, because multicol \vsplits the collected box for every
+// column while this engine slices one already-typeset vbox. Measured on a
+// two-column witness of plain prose (one page, `disc/mc.tex`):
+//
+//	                        baselines   first → last    median step
+//	oracle (tectonic)          10      134.76 → 242.36     11.96
+//	this engine                10      131.81 → 239.41     11.96   ← aligned
+//	slices 2..n pruned         20      131.81 → 242.34      2.93   ← MISALIGNED
+//	every slice pruned         11      134.74 → 254.30     11.96   ← aligned, off by a line
+//
+// The 2.93pt median step of the third row is the whole diagnosis: twenty distinct
+// baselines where the oracle has ten shared ones, because the second column sat
+// 10pt − 7pt below the first. Pruning the first slice too restores the alignment AND
+// lands its first baseline on 134.74 against the oracle's 134.76 — but it moves the
+// balance by a line, 11 baselines against 10, because the inserted glue changes the
+// per-column target. Closer in position, further in structure.
+//
+// ⛔ So the one defect this witness does establish is left OPEN rather than half
+// fixed: the whole block sits 2.95pt too high, which is the \splittopskip no column
+// here receives. Correcting it needs multicol.sty's own column loop, which has not
+// been read, and this repository's rule is to cite only what was opened.
+func (e *Engine) balanceVList(list []node, n int) [][]node {
 	pieces := make([][]node, 0, n)
 	remaining := list
 	for c := 0; c < n; c++ {
@@ -112,7 +139,7 @@ func balanceVList(list []node, n int) [][]node {
 			continue
 		}
 		target := vlistHeight(remaining) / left
-		piece, rest := splitVList(remaining, target)
+		piece, rest := e.splitVList(remaining, target)
 		pieces = append(pieces, piece)
 		remaining = rest
 	}
