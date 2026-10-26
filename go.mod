@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/go-gfx/gfx v0.36.1
-	github.com/go-opentype/opentype v0.16.0
+	github.com/go-opentype/opentype v0.16.1
 	github.com/go-pdfkit/pdfkit v0.17.0
 	github.com/go-pdfkit/reader v0.9.0
 	github.com/go-tex/math v0.50.0
@@ -16,7 +16,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.2.6 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/go-crdt/collab v0.77.1 // indirect
 	github.com/go-crdt/crdt v0.57.0 // indirect
