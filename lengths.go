@@ -136,6 +136,8 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 		e.setEngineDimen(saveHsize, &e.hsize, addOrSet(add, e.hsize, g.width), global)
 	case m.kind == mPrim && m.name == "textwidth":
 		e.setTextWidth(addOrSet(add, e.fullWidth(), g.width), global)
+	case m.kind == mPrim && m.name == "linewidth":
+		e.setLineWidth(addOrSet(add, e.lineWidthValue(), g.width), global)
 	case m.kind == mPrim && m.name == "columnwidth":
 		e.setColumnWidth(addOrSet(add, e.columnWidthValue(), g.width), global)
 	case m.kind == mPrim && m.name == "vsize":
