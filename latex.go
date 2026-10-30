@@ -309,9 +309,26 @@ const MiniLaTeXKernel = `
 % entry, so its author/year content is recovered even for a .bbl whose entry BODY
 % (apsrev's \bibinfo{author}{…}) this kernel renders only in part. \bibitem{⟨key⟩}
 % (no bracket) is unchanged.
+% ⛔⛔ \@bibsep is the vertical space BETWEEN entries, and it was missing entirely.
+% This kernel's \thebibliography is an emulation that sets \leftskip rather than
+% going through \list, so nothing applied \itemsep — and LaTeX's own
+% thebibliography IS a list (latex.ltx: \list{\@biblabel{…}}{\itemsep…}), where
+% \item adds \itemsep and the new paragraph adds \parskip, which \list has set to
+% \parsep. Measured on three one-line entries, baseline to baseline:
+%
+%	ours       11.956pt   = \baselineskip alone
+%	reference  19.925pt   = \baselineskip + \itemsep(4) + \parsep(4)
+%
+% 7.97pt short on EVERY reference of EVERY paper: a 40-entry bibliography came out
+% 3 pages against the reference's 4. The registers were right all along — \itemsep,
+% \parsep and \topsep all read identically to the reference inside the environment
+% — and nobody emitted them. Storing a parameter is not typesetting it.
+%
+% ⚠ It is skipped before the FIRST entry, where \topsep already applies.
+\def\@bibsep{\ifnum\c@bibitem>0 \vskip\itemsep\vskip\parsep\fi}
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
-\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}}
-\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+\def\@bibitemopt[#1]#2{\par\@bibsep\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}}
+\def\@bibitemnoopt#1{\par\@bibsep\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
 % arguments after an optional occurrence number (xstring.tex:444,
 % \xs_newmacro*3\IfSubStr{1}{2}{0}). Undefined it consumed nothing, and acmart opens
