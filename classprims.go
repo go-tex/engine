@@ -401,8 +401,24 @@ const LaTeX2eClassLead = `
 // that follows attaches to a line instead of becoming a paragraph of its own.
 // latex.ltx opens both \@iiiminipage (11853) and \@iiiparbox with it, which is
 // what makes two side-by-side panels share a line.
+//
+// ⛔⛔ THE PARAGRAPH IS INDENTED. tex.web:21104-21109 lists the commands that, met in
+// vertical mode, back the input up and start one:
+//
+//	vmode+letter, vmode+other_char, vmode+char_num, vmode+char_given,
+//	vmode+math_shift, vmode+un_hbox, vmode+vrule,
+//	vmode+accent, vmode+discretionary, vmode+hskip, vmode+valign,
+//	vmode+ex_space, vmode+no_boundary:
+//	  begin back_input; new_graf(true); end;
+//
+// and the argument is TRUE — indented. \leavevmode is \unhbox\voidb@x, which is the
+// vmode+un_hbox case, so it indents like the rest. Passing false here made every
+// \parbox and minipage at the start of a paragraph sit \parindent too far left:
+// measured against tectonic on disc/indent.tex, the reference puts the box at
+// x=148.71 and we put it at 133.77, the 15pt of \parindent exactly. A document that
+// wants the box flush says \noindent, and that path was never the broken one.
 func (e *Engine) leaveVMode() {
 	if !e.inPar {
-		e.beginParagraph(false)
+		e.beginParagraph(true)
 	}
 }
