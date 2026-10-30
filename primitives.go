@@ -1932,7 +1932,21 @@ func (e *Engine) loadMore() {
 	e.prim("providecommand", func(e *Engine) { e.doProvidecommand() })
 	e.prim("newenvironment", func(e *Engine) { e.doNewenvironment() })
 	e.prim("renewenvironment", func(e *Engine) { e.doNewenvironment() })
-	e.prim("rule", func(e *Engine) { e.place(e.doRuleNode()) })
+	// ⛔ \rule LEAVES VERTICAL MODE FIRST. ltboxes.dtx:1498-1505 is
+	//
+	//	\def\@rule[#1]#2#3{\leavevmode \hbox{… \vrule\@width…\@height…\@depth…}}
+	//
+	// and \leavevmode is \unhbox\voidb@x, which tex.web:21105 and 21108 turn into
+	// `back_input; new_graf(true)`. The \vrule it wraps is in that same list anyway.
+	//
+	// Without it, place() contributed the rule straight to the VERTICAL list, so the
+	// rule became an item of its own instead of a line's content — and, because
+	// nothing was appended through append_to_vlist, \prevdepth was never armed, so
+	// whatever box came next lost its interline glue (tex.web:13318-13326). That is
+	// go-tex/engine#651: a float whose body is a \rule measured 219.52pt against the
+	// reference's 224.05998, short by exactly the 12 − 0 − 6.94 = 5.06pt of
+	// \baselineskip the caption should have received.
+	e.prim("rule", func(e *Engine) { e.leaveVMode(); e.place(e.doRuleNode()) })
 	e.prim("parbox", func(e *Engine) { e.place(e.doParbox()) })
 	e.prim("fbox", func(e *Engine) { e.place(e.doFbox()) })
 	e.prim("gotex@tightframe", func(e *Engine) { e.place(e.doTightFrame()) })
@@ -2708,9 +2722,12 @@ func (e *Engine) placeHGlue(g glueSpec) { e.placeHGlueNode(glueNode{spec: g}) }
 
 // placeHGlueNode is placeHGlue for a fully-formed glue node (so a leader flag
 // survives), sharing the "an \hskip in vertical mode begins a paragraph" rule.
+//
+// ⛔ And that paragraph is INDENTED: vmode+hskip is in tex.web:21106's list and the
+// list calls new_graf(TRUE). See leaveVMode for the passage.
 func (e *Engine) placeHGlueNode(n glueNode) {
 	if !e.inPar {
-		e.beginParagraph(false)
+		e.beginParagraph(true)
 	}
 	e.parList = append(e.parList, n)
 }
