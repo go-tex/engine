@@ -310,7 +310,16 @@ Each stage is gated by an objective oracle:
    the first, which decides who wins the leftover space on a list that also holds a
    `\hfil`. **Vertical** infinite glue does not stretch yet: `\vfil`/`\vfill`/`\vss`
    are no-ops and a page is packed at its natural height, so `\vspace{\fill}` puts
-   nothing between its neighbours (#663).
+   nothing between its neighbours (#663). `\pagebreak`, `\nopagebreak`, `\linebreak`
+   and `\nolinebreak` are **penalties** rather than no-ops (`ltspace.dtx` 294-306,
+   344-375, 527-531): the optional degree goes through `\@getpen` (0, 51, 151, 301,
+   10000) and the sign is what separates forcing from forbidding. All four did nothing
+   at all before, on 18 of the 154 measured corpus papers; `\pagebreak` between two
+   paragraphs made one page where `tectonic` makes two. Two gaps are left and named:
+   in **horizontal** mode `\pagebreak` needs `\vadjust`, which is not implemented
+   (#665), and a line ended by a forced break is **not justified** here — `\parfillskip`
+   is appended to every forced-break fragment instead of once per paragraph, so the
+   slack it should give the interword glue is absorbed (#666).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
