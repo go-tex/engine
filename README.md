@@ -300,7 +300,17 @@ Each stage is gated by an objective oracle:
    not charged against the goal and is capped at `\maxdepth` (`tex.web` 19519-19529,
    19594-19599). Summing the two, as this did, refused a page that filled to exactly
    `\textheight` over the descender of its own last line and cost it a line
-   (#622, #648).
+   (#622, #648). `\hspace` and `\vspace` read a **glue**, as the reference does by
+   putting their argument through a skip register (`ltspace.dtx` 1412-1413, 450):
+   reading a rigid dimen kept the natural width and dropped the stretch, so
+   `\hspace{\fill}` became a 0pt space and the words on either side were set
+   adjoining — 188.50 where `tectonic` puts the second one at the right margin,
+   477.48. `\fill`, `\enskip` and `\samepage` are defined, and `\stretch` is the
+   reference's **second** order of infinity (`0pt plus n fill`, l.1454) rather than
+   the first, which decides who wins the leftover space on a list that also holds a
+   `\hfil`. **Vertical** infinite glue does not stretch yet: `\vfil`/`\vfill`/`\vss`
+   are no-ops and a page is packed at its natural height, so `\vspace{\fill}` puts
+   nothing between its neighbours (#663).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
