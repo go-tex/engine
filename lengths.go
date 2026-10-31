@@ -294,8 +294,37 @@ func (e *Engine) readBraceGlue() glueSpec {
 		g = e.scanGlue()
 	}
 	g.width = e.calcTailDimen(g.width)
-	if c, ok := e.getXToken(); ok && !(c.cat == catEnd && !c.cs_) {
-		e.back(c)
+	// ⛔ \relax and spaces between the glue and the closing brace are absorbed.
+	//
+	// In the reference there is no closing brace to meet: \setlength\sp@ce@skip{#1}
+	// is a MACRO, so #1's braces are stripped before the assignment ever scans, and
+	// whatever the glue scan leaves behind — a \relax, a space — is simply executed
+	// as a no-op afterwards. A reader that keeps the braces as real tokens has to do
+	// that absorbing itself.
+	//
+	// \stretch puts one there by construction (ltspace.dtx:1454):
+	//
+	//	\def\stretch#1{\z@ \@plus #1fill\relax}
+	//
+	// so \vspace{\stretch{1}} — the ordinary way to push the rest of a page down —
+	// left the \relax in front of the brace, and the brace surfaced LATER as
+	// "Extra }, or forgotten \endgroup" with no mention of glue or of \stretch.
+	// That is why this was probed with \ifx rather than read off the message.
+	for {
+		c, ok := e.getXToken()
+		if !ok {
+			break
+		}
+		if c.cs_ && c.cs == "relax" {
+			continue
+		}
+		if !c.cs_ && c.cat == catSpace {
+			continue
+		}
+		if !(c.cat == catEnd && !c.cs_) {
+			e.back(c)
+		}
+		break
 	}
 	return g
 }

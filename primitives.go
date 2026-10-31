@@ -2482,14 +2482,31 @@ func (e *Engine) loadStomach() {
 	// the star and dropping it made \hspace* identical to \hspace: measured against
 	// tectonic, a line opening with \hspace*{50pt} was indented 50pt there and not
 	// at all here, while the unstarred form is discarded in both.
+	// ⛔ The argument is a GLUE, not a dimen. The reference puts it through a SKIP
+	// register (ltspace.dtx:1412-1413, and l.1423 for the pre-calc form):
+	//
+	//	\newskip\sp@ce@skip
+	//	\def\@hspace#1{\setlength\sp@ce@skip{#1}\hskip\sp@ce@skip}
+	//	\def\@hspace#1{\hskip #1\relax}			% older release
+	//
+	// readBraceDimen kept the natural width and threw the stretch and the shrink
+	// away, which is silent: \hspace{\fill} became a 0pt space instead of an
+	// infinite one. Measured on three anchored lines against tectonic, before:
+	// \hspace{\fill} left "gauche" and "droite" ADJOINING at x=188.50 where the
+	// reference pushes "droite" to the right margin at 477.48 — \hfill on the very
+	// next line was right, so the loss was in \hspace's scan and not in the glue.
+	// \hspace{1cm plus 2mm} and \hspace{\stretch{2}} lost their rubber the same way.
+	//
+	// readBraceGlue is what \setlength itself reads with, so this IS the reference's
+	// route rather than a parallel one.
 	e.prim("hspace", func(e *Engine) {
 		star := e.scanOptStar()
-		d := e.readBraceDimen()
+		g := e.readBraceGlue()
 		if star {
 			e.place(ruleNode{heightRun: true, depthRun: true})
 			e.place(penaltyNode{penalty: 10000}) // \nobreak
 		}
-		e.placeHGlue(glueSpec{width: d})
+		e.placeHGlue(g)
 	})
 	// \vspace and \vspace*. The star is the whole difference: the space it asks
 	// for must survive a page break, and LaTeX gets that by putting a ZERO-HEIGHT
@@ -2503,14 +2520,24 @@ func (e *Engine) loadStomach() {
 	// a page top — which is exactly where it is asked for. book.cls opens every
 	// chapter with \vspace*{50\p@} (\@makechapterhead), so a chapter head sat
 	// 50pt too high and the corpus's 333-page book came out 13 pages short.
+	// ⛔ A glue here too, by the same route: both \@vspace and \@vspacer go through
+	// \@vspace@calcify (ltspace.dtx:450, 1152-1183), which is the SKIP register again
+	//
+	//	\def\@vspace@calcify#1{\setlength\sp@ce@skip{#1}\vskip\sp@ce@skip}
+	//
+	// and \vspace{\fill} / \vspace{\stretch{1}} are how a document pushes the rest
+	// of a page down. \vspace{\stretch{1}} did not merely lose its stretch here, it
+	// ABORTED: "Extra }, or forgotten \endgroup", because the dimen scan stopped at
+	// "0pt" and met "plus" where it wanted the closing brace. An error message that
+	// names braces for a defect in a glue scan is why this was probed and not read.
 	e.prim("vspace", func(e *Engine) {
 		star := e.scanOptStar()
-		d := e.readBraceDimen()
+		g := e.readBraceGlue()
 		if star {
 			e.contribute(ruleNode{widthRun: true})
 			e.contribute(penaltyNode{penalty: 10000}) // \nobreak
 		}
-		e.contribute(glueNode{spec: glueSpec{width: d}})
+		e.contribute(glueNode{spec: g})
 	})
 	e.prim("hrulefill", func(e *Engine) {
 		e.placeHGlueNode(glueNode{spec: fillGlue(), leader: leaderRule})
