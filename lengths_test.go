@@ -45,13 +45,38 @@ func TestRubberLengthPreserved(t *testing.T) {
 	}
 }
 
-// \stretch{n} is the rubber length 0pt plus n fil (order-1 infinite stretch).
+// \stretch{n} is the rubber length 0pt plus n FILL — the SECOND order of infinity,
+// not the first (ltspace.dtx:1454):
+//
+//	\def\stretch#1{\z@ \@plus #1fill\relax}
+//
+// ⛔ This test asserted "fil" and so pinned the defect in place. The order is not a
+// detail: on a list that also holds a \vfil or an \hfil, order 2 takes ALL the
+// leftover space and order 1 only shares it, so the box lands somewhere else with
+// nothing failing. Measured against tectonic on a page holding \stretch{1},
+// \stretch{2}, \stretch{1} between three words, the reference puts them at
+// y=126.73 / 267.21 / 536.20 — the 1:2:1 the orders are there to express.
+//
+// The trailing \relax is part of the definition too, and the \setlength here is
+// what exercises its absorption: without it the brace after \stretch{1} surfaced
+// as "Extra }, or forgotten \endgroup" much later.
 func TestStretch(t *testing.T) {
-	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{\stretch{2}}`, `\gap`); got != "0.0pt plus 2.0fil" {
-		t.Errorf("stretch{2}: got %q want %q", got, "0.0pt plus 2.0fil")
+	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{\stretch{2}}`, `\gap`); got != "0.0pt plus 2.0fill" {
+		t.Errorf("stretch{2}: got %q want %q", got, "0.0pt plus 2.0fill")
 	}
-	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{\stretch{1}}`, `\gap`); got != "0.0pt plus 1.0fil" {
-		t.Errorf("stretch{1}: got %q want %q", got, "0.0pt plus 1.0fil")
+	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{\stretch{1}}`, `\gap`); got != "0.0pt plus 1.0fill" {
+		t.Errorf("stretch{1}: got %q want %q", got, "0.0pt plus 1.0fill")
+	}
+	// ⛔ THE CONTROL on the order: \stretch must differ from a first-order glue, or
+	// an implementation that emitted "fil" for both would pass the two cases above
+	// once their expected strings were updated. \fill is the reference's own
+	// order-2 length (ltspace.dtx:1445-1446) and must agree with \stretch{1}.
+	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{\fill}`, `\gap`); got != "0.0pt plus 1.0fill" {
+		t.Errorf("\\fill: got %q want %q", got, "0.0pt plus 1.0fill")
+	}
+	if got := theLen(t, `\newlength{\gap}\setlength{\gap}{0pt plus 1fil}`, `\gap`); got == "0.0pt plus 1.0fill" {
+		t.Error("une glue d'ordre 1 ne doit pas se lire comme fill: le scan ne " +
+			"distingue plus les deux ordres, et le témoin de \\stretch ne vaut rien")
 	}
 }
 
@@ -358,8 +383,11 @@ func TestLengthDrivesParboxWidth(t *testing.T) {
 	}
 }
 
-// \hskip\stretch{1} contributes order-1 infinite glue (like \hfil), usable
-// wherever a glue is scanned.
+// \hskip\stretch{1} contributes order-2 infinite glue (like \hfill), usable
+// wherever a glue is scanned. Here the register assignment reads \stretch directly
+// rather than through \setlength's braces, which is the OTHER route into the same
+// definition — it has no closing brace, so the trailing \relax must be harmless on
+// this path as well (ltspace.dtx:1454).
 func TestStretchAsGlue(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
@@ -367,8 +395,8 @@ func TestStretchAsGlue(t *testing.T) {
 	if _, err := e.Run(`\newskip\s\s=\stretch{3}\message{\the\s}`); err != nil {
 		t.Fatal(err)
 	}
-	if got := trimNL(e.out.String()); got != "0.0pt plus 3.0fil" {
-		t.Errorf("stretch as glue: got %q want %q", got, "0.0pt plus 3.0fil")
+	if got := trimNL(e.out.String()); got != "0.0pt plus 3.0fill" {
+		t.Errorf("stretch as glue: got %q want %q", got, "0.0pt plus 3.0fill")
 	}
 }
 

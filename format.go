@@ -39,8 +39,29 @@ const Plain = `
 \def\bigskip{\vskip12pt}
 \def\medskip{\vskip6pt}
 \def\smallskip{\vskip3pt}
-\def\quad{\hskip1em}
-\def\qquad{\hskip2em}
+% ltspace.dtx:1501-1503 defines the three together, and \relax is part of each:
+%
+%	\def\enskip{\hskip.5em\relax}
+%	\def\quad{\hskip1em\relax}
+%	\def\qquad{\hskip2em\relax}
+%
+% \enskip was the one missing. Its absence is not a silent width error: \enskip is
+% a document command, so strict mode ABORTS the compilation and -lenient drops it,
+% which glues the words on either side together ("gauchedroite" in the witness).
+%
+% The \relax is what stops the glue scan. \hskip.5em with nothing after it leaves
+% TeX looking for "plus"/"minus" in the document's own text, so "\quad plus" reads
+% the following word as a stretch component and eats it. The three had no \relax
+% here; the reference puts one on every one of them.
+\def\enskip{\hskip.5em\relax}
+\def\quad{\hskip1em\relax}
+\def\qquad{\hskip2em\relax}
+% \enspace is a KERN in the reference (ltspace.dtx:1469, and l.1489 for the
+% pre-2018 form): \DeclareRobustCommand\enspace{\leavevmode@ifvmode\kern.5em}.
+% A kern cannot be broken at and cannot stretch; the \hskip here could do both.
+% Left as glue for now with the divergence named, because every list item in this
+% format goes through \llap{#2\enspace} and changing its breakability is a corpus
+% question, not a one-line one.
 \def\enspace{\hskip.5em}
 \def\thinspace{\hskip.16667em}
 \def\negthinspace{\hskip-.16667em}

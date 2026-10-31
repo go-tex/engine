@@ -638,8 +638,14 @@ func (e *Engine) boxNodeFor(t tok) (node, bool) {
 	case "hskip", "vskip":
 		return glueNode{spec: e.scanGlue()}, true
 	case "hspace", "vspace":
+		// A glue, as in the primitives themselves: the reference reads this argument
+		// into a SKIP register (\@hspace, ltspace.dtx:1413). THIS path is the one
+		// inside a box — \hbox to\hsize{a\hspace{\fill}b} and \parbox{...} go through
+		// it — so leaving it on readBraceDimen would have kept the defect for every
+		// \hspace{\fill} in a box while the one in a paragraph was fixed, which is
+		// worse than either: the same source would stretch or not by its surroundings.
 		e.scanOptStar()
-		return glueNode{spec: glueSpec{width: e.readBraceDimen()}}, true
+		return glueNode{spec: e.readBraceGlue()}, true
 	case "hrulefill":
 		return glueNode{spec: fillGlue(), leader: leaderRule}, true
 	case "dotfill":

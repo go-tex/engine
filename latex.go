@@ -822,10 +822,29 @@ const MiniLaTeXKernel = `
 \def\@fnsymbol#1{\ifcase#1\or *\or †\or ‡\or §\or ¶\or ‖\or **\or ††\or ‡‡\fi}
 \def\fnsymbol#1{\expandafter\@fnsymbol\csname c@#1\endcsname}
 % ─── length interface (feat/lengths) ─────────────────────────────────────────
-% \stretch{n} is a rubber length "0pt plus n fil" (order-1 infinite stretch), so
-% \setlength{\x}{\stretch{2}} keeps the stretch and \hskip\stretch{1} behaves
-% like \hfil. \newlength/\setlength/\addtolength/\settoX are Go primitives.
-\def\stretch#1{0pt plus #1fil}
+% \fill and \stretch, from the same block of the reference:
+%
+%	\newskip\fill
+%	\fill = 0pt plus 1fill			ltspace.dtx:1445-1446
+%	\def\stretch#1{\z@ \@plus #1fill\relax}	ltspace.dtx:1454
+%
+% ⛔ BOTH are "fill", the SECOND order of infinity, not "fil". \stretch was spelt
+% \def\stretch#1{0pt plus #1fil} here, which is a different glue: against any
+% \vfil or \hfil on the same list, the reference's \stretch WINS the whole
+% leftover space and ours only SHARES it. Nothing fails; the box is laid out at
+% the wrong place. The order is the one thing a comment cannot be trusted on — the
+% comment here said "order-1 infinite stretch", and it was describing the defect.
+%
+% \fill was absent entirely, and it is a document command: \hspace{\fill} and
+% \vspace{\fill} are how a source pushes text to a margin or to the bottom of a
+% page. In strict mode its absence ABORTED the compilation; with -lenient the
+% \hspace got no length at all and the words on either side were set adjoining
+% ("gauchedroite" in the witness, 188.50 where the reference puts 477.48).
+%
+% \newskip, not \def: \fill is a LENGTH, so \setlength\x\fill, \advance\fill and
+% \the\fill all have to work on it.
+\newskip\fill \fill=0pt plus 1fill
+\def\stretch#1{0pt plus #1fill\relax}
 % ─── amsmath subequations ────────────────────────────────────────────────────
 % \begin{subequations} numbers the equations inside as Na, Nb, … : it steps the
 % parent equation number, freezes it in \@parentequation, then temporarily reuses
@@ -1476,6 +1495,32 @@ const MiniLaTeXKernel = `
 \def\nopagebreak{\@ifnextbracket\@gobbleoptonly\relax}
 \def\linebreak{\@ifnextbracket\@gobbleoptonly\relax}
 \def\nolinebreak{\@ifnextbracket\@gobbleoptonly\relax}
+% \samepage, ltspace.dtx:314-322 verbatim, nine penalties set to \@M:
+%
+%	\DeclareRobustCommand\samepage{\interlinepenalty\@M
+%	   \predisplaypenalty\@M \postdisplaypenalty\@M \interdisplaylinepenalty\@M
+%	   \@beginparpenalty\@M \@endparpenalty\@M \@itempenalty\@M
+%	   \@secpenalty\@M \interfootnotelinepenalty\@M}
+%
+% The reference documents it as a DECLARATION, so a bare \samepage inside a group
+% is its usage. It was undefined here, and strict mode aborted on it (probed:
+% "Undefined control sequence \samepage"). Whether \begin{samepage} also has to
+% work is a separate question about \end's handling of a declaration with no
+% \endsamepage, and ltspace.dtx does not answer it — so nothing is claimed here.
+%
+% ⛔ \@M and all four \@…penalty registers were already here. grep found them only
+% inside COMMENTS, which read as "not implemented"; a probe that SET each one
+% compiled clean. The code shape and the behaviour disagreed, and the behaviour is
+% the one that answers.
+\def\samepage{\interlinepenalty\@M
+  \predisplaypenalty\@M
+  \postdisplaypenalty\@M
+  \interdisplaylinepenalty\@M
+  \@beginparpenalty\@M
+  \@endparpenalty\@M
+  \@itempenalty\@M
+  \@secpenalty\@M
+  \interfootnotelinepenalty\@M}
 \def\boldmath{}
 \def\unboldmath{}
 % \frenchspacing / \nonfrenchspacing, latex.ltx:554-557 verbatim. They were empty
