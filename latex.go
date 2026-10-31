@@ -1509,10 +1509,108 @@ const MiniLaTeXKernel = `
 % wraps the same way, were already macros here and never had the problem.
 \expandafter\let\csname gotex@vspace\endcsname\vspace
 \def\vspace{\gotex@vspace}
-\def\pagebreak{\@ifnextbracket\@gobbleoptonly\relax}
-\def\nopagebreak{\@ifnextbracket\@gobbleoptonly\relax}
-\def\linebreak{\@ifnextbracket\@gobbleoptonly\relax}
-\def\nolinebreak{\@ifnextbracket\@gobbleoptonly\relax}
+% ⛔⛔ THE FOUR BREAK COMMANDS WERE COMPLETE NO-OPS.
+%
+% They were \@ifnextbracket\@gobbleoptonly\relax, so
+%
+%	un deux\linebreak trois quatre
+%
+% came out as the single word "deuxtrois": with no break, and no glue either — a
+% control word absorbs the spaces after it, in the REFERENCE too — the two words landed
+% adjacent. Measured against tectonic: the reference puts "deux" at x=456.72 with
+% "trois quatre" on the next line; we had one line and one word. On a short first
+% paragraph followed by \pagebreak the reference makes TWO pages and we made ONE.
+% 18 of the 154 measured corpus papers use one of these four.
+%
+% ⛔ The eaten space was MY misreading while diagnosing, and it is retracted: asked
+% directly, tectonic joins "sixsept" in six\nolinebreak sept exactly as we do, and
+% separates them only when a {} stops the absorption. A test that had demanded a space
+% there would have been demanding a divergence.
+%
+% ⛔⛔ AND NO BACKQUOTES IN THIS COMMENT. It lives inside a Go RAW STRING, so a
+% backquote ENDS the preamble here and the file stops compiling with errors that point
+% at TeX words ("unexpected name six after top level declaration"). Third time in this
+% repository.
+%
+% The reference reduces all four to a PENALTY (ltspace.dtx:294-306, 344-375, 527-531):
+%
+%	\DeclareRobustCommand\pagebreak{\@testopt{\@no@pgbk-}4}
+%	\DeclareRobustCommand\nopagebreak{\@testopt\@no@pgbk4}
+%	\DeclareRobustCommand\linebreak{\@testopt{\@no@lnbk-}4}
+%	\DeclareRobustCommand\nolinebreak{\@testopt\@no@lnbk4}
+%
+% The default argument is 4, and the sign is the whole difference between forcing and
+% forbidding: \pagebreak passes "-" so \penalty -\@getpen{4} = -10000 forces the break,
+% \nopagebreak passes nothing so +10000 forbids it.
+% ⛔ \def, not \DeclareRobustCommand: that macro is not yet defined at this point in
+% this format's preamble — the build fails with "Undefined control sequence
+% \DeclareRobustCommand" on this very line — and every neighbour here uses \def. The
+% difference is robustness inside a moving argument (\protected), which is a real but
+% separate divergence, shared with \pagebreak's and \vspace's existing definitions.
+\def\pagebreak{\@testopt{\@no@pgbk-}4}
+\def\nopagebreak{\@testopt\@no@pgbk4}
+\def\linebreak{\@testopt{\@no@lnbk-}4}
+\def\nolinebreak{\@testopt\@no@lnbk4}
+% \@getpen, ltspace.dtx:529-531 verbatim. The optional argument is a DEGREE, not a
+% penalty: 0 means "no opinion" and 4 means "absolutely".
+\def\@getpen#1{\ifcase #1 \z@ \or \@lowpenalty\or
+         \@medpenalty \or \@highpenalty
+         \else \@M \fi}
+% \@no@lnbk, ltspace.dtx:364-375 verbatim.
+%
+% ⛔ \lastskip is saved, \unskip removes it, the penalty goes in, and the glue is put
+% back — in that order. A \penalty placed AFTER the interword glue is not a legal
+% breakpoint for it (tex.web's precedes_break), so \linebreak would do nothing at all
+% without the \unskip. And the \ignorespaces is what stops the space that follows the
+% command from becoming a second one.
+\def\@no@lnbk #1[#2]{%
+  \ifvmode
+    \@nolnerr
+  \else
+    \@tempskipa\lastskip
+    \unskip
+    \penalty #1\@getpen{#2}%
+    \ifdim\@tempskipa>\z@
+      \hskip\@tempskipa
+      \ignorespaces
+    \fi
+  \fi}
+% \@nolnerr, lterror.dtx:641-642, and \@eha, lterror.dtx:602-606 — the help text, which
+% was absent here while \@ehc was present:
+%
+%	\gdef\@nolnerr{\@latex@error{There's no line here to end}\@eha}
+%
+% ⛔ The reference ERRORS on \linebreak in vertical mode rather than ignoring it. Note
+% that \\ in vertical mode goes through \@gnewline, which calls the same \@nolnerr
+% (ltspace.dtx:517-522) — go-tex/engine#661 made that case silent instead, on a witness
+% of its own. The two are not reconciled here and #661 says so.
+\gdef\@eha{Your command was ignored.\MessageBreak
+  Type \space I <command> <return> \space to replace it with another command,\MessageBreak
+  or \space <return> \space to continue without it.}
+\gdef\@nolnerr{\@latex@error{There's no line here to end}\@eha}
+% \@no@pgbk, ltspace.dtx:348-355. The VERTICAL-mode branch is the reference verbatim.
+%
+% ⛔ THE HORIZONTAL BRANCH IS NOT THE REFERENCE, and this is the one divergence this
+% change knowingly leaves. The reference writes
+%
+%	\@bsphack \vadjust{\penalty #1\@getpen{#2}}\@esphack
+%
+% and \vadjust is not implemented here (go-tex/engine#665, with the tex.web
+% bibliography: §2994-3001, §12900-13015, §21191-21231). Emitting the penalty into the
+% horizontal list instead would put it INSIDE the line, where it is a line-break
+% penalty and not a page-break one — a different command with the same spelling, which
+% is worse than doing nothing.
+%
+% ⭐ But \@bsphack…\@esphack with nothing between them is NOT nothing: it is what keeps
+% the surrounding spacing intact, so the "deuxtrois" corruption is gone on this branch
+% too even though the break still does not happen.
+\def\@no@pgbk #1[#2]{%
+  \ifvmode
+    \penalty #1\@getpen{#2}%
+  \else
+    \@bsphack
+    \@esphack
+  \fi}
 % \samepage, ltspace.dtx:314-322 verbatim, nine penalties set to \@M:
 %
 %	\DeclareRobustCommand\samepage{\interlinepenalty\@M
