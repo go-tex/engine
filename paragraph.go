@@ -25,9 +25,14 @@ func (e *Engine) endParagraph() {
 	e.inPar = false
 	segments := splitAtForcedBreaks(e.parList) // \\ (a forced -10000 penalty) ends a line
 	e.parList = nil
+	// ⛔ first says whether this fragment opens the PARAGRAPH, which decides whether
+	// its leading glue may be pruned: see layoutSegment. A fragment after a \\ opens a
+	// line that follows a forced break, not a paragraph.
+	first := true
 	for _, seg := range segments {
 		if len(seg) > 0 {
-			e.layoutSegment(seg)
+			e.layoutSegment(seg, first)
+			first = false
 		}
 	}
 	// Attach any footnotes referenced in this paragraph to the vertical list,
@@ -54,7 +59,13 @@ func splitAtForcedBreaks(list []node) [][]node {
 
 // layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
 // contributes the lines of one paragraph fragment to the main vertical list.
-func (e *Engine) layoutSegment(hlist []node) {
+// firstSegment says this fragment opens the paragraph. It decides one thing: whether
+// the leading glue of its first line survives. tex.web's post_line_break
+// (17273-17279) justifies a line and appends it, and only THEN prunes the next one's
+// head — 17297 explains why, the pruning drops the glue the break consumed. A
+// paragraph's first line follows no break and keeps whatever the paragraph began
+// with; a fragment after a \\ follows a FORCED break and does not.
+func (e *Engine) layoutSegment(hlist []node, firstSegment bool) {
 	e.applyTwoColumnMeasure() // halve e.hsize to the column width on the first paragraph (two-column mode)
 	// The measure the TEXT is broken against is \hsize less the two skips that
 	// will be glued to every line (applyLineSkips). TeX reaches the same place
@@ -79,8 +90,25 @@ func (e *Engine) layoutSegment(hlist []node) {
 	if !ok || len(lines) == 0 {
 		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
 	}
-	for _, ln := range lines {
-		seg := trimLeadingGlue(list[ln.Start:ln.End])
+	for i, ln := range lines {
+		// ⛔⛔ THE PARAGRAPH'S FIRST LINE IS NEVER PRUNED — and "the paragraph's", not
+		// "this fragment's". go-typeset/linebreak v1.2.1 stopped discarding a
+		// paragraph's opening glue; this is the other half, and together they close
+		// go-tex/engine#657: \noindent\hskip 20pt went from x=133.77 to 153.70 against
+		// the reference's 153.69.
+		//
+		// ⛔ firstSegment is what makes it right rather than merely passing. A \\ is a
+		// forced penalty INSIDE the paragraph (latex.go, \def\\{\penalty-10000 }), and
+		// endParagraph splits the list at those penalties into fragments laid out one
+		// by one — so without the flag every fragment's head would be exempt, and
+		// `\hspace{50pt}` after a \\ would keep glue that follows a break. The existing
+		// TestHspaceStarSurvivesALineBreak fails exactly that way, which is how this
+		// condition got narrowed; a probe showed the three fragments arriving as three
+		// calls with i=0 each.
+		seg := list[ln.Start:ln.End]
+		if i > 0 || !firstSegment {
+			seg = trimLeadingGlue(seg)
+		}
 		// If the line was broken at a discretionary, append a hyphen. Copy the
 		// segment first: it aliases list's backing array, so appending in place
 		// would overwrite the next line's first node.
