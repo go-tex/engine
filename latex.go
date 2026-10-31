@@ -624,8 +624,26 @@ const MiniLaTeXKernel = `
 \def\flushright{\trivlist \raggedleft\item\relax}
 \def\endflushright{\par\endtrivlist}
 \def\item{\par\noindent\quad-- }
-\def\\{\penalty-10000 }
-\def\newline{\penalty-10000 }
+% ⛔⛔ \\ IN VERTICAL MODE CONTRIBUTES NOTHING. ltspace.dtx:517-522, \@gnewline:
+%
+%	\def\@gnewline #1{%
+%	  \ifvmode \@nolnerr
+%	  \else \unskip \reserved@e {\reserved@f#1}\nobreak \hfil \break \fi}
+%
+% \@nolnerr is "There's no line here to end" — an error, after which LaTeX has
+% contributed nothing and carries on. There is no line to end, so there is nothing
+% to do.
+%
+% As a bare \penalty-10000 this reached the MAIN VERTICAL list outside a paragraph,
+% where −10000 is a FORCED PAGE BREAK. Measured against tectonic on three paragraphs
+% separated by a bare \\ in vertical mode: the reference reports the error twice and
+% sets the three on ONE page; we emitted THREE pages, one per paragraph. A stray \\
+% between paragraphs ejected a page.
+%
+% We do not raise the error: -lenient is how the corpus is swept, and the document
+% LaTeX produces after the error is dismissed is the one with nothing contributed.
+\def\\{\ifvmode\else\penalty-10000 \fi}
+\def\newline{\ifvmode\else\penalty-10000 \fi}
 % \@normalcr is the kernel's INTERNAL name for \\ (latex.ltx:6453, \let\\\@normalcr),
 % and a class that line-breaks through the internal rather than through \\ found it
 % undefined: 2607.18707 skipped it three times. \let keeps the two in step whatever
