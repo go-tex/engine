@@ -642,8 +642,27 @@ const MiniLaTeXKernel = `
 %
 % We do not raise the error: -lenient is how the corpus is swept, and the document
 % LaTeX produces after the error is dismissed is the one with nothing contributed.
-\def\\{\ifvmode\else\penalty-10000 \fi}
-\def\newline{\ifvmode\else\penalty-10000 \fi}
+% ⛔⛔ AND IN HORIZONTAL MODE IT IS NOT A BARE PENALTY EITHER. The reference's
+% \@gnewline is \unskip \nobreak \hfil \break — four things, and each one does work:
+%
+%	\unskip   removes the glue before the \\, so the line does not end on a space
+%	\nobreak  \penalty10000: the \hfil that follows must not be a breakpoint
+%	\hfil     absorbs the slack, which is why a \\ line is NOT justified
+%	\break    \penalty-10000: the forced break itself
+%
+% Only \break was here. The \hfil is the one that shows: a \linebreak line IS
+% justified (its interword glue stretches to the margin) and a \\ line is NOT, and
+% that difference is entirely this \hfil. Measured against tectonic, x of the second
+% word on the broken line: \linebreak 465.52, \\ 155.64.
+%
+% ⛔ Two errors were cancelling here. Without the \hfil our \\ lines should have
+% stretched to the margin — and they did not, because endParagraph gave every
+% forced-break FRAGMENT its own \parfillskip, which did the \hfil's job by accident.
+% Removing that spurious glue (one paragraph, one \parfillskip, tex.web §16066-16084)
+% is what exposes the missing \hfil, so the two changes have to land together: either
+% one alone is a regression.
+\def\\{\ifvmode\else\unskip\nobreak\hfil\break\fi}
+\def\newline{\ifvmode\else\unskip\nobreak\hfil\break\fi}
 % \@normalcr is the kernel's INTERNAL name for \\ (latex.ltx:6453, \let\\\@normalcr),
 % and a class that line-breaks through the internal rather than through \\ found it
 % undefined: 2607.18707 skipped it three times. \let keeps the two in step whatever
