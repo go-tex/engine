@@ -1657,27 +1657,24 @@ const MiniLaTeXKernel = `
   Type \space I <command> <return> \space to replace it with another command,\MessageBreak
   or \space <return> \space to continue without it.}
 \gdef\@nolnerr{\@latex@error{There's no line here to end}\@eha}
-% \@no@pgbk, ltspace.dtx:348-355. The VERTICAL-mode branch is the reference verbatim.
+% \@no@pgbk, ltspace.dtx:348-355, now VERBATIM in both branches:
 %
-% ⛔ THE HORIZONTAL BRANCH IS NOT THE REFERENCE, and this is the one divergence this
-% change knowingly leaves. The reference writes
+%	\def\@no@pgbk #1[#2]{%
+%	  \ifvmode \penalty #1\@getpen{#2}%
+%	  \else \@bsphack \vadjust{\penalty #1\@getpen{#2}}\@esphack \fi}
 %
-%	\@bsphack \vadjust{\penalty #1\@getpen{#2}}\@esphack
-%
-% and \vadjust is not implemented here (go-tex/engine#665, with the tex.web
-% bibliography: §2994-3001, §12900-13015, §21191-21231). Emitting the penalty into the
-% horizontal list instead would put it INSIDE the line, where it is a line-break
-% penalty and not a page-break one — a different command with the same spelling, which
-% is worse than doing nothing.
-%
-% ⭐ But \@bsphack…\@esphack with nothing between them is NOT nothing: it is what keeps
-% the surrounding spacing intact, so the "deuxtrois" corruption is gone on this branch
-% too even though the break still does not happen.
+% ⭐ The horizontal branch was the one divergence #667 knowingly left, because the
+% penalty has to reach the VERTICAL list: written straight into the horizontal list it
+% would be a LINE-break penalty, the same number meaning a different thing — a
+% different command with the same spelling. \vadjust is what carries it across, and it
+% exists now (go-tex/engine#665; tex.web §2994-3001, §12900-12903, §17413-17418,
+% §21195, §21199-21231).
 \def\@no@pgbk #1[#2]{%
   \ifvmode
     \penalty #1\@getpen{#2}%
   \else
     \@bsphack
+    \vadjust{\penalty #1\@getpen{#2}}%
     \@esphack
   \fi}
 % \samepage, ltspace.dtx:314-322 verbatim, nine penalties set to \@M:
