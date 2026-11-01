@@ -1170,6 +1170,49 @@ const MiniLaTeXKernel = `
 % plain-TeX 8.9in default and overfilling every page.
 \let\textheight\vsize
 \newdimen\marginparwidth\newdimen\marginparsep\newdimen\marginparpush
+% ⛔⛔ \marginpar WAS ABSENT, AND IN -lenient ITS ARGUMENT LEAKED INTO THE BODY.
+%
+% 52 of the 154 measured corpus papers use it (5985 in the archive). Strict mode
+% aborted; -lenient skipped the command name and then SET ITS ARGUMENT AS TEXT.
+% Measured against tectonic:
+%
+%	source                                     oracle                    avant
+%	AVANTUN\marginpar{NOTEUN}APRESUN           AVANTUNAPRESUN            AVANTUNNOTEUNAPRESUN
+%	                                           + NOTEUN en marge, x=488.44
+%	AVANTTROIS\marginpar[GAUCHE]{DROITE}…      AVANTTROISAPRESTROIS      AVANTTROIS[GAUCHE]DROITEAPRESTROIS
+%	                                           + DROITE en marge
+%
+% The second row is the one to look at: BOTH arguments landed in the running text, the
+% optional one with its literal brackets. That is not a missing marginal note, it is
+% corrupted body text — and body text is what the corpus measures.
+%
+% The reference, ltfloat.dtx:951-967, 973-985:
+%
+%	\def\marginpar{\ifhmode \@bsphack \@floatpenalty -\@Mii
+%	  \else \@floatpenalty-\@Miii \fi
+%	  \ifinner \@parmoderr \@floatpenalty\z@ \else …\@next… \fi
+%	  \@ifnextchar [\@xmpar\@ympar}
+%	\long\def\@xmpar[#1]#2{\@savemarbox\@marbox{#1}\@savemarbox\@currbox{#2}\@xympar}
+%	\long\def\@ympar#1{\@savemarbox\@marbox{#1}\global\setbox\@currbox\copy\@marbox
+%	  \@xympar}
+%
+% \@savemarbox (1013-1025) sets the note in a \vtop at \hsize=\marginparwidth, and
+% \@xympar (1098-1106) conses it onto \@currlist and hands it to the float machinery,
+% which is what puts it in the margin. On the normal side the box shown is the SECOND
+% argument; \if@reversemargin shows the first.
+%
+% ⛔ THE NOTE IS NOT PLACED HERE, AND THAT IS NAMED, NOT HIDDEN. Putting a box in the
+% margin from inside a paragraph needs \vadjust, which this engine does not have
+% (go-tex/engine#665) — the alternative is the float machinery, which is its own piece
+% of work. What this does is read both arguments correctly and emit NOTHING, which
+% makes the body text EXACTLY the reference's: AVANTUNAPRESUN. A note in the margin is
+% a note; a note in the middle of a sentence is a wrong sentence.
+%
+% \@bsphack…\@esphack keeps the spacing around an invisible command right, as the
+% reference does for the horizontal-mode case.
+\def\marginpar{\@ifnextbracket\gotex@mparopt\gotex@mpar}
+\long\def\gotex@mparopt[#1]#2{\@bsphack\@esphack}
+\long\def\gotex@mpar#1{\@bsphack\@esphack}
 \def\em{\it}
 \def\normalem{}
 \def\ULforem{}

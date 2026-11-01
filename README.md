@@ -57,6 +57,15 @@ true}`) turns those gaps into best-effort no-ops so an editor preview shows the
 typesettable content instead of one hard error:
 
 - an **undefined command** is skipped, along with its likely `[opt]{arg}` block;
+  ⛔ "likely" is the catch, and it is why a command that *takes* an argument is worth
+  defining even when its effect is not implemented: `\marginpar` was undefined, and in
+  lenient mode its argument reached the page as ordinary text —
+  `AVANTUN\marginpar{NOTEUN}APRESUN` set `AVANTUNNOTEUNAPRESUN`, and the optional form
+  set the first argument *with its brackets*, where `tectonic` puts `AVANTUNAPRESUN` and
+  the note out in the margin. It is now defined and reads both arguments
+  (`ltfloat.dtx` 951-967, 973-985), so the body text matches the reference exactly;
+  placing the note in the margin needs `\vadjust` (#665) and is still missing;
+
 - an **unloadable figure** becomes a framed placeholder of the requested size
   (this includes a raster figure above 40 megapixels, see below);
 - a **math macro** go-tex/math doesn't know drops that one equation;
