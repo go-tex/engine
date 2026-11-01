@@ -2031,6 +2031,63 @@ func (e *Engine) loadMore() {
 	// put back, so no input is consumed. The chosen branch is halved for the same
 	// reason \@ifnextchar's is (see halveParamHashes): this stands in for a
 	// \@ifnextchar whose real definition stores the branch with \def first.
+	// \\ — the line break, with its star and its optional length, scanned HERE.
+	//
+	// ltspace.dtx:407-412, 476-492, 517-522:
+	//
+	//	\@normalcr    = \@ifstar{\let\reserved@e\vadjust \let\reserved@f\nobreak
+	//	                         \@xnewline}{\@xnewline}
+	//	\@xnewline    = \@ifnextchar[\@newline{\@gnewline\relax}
+	//	\@newline[#1] = \let\reserved@e\vadjust \@gnewline{\@vspace@calcify{#1}}
+	//	\@gnewline#1  = \ifvmode \@nolnerr
+	//	                \else \unskip \reserved@e{\reserved@f#1}\nobreak \hfil \break \fi
+	//
+	// ⛔⛔ WHY A PRIMITIVE AND NOT A MACRO. Written as \def\\{\@ifstar…}, the maths
+	// layer received `\@ifstar` and both of its branches and refused every formula
+	// containing a \\ — a matrix row separator, so every matrix (go-tex/engine#662).
+	// Three measurements narrowed it:
+	//
+	//	\def\\{\gotexUNKNOWN}                     formula renders — \\ written VERBATIM
+	//	\def\\{\@ifnextbracket\gotexA\gotexB}     formula renders — verbatim too
+	//	\def\\{\@ifstar\gotexA\gotexA}            \@ifstar reaches the layer, refused
+	//	\let\\<a Go primitive that calls fail>    formula renders, primitive NOT run
+	//
+	// The last row is the one that decided this. #662 suspected a primitive would be
+	// worse — "if capture expands, a primitive would be executed during capture" — and
+	// it is not: the capture writes the control sequence and never consults its
+	// meaning. So the scanning belongs in Go, where no macro name can leak into a
+	// formula, and \@ifstar is avoided entirely.
+	//
+	// ⛔ THE VERTICAL MODE CASE CONTRIBUTES NOTHING, not a penalty. The reference calls
+	// \@nolnerr there — "There's no line here to end" — and carries on having added
+	// nothing. As a bare \penalty-10000 this reached the MAIN vertical list, where
+	// −10000 is a FORCED PAGE BREAK: three paragraphs separated by a stray \\ came out
+	// on three pages against the reference's one (#661).
+	e.prim("gotex@cr", func(e *Engine) {
+		star := e.scanOptStar()
+		after, haveLen := e.scanOptBracketGlue()
+		if !e.inPar {
+			return // \@nolnerr: there is no line to end, so nothing is contributed
+		}
+		// \unskip: the glue before the \\ goes, so the line does not end on a space.
+		e.deleteLast(func(n node) bool { _, ok := n.(glueNode); return ok })
+		e.place(penaltyNode{penalty: 10000}) // \nobreak, so the \hfil cannot be broken at
+		e.place(glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}})
+		// ⛔ The optional length rides on the FORCED PENALTY, and the line loop emits
+		// it after the line that ends there. The reference puts it through \vadjust,
+		// which this engine does not have (#665); carrying it on the breakpoint is the
+		// same effect for this one case, and it is the only case that needs it.
+		p := penaltyNode{penalty: -10000}
+		if haveLen {
+			p.vskipAfter = after
+		}
+		e.place(p)
+		// ⛔ \\* additionally forbids a page break at that line, which needs \vadjust
+		// (#665). Consuming the star stops the `*` being TYPESET — the visible half,
+		// and the one a reader sees — and the no-page-break half is left undone rather
+		// than silently claimed.
+		_ = star
+	})
 	e.prim("@ifnextbracket", func(e *Engine) {
 		thenToks := e.grabUndelimited()
 		elseToks := e.grabUndelimited()

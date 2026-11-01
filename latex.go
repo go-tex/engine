@@ -661,7 +661,14 @@ const MiniLaTeXKernel = `
 % Removing that spurious glue (one paragraph, one \parfillskip, tex.web §16066-16084)
 % is what exposes the missing \hfil, so the two changes have to land together: either
 % one alone is a regression.
-\def\\{\ifvmode\else\unskip\nobreak\hfil\break\fi}
+% \\ is the Go primitive \gotex@cr, which scans the star and the optional [length]
+% itself — see its comment in primitives.go for the three measurements that settled
+% that choice, and why a macro here put \@ifstar into every formula containing a
+% matrix row separator (go-tex/engine#662).
+\let\\\gotex@cr
+% \newline is \\ without the optional argument or the star (ltspace.dtx:476-492: it is
+% \@gnewline\relax, not \@xnewline). Scanning one anyway would eat a bracket that
+% belongs to the text: "\newline [1] introduces" is ordinary prose.
 \def\newline{\ifvmode\else\unskip\nobreak\hfil\break\fi}
 % \@normalcr is the kernel's INTERNAL name for \\ (latex.ltx:6453, \let\\\@normalcr),
 % and a class that line-breaks through the internal rather than through \\ found it

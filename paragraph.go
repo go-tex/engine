@@ -118,6 +118,19 @@ func (e *Engine) layoutSegment(hlist []node) {
 		}
 		seg = e.applyLineSkips(seg)
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
+		// ⛔ `\\[len]`: the space the break asked for, emitted AFTER the line it ends.
+		// The reference reaches the same place through \vadjust (ltspace.dtx:485-492),
+		// which this engine does not have (#665) — the length rides on the forced
+		// penalty instead, and this is where it comes off. Before, the optional
+		// argument was not scanned at all and `\\[20pt]` TYPESET the five characters
+		// "[20pt]" into the body: measured against tectonic, line 3 read "[20pt] CCC"
+		// at baseline 158.65 where the reference has "CCC" at 178.60 — one
+		// \baselineskip plus the 20pt.
+		if ln.End < len(list) {
+			if p, isPen := list[ln.End].(penaltyNode); isPen && p.vskipAfter != (glueSpec{}) {
+				e.contribute(glueNode{spec: p.vskipAfter})
+			}
+		}
 	}
 }
 
