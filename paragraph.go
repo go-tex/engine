@@ -116,22 +116,58 @@ func (e *Engine) layoutSegment(hlist []node) {
 				}
 			}
 		}
+		// ⛔ \vadjust material comes OUT of the line before it is packaged, so it
+		// contributes no width — tex.web §12900-12903: with `adjust_tail` non-null,
+		// hpack "removes all occurrences of ins_node, mark_node and adjust_node items
+		// and appends the resulting material onto the list that ends at adjust_tail".
+		// §17435 arms that list immediately before hpack.
+		seg, adjusts := extractAdjusts(seg)
 		seg = e.applyLineSkips(seg)
 		e.appendToPage(hpackSP(seg, packTo, e.hsize))
-		// ⛔ `\\[len]`: the space the break asked for, emitted AFTER the line it ends.
-		// The reference reaches the same place through \vadjust (ltspace.dtx:485-492),
-		// which this engine does not have (#665) — the length rides on the forced
-		// penalty instead, and this is where it comes off. Before, the optional
-		// argument was not scanned at all and `\\[20pt]` TYPESET the five characters
-		// "[20pt]" into the body: measured against tectonic, line 3 read "[20pt] CCC"
-		// at baseline 158.65 where the reference has "CCC" at 178.60 — one
-		// \baselineskip plus the 20pt.
-		if ln.End < len(list) {
-			if p, isPen := list[ln.End].(penaltyNode); isPen && p.vskipAfter != (glueSpec{}) {
-				e.contribute(glueNode{spec: p.vskipAfter})
+		// ⛔ AND IT GOES IN AFTER THE LINE BOX, not before. §17413-17418 is explicit
+		// about the order: append_to_vlist(just_box) first, THEN the adjustment, then
+		// adjust_tail is cleared. Emitting it first would put a \vadjust's space above
+		// the line it was written on.
+		for _, a := range adjusts {
+			for _, n := range a {
+				e.contribute(n)
 			}
 		}
 	}
+}
+
+// extractAdjusts takes the \vadjust material out of a line and returns the line
+// without it, plus each adjustment's vertical list in the order it was written.
+//
+// ⛔ It COPIES rather than filtering in place: seg aliases the paragraph's backing
+// array, and writing to it would corrupt the next line's nodes — the same trap the
+// discretionary-hyphen branch above documents. When there is nothing to take out, the
+// original slice is returned untouched, so the common case allocates nothing.
+//
+// ⛔ Several adjustments on one line keep their order (§13009-13010 walks to the end of
+// the adjustment list before appending the next one), because two \vadjust on a line
+// are two pieces of vertical material and swapping them swaps what the reader sees.
+func extractAdjusts(seg []node) ([]node, [][]node) {
+	has := false
+	for _, n := range seg {
+		if _, ok := n.(adjustNode); ok {
+			has = true
+			break
+		}
+	}
+	if !has {
+		return seg, nil
+	}
+	out := make([]node, 0, len(seg))
+	var adj [][]node
+	for _, n := range seg {
+		if a, ok := n.(adjustNode); ok {
+			adj = append(adj, a.list)
+			continue
+		}
+		out = append(out, n)
+	}
+	return out, adj
 }
 
 // applyLineSkips wraps a line's material with \leftskip and \rightskip glue (when
