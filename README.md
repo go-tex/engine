@@ -57,10 +57,21 @@ true}`) turns those gaps into best-effort no-ops so an editor preview shows the
 typesettable content instead of one hard error:
 
 - an **undefined command** is skipped, along with its likely `[opt]{arg}` block;
-- an **unloadable figure** becomes a framed placeholder of the requested size;
+- an **unloadable figure** becomes a framed placeholder of the requested size
+  (this includes a raster figure above 40 megapixels, see below);
 - a **math macro** go-tex/math doesn't know drops that one equation;
 - a **`\setlength` on an unmodelled length**, and a missing `\input`/`\bibliography`/
   `\font` **file**, are ignored.
+
+**Raster figures above 40 megapixels.** `\includegraphics` decodes a PNG, JPEG,
+GIF, WEBP, TIFF, BMP, ICNS or ICO figure through `go-gfx/gfx`, which since v0.37.0
+refuses an image of more than `codec.DefaultMaxPixels` (40 million pixels, width
+times height) from its header, before allocating anything: the size is read from
+the file, and a compressed format describes a huge image in a few bytes. Such a
+figure fails with an error wrapping `codec.ErrTooLarge`: in strict mode the
+compile stops (`includegraphics <name>: …`), in lenient mode it becomes the
+framed placeholder above and is recorded as a dropped figure. There is no option
+to raise the ceiling; downscale the figure.
 
 Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
 report what was dropped. `Diagnostics` also records the paths the document read from
