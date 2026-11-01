@@ -51,8 +51,20 @@ const (
 // \fill uses; \hfill, \hrulefill and \dotfill are all built on it.
 func fillGlue() glueSpec { return glueSpec{stretch: unity, stretchOrder: 2} }
 
-type penaltyNode struct{ penalty int } // \penalty
-type ruleNode struct {                 // \hrule/\vrule
+// penaltyNode is \penalty. vskipAfter is the vertical glue to contribute AFTER the
+// line that ends at this breakpoint, which is what `\\[len]` asks for.
+//
+// ⛔ The reference puts that space through \vadjust (ltspace.dtx:485-492), which this
+// engine does not have (go-tex/engine#665). Carrying it on the breakpoint is the same
+// effect for this one case — the line loop emits it once the line box is appended —
+// and it is the only case that needs it today. A general \vadjust would subsume this
+// field; until then, naming it on the node is better than a parallel side-table that
+// the breaker could reorder away from.
+type penaltyNode struct {
+	penalty    int
+	vskipAfter glueSpec
+}
+type ruleNode struct { // \hrule/\vrule
 	width, height, depth          int
 	widthRun, heightRun, depthRun bool // a "running" dimension follows the box
 }

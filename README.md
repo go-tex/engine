@@ -330,7 +330,17 @@ Each stage is gated by an objective oracle:
    the first, which decides who wins the leftover space on a list that also holds a
    `\hfil`. **Vertical** infinite glue does not stretch yet: `\vfil`/`\vfill`/`\vss`
    are no-ops and a page is packed at its natural height, so `\vspace{\fill}` puts
-   nothing between its neighbours (#663). `\pagebreak`, `\nopagebreak`, `\linebreak`
+   nothing between its neighbours (#663). `\\` is a **Go primitive** that scans its own
+   star and optional length: as a macro built on `\@ifstar` it put `\@ifstar` into the
+   maths source and every formula holding a matrix row separator was refused, because
+   the maths capture writes a control sequence **verbatim** and never consults its
+   meaning — measured four ways, including a primitive that calls `fail` and is never
+   run during a capture. `\\[20pt]` used to typeset the five characters `[20pt]` and
+   `\\*` a `*`, on 38 and 9 of the 154 measured papers; the length now rides on the
+   forced penalty and the line loop emits it after the line, giving the reference's
+   31.88pt step where a bare `\\` gives 11.96 (#662). `\\*`'s page-break suppression
+   still needs `\vadjust` (#665) — consuming the star stops the `*` being typeset,
+   which is the half a reader sees. `\pagebreak`, `\nopagebreak`, `\linebreak`
    and `\nolinebreak` are **penalties** rather than no-ops (`ltspace.dtx` 294-306,
    344-375, 527-531): the optional degree goes through `\@getpen` (0, 51, 151, 301,
    10000) and the sign is what separates forcing from forbidding. All four did nothing

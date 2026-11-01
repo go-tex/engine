@@ -271,6 +271,38 @@ func (e *Engine) skipToGroupEnd() {
 	}
 }
 
+// scanOptBracketGlue reads an optional [glue] and says whether one was there.
+//
+// ⛔ The peeked token is put BACK when it is not a '[', so nothing is consumed: `\\`
+// is followed by a bracket far more often as the start of the next line's text than
+// as its own optional argument, and eating one would delete a character. LaTeX has
+// the same ambiguity and resolves it the same way — the optional argument wins — so
+// following the reference here is the faithful choice rather than a safe one.
+//
+// ⛔ A '[' with no readable glue after it is NOT an optional argument: the bracket and
+// what follows are put back untouched. Otherwise `\\[a]` would silently eat "[a]",
+// which is the defect this whole change is about, moved one step along.
+func (e *Engine) scanOptBracketGlue() (glueSpec, bool) {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok {
+		return glueSpec{}, false
+	}
+	if t.cs_ || t.ch != '[' {
+		e.back(t)
+		return glueSpec{}, false
+	}
+	g := e.scanGlue()
+	c, ok := e.getXToken()
+	if !ok || c.cs_ || c.ch != ']' {
+		if ok {
+			e.back(c)
+		}
+		return glueSpec{}, false
+	}
+	return g, true
+}
+
 // readBraceGlue reads a {glue} group (the value argument of \setlength) and
 // returns the glue, accepting rubber components (plus/minus). It mirrors
 // readBraceDimen but scans a full glue instead of a rigid dimen.
