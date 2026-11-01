@@ -184,13 +184,24 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	// that spurious glue was a legal breakpoint at the end of each fragment, and the
 	// overfull single-line node was deactivated there BY ACCIDENT. Removing the glue
 	// removed the accident, and the missing clause surfaced.
-	for _, q := range []LineBreakParams{
-		withFinalPass(p),
-		withTolerance(withFinalPass(p), maxBadRatio),
-	} {
-		if ok && !hasBadLine(lines) {
-			break
-		}
+	// ⛔⛔ FinalPass IS NOT ARMED HERE YET, AND THAT IS A MEASURED DECISION.
+	//
+	// Arming it hyphenated titles — "THETI-TLE" across eleven class tests — because
+	// TeX reaches its final pass only when pass 2 failed OUTRIGHT, and pass 2 does not
+	// fail here for a reason the library does not yet reproduce: TeX refuses to record
+	// a forced break whose line is past the threshold (tex.web §16769 → §16824-16831,
+	// "else if b>threshold then goto deactivate"), while the library records every
+	// forced break unconditionally. Until that is faithful the clause fires at
+	// breakpoints TeX never reaches, and at ZERO cost, so it wins everywhere.
+	//
+	// Arming it TOGETHER with the wide-open tolerance below is worse still: raising the
+	// tolerance makes a hopeless line feasible at its full 1e8, which defeats the
+	// clause — artificial demerits only fire when nothing feasible was recorded there.
+	//
+	// So the wide-open pass stays as it was, alone, and #666 carries the rest.
+	if !ok || hasBadLine(lines) {
+		q := p
+		q.Tolerance = maxBadRatio
 		if l2, ok2 := KnuthPlassWith(items, lineWidth, q); ok2 {
 			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
 				lines, ok = l2, true
@@ -198,16 +209,6 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 		}
 	}
 	return list, lines, ok
-}
-
-func withFinalPass(p LineBreakParams) LineBreakParams {
-	p.FinalPass = true
-	return p
-}
-
-func withTolerance(p LineBreakParams, t float64) LineBreakParams {
-	p.Tolerance = t
-	return p
 }
 
 // withParFill closes a horizontal list the way TeX ends every paragraph: with the
@@ -381,12 +382,57 @@ func toItems(list []node) []Item {
 	return items
 }
 
-// trimLeadingGlue drops a leading glue or discretionary node (TeX discards glue
-// at a line's left edge, and a discretionary carried to a line start is not set).
+// trimLeadingGlue prunes the discardables at a line's left edge, tex.web §17297-17313,
+// which says what they are in one sentence:
+//
+//	Glue and penalty and kern and math nodes are deleted at the beginning of a line,
+//	except in the anomalous case that the node to be deleted is actually one of the
+//	chosen breakpoints.
+//
+// and then loops, stopping at a char node, at a non-discardable, at an implicit kern,
+// or at the next chosen breakpoint.
+//
+// ⛔⛔ PENALTIES TOO, AND THAT IS NOT A DETAIL. This dropped glue and discretionaries
+// only. A line that begins at a forced break begins AT THE PENALTY — the breaker
+// reports Line.Start on the penalty itself, not after it — so the first node was a
+// penaltyNode, the pruning stopped there on sight, and the glue behind it survived.
+//
+// Measured on the reference's own \hspace* document, x of the first glyph of each line:
+//
+//	                      oracle   avant   après
+//	A                     133.77   133.77  133.77
+//	\hspace*{50pt}B       183.58   185.58  185.58   le filet le protège
+//	\hspace{50pt}C        133.77   185.58  133.77   écartée, comme chez l'oracle
+//
+// It was invisible while endParagraph split the paragraph at forced penalties: the
+// split REMOVED the penalty from the list, so a fragment began on the glue by
+// construction and this function never had to step over one. Another thing the
+// workaround was hiding (#666).
+//
+// ⭐ And this is exactly why \hspace* survives: \@hspacer puts a zero-width RULE in
+// front of the glue (ltspace.dtx:1436-1437), a rule is NOT discardable, so the loop
+// stops on it and the 50pt stays. Nothing here special-cases the star.
+//
+// ⛔ KERNS AND MATH NODES ARE LEFT ALONE HERE, AND THAT IS DELIBERATE.
+//
+// §17312 prunes a kern only when `subtype(q)<>explicit` is false — an IMPLICIT kern
+// stops the pruning, because a font kern belongs to the pair of glyphs around it and
+// dropping it at a line start would change the word's shape. kernNode carries no such
+// distinction (stomach.go: width and `space`), so there is no way to prune the right
+// ones; pruning all of them would corrupt kerning, and that is worse than leaving a
+// small space at a margin.
+//
+// §17313's math_node is TeX's `$` boundary, a discardable marker. Ours is a math BOX
+// with a width, a height and a depth — toItems maps it to Box — so pruning it would
+// drop CONTENT, not space.
+//
+// Both are named rather than silently omitted: the next reader should see that the
+// reference prunes more than this does, and why stopping here is the faithful choice
+// given the node types that exist.
 func trimLeadingGlue(seg []node) []node {
 	for len(seg) > 0 {
 		switch seg[0].(type) {
-		case glueNode, discNode:
+		case glueNode, discNode, penaltyNode:
 			seg = seg[1:]
 		default:
 			return seg
