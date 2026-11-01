@@ -82,10 +82,25 @@ func TestActiveTieDoesNotBreakLine(t *testing.T) {
 	countLines := func(joiner string) int {
 		e := New()
 		e.SetFont(spMock{}) // letters 5pt, space 3pt; no patterns ⇒ no in-word breaks
-		e.hsize = 40 * unity
+		// ⛔⛔ THE MEASURE IS THE FIRST WORD'S WIDTH, EXACTLY. 35pt, not 40.
+		//
+		// spMock's space has NO stretch, so at 40pt the break after the first word
+		// leaves a line 5pt short with nothing to fill it — badness 10000, infeasible
+		// at any \tolerance — and whether two lines come out at all then depends on the
+		// breaker's fallback rather than on the tie. This test asserted "2 lines" for a
+		// plain space on that fixture, and it only held because of an ACCIDENT: every
+		// forced-break fragment used to get its own \parfillskip, which was a legal
+		// breakpoint where the single-line node got deactivated. Removing that (#666)
+		// removed the 2 lines with it.
+		//
+		// At 35pt the first line is the first word and nothing else: ratio 0, perfectly
+		// feasible, no fallback involved. The tie then has exactly one thing to forbid,
+		// and forbidding it leaves one overfull line of 73pt. That is the rule, measured
+		// on an exact fit instead of on a pathological one.
+		e.hsize = 35 * unity
 		e.parindent = 0
 		e.baselineskip = 10 * unity
-		// Two 7-letter words (35pt each); joined natural width 35+3+35 = 73pt > 40pt.
+		// Two 7-letter words (35pt each); joined natural width 35+3+35 = 73pt.
 		if _, err := e.Run(`aaaaaaa` + joiner + `bbbbbbb\par`); err != nil {
 			t.Fatalf("run %q: %v", joiner, err)
 		}

@@ -23,49 +23,42 @@ func (e *Engine) endParagraph() {
 		return
 	}
 	e.inPar = false
-	segments := splitAtForcedBreaks(e.parList) // \\ (a forced -10000 penalty) ends a line
+	hlist := e.parList
 	e.parList = nil
-	// ⛔ first says whether this fragment opens the PARAGRAPH, which decides whether
-	// its leading glue may be pruned: see layoutSegment. A fragment after a \\ opens a
-	// line that follows a forced break, not a paragraph.
-	first := true
-	for _, seg := range segments {
-		if len(seg) > 0 {
-			e.layoutSegment(seg, first)
-			first = false
-		}
+	// ⛔⛔ ONE PARAGRAPH, ONE \parfillskip.
+	//
+	// This used to cut the list at every forced penalty and lay each fragment out as
+	// its own paragraph, which gave every fragment its own \parfillskip. That glue is
+	// 0pt plus 1fil: it takes ALL the slack when the line is packed to \hsize, so the
+	// interword glue got none and a line ended by a forced break came out at its
+	// NATURAL width instead of justified.
+	//
+	// tex.web §16066-16084 appends \parfillskip ONCE, in line_break, for the whole
+	// paragraph. A forced penalty inside is an ordinary breakpoint of cost −∞, and the
+	// lines before it are justified like any other. The breaker here already receives
+	// those penalties — toItems maps penaltyNode to Penalty — so the split was never
+	// what made the forced break happen, only what added the spurious glue.
+	//
+	// Measured against tectonic, x of the second word on a line ended by a forced
+	// break: 456.72 there (the right margin) against 147.18 here.
+	if len(hlist) > 0 {
+		e.layoutSegment(hlist)
 	}
 	// Attach any footnotes referenced in this paragraph to the vertical list,
 	// just after it, so they land on (and reserve room in) the same page.
 	e.flushFootnotes()
 }
 
-// splitAtForcedBreaks divides a paragraph's horizontal list at explicit forced
-// breaks (\\, i.e. a penalty ≤ −10000) so each fragment is line-broken as its own
-// run of lines — an explicit line break, independent of the optimiser.
-func splitAtForcedBreaks(list []node) [][]node {
-	var segs [][]node
-	var cur []node
-	for _, n := range list {
-		if p, ok := n.(penaltyNode); ok && p.penalty <= -10000 {
-			segs = append(segs, cur)
-			cur = nil
-			continue
-		}
-		cur = append(cur, n)
-	}
-	return append(segs, cur)
-}
-
 // layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
-// contributes the lines of one paragraph fragment to the main vertical list.
-// firstSegment says this fragment opens the paragraph. It decides one thing: whether
-// the leading glue of its first line survives. tex.web's post_line_break
-// (17273-17279) justifies a line and appends it, and only THEN prunes the next one's
-// head — 17297 explains why, the pruning drops the glue the break consumed. A
-// paragraph's first line follows no break and keeps whatever the paragraph began
-// with; a fragment after a \\ follows a FORCED break and does not.
-func (e *Engine) layoutSegment(hlist []node, firstSegment bool) {
+// contributes the lines of a paragraph to the main vertical list.
+//
+// ⛔ The paragraph's FIRST line keeps its leading glue; every later line is pruned.
+// tex.web's post_line_break (17273-17279) justifies a line and appends it, and only
+// THEN prunes the next one's head — 17297 explains why: the pruning drops the glue the
+// break consumed. The first line follows no break and so keeps whatever the paragraph
+// began with (#657, #659). With the per-fragment split gone that rule is just
+// "i > 0" in the line loop, which is what it always meant.
+func (e *Engine) layoutSegment(hlist []node) {
 	e.applyTwoColumnMeasure() // halve e.hsize to the column width on the first paragraph (two-column mode)
 	// The measure the TEXT is broken against is \hsize less the two skips that
 	// will be glued to every line (applyLineSkips). TeX reaches the same place
@@ -97,16 +90,18 @@ func (e *Engine) layoutSegment(hlist []node, firstSegment bool) {
 		// go-tex/engine#657: \noindent\hskip 20pt went from x=133.77 to 153.70 against
 		// the reference's 153.69.
 		//
-		// ⛔ firstSegment is what makes it right rather than merely passing. A \\ is a
-		// forced penalty INSIDE the paragraph (latex.go, \def\\{\penalty-10000 }), and
-		// endParagraph splits the list at those penalties into fragments laid out one
-		// by one — so without the flag every fragment's head would be exempt, and
-		// `\hspace{50pt}` after a \\ would keep glue that follows a break. The existing
-		// TestHspaceStarSurvivesALineBreak fails exactly that way, which is how this
-		// condition got narrowed; a probe showed the three fragments arriving as three
-		// calls with i=0 each.
+		// ⛔ This used to need a firstSegment flag, because endParagraph split the list
+		// at every forced penalty and called this function once per fragment — so every
+		// fragment arrived with i=0 and, without the flag, every fragment's head was
+		// exempt from pruning. The split is gone (one paragraph, one \parfillskip), so
+		// there is one call, i counts the paragraph's lines, and "i > 0" says exactly
+		// what the rule is: the first line follows no break, every later one does.
+		//
+		// A \\ is a forced penalty INSIDE the list and the breaker takes it as a
+		// breakpoint like any other, so a line after a \\ has i > 0 and IS pruned —
+		// which is what TestHspaceStarSurvivesALineBreak asserts.
 		seg := list[ln.Start:ln.End]
-		if i > 0 || !firstSegment {
+		if i > 0 {
 			seg = trimLeadingGlue(seg)
 		}
 		// If the line was broken at a discretionary, append a hyphen. Copy the
@@ -166,9 +161,44 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	items := toItems(list)
 	lines, ok := KnuthPlassWith(items, lineWidth, p)
 	// The second pass can "succeed" with a single over/underfull line via the forced
-	// final break. When it leaves a bad line, run the emergency pass at a large
-	// tolerance so discretionary (hyphen) and no-stretch breaks become feasible.
-	// Adopt it only if it removes the bad line.
+	// final break. Two more passes follow, in this order, and each is adopted only if
+	// it removes the bad line.
+	//
+	// ⛔⛔ FIRST THE REAL FINAL PASS: \tolerance unchanged, artificial_demerits armed
+	// (go-typeset/linebreak v1.2.2, Params.FinalPass; tex.web §16769-16771). At a
+	// breakpoint where NOTHING is feasible and only one node is active, the break is
+	// recorded at ZERO cost rather than the node being deactivated.
+	//
+	// Zero is what decides it. A line past inf_bad costs 1e8, so two hopeless lines
+	// (2e8) otherwise lose to ONE overfull line (1e8) — and the breaker returned the
+	// overfull one. Measured with spMock: two unbreakable 35pt words and a 3pt rigid
+	// space on a 40pt measure came back as one line 33pt over the margin
+	// (TestActiveTieDoesNotBreakLine), where the reference sets two.
+	//
+	// ⛔ AND IT MUST COME BEFORE THE WIDE-OPEN PASS, not with it. Raising the tolerance
+	// to maxBadRatio makes a hopeless line FEASIBLE at its full 1e8, which DEFEATS the
+	// clause: artificial demerits only fire when nothing feasible was recorded there.
+	// Setting both at once left the test failing exactly as before.
+	//
+	// None of this showed while every forced-break fragment got its own \parfillskip:
+	// that spurious glue was a legal breakpoint at the end of each fragment, and the
+	// overfull single-line node was deactivated there BY ACCIDENT. Removing the glue
+	// removed the accident, and the missing clause surfaced.
+	// ⛔⛔ FinalPass IS NOT ARMED HERE YET, AND THAT IS A MEASURED DECISION.
+	//
+	// Arming it hyphenated titles — "THETI-TLE" across eleven class tests — because
+	// TeX reaches its final pass only when pass 2 failed OUTRIGHT, and pass 2 does not
+	// fail here for a reason the library does not yet reproduce: TeX refuses to record
+	// a forced break whose line is past the threshold (tex.web §16769 → §16824-16831,
+	// "else if b>threshold then goto deactivate"), while the library records every
+	// forced break unconditionally. Until that is faithful the clause fires at
+	// breakpoints TeX never reaches, and at ZERO cost, so it wins everywhere.
+	//
+	// Arming it TOGETHER with the wide-open tolerance below is worse still: raising the
+	// tolerance makes a hopeless line feasible at its full 1e8, which defeats the
+	// clause — artificial demerits only fire when nothing feasible was recorded there.
+	//
+	// So the wide-open pass stays as it was, alone, and #666 carries the rest.
 	if !ok || hasBadLine(lines) {
 		q := p
 		q.Tolerance = maxBadRatio
@@ -196,9 +226,38 @@ func (e *Engine) withParFill(list []node) []node {
 	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
 		fill = e.skip[m.code]
 	}
-	return append(append([]node{}, list...),
-		glueNode{spec: fill},
-		penaltyNode{penalty: -int(InfPenalty)})
+	out := append([]node{}, list...)
+	// ⛔⛔ AN INFINITE PENALTY GOES IN FRONT OF \parfillskip, AND A TRAILING GLUE IS
+	// REPLACED BY IT RATHER THAN KEPT. tex.web §16077-16084, verbatim in its own words:
+	//
+	//	if is_char_node(tail) then tail_append(new_penalty(inf_penalty))
+	//	else if type(tail)<>glue_node then tail_append(new_penalty(inf_penalty))
+	//	else begin type(tail):=penalty_node; … penalty(tail):=inf_penalty; end;
+	//	link(tail):=new_param_glue(par_fill_skip_code);
+	//
+	// and §16066-16071 says why, twice: the \parfillskip "is preceded by an infinite
+	// penalty, so it will never be considered as a potential breakpoint", and the
+	// trailing glue is removed "since spaces usually precede blank lines and instances
+	// of $$".
+	//
+	// This appended the \parfillskip straight onto the list, so a space before \par
+	// stayed as material AND the \parfillskip itself was a legal breakpoint — a glue
+	// preceded by non-discardable material is one. A break there yields a last line
+	// holding nothing but the fill.
+	if n := len(out); n > 0 {
+		if _, isGlue := out[n-1].(glueNode); isGlue {
+			out[n-1] = penaltyNode{penalty: int(InfPenalty)}
+		} else {
+			out = append(out, penaltyNode{penalty: int(InfPenalty)})
+		}
+	} else {
+		out = append(out, penaltyNode{penalty: int(InfPenalty)})
+	}
+	// ⛔ The forced break after the \parfillskip is OURS, not tex.web's: TeX's
+	// line_break ends the last line by reaching the end of the list, while this
+	// breaker needs the break named. It is the classic Knuth–Plass paragraph
+	// terminator and it changes nothing about where the other lines fall.
+	return append(out, glueNode{spec: fill}, penaltyNode{penalty: -int(InfPenalty)})
 }
 
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio
@@ -323,12 +382,57 @@ func toItems(list []node) []Item {
 	return items
 }
 
-// trimLeadingGlue drops a leading glue or discretionary node (TeX discards glue
-// at a line's left edge, and a discretionary carried to a line start is not set).
+// trimLeadingGlue prunes the discardables at a line's left edge, tex.web §17297-17313,
+// which says what they are in one sentence:
+//
+//	Glue and penalty and kern and math nodes are deleted at the beginning of a line,
+//	except in the anomalous case that the node to be deleted is actually one of the
+//	chosen breakpoints.
+//
+// and then loops, stopping at a char node, at a non-discardable, at an implicit kern,
+// or at the next chosen breakpoint.
+//
+// ⛔⛔ PENALTIES TOO, AND THAT IS NOT A DETAIL. This dropped glue and discretionaries
+// only. A line that begins at a forced break begins AT THE PENALTY — the breaker
+// reports Line.Start on the penalty itself, not after it — so the first node was a
+// penaltyNode, the pruning stopped there on sight, and the glue behind it survived.
+//
+// Measured on the reference's own \hspace* document, x of the first glyph of each line:
+//
+//	                      oracle   avant   après
+//	A                     133.77   133.77  133.77
+//	\hspace*{50pt}B       183.58   185.58  185.58   le filet le protège
+//	\hspace{50pt}C        133.77   185.58  133.77   écartée, comme chez l'oracle
+//
+// It was invisible while endParagraph split the paragraph at forced penalties: the
+// split REMOVED the penalty from the list, so a fragment began on the glue by
+// construction and this function never had to step over one. Another thing the
+// workaround was hiding (#666).
+//
+// ⭐ And this is exactly why \hspace* survives: \@hspacer puts a zero-width RULE in
+// front of the glue (ltspace.dtx:1436-1437), a rule is NOT discardable, so the loop
+// stops on it and the 50pt stays. Nothing here special-cases the star.
+//
+// ⛔ KERNS AND MATH NODES ARE LEFT ALONE HERE, AND THAT IS DELIBERATE.
+//
+// §17312 prunes a kern only when `subtype(q)<>explicit` is false — an IMPLICIT kern
+// stops the pruning, because a font kern belongs to the pair of glyphs around it and
+// dropping it at a line start would change the word's shape. kernNode carries no such
+// distinction (stomach.go: width and `space`), so there is no way to prune the right
+// ones; pruning all of them would corrupt kerning, and that is worse than leaving a
+// small space at a margin.
+//
+// §17313's math_node is TeX's `$` boundary, a discardable marker. Ours is a math BOX
+// with a width, a height and a depth — toItems maps it to Box — so pruning it would
+// drop CONTENT, not space.
+//
+// Both are named rather than silently omitted: the next reader should see that the
+// reference prunes more than this does, and why stopping here is the faithful choice
+// given the node types that exist.
 func trimLeadingGlue(seg []node) []node {
 	for len(seg) > 0 {
 		switch seg[0].(type) {
-		case glueNode, discNode:
+		case glueNode, discNode, penaltyNode:
 			seg = seg[1:]
 		default:
 			return seg
