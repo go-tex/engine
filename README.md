@@ -338,9 +338,18 @@ Each stage is gated by an objective oracle:
    run during a capture. `\\[20pt]` used to typeset the five characters `[20pt]` and
    `\\*` a `*`, on 38 and 9 of the 154 measured papers; the length now rides on the
    forced penalty and the line loop emits it after the line, giving the reference's
-   31.88pt step where a bare `\\` gives 11.96 (#662). `\\*`'s page-break suppression
-   still needs `\vadjust` (#665) — consuming the star stops the `*` being typeset,
-   which is the half a reader sees. `\pagebreak`, `\nopagebreak`, `\linebreak`
+   31.88pt step where a bare `\\` gives 11.96 (#662). **`\vadjust` is implemented**
+   (`tex.web` §2994-3001, §12900-12903, §17413-17418, §21195, §21199-21231): vertical
+   material written inside a paragraph rides along in an adjust node that contributes
+   no width, and comes out into the enclosing vertical list **after** the line it was
+   written on — measured against `tectonic` as a 41.84pt baseline step where a normal
+   one is 11.96, with the control paragraph unchanged. It is an **error** in vertical
+   mode, as §21195 requires. Three commands were waiting on it and now work:
+   `\pagebreak`/`\nopagebreak` in horizontal mode (the reference makes two pages on a
+   short first paragraph and so do we, where we made one), `\\*`'s page-break
+   suppression (the `\nobreak` goes *inside* the `\vadjust`, so it reaches the vertical
+   list where 10000 refuses a page rather than a line), and `\\[len]`'s space, which
+   now uses the same mechanism instead of the stopgap field it shipped with (#665). `\pagebreak`, `\nopagebreak`, `\linebreak`
    and `\nolinebreak` are **penalties** rather than no-ops (`ltspace.dtx` 294-306,
    344-375, 527-531): the optional degree goes through `\@getpen` (0, 51, 151, 301,
    10000) and the sign is what separates forcing from forbidding. All four did nothing

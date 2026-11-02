@@ -2069,24 +2069,39 @@ func (e *Engine) loadMore() {
 		if !e.inPar {
 			return // \@nolnerr: there is no line to end, so nothing is contributed
 		}
+		// Now \@gnewline itself, in its own order (ltspace.dtx:517-522):
+		//
+		//	\unskip \reserved@e {\reserved@f#1} \nobreak \hfil \break
+		//
+		// where \reserved@e is \vadjust and \reserved@f is \nobreak for the STARRED
+		// form and empty otherwise (407-412, 485-492). So the adjustment comes FIRST,
+		// before the \nobreak and the \hfil — not last.
+		//
 		// \unskip: the glue before the \\ goes, so the line does not end on a space.
 		e.deleteLast(func(n node) bool { _, ok := n.(glueNode); return ok })
+		// ⛔⛔ AND THIS IS WHERE \\* FORBIDS ITS PAGE BREAK: the \nobreak goes INSIDE
+		// the \vadjust, so it lands in the VERTICAL list after the line, where a
+		// penalty of 10000 is a page-break refusal. Outside it would be a line-break
+		// refusal — the same number meaning a different thing in a different list.
+		//
+		// ⛔ This replaces penaltyNode.vskipAfter, which was a stopgap added hours
+		// earlier for \\[len] alone, when #665 said \vadjust was unavailable. It is
+		// available now, and one mechanism for "vertical material after a line" is
+		// better than two: the stopgap could only carry a glue, so it could not have
+		// expressed \\*'s \nobreak at all.
+		var adj []node
+		if star {
+			adj = append(adj, penaltyNode{penalty: 10000})
+		}
+		if haveLen {
+			adj = append(adj, glueNode{spec: after})
+		}
+		if len(adj) > 0 {
+			e.place(adjustNode{list: adj})
+		}
 		e.place(penaltyNode{penalty: 10000}) // \nobreak, so the \hfil cannot be broken at
 		e.place(glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}})
-		// ⛔ The optional length rides on the FORCED PENALTY, and the line loop emits
-		// it after the line that ends there. The reference puts it through \vadjust,
-		// which this engine does not have (#665); carrying it on the breakpoint is the
-		// same effect for this one case, and it is the only case that needs it.
-		p := penaltyNode{penalty: -10000}
-		if haveLen {
-			p.vskipAfter = after
-		}
-		e.place(p)
-		// ⛔ \\* additionally forbids a page break at that line, which needs \vadjust
-		// (#665). Consuming the star stops the `*` being TYPESET — the visible half,
-		// and the one a reader sees — and the no-page-break half is left undone rather
-		// than silently claimed.
-		_ = star
+		e.place(penaltyNode{penalty: -10000}) // \break
 	})
 	e.prim("@ifnextbracket", func(e *Engine) {
 		thenToks := e.grabUndelimited()
@@ -2506,6 +2521,43 @@ func (e *Engine) loadStomach() {
 	// vertical list; inside \setbox they are reached via scanBox/buildBoxList.
 	e.prim("hbox", func(e *Engine) { e.place(e.makeBox(hbox)) })
 	e.prim("vbox", func(e *Engine) { e.place(e.makeBox(vbox)) })
+	// \vadjust{…}: vertical material written inside a paragraph, which comes out into
+	// the enclosing vertical list AFTER the line it was written on.
+	//
+	// tex.web §21199-21211 (begin_insert_or_adjust) opens it in INTERNAL VERTICAL mode
+	// — `mode := -vmode`, `prev_depth := ignore_depth` — and §21213-21231 packages the
+	// result and hangs its LIST off an adjust node. buildVBoxList is that internal
+	// vertical mode here, which is why \vadjust and \vbox share it.
+	//
+	// ⛔ FORBIDDEN IN VERTICAL MODE, and that is not a courtesy: §21195 puts
+	// `vmode+vadjust` in TeX's `@<Forbidden…@>` list. Material written between two
+	// paragraphs needs no adjustment — it is already in the vertical list — and
+	// accepting it there would quietly make \vadjust a synonym for "contribute", which
+	// is a different command with the same spelling.
+	e.prim("vadjust", func(e *Engine) {
+		if !e.inPar {
+			e.fail("\\vadjust is forbidden in vertical mode (tex.web §21195): " +
+				"between paragraphs, write the material directly")
+			return
+		}
+		e.skipOptSpace()
+		t, ok := e.getXToken()
+		if !ok {
+			return
+		}
+		rt := t
+		if c, isChar := e.implicitChar(t); isChar {
+			rt = c
+		}
+		if !(rt.cat == catBegin && !rt.cs_) {
+			e.back(t)
+			return
+		}
+		e.beginGroupKind(boxGroup)
+		list := e.buildVBoxList()
+		e.endGroup()
+		e.place(adjustNode{list: list})
+	})
 	e.prim("vtop", func(e *Engine) { e.place(e.makeVtop()) })
 	e.prim("vsplit", func(e *Engine) { e.place(e.doVsplit()) })
 	e.prim("box", func(e *Engine) {
