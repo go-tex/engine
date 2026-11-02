@@ -241,10 +241,39 @@ const MiniLaTeXKernel = `
 % \@maketitle at all — a bare \documentclass{article} through this engine's own
 % emulation, which is most of the test suite. Replacing it outright would have been a
 % change to every such document for the sake of the 58.
+% ⛔⛔ THE TITLE BLOCK'S FOOTNOTES ARE SYMBOLS, NOT NUMBERS. article.cls:203-223 wraps
+% the whole of \maketitle in a group that redefines the REPRESENTATION, and resets the
+% COUNTER after it:
+%
+%	\newcommand\maketitle{\par
+%	  \begingroup
+%	    \renewcommand\thefootnote{\@fnsymbol\c@footnote}%
+%	    … \@thanks
+%	  \endgroup
+%	  \setcounter{footnote}{0}%
+%
+% ⛔ The reset is OUTSIDE the group and explicit, and it has to be in LaTeX: counter
+% commands are \global, so \endgroup does not restore \c@footnote there.
+%
+% ⚠ ON THIS ENGINE NO WITNESS DISTINGUISHES IT, AND THAT IS AN OPEN QUESTION, NOT A
+% RESULT. Removing this \setcounter changes nothing on three probes: with \thanks alone,
+% with a \footnote before the title, and with both. \c@footnote reads 0 after \maketitle
+% either way — while the \thanks mark is built from the value 1, so the mark and the
+% counter disagree about what happened. A plain \footnote inside \begingroup…\endgroup
+% DOES leave the counter stepped (measured, and matching tectonic), so the engine's
+% global step is right; something on the \maketitle path is not. The line is kept
+% because it is the reference's shape and cited, not because a measurement asked for it.
+%
+% Measured against tectonic on a paper with \thanks: the title mark is ∗ and the body's
+% first note is 1; this engine gave 1 and 2. The mark is what this change fixes.
 \long\def\maketitle{\par
+  \begingroup
+  \def\thefootnote{\@fnsymbol\c@footnote}%
   \@ifundefined{@maketitle}{\gotex@genericmaketitle}{%
     \if@twocolumn\twocolumn[\@maketitle]\else\@maketitle\fi}%
-  \@thanks\global\def\@thanks{}}
+  \@thanks\global\def\@thanks{}%
+  \endgroup
+  \setcounter{footnote}{0}}
 \long\def\gotex@genericmaketitle{\bigskip\centerline{\@title}\smallskip
   \centerline{\@author}\smallskip\centerline{\@date}\bigskip}
 \def\bullet{\char8226\relax}
@@ -864,6 +893,21 @@ const MiniLaTeXKernel = `
 \def\alph#1{\expandafter\@alph\csname c@#1\endcsname}
 \def\Alph#1{\expandafter\@Alph\csname c@#1\endcsname}
 \def\@fnsymbol#1{\ifcase#1\or *\or †\or ‡\or §\or ¶\or ‖\or **\or ††\or ‡‡\fi}
+% latex.ltx:13164-13165 declares the footnote counter and its representation:
+%
+%	\@definecounter{footnote}
+%	\def\thefootnote{\@arabic\c@footnote}
+%
+% ⛔⛔ The engine kept this count as a Go int on the Engine, which made TWO defects
+% unfixable at once: \thefootnote had no \c@footnote to read, so the mark was always
+% arabic digits built in Go; and \setcounter{footnote}{0} could not reach it, because
+% every LaTeX counter command goes through \c@<name>. article.cls:223 performs exactly
+% that reset right after \maketitle.
+% ⛔ The register itself already existed — classkernel.go:244, \newcount\c@footnote —
+% and declaring it again here with \newcounter allocated a SECOND register under the
+% same name. Nothing was stepping either of them; what was missing is the
+% representation below, not the counter.
+\def\thefootnote{\@arabic\c@footnote}
 \def\fnsymbol#1{\expandafter\@fnsymbol\csname c@#1\endcsname}
 % ─── length interface (feat/lengths) ─────────────────────────────────────────
 % \fill and \stretch, from the same block of the reference:
