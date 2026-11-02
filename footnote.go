@@ -263,7 +263,29 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	if s, rest, found := takePageStyle(vlist); found {
 		style, vlist = s, rest
 	}
+	// ⛔⛔ EVERY PAGE IS PACKED EXACTLY TO \vsize, WHATEVER THE PAGE STYLE. TeX has no
+	// page-style branch here at all — styles are the output routine's business, not the
+	// packer's — and the chain is three lines of tex.web:
+	//
+	//	§19321  page_goal := vsize
+	//	§19564  best_size := page_goal
+	//	§19813  box(255) := vpackage(link(page_head), best_size, exactly, page_max_depth)
+	//
+	// "empty" packed NATURALLY, so a page of this style was exactly as tall as its
+	// material and every vertical glue on it stretched by nothing. \vspace{\fill} under
+	// \pagestyle{empty} put its word at y=143.91 where tectonic puts it at 664.72 — a
+	// 520pt error, on the style this engine takes as its DEFAULT (engine.go).
+	//
+	// ⛔ §19811-19814 sets vbadness := inf_bad and vfuzz := max_dimen around that call
+	// "to inhibit error messages": a page that cannot fill itself is packed short in
+	// silence, it is not a warning. vpackSP must stay as quiet here as it is for "plain".
 	if style == "empty" {
+		if e.vsize > 0 {
+			return vpackSP(vlist, packTo, e.vsize)
+		}
+		// No \vsize is not "pack to zero": with no page goal there is nothing to pack
+		// to, and natural height is the only answer that does not invent one. The same
+		// fallback guards the "plain" branch below.
 		return vpackSP(vlist, packNatural, 0)
 	}
 	e.curPageNum = pageNum // so \thepage in a header/footer field is this page
