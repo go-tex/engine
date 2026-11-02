@@ -77,7 +77,13 @@ const Plain = `
 \def\;{\hskip.27778em}
 \def\raggedright{\rightskip=0pt plus 1fil\leftskip=0pt\parindent=0pt\relax}
 \def\justified{\rightskip=0pt\relax}
-\def\vfill{\vskip0pt plus 1fil\relax}
+% \vfill is a PRIMITIVE here (primitives.go), bound to fill_glue = 0pt plus 1fill as
+% tex.web §20559/§20601/§3319 has it. The macro that used to sit on this line spelt it
+% "plus 1fil" — order ONE — and shadowed the primitive, so \vfill shared the leftover
+% space with the page style's own \vfil instead of taking all of it.
+%
+% ⛔ No backquotes in this comment: it lives inside a Go RAW STRING, where one ends the
+% preamble. Fourth time in this repository.
 \def\eject{\par\penalty-10000 }
 \def\supereject{\par\penalty-10000 }
 \def\break{\penalty-10000 }
