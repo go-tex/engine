@@ -328,9 +328,19 @@ Each stage is gated by an objective oracle:
    477.48. `\fill`, `\enskip` and `\samepage` are defined, and `\stretch` is the
    reference's **second** order of infinity (`0pt plus n fill`, l.1454) rather than
    the first, which decides who wins the leftover space on a list that also holds a
-   `\hfil`. **Vertical** infinite glue does not stretch yet: `\vfil`/`\vfill`/`\vss`
-   are no-ops and a page is packed at its natural height, so `\vspace{\fill}` puts
-   nothing between its neighbours (#663). `\\` is a **Go primitive** that scans its own
+   `\hfil`. `\vfil`/`\vfill`/`\vss` contribute their glue at the reference's orders
+   (`tex.web` §20557-20559, §20600-20601, §3318-3320), and `\vfill` is the **second**
+   order where a macro in the format used to shadow the primitive with the first (#674).
+   **Every page is packed `exactly` to `\vsize`, whatever its page style**
+   (`tex.web` §19321 `page_goal:=vsize`, §19564 `best_size:=page_goal`, §19813
+   `vpackage(…,best_size,exactly,…)`): TeX has no page-style branch in the packer,
+   because styles are the output routine's business. `\pagestyle{empty}` — which this
+   engine takes as its **default** — was packed at its **natural** height, so the page
+   was exactly as tall as its material and every vertical glue on it stretched by
+   nothing: `\vspace{\fill}` under that style put its word at **143.91** where
+   `tectonic` puts it at **664.72**. §19811-19814 sets `vbadness:=inf_bad` and
+   `vfuzz:=max_dimen` around that call *"to inhibit error messages"*, so a page that
+   cannot fill itself is packed short in **silence** — it is not a warning. `\\` is a **Go primitive** that scans its own
    star and optional length: as a macro built on `\@ifstar` it put `\@ifstar` into the
    maths source and every formula holding a matrix row separator was refused, because
    the maths capture writes a control sequence **verbatim** and never consults its
