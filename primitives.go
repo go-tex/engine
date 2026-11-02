@@ -2574,9 +2574,40 @@ func (e *Engine) loadStomach() {
 	e.prim("hss", func(e *Engine) {
 		e.placeHGlue(glueSpec{stretch: unity, stretchOrder: 1, shrink: unity, shrinkOrder: 1})
 	})
-	for _, f := range []string{"vfil", "vfill", "vss"} {
-		e.prim(f, func(e *Engine) {})
-	}
+	// ⛔⛔ THE VERTICAL TRIO WAS EMPTY WHILE THE HORIZONTAL ONE ABOVE WAS RIGHT. The
+	// asymmetry is the whole defect: \hfil/\hfill/\hss contributed their glue and
+	// \vfil/\vfill/\vss contributed NOTHING, so a page could not be filled from below.
+	//
+	// tex.web §20557-20559 binds them, and §20600-20601 and §3318-3320 say what to:
+	//
+	//	primitive("vfil",vskip,fil_code)    fil_glue  == 0pt plus 1fil
+	//	primitive("vfill",vskip,fill_code)  fill_glue == 0pt plus 1fill
+	//	primitive("vss",vskip,ss_code)      ss_glue   == 0pt plus 1fil minus 1fil
+	//
+	// with stretch_order fil and fill respectively (§3359-3360). They are \vskip with
+	// a fixed glue, which is why they go through contribute like \vskip and not
+	// through placeHGlue like their horizontal twins.
+	//
+	// ⛔ \vfill was not merely empty: format.go also carried
+	// `\def\vfill{\vskip0pt plus 1fil\relax}`, shadowing the primitive with ORDER 1
+	// where TeX gives order 2. Measured against explicit glues of each order on the
+	// default page style, the word pushed down landed at
+	//
+	//	\vskip 0pt plus 1fil    398.890      \vfill  398.865   <- matched order ONE
+	//	\vskip 0pt plus 1fill   658.625
+	//
+	// so \vfill shared the leftover space evenly with the page style's own \vfil
+	// instead of taking all of it. That macro is gone: one implementation, here.
+	e.prim("vfil", func(e *Engine) {
+		e.contribute(glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}})
+	})
+	e.prim("vfill", func(e *Engine) {
+		e.contribute(glueNode{spec: glueSpec{stretch: unity, stretchOrder: 2}})
+	})
+	e.prim("vss", func(e *Engine) {
+		e.contribute(glueNode{spec: glueSpec{
+			stretch: unity, stretchOrder: 1, shrink: unity, shrinkOrder: 1}})
+	})
 	// LaTeX spacing commands. \hspace{d}/\hspace*{d} put fixed horizontal glue of
 	// width d on the line; \vspace{d}/\vspace*{d} put fixed vertical glue on the
 	// page. \hrulefill and \dotfill are fill glue (order 2) rendered as a rule or a
