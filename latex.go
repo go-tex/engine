@@ -908,6 +908,17 @@ const MiniLaTeXKernel = `
 % same name. Nothing was stepping either of them; what was missing is the
 % representation below, not the counter.
 \def\thefootnote{\@arabic\c@footnote}
+% latex.ltx:13168 — the mark itself, as a macro a class or a document can replace:
+%
+%	\def\@makefnmark{\hbox{\@textsuperscript{\normalfont\@thefnmark}}}
+%
+% \@thefnmark is not declared here: the reference sets it per note with
+% \protected@xdef (latex.ltx:13179), and queueFootnoteText does the same in the note's
+% own group. A default would be a mark no footnote ever asked for.
+% ⚠ \@textsuperscript is the identity in this engine (classprims.go:260), so the mark
+% comes out at text size and on the baseline where the reference raises it. That is a
+% SEPARATE divergence from where the mark sits, and it is unchanged by this block.
+\def\@makefnmark{\hbox{\@textsuperscript{\normalfont\@thefnmark}}}
 % ⛔⛔ \footnoterule WAS THREE HARD-CODED NODES IN assemblePage, so a class could not
 % change it — and 60 of the 154 measured papers redefine it. The shape below is
 % article.cls:605-608's, which is what this engine already drew, so defining it changes
