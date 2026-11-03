@@ -27,12 +27,22 @@ func TestFootnote(t *testing.T) {
 	if len(notes) != 2 {
 		t.Fatalf("footnote nodes on mvl = %d, want 2", len(notes))
 	}
-	// Bodies are numbered "N. text" (the space is glue, dropped by mvlText).
-	if got := mvlText([]node{notes[0]}); got != "1.First" {
-		t.Errorf("note 1 body = %q, want %q", got, "1.First")
+	// Bodies are numbered "N text" (the space is glue, dropped by mvlText).
+	//
+	// ⛔⛔ CE TEST EXIGEAIT « 1.First », ET CE POINT EST UN DÉFAUT QU'IL FIGEAIT. La
+	// référence ne l'écrit pas: \@makefntext pose la marque puis le texte,
+	// \hb@xt@1.8em{\hss\@makefnmark}#1 (article.cls:609-612), et \@makefnmark ne porte
+	// aucune ponctuation (latex.ltx:13168). Mesuré contre tectonic sur un papier avec
+	// \thanks et une note de corps: « ∗ Affiliation » et « 1 Note ordinaire. » là-bas,
+	// « 1. Affiliation » et « 2. Note ordinaire. » ici.
+	//
+	// Une attente mise à jour sans sa raison serait un test qui suit le code; celle-ci
+	// suit la référence, et c'est la référence qui a changé d'avis sur nous.
+	if got := mvlText([]node{notes[0]}); got != "1First" {
+		t.Errorf("note 1 body = %q, want %q", got, "1First")
 	}
-	if got := mvlText([]node{notes[1]}); got != "2.Second" {
-		t.Errorf("note 2 body = %q, want %q", got, "2.Second")
+	if got := mvlText([]node{notes[1]}); got != "2Second" {
+		t.Errorf("note 2 body = %q, want %q", got, "2Second")
 	}
 	// The inline marker is a raised (negative-shift) box on the first line.
 	line, _ := e.mvl[0].(*boxNode)

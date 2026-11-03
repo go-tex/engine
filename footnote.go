@@ -63,16 +63,78 @@ func (e *Engine) setFootinsSkip(v int) {
 // list, and drop a raised reference number at the current point.
 func (e *Engine) doFootnote() {
 	text := e.grabUndelimited()
+	n := e.stepFootnote()
+	mark := e.footnoteMark(n)
+	e.queueFootnoteText(mark, text)
+	e.emitFootnoteMark(mark)
+}
+
+// footnoteCounterIndex is the count register \c@footnote lives in, or -1 when no
+// format declared the counter.
+func (e *Engine) footnoteCounterIndex() int {
+	if m := e.eq["c@footnote"]; m != nil && m.kind == mCountRef {
+		return m.code
+	}
+	return -1
+}
+
+// stepFootnote advances the footnote counter and returns its new value.
+//
+// ⛔⛔ THE COUNTER WAS A GO int ON THE ENGINE, AND THAT IS WHY TWO SEPARATE DEFECTS
+// COULD NOT BE FIXED. \thefootnote could not be consulted, because there was no
+// \c@footnote for it to read; and \setcounter{footnote}{0} could not reach it, because
+// LaTeX's counter commands all go through \c@<name>. article.cls:223 resets the counter
+// that way immediately after \maketitle, which is how the body's first note is 1 while
+// the title's \thanks has already consumed a number.
+//
+// ⛔ The Go field survives as the fallback for an engine running with no format loaded
+// — several tests drive the primitives directly — and is kept in step so nothing reads
+// a stale value. It is a fallback, not a second source of truth: when \c@footnote
+// exists it is the counter, and the field only mirrors it.
+func (e *Engine) stepFootnote() int {
+	if i := e.footnoteCounterIndex(); i >= 0 {
+		e.stepCounter("footnote")
+		e.footnoteCounter = e.count[i]
+		return e.count[i]
+	}
 	e.footnoteCounter++
-	n := e.footnoteCounter
-	e.queueFootnoteText(n, text)
-	e.emitFootnoteMark(n)
+	return e.footnoteCounter
+}
+
+// footnoteMark is what \thefootnote produces for value n — the ARABIC NUMBER in the
+// body, and the SYMBOL (*, †, ‡) inside \maketitle, where article.cls:205 redefines it
+// as \@fnsymbol\c@footnote.
+//
+// ⛔ Measured against tectonic before this existed: a paper whose title block carries
+// \thanks got `1` where the reference gives `∗`, and the body's first note `2` where
+// the reference gives `1`. 70 of the 154 measured papers write \thefootnote.
+//
+// ⛔ The register is set and restored around the expansion rather than stepped, because
+// \footnotemark[3] names a number without disturbing the counter — LaTeX does the same
+// with \begingroup\c@footnote#1\relax.
+func (e *Engine) footnoteMark(n int) string {
+	i := e.footnoteCounterIndex()
+	m := e.eq["thefootnote"]
+	if i < 0 || m == nil || m.kind != mMacro {
+		return strconv.Itoa(n)
+	}
+	old := e.count[i]
+	e.count[i] = n
+	s := strings.TrimSpace(e.expandToString([]tok{csTok("thefootnote")}))
+	e.count[i] = old
+	if s == "" {
+		// ⛔ An empty expansion is not a mark. Falling back to the digits keeps a note
+		// visible rather than silently losing its reference, which is the failure a
+		// reader cannot see.
+		return strconv.Itoa(n)
+	}
+	return s
 }
 
 // queueFootnoteText builds the numbered note and holds it until the enclosing paragraph
 // attaches it to the vertical list. Split out of doFootnote so \footnotetext can reach it:
 // the two halves of a footnote are separable in LaTeX and were not here.
-func (e *Engine) queueFootnoteText(n int, text []tok) {
+func (e *Engine) queueFootnoteText(mark string, text []tok) {
 	// Body = \footnotesize "N. " + text, set as a mini-paragraph to the body width.
 	//
 	// ⛔ IN BRACES, because typesetGroupToVbox saves the vertical-list state and the
@@ -88,23 +150,32 @@ func (e *Engine) queueFootnoteText(n int, text []tok) {
 	// the other six callers — floats, minipage, multicols, parbox, subfigure,
 	// two-column spans — exactly as they were; putting a group inside the sandbox
 	// broke multicols, whose body crosses it with groups open.
+	// ⛔ NO FULL STOP. This wrote "1. " where the reference writes the mark and a
+	// space: \@makefntext is \hb@xt@1.8em{\hss\@makefnmark}#1 (article.cls:609-612),
+	// and \@makefnmark carries no punctuation. Measured against tectonic on a paper
+	// with a \thanks and a body note: `∗ Affiliation` and `1 Note ordinaire.` there,
+	// `1. Affiliation` and `2. Note ordinaire.` here.
+	//
+	// ⚠ The 1.8em box that right-aligns the mark is NOT built here — \hb@xt@ is itself
+	// on the absent list (34 of 154 papers). This fixes what the mark IS, not yet where
+	// it sits.
 	label := []tok{chTok('{', catBegin), csTok("footnotesize")}
-	label = append(label, numberToks(n)...)
-	label = append(label, chTok('.', catOther), chTok(' ', catSpace))
+	label = append(label, stringToToks(mark)...)
+	label = append(label, chTok(' ', catSpace))
 	body := append(label, text...)
 	body = append(body, chTok('}', catEnd))
 	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(body))
 }
 
 // emitFootnoteMark drops the raised reference number at the current point.
-func (e *Engine) emitFootnoteMark(n int) {
+func (e *Engine) emitFootnoteMark(mark string) {
 	if e.curFont == nil {
 		return
 	}
 	if !e.inPar {
 		e.beginParagraph(true)
 	}
-	e.parList = append(e.parList, e.footnoteMarker(n))
+	e.parList = append(e.parList, e.footnoteMarker(mark))
 }
 
 // doFootnoteMark implements \footnotemark and doFootnoteText implements \footnotetext: the
@@ -129,18 +200,21 @@ func (e *Engine) emitFootnoteMark(n int) {
 func (e *Engine) doFootnoteMark() {
 	n, explicit := e.scanOptFootnoteNumber()
 	if !explicit {
-		e.footnoteCounter++
-		n = e.footnoteCounter
+		n = e.stepFootnote()
 	}
-	e.emitFootnoteMark(n)
+	e.emitFootnoteMark(e.footnoteMark(n))
 }
 
 func (e *Engine) doFootnoteText() {
 	n, explicit := e.scanOptFootnoteNumber()
 	if !explicit {
-		n = e.footnoteCounter
+		if i := e.footnoteCounterIndex(); i >= 0 {
+			n = e.count[i]
+		} else {
+			n = e.footnoteCounter
+		}
 	}
-	e.queueFootnoteText(n, e.grabUndelimited())
+	e.queueFootnoteText(e.footnoteMark(n), e.grabUndelimited())
 }
 
 // scanOptFootnoteNumber reads the optional [n] both commands take. A bracket whose content
@@ -159,9 +233,9 @@ func (e *Engine) scanOptFootnoteNumber() (int, bool) {
 
 // footnoteMarker builds the raised reference number placed inline at the \footnote
 // call — the digits packed into an hbox shifted up by ~0.4em.
-func (e *Engine) footnoteMarker(n int) node {
+func (e *Engine) footnoteMarker(mark string) node {
 	var mk []node
-	for _, r := range strconv.Itoa(n) {
+	for _, r := range mark {
 		w, h, d := e.curFont.charDimsSP(r)
 		mk = append(mk, charNode{ch: r, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont})
 	}

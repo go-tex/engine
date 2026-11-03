@@ -331,6 +331,13 @@ Each stage is gated by an objective oracle:
    `\hfil`. `\vfil`/`\vfill`/`\vss` contribute their glue at the reference's orders
    (`tex.web` §20557-20559, §20600-20601, §3318-3320), and `\vfill` is the **second**
    order where a macro in the format used to shadow the primitive with the first (#674).
+   **A footnote's mark is whatever `\thefootnote` expands to**, not digits built in
+   Go: the counter is the TeX counter `\c@footnote` (`latex.ltx:13164-13165`), so
+   `\renewcommand\thefootnote{\fnsymbol{footnote}}` works, and `\maketitle` scopes it
+   to `\@fnsymbol` as `article.cls:205` does — a title block's `\thanks` comes out
+   `∗`, not `1`, as it does in the reference. The foot label carries no full stop
+   (`\@makefnmark` has none); this engine wrote `1.` and a space. The mark is **not** set
+   in `\@makefntext`'s `\hb@xt@1.8em{\hss …}` box, so its *position* is unchanged.
    **Every page is packed `exactly` to `\vsize`, whatever its page style**
    (`tex.web` §19321 `page_goal:=vsize`, §19564 `best_size:=page_goal`, §19813
    `vpackage(…,best_size,exactly,…)`): TeX has no page-style branch in the packer,
