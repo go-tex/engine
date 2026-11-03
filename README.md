@@ -338,6 +338,12 @@ Each stage is gated by an objective oracle:
    `∗`, not `1`, as it does in the reference. The foot label carries no full stop
    (`\@makefnmark` has none); this engine wrote `1.` and a space. The mark is **not** set
    in `\@makefntext`'s `\hb@xt@1.8em{\hss …}` box, so its *position* is unchanged.
+   **`\footnoterule` is a macro the page builder executes**, not three nodes built in
+   Go: `60 of the 154` measured papers redefine it, and what this engine drew was
+   `article.cls:605-608`'s `.4\columnwidth` — right for article and its relatives by
+   coincidence, where the kernel's own rule is a fixed `2in`
+   (`latex.ltx:13162-13163`). `\let\footnoterule\relax` now draws **nothing**, which is
+   what `article.cls:172` asks for on a title page.
    **Every page is packed `exactly` to `\vsize`, whatever its page style**
    (`tex.web` §19321 `page_goal:=vsize`, §19564 `best_size:=page_goal`, §19813
    `vpackage(…,best_size,exactly,…)`): TeX has no page-style branch in the packer,
