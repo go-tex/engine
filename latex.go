@@ -338,9 +338,20 @@ const MiniLaTeXKernel = `
 % entry, so its author/year content is recovered even for a .bbl whose entry BODY
 % (apsrev's \bibinfo{author}{…}) this kernel renders only in part. \bibitem{⟨key⟩}
 % (no bracket) is unchanged.
+% ⛔⛔ THE MARKER'S BRACKETS WERE WRITTEN INTO THESE TWO MACROS, so a class could not
+% change them. latex.ltx:13324 makes the marker a macro of its own —
+%
+%	\def\@biblabel#1{[#1]}
+%
+% — and article.cls:568 calls it to build the list's label. 2961 papers of the arXiv
+% pool and 19 of the measured 154 carry a CLASS that redefines it — \def\@biblabel#1{#1.}
+% and the like; this engine executes those classes, so the definition was reaching the
+% eqtb and being ignored at the one point that mattered. Measured before: a document
+% writing \def\@biblabel#1{<<#1>>} rendered BYTE-IDENTICALLY to one that did not.
+\def\@biblabel#1{[#1]}
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
-\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{[\thebibitem]\enspace}}
-\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{[\thebibitem]\enspace}}
+\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
+\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
 % arguments after an optional occurrence number (xstring.tex:444,
 % \xs_newmacro*3\IfSubStr{1}{2}{0}). Undefined it consumed nothing, and acmart opens

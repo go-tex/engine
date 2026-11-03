@@ -181,17 +181,57 @@ func (e *Engine) doCite() {
 	for i, k := range keys {
 		keys[i] = e.refText(k)
 	}
+	list := joinComma(keys)
+	if pre != "" {
+		list = pre + " " + list
+	}
+	if e.citeThroughMacro(list, post) {
+		return
+	}
 	var b strings.Builder
 	b.WriteString("[")
-	if pre != "" {
-		b.WriteString(pre + " ")
-	}
-	b.WriteString(joinComma(keys))
+	b.WriteString(list)
 	if post != "" {
 		b.WriteString(", " + post)
 	}
 	b.WriteString("]")
 	e.pushString(b.String())
+}
+
+// citeThroughMacro hands the finished key list to \@cite when the format or the class
+// defines one, as latex.ltx:13295 does, and says whether it did.
+//
+// ⛔⛔ THE BRACKETS WERE BUILT IN GO, so a class could not change them — and 1450 papers
+// of the arXiv pool, 12 of the measured 154, carry a class that redefines \@cite. This
+// engine EXECUTES those classes, so the redefinition was already in the eqtb and was
+// dropped at the point of use: a document writing \def\@cite#1#2{(((#1#2)))} rendered
+// byte-identically to one that did not.
+//
+//	\def\@cite#1#2{[{#1\if@tempswa , #2\fi}]}
+//
+// ⛔ \if@tempswa IS SET HERE, not left over. The reference's \cite sets it true when it
+// read a bracket and false when it did not (latex.ltx:13283-13284), and a redefined
+// \@cite reads it to decide whether to print the note at all. Leaving it alone would
+// make the note's fate depend on whatever last touched the switch.
+//
+// The precedent is footnoteRuleNodes and footnoteTextBody (footnote.go): a macro the
+// reference defines is EXECUTED, not imitated.
+func (e *Engine) citeThroughMacro(list, post string) bool {
+	m := e.eq["@cite"]
+	if m == nil || m.kind != mMacro {
+		return false
+	}
+	toks := []tok{csTok("@tempswafalse")}
+	if post != "" {
+		toks[0] = csTok("@tempswatrue")
+	}
+	toks = append(toks, csTok("@cite"), chTok('{', catBegin))
+	toks = append(toks, stringToToks(list)...)
+	toks = append(toks, chTok('}', catEnd), chTok('{', catBegin))
+	toks = append(toks, stringToToks(post)...)
+	toks = append(toks, chTok('}', catEnd))
+	e.push(toks)
+	return true
 }
 
 // readCiteNotes reads the one or two optional arguments a citation command takes.
