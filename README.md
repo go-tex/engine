@@ -353,6 +353,19 @@ Each stage is gated by an objective oracle:
    coincidence, where the kernel's own rule is a fixed `2in`
    (`latex.ltx:13162-13163`). `\let\footnoterule\relax` now draws **nothing**, which is
    what `article.cls:172` asks for on a title page.
+   **A citation's brackets are `\@biblabel` and `\@cite`, called**, not brackets built in
+   Go: the reference makes both a macro (`latex.ltx:13324`, `:13322`) and
+   `article.cls:568` builds the bibliography list's label by calling `\@biblabel`. This
+   engine runs real `.cls` files, so a class's redefinition was already in the eqtb and
+   was dropped at the point of use — a document writing `\def\@biblabel#1{<<#1>>}`
+   rendered **byte-identically** to one that did not. `22 of the 154` measured papers
+   carry a class that redefines one of the two (`19` for `\@biblabel`, `12` for
+   `\@cite`), and only 50 of the 154 ship a class at all, so that is **44 %** of the
+   papers that bring their own; `18 of 154` render differently. `\if@tempswa` is set
+   rather than inherited, as `latex.ltx:13283-13284` sets it, so a redefined `\@cite`
+   can decide whether to print the note. `\@citex` — the iteration natbib replaces — is
+   **not** executed; one paper in 154 ships `natbib.sty`
+   ([#681](https://github.com/go-tex/engine/issues/681)).
    **Every page is packed `exactly` to `\vsize`, whatever its page style**
    (`tex.web` §19321 `page_goal:=vsize`, §19564 `best_size:=page_goal`, §19813
    `vpackage(…,best_size,exactly,…)`): TeX has no page-style branch in the packer,
