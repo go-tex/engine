@@ -155,16 +155,54 @@ func (e *Engine) queueFootnoteText(mark string, text []tok) {
 	// and \@makefnmark carries no punctuation. Measured against tectonic on a paper
 	// with a \thanks and a body note: `∗ Affiliation` and `1 Note ordinaire.` there,
 	// `1. Affiliation` and `2. Note ordinaire.` here.
-	//
-	// ⚠ The 1.8em box that right-aligns the mark is NOT built here — \hb@xt@ is itself
-	// on the absent list (34 of 154 papers). This fixes what the mark IS, not yet where
-	// it sits.
-	label := []tok{chTok('{', catBegin), csTok("footnotesize")}
-	label = append(label, stringToToks(mark)...)
-	label = append(label, chTok(' ', catSpace))
-	body := append(label, text...)
+	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(e.footnoteTextBody(mark, text)))
+}
+
+// footnoteTextBody assembles the note the way latex.ltx:13198 does — by CALLING the
+// class's \@makefntext with the note as its argument — instead of laying the mark out
+// in Go.
+//
+// ⛔⛔ THE LAYOUT OF A NOTE BELONGS TO THE CLASS, and this put the mark, a space and
+// the text in a flat row, so no class could place it. The three base classes all write
+//
+//	\newcommand\@makefntext[1]{\parindent 1em\noindent\hb@xt@1.8em{\hss\@makefnmark}#1}
+//
+// (article.cls:609-612, report.cls:708, book.cls:714), which RIGHT-ALIGNS the mark in a
+// 1.8em box, so every note's text began one box-width to the left of the reference's.
+// amsart.cls:1303 writes a different one, \def\@makefntext{\indent\@makefnmark} — no
+// parameter at all — which is why the note is handed over BRACED: that brace group is
+// the argument for the three base classes and an ordinary group for amsart, and both
+// read correctly.
+//
+// The mark reaches it through \@thefnmark, as in the reference (latex.ltx:13179), and
+// \@makefnmark (latex.go) is what turns it into a box — so a document redefining either
+// one is honoured. \@thefnmark is \def'd INSIDE the note's group rather than globally:
+// the reference's \protected@xdef is global, but it rewrites it before every note, so
+// the two cannot be told apart from the output, and the local form cannot leak a mark
+// into whatever is typeset next.
+//
+// The precedent is footnoteRuleNodes below, and latexHead (fancyhdr.go:176): a macro the
+// reference defines is EXECUTED, not imitated.
+func (e *Engine) footnoteTextBody(mark string, text []tok) []tok {
+	body := []tok{chTok('{', catBegin), csTok("footnotesize")}
+	body = append(body, csTok("def"), csTok("@thefnmark"), chTok('{', catBegin))
+	body = append(body, stringToToks(mark)...)
 	body = append(body, chTok('}', catEnd))
-	e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(body))
+	if m := e.eq["@makefntext"]; m != nil && m.kind == mMacro {
+		body = append(body, csTok("@makefntext"), chTok('{', catBegin))
+		body = append(body, text...)
+		body = append(body, chTok('}', catEnd), chTok('}', catEnd))
+		return body
+	}
+	// ⛔ No class, no \@makefntext: latex.ltx DEFINES none — it only calls it (:13198),
+	// every class supplying its own. So the fallback is this engine's, not the
+	// reference's, and it stays what the note looked like before: the mark, a space,
+	// the text. It still goes through \@makefnmark, so the mark is a class's or a
+	// document's even when the note's layout is ours.
+	body = append(body, csTok("@makefnmark"), chTok(' ', catSpace))
+	body = append(body, text...)
+	body = append(body, chTok('}', catEnd))
+	return body
 }
 
 // emitFootnoteMark drops the raised reference number at the current point.
