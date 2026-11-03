@@ -253,6 +253,45 @@ func numberToks(n int) []tok {
 	return out
 }
 
+// footnoteRuleNodes is \footnoterule, EXECUTED rather than imitated.
+//
+// ⛔⛔ THE RULE WAS THREE HARD-CODED NODES IN GO, so a class could not change it — and
+// 60 of the 154 measured papers redefine \footnoterule, counted on their own sources.
+// The shape we drew happens to match article.cls:605-608,
+//
+//	\renewcommand\footnoterule{\kern-3\p@ \hrule\@width.4\columnwidth \kern2.6\p@}
+//
+// which is why nothing looked wrong: we agreed with the commonest class by coincidence
+// and with nobody else. The kernel's own rule is a FIXED 2in (latex.ltx:13162-13163),
+// so even the default was only right for article and its relatives.
+//
+// ⛔ \let\footnoterule\relax DRAWS NOTHING. article.cls:172 does exactly that for the
+// \if@titlepage branch, so a title page's notes carry no rule at all. A name that
+// exists but is not a macro must therefore produce an EMPTY list, not the fallback —
+// reading "not a macro" as "use the built-in rule" would put a rule on the one page the
+// class took trouble to clear.
+//
+// ⭐ The precedent for executing a macro at page-assembly time is latexHead
+// (fancyhdr.go:176), which reads \@oddhead's body and typesets it the same way.
+func (e *Engine) footnoteRuleNodes() []node {
+	if m := e.eq["footnoterule"]; m != nil {
+		if m.kind != mMacro {
+			return nil // \let\footnoterule\relax
+		}
+		if b := e.typesetGroupToVbox(m.body); b != nil {
+			return []node{b}
+		}
+		return nil
+	}
+	// No format loaded: the engine's own primitives are being driven directly. The
+	// built-in shape is article.cls's, which is what this drew before.
+	return []node{
+		kernNode{width: -ptToSP(3)},
+		ruleNode{width: e.hsize * 2 / 5, height: defaultRule},
+		kernNode{width: ptToSP(2.6)},
+	}
+}
+
 // typesetGroupToVbox runs a token list through the main loop in isolation and
 // returns the material it produced as a vbox — used to set a footnote body. The
 // engine's horizontal/vertical state is saved and restored, and buildingFootnote
@@ -318,12 +357,8 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 		// net: \kern-3pt, a .4pt rule, \kern2.6pt (latex.ltx:13162-13163). The
 		// gaps here were a flat 10pt and 4pt, 5.4pt more than the reference puts
 		// there.
-		vlist = append(vlist,
-			glueNode{spec: glueSpec{width: e.footinsSkip()}},
-			kernNode{width: -ptToSP(3)},
-			ruleNode{width: e.hsize * 2 / 5, height: defaultRule},
-			kernNode{width: ptToSP(2.6)},
-		)
+		vlist = append(vlist, glueNode{spec: glueSpec{width: e.footinsSkip()}})
+		vlist = append(vlist, e.footnoteRuleNodes()...)
 		for i, b := range notes {
 			if i > 0 {
 				vlist = append(vlist, glueNode{spec: glueSpec{width: 3 * unity}})

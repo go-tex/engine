@@ -908,6 +908,16 @@ const MiniLaTeXKernel = `
 % same name. Nothing was stepping either of them; what was missing is the
 % representation below, not the counter.
 \def\thefootnote{\@arabic\c@footnote}
+% ⛔⛔ \footnoterule WAS THREE HARD-CODED NODES IN assemblePage, so a class could not
+% change it — and 60 of the 154 measured papers redefine it. The shape below is
+% article.cls:605-608's, which is what this engine already drew, so defining it changes
+% nothing by itself and makes every redefinition take effect:
+%
+%	\renewcommand\footnoterule{\kern-3\p@ \hrule\@width.4\columnwidth \kern2.6\p@}
+%
+% The KERNEL's own rule is a fixed 2in (latex.ltx:13162-13163) — a different number —
+% so the agreement was with article and its relatives, not with LaTeX.
+\def\footnoterule{\kern-3\p@ \hrule\@width.4\columnwidth \kern2.6\p@}
 \def\fnsymbol#1{\expandafter\@fnsymbol\csname c@#1\endcsname}
 % ─── length interface (feat/lengths) ─────────────────────────────────────────
 % \fill and \stretch, from the same block of the reference:
