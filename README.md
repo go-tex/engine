@@ -336,8 +336,17 @@ Each stage is gated by an objective oracle:
    `\renewcommand\thefootnote{\fnsymbol{footnote}}` works, and `\maketitle` scopes it
    to `\@fnsymbol` as `article.cls:205` does — a title block's `\thanks` comes out
    `∗`, not `1`, as it does in the reference. The foot label carries no full stop
-   (`\@makefnmark` has none); this engine wrote `1.` and a space. The mark is **not** set
-   in `\@makefntext`'s `\hb@xt@1.8em{\hss …}` box, so its *position* is unchanged.
+   (`\@makefnmark` has none); this engine wrote `1.` and a space.
+   **And a note's layout is `\@makefntext`, called**, not a row built in Go: the three
+   base classes right-align the mark in a `1.8em` box
+   (`\hb@xt@1.8em{\hss\@makefnmark}#1`, `article.cls:609-612`, `report.cls:708`,
+   `book.cls:714`), so every note's text used to begin one box-width to the left of
+   the reference's — measured as no box of `14.400pt` anywhere on the page before and
+   one now, with `72 of the 154` corpus papers rendering differently and Σ\|deviation\|
+   `277 → 276`. The mark reaches it through `\@thefnmark` and `\@makefnmark`
+   (`latex.ltx:13168`, `:13179`), both replaceable by a document. `\@textsuperscript`
+   is still the identity here, so the mark is set at text size on the baseline where
+   the reference raises it — a separate divergence, unchanged.
    **`\footnoterule` is a macro the page builder executes**, not three nodes built in
    Go: `60 of the 154` measured papers redefine it, and what this engine drew was
    `article.cls:605-608`'s `.4\columnwidth` — right for article and its relatives by
