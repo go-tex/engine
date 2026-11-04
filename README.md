@@ -366,6 +366,19 @@ Each stage is gated by an objective oracle:
    can decide whether to print the note. `\@citex` — the iteration natbib replaces — is
    **not** executed; one paper in 154 ships `natbib.sty`
    ([#681](https://github.com/go-tex/engine/issues/681)).
+   **A display chooses between the long and the short skips.** `tex.web:22578-22585`
+   takes `\abovedisplayshortskip`/`\belowdisplayshortskip` when the previous line ends
+   to the *left* of where the display begins — they do not collide, so little space is
+   needed — and this engine always took the long pair. Measured baseline to baseline
+   across one display between two text lines: `11.96`/`17.93` in the reference against
+   our `21.92`/`21.92`, now `11.96`/`17.93` **exactly**. A document of 40 displays went
+   from 6 pages to the reference's 5. On the corpus the signed page bias falls from
+   `+50` to **`+35`** and the median absolute deviation reaches **0** — but Σ\|deviation\|
+   moves only 276 → 275: every mover got shorter, which rights the papers we set too
+   long and worsens six we already set too short, two of them from exact. That surplus
+   glue was cancelling a second, opposite error, now measurable on its own
+   ([#683](https://github.com/go-tex/engine/issues/683)). `\predisplaysize` follows
+   `tex.web:21781-21813`, two ems and all, but is not exposed as a register.
    **Every page is packed `exactly` to `\vsize`, whatever its page style**
    (`tex.web` §19321 `page_goal:=vsize`, §19564 `best_size:=page_goal`, §19813
    `vpackage(…,best_size,exactly,…)`): TeX has no page-style branch in the packer,
