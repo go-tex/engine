@@ -2,6 +2,18 @@ package engine
 
 import "testing"
 
+// wideDisplay is a formula broad enough that, centred in the 200pt measure these
+// tests use, its left edge falls to the LEFT of where the preceding line ends. That
+// is TeX's "not enough clearance" case (tex.web:22580) and selects the long pair of
+// display skips.
+//
+// ⛔ A LONG PRECEDING PARAGRAPH DOES NOT DO THIS, which is worth writing down because
+// it is the obvious thing to reach for and it fails: the quantity TeX measures is the
+// LAST line of that paragraph, and a paragraph long enough to wrap ends on a short
+// remainder. Widening the display moves the edge instead of the text, and the edge is
+// the other half of the same comparison.
+const wideDisplay = `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+
 // A display places \abovedisplayskip glue before its box and \belowdisplayskip
 // after it, carrying the values in the like-named registers — and the ordinary
 // interline glue stays. TeX ADDS the two skips to it rather than replacing it:
@@ -10,6 +22,14 @@ import "testing"
 // baselineskip-prev_depth-height(b) in front of it, and it never sets prev_depth
 // to ignore_depth around a display. So the list above the box reads
 // [\abovedisplayskip][interline][box].
+//
+// ⛔⛔ THIS TEST ASSERTED ONE BRANCH WITHOUT KNOWING THERE WERE TWO. TeX chooses
+// between the long pair and the SHORT pair depending on whether the line before the
+// display reaches as far as the display's left edge (tex.web:22578-22585), and its
+// original document — `before $$x$$ after` with a short first line and a centred
+// display — takes the SHORT branch. Asserting 10pt there froze the defect that cost
+// 13.95pt on every display (#683). The long branch needs a preceding line that
+// actually reaches the display, which is what the filler below is for.
 func TestDisplaySkipsAroundDisplay(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{})
@@ -18,7 +38,7 @@ func TestDisplaySkipsAroundDisplay(t *testing.T) {
 	// text paragraphs; the display's box must be flanked by glue of those values.
 	src := `\newskip\abovedisplayskip \abovedisplayskip=10pt` +
 		`\newskip\belowdisplayskip \belowdisplayskip=7pt` +
-		`before $$x$$ after\par`
+		`before $$` + wideDisplay + `$$ after\par`
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
 	}
