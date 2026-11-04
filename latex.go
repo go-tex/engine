@@ -304,7 +304,25 @@ const MiniLaTeXKernel = `
 % Between items: \itemsep, as latex.ltx's \@item adds (l.11567), PLUS \parsep —
 % inside a list \parskip is \parsep, so the paragraph break between two items
 % carries it too. \itemsep alone put items 18.1pt apart where the reference has 22.5.
+% ⛔⛔ THE THREE LIST PENALTIES WERE NEVER CONTRIBUTED, and they are what lets the page
+% builder split a list. latex.ltx puts one before the first item (:11562), one between
+% items (:11567) and one after the list (:11523, \@endparenv):
+%
+%	\addpenalty\@beginparpenalty \addvspace\@topsep
+%	\addpenalty\@itempenalty     \addvspace\itemsep
+%	\addpenalty\@endparpenalty   \addvspace\@topsepadd
+%
+% All three are NEGATIVE (-\@lowpenalty, -51): they ENCOURAGE a break there. Without
+% them the builder has no reason to prefer a list boundary, carries a list it could
+% have split, and spends a page it did not need — 40 itemize blocks cost 7 pages
+% against the reference's 6 while every height agreed (go-tex/engine#685).
+%
+% ⚠ Fixing \addpenalty alone was NOT enough, which is worth recording: these list
+% macros are this engine's own, not the kernel's \list, so they never called it. The
+% no-op stub hid that — with the stub in place, adding the calls would have changed
+% nothing either, and each fix on its own looks inert.
 \def\@iteminterspace{\if@listfirst\@listfirstfalse\else
+  \addpenalty\@itempenalty
   \@tempskipa\itemsep\advance\@tempskipa\parsep
   \ifdim\@tempskipa>\z@\vskip\@tempskipa\fi\fi}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
@@ -315,10 +333,10 @@ const MiniLaTeXKernel = `
 % the bracket that \@ifnextbracket has already confirmed is present.
 \def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
-\def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
-\def\enditemize{\par\endgroup\addvspace\@topsepadd}
-\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
-\def\endenumerate{\par\@enumitemrec\endgroup\addvspace\@topsepadd}
+\def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addpenalty\@beginparpenalty\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
+\def\enditemize{\par\endgroup\addpenalty\@endparpenalty\addvspace\@topsepadd}
+\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addpenalty\@beginparpenalty\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
+\def\endenumerate{\par\@enumitemrec\endgroup\addpenalty\@endparpenalty\addvspace\@topsepadd}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a

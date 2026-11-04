@@ -2723,6 +2723,10 @@ func (e *Engine) loadStomach() {
 		}
 	})
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
+	// \gotex@addpenalty is \addpenalty's body: the penalty goes BEFORE the glue that
+	// already ends the vertical list, which is what the reference's three cancelling
+	// \vskip's achieve on a list that can only be appended to. See addpenalty.go.
+	e.prim("gotex@addpenalty", func(e *Engine) { e.addPenaltyToPage(e.scanInt()) })
 	// Box shifting: \raise/\lower move an hbox/vbox off the baseline (horizontal
 	// mode); \moveleft/\moveright shift a box horizontally (vertical mode). TeX's
 	// shift_amount is positive downward, so \raise and \moveleft negate it.
