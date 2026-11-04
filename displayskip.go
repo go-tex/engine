@@ -86,7 +86,14 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 	// display. Suppressing it here cost a whole \baselineskip per display:
 	// measured against tectonic on one \[…\] between two lines of text, baseline
 	// to baseline across the display, reference 43.95pt against our 32.02pt.
-	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("abovedisplayskip")})
+	// Which PAIR of skips: the short one when the line before the display ends to
+	// the left of where the display begins (tex.web:22578-22585, and
+	// predisplaysize.go for the measurement that said this was never happening).
+	above, below := "abovedisplayskip", "belowdisplayskip"
+	if !e.alignDisplay && useShortDisplaySkips(e.lastLinePreDisplaySize(), displayLeftEdge(boxes[0])) {
+		above, below = "abovedisplayshortskip", "belowdisplayshortskip"
+	}
+	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip(above)})
 	if e.alignDisplay {
 		// See placeAlignmentDisplay: an alignment carries its own first-row glue.
 		e.mvl = append(e.mvl, glueNode{spec: glueSpec{width: e.baselineskip}})
@@ -119,7 +126,7 @@ func (e *Engine) placeDisplay(boxes []*boxNode) {
 	// then follows it through the ordinary interline path, prev_depth being the
 	// depth of the last display box (tex.web:22614-22615, then resume_after_display
 	// — again, nothing resets prev_depth).
-	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("belowdisplayskip")})
+	e.mvl = append(e.mvl, glueNode{spec: e.namedSkip(below)})
 	// The text after the display resumes the same paragraph in TeX, so the fresh
 	// paragraph this engine starts for it must not carry a \parskip (see
 	// beginParagraph). An explicit \par before that text clears the flag.
