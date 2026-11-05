@@ -350,8 +350,31 @@ const MiniLaTeXKernel = `
 % writing \def\@biblabel#1{<<#1>>} rendered BYTE-IDENTICALLY to one that did not.
 \def\@biblabel#1{[#1]}
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
-\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
-\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
+% ⛔⛔ AND A BIBLIOGRAPHY ENTRY IS AN \item, SO IT CARRIES \itemsep + \parsep.
+% article.cls:565-583 builds thebibliography on \list and the kernel's \@lbibitem /
+% \@bibitem open each entry with \item (latex.ltx:13275, 13279), so every entry after
+% the first gets what \@item adds (latex.ltx:11567) — \itemsep, plus \parsep because
+% \parskip is \parsep inside a list. Here the entries were separated by a bare \par.
+%
+% The registers were already right: \itemsep, \parsep, \topsep, \labelsep and
+% \labelwidth read IDENTICAL to the reference's from inside both engines (4pt plus 2
+% minus 1, 4pt plus 2 minus 1, 8pt plus 2 minus 4, 5pt, 20pt). Only this one call was
+% missing, and \@iteminterspace had been computing the sum for \itemize and
+% \enumerate all along.
+%
+% Measured against tectonic on two entries: the reference puts 19.93pt between the
+% last line of one and the first line of the next, we put 11.96 — exactly one
+% \baselineskip, the space of a \par and nothing else. With the call: 19.93, to the
+% hundredth. That is 7.97pt per entry, so a 40-entry bibliography was more than half
+% a page short and a 100-entry one a page and a half.
+%
+% ⚠ The ENTRY'S MEASURE is a different defect and is NOT fixed here: our entries
+% start at x=116.91 where the reference starts them at 133.77, the text margin
+% itself. That one is not in this macro — article.cls computes it in the settings
+% block of \list, and our \list is a two-argument stub that expands to \@trivlist
+% (classprims.go) and throws that block away. Filed separately.
+\def\@bibitemopt[#1]#2{\par\@iteminterspace\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
+\def\@bibitemnoopt#1{\par\@iteminterspace\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
 % arguments after an optional occurrence number (xstring.tex:444,
 % \xs_newmacro*3\IfSubStr{1}{2}{0}). Undefined it consumed nothing, and acmart opens
