@@ -334,11 +334,26 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			// \penalty-300 on a badness-10000 page at 9700 — cheaper than a perfectly
 			// full page at any positive penalty.
 			//
-			// That is the arithmetic behind three measured regressions: \addpenalty on
-			// lists (#685), \addvspace (#690) and the sectioning penalties (#691) are all
-			// NEGATIVE penalties, each faithful to latex.ltx, and each made the corpus
-			// worse. They were being compared on a scale that rewarded them for landing
-			// on pages TeX refuses outright.
+			// ⚠ AND IT CHANGES NOTHING ON THE CORPUS, MEASURED TWICE. 154 arXiv papers
+			// against tectonic, on this page builder and again on the one that fires a
+			// page at a breakpoint rather than at the node that crosses \vsize (#693):
+			// ZERO documents moved, both times — not an unchanged Σ that hides
+			// compensating moves, zero displacement.
+			//
+			// This comment first claimed the rule was "the arithmetic behind" the three
+			// measured regressions of #685, #690 and #691, which are all negative
+			// penalties faithful to latex.ltx. That is an explanation nothing supports:
+			// it was written before the sweep and the sweep refused it. The reason the
+			// clause cannot reach those cases is visible in the rule itself — ties go to
+			// the LATER breakpoint (`c <= least`), so when every candidate on a hopeless
+			// page costs the same deplorable, the champion is the same one the sum would
+			// have picked. It bites only where a negative penalty sits EARLIER than a
+			// zero-penalty breakpoint on a page that stays infinitely bad, which the
+			// test below builds deliberately and the corpus does not contain.
+			//
+			// It ships as a port, not as a fix: the equality oracle is tex.web, and a
+			// faithful rule with no measured effect is worth more than an unfaithful one
+			// with none.
 			c := b + float64(pen)
 			if b >= infBad {
 				c = deplorable
