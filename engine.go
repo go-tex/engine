@@ -205,6 +205,7 @@ type Engine struct {
 	jobName string // \jobname: the main input file's base name ("" ⇒ texput)
 
 	out    strings.Builder   // \message output
+	shows  strings.Builder   // \showthe output: a diagnostic TeX prints unconditionally
 	labels map[string]string // \label → \@currentlabel text, resolved by \ref (two-pass)
 	// typed cross-references (see typedrefs.go): recorded beside labels at \label
 	// time and carried through the two-pass compile exactly like labels.
@@ -2374,6 +2375,16 @@ type Diagnostics struct {
 	// documents it prints nothing, and a diagnosis has to typeset its answers onto a
 	// page instead. Empty unless the document said something.
 	Messages string
+	// Shows is what \showthe asked to be shown, one "> value." per line.
+	//
+	// ⛔ IT IS SEPARATE FROM Messages BECAUSE TeX TREATS IT DIFFERENTLY. \message is
+	// the document talking, and a caller may reasonably not want it; \showthe is a
+	// DIAGNOSTIC the user asked for by name, and tex.web:23721-23726 writes it to the
+	// log and the terminal whatever the interaction mode. Folding it into Messages put
+	// it behind -messages, where our own measurement tooling could not see it: measure
+	// dimens writes one \showthe per dimension and read ZERO of them, because the flag
+	// it would have to pass is this engine's and not a real TeX's. (#686)
+	Shows string
 	// RunawayArgs counts the macro calls abandoned because a \par ended an argument
 	// (tex.web §392/§396, parEndsArgument). It is an ALARM, not a feature gap: the
 	// call is dropped, so whatever it would have set is gone. It used to be tallied
@@ -2515,6 +2526,7 @@ func (e *Engine) Diagnostics() Diagnostics {
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
 		Messages:         e.out.String(),
+		Shows:            e.shows.String(),
 		RunawayArgs:      e.runawayArgs,
 		RunawayMacros:    e.runawayMacros,
 		UndefinedEnvs:    undefinedEnvs,
