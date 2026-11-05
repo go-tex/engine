@@ -275,10 +275,36 @@ func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 // revtex — never set \vsize, so it stays 0. Breaking against 0 makes every legal
 // breakpoint overfull, exploding a paper into hundreds of near-empty pages. Fall
 // back to the plain-TeX default page height so such a document paginates normally.
+// ⛔⛔ AND WHEN IT FIRES, THE RUN SAYS SO. 8.9in is 643.20pt against article's
+// 550pt — 93pt, more than seven lines, of page per page — so a document broken
+// against it is not being measured against anything the document asked for, and a
+// Σ|deviation| that contains such a document says nothing about the engine.
+// It used to fire in silence, which is how it ended up in `effectiveVsize`'s own
+// comment as a fact about revtex and aastex that nobody had checked.
+//
+// ⚠ IT IS NOT A FACT: measured on 2307.10134, a revtex paper, the counter stays at
+// zero — \vsize is set there and the fallback never runs. Whatever carries that
+// population's bias, this is not it.
+//
+// ⛔ AND \textheight IS NOT A SECOND CHANCE HERE, however much ltoutput.dtx:183
+// ("Page layout must initialize \@colht and \@colroom to \textheight") invites it:
+// this engine \lets \textheight TO \vsize, so the two names are one register and
+// `if \textheight > 0` after `if \vsize > 0` can never be true. The reference keeps
+// three distinct quantities where we keep one —
+//
+//	\@colht   : the column's total height; \textheight in single-column (:288-291)
+//	\@colroom : \@colht minus the floats committed top and bottom     (:293-296)
+//	\vsize    : set globally to \@colroom by the output routine, per page (:1652)
+//
+// — and closing that gap is a page-layout change, not a fallback.
 func (e *Engine) effectiveVsize() int {
 	if e.vsize > 0 {
 		return e.vsize
 	}
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS["gotex@vsize-fallback"]++
 	return ptToSP(8.9 * 7227.0 / 100.0) // plain TeX \vsize = 8.9in
 }
 
