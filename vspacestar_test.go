@@ -58,11 +58,49 @@ func TestVspaceStarSurvivesAPageBreak(t *testing.T) {
 		t.Errorf("starred: page two starts at %.1f, page one at %.1f — the 50pt did not survive", y2, y1)
 	}
 
-	// The unstarred form is discarded at a page top, as TeX discards any glue there.
+	// ⛔⛔ THE UNSTARRED FORM IS DISCARDED ON PAGE ONE TOO, and this half of the test
+	// used to assert the opposite — it required page one to KEEP the glue and only
+	// page two to lose it. The oracle says otherwise, on this very document:
+	//
+	//	tectonic                       page 1 baseline y = 134.76
+	//	this engine, before            page 1 baseline y = 184.56   ← 49.8pt too low
+	//	this engine, discarding        page 1 baseline y = 134.74
+	//
+	// build_page discards a glue, kern or penalty node outright while
+	// page_contents < box_there (tex.web:19495-19502, `goto done1`), and the main
+	// vertical list is empty when the document opens. Page one is a page top like any
+	// other. The old expectation was this engine's own 50pt error written down as a
+	// requirement, which is how a test stops being a check.
 	pp := pagesOf(plain)
 	py1, py2 := firstBaselineY(t, pp[0]), firstBaselineY(t, pp[1])
-	if py2 >= py1-amount/2 {
-		t.Errorf("plain: page two starts at %.1f and page one at %.1f — the glue should have been discarded", py2, py1)
+	if diff := py2 - py1; diff < -1 || diff > 1 {
+		t.Errorf("plain: page one starts at %.1f and page two at %.1f — both are page "+
+			"tops and the glue is discarded at both", py1, py2)
+	}
+
+	// ⛔ AND THE DISCRIMINATOR, which is what this test exists for: the STAR is the
+	// whole difference. \@vspacer puts a zero-height rule in front of the glue
+	// (latex.ltx:6584); a rule is not discardable, so the glue is no longer at the top
+	// of the page and survives. Without this line the two assertions above would both
+	// pass for an engine that discarded the starred form as well.
+	//
+	// The bound is "at least the glue", not "exactly the glue", and the slack is a
+	// measured quantity rather than room to be vague. With a zero-height rule as the
+	// page's first box, \topskip is not reduced at all (tex.web:19513 subtracts
+	// height(p), and the rule's is 0), so the starred page carries the full \topskip
+	// plus the 50pt plus whatever the rule contributes before the first text line.
+	// On this document:
+	//
+	//	tectonic   starred 196.53, plain 134.76  → 61.77
+	//	this engine starred 191.66, plain 134.74 → 56.92
+	//
+	// ⚠ That remaining 4.87pt is a DIFFERENT defect and not this one's business: the
+	// same starred document gives 191.66 both before and after this change, so it
+	// predates it. Filed separately.
+	if diff := y1 - py1; diff < amount {
+		t.Errorf("starred page one at %.1f, plain page one at %.1f — écart %.1f, "+
+			"au moins %.0f attendu: le filet de hauteur nulle doit retenir la colle "+
+			"que la forme non étoilée perd", y1, py1, diff, amount)
 	}
 }
 

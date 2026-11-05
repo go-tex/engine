@@ -217,7 +217,20 @@ func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 	// Whatsits from slices that held no box. TeX keeps them on the contribution
 	// list rather than shipping a page for them; see pageIsUnshippable.
 	var carry []node
-	for start := 0; start < len(list); {
+	// ⛔⛔ THE FIRST PAGE STARTS AT ITS FIRST BOX, like every other one. While
+	// page_contents < box_there, build_page DISCARDS a glue, kern or penalty node
+	// outright — `goto done1`, tex.web:19495-19502 — so its width never reaches
+	// page_total and its stretch and shrink never reach page_so_far; the page proper
+	// begins when a box arrives and \topskip is inserted ahead of it (:19509-19516).
+	//
+	// Every page after the first already got this: the loop ends with
+	// `skipDiscardable(list, end)`. Page ONE did not, because it starts at index 0 and
+	// nothing had skipped for it. A document whose main vertical list opens with glue
+	// — a \vskip from \maketitle, say — was charging that glue's height AND its
+	// shrink to a page TeX had not begun yet. Both sites have to agree about where the
+	// page starts, so the skip is done here, on the index the slice is taken from, and
+	// not inside findPageBreak where only one of the two would see it.
+	for start := skipDiscardable(list, 0); start < len(list); {
 		end := e.findPageBreak(list, start)
 		page := trimTrailingGlue(list[start:end])
 		switch {
