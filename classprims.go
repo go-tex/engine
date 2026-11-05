@@ -194,7 +194,6 @@ const LaTeX2eClassLead = `
 \def\@startsection#1#2#3#4#5#6{\par
   \@tempskipa#4\relax
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
-  \if@nobreak\else\addpenalty\@secpenalty\fi
   \vskip\@tempskipa
   \@ifstar{\@gxsec{#1}{#2}{#6}{#5}\@gxstar}{\@gxsec{#1}{#2}{#6}{#5}\@gxnum}}
 \def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
