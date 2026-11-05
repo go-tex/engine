@@ -44,13 +44,36 @@ const (
 // higher, because the 46th line's own ~1.9pt descender was charged as if it had to
 // fit above the bottom of the text block. It does not: that is what \maxdepth's 5pt
 // is for. (go-tex/engine#622)
+// ⛔⛔ AND THE PAGE'S GLUE, which this tracked none of. TeX keeps eight quantities in
+// page_so_far (tex.web:19226-19232): the goal, the total, THREE ORDERS OF INFINITE
+// STRETCH plus the finite one, the shrink, and the depth. This struct had two of
+// them, so pageBadness could only ever be a function of two heights — and TeX's
+// badness is a function of the shortfall OVER THE GLUE AVAILABLE TO ABSORB IT
+// (:19593-19599). The two ask different questions: a page ending in \vfill is badness
+// 0 to TeX and was ~10000 here. Since the breakpoint cost is `badness + penalty` on
+// both sides, every penalty was being compared against numbers on the wrong scale —
+// which is why contributing faithful list penalties made the corpus measurably worse
+// (go-tex/engine#685, #687).
 type pageSoFar struct {
-	total int // page_total: charged against \vsize
-	depth int // page_depth: NOT charged, capped at \maxdepth
+	total   int    // page_total: charged against \vsize
+	depth   int    // page_depth: NOT charged, capped at \maxdepth
+	stretch [4]int // page_so_far[2..5]: finite, fil, fill, filll
+	shrink  int    // page_so_far[6]
 }
 
 // add moves the pair for one node, exactly as tex.web:19519-19529 and 19550 do.
 func (p *pageSoFar) add(n node, maxDepth int) {
+	// The glue a node carries is accumulated whatever its kind: tex.web:19542-19548
+	// adds the stretch and shrink of every glue node contributed to the page, and
+	// 19550 then moves the heights. A box contributes none of its own.
+	if g, ok := n.(glueNode); ok {
+		o := g.spec.stretchOrder
+		if o < 0 || o >= len(p.stretch) {
+			o = 0
+		}
+		p.stretch[o] += g.spec.stretch
+		p.shrink += g.spec.shrink
+	}
 	h, d, kind := vHeightDepth(n)
 	switch kind {
 	case vBoxLike:
@@ -64,6 +87,35 @@ func (p *pageSoFar) add(n node, maxDepth int) {
 		p.total += p.depth + h
 		p.depth = 0
 	}
+}
+
+// badnessOf is tex.web:19593-19599, the badness of the page as it stands.
+//
+//	if page_total<page_goal then
+//	  if (page_so_far[3]<>0) or (page_so_far[4]<>0) or (page_so_far[5]<>0) then b:=0
+//	  else b:=badness(page_goal-page_total,page_so_far[2])
+//	else if page_total-page_goal>page_shrink then b:=awful_bad
+//	else b:=badness(page_total-page_goal,page_shrink)
+//
+// ⛔ ANY INFINITE STRETCH MAKES THE PAGE PERFECT, not merely good: a page that can be
+// filled exactly is never a bad place to stop, so TeX scores it 0 and lets the
+// penalties alone decide. A \vfill at the end of a chapter is the everyday case.
+//
+// ⛔ AND OVERFULL IS NOT "TALLER THAN \vsize". It is taller by more than the page's
+// glue can SHRINK. Refusing every h > vsize, as this did, throws away pages TeX
+// accepts by tightening them.
+func (p *pageSoFar) badnessOf(goal int) float64 {
+	const awfulBad = 0x3FFFFFFF
+	if p.total < goal {
+		if p.stretch[1] != 0 || p.stretch[2] != 0 || p.stretch[3] != 0 {
+			return 0
+		}
+		return float64(badness(goal-p.total, p.stretch[0]))
+	}
+	if p.total-goal > p.shrink {
+		return awfulBad
+	}
+	return float64(badness(p.total-goal, p.shrink))
 }
 
 // vContribution is a node's contribution to the running page height (sp).
@@ -258,8 +310,12 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			if pen <= -10000 {
 				return i // forced break
 			}
-			b := pageBadness(page.total, vsize)
-			if math.IsInf(b, 1) { // already overfull at a legal break
+			// ⛔ awful_bad, not +Inf: tex.web:19556-19560 compares b against
+			// awful_bad as a NUMBER, and :19572 fires the page when the cost reaches
+			// it. A page whose excess exceeds its own shrink is beyond saving; one
+			// that is merely tall is not.
+			b := page.badnessOf(vsize)
+			if b >= 0x3FFFFFFF { // overfull beyond what the page's glue can shrink
 				if best >= 0 {
 					return best
 				}
