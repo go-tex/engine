@@ -180,6 +180,9 @@ func (e *Engine) loadPrimitives() {
 	// \showthe prints what \the would give and carries on (tex.web:23721-23726); see
 	// showthe.go for why the operand is read by \the itself rather than re-parsed.
 	e.prim("showthe", func(e *Engine) { e.doShowThe() })
+	// \addvspace's body: "leave AT LEAST this much", a maximum against the skip
+	// already on the list rather than a sum. See addvspace.go.
+	e.prim("gotex@addvspace", func(e *Engine) { e.addVSpaceToPage(e.scanGlue()) })
 	e.prim("romannumeral", func(e *Engine) { e.pushString(roman(e.scanInt())) })
 
 	// e-TeX expressions (see etex.go). Executed on their own they contribute
