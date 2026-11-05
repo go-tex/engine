@@ -314,6 +314,17 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			// awful_bad as a NUMBER, and :19572 fires the page when the cost reaches
 			// it. A page whose excess exceeds its own shrink is beyond saving; one
 			// that is merely tall is not.
+			//
+			// ⛔⛔ AND THIS IS THE ONLY THING THAT FIRES A FULL PAGE. build_page has no
+			// "the total passed the goal" test anywhere (tex.web:19425-19432 loops
+			// until the contribution list is empty; :19572 fires on c=awful_bad or a
+			// forced penalty, and nothing else). This loop also returned as soon as
+			// page_total crossed \vsize, at whatever node did the crossing — which
+			// throws away the half of badnessOf that exists for exactly this moment:
+			// a page is overfull when its excess beats its SHRINK, not when it is
+			// merely taller than \vsize. With the early return in place, every page
+			// whose glue could have been tightened stopped one item short, and the
+			// shrink was computed and then never consulted.
 			b := page.badnessOf(vsize)
 			if b >= 0x3FFFFFFF { // overfull beyond what the page's glue can shrink
 				if best >= 0 {
@@ -338,9 +349,35 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			sawFootnote = true
 			page.total += e.footinsSkip()
 		}
-		if page.total > vsize && best >= 0 {
-			return best
-		}
+	}
+	// ⛔⛔ THE END OF THE LIST IS A BREAKPOINT, AND IT IS WHAT FIRES THE LAST PAGE.
+	// This is not an afterthought to the change above: with build_page's own firing
+	// rule and nothing else, a page that overflows with no breakpoint left after it
+	// would simply never fire. tex.web:20486-20500 is how TeX gets there —
+	//
+	//	tail_append(new_null_box); width(tail):=hsize;
+	//	tail_append(new_glue(fill_glue));
+	//	tail_append(new_penalty(-@'10000000000));
+	//	build_page;
+	//
+	// \end does not hand the residue to the shipper. It appends an empty box, a
+	// \vfill and a forced penalty and runs build_page ONE MORE TIME, so the last
+	// page is decided at a real breakpoint like every other page. Two details of
+	// that fixture matter here and both are read off the order in :19457-19470:
+	//
+	//   - the null box charges the pending page_depth into page_total (:19519), so
+	//     the depth of the last box on the page is finally paid;
+	//   - the \vfill is a legal breakpoint whose badness is taken BEFORE its own
+	//     stretch is added (update_heights runs after the champion test), so the
+	//     \vfill does not rescue a page that is already too tall.
+	//
+	// So: an overfull page fires at its champion, and a page that still fits keeps
+	// everything to the end. 0x3FFFFFFF is awful_bad, @'7777777777 in WEB.
+	final := page
+	final.total += final.depth
+	final.depth = 0
+	if best >= 0 && final.badnessOf(vsize) >= 0x3FFFFFFF {
+		return best
 	}
 	return len(list)
 }
