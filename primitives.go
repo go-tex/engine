@@ -177,6 +177,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("string", func(e *Engine) { e.doString() })
 	e.prim("number", func(e *Engine) { e.pushString(strconv.Itoa(e.scanInt())) })
 	e.prim("the", func(e *Engine) { e.doThe() })
+	// \addvspace's body: "leave AT LEAST this much", a maximum against the skip
+	// already on the list rather than a sum. See addvspace.go.
+	e.prim("gotex@addvspace", func(e *Engine) { e.addVSpaceToPage(e.scanGlue()) })
 	e.prim("romannumeral", func(e *Engine) { e.pushString(roman(e.scanInt())) })
 
 	// e-TeX expressions (see etex.go). Executed on their own they contribute
