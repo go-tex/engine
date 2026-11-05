@@ -177,6 +177,9 @@ func (e *Engine) loadPrimitives() {
 	e.prim("string", func(e *Engine) { e.doString() })
 	e.prim("number", func(e *Engine) { e.pushString(strconv.Itoa(e.scanInt())) })
 	e.prim("the", func(e *Engine) { e.doThe() })
+	// \showthe prints what \the would give and carries on (tex.web:23721-23726); see
+	// showthe.go for why the operand is read by \the itself rather than re-parsed.
+	e.prim("showthe", func(e *Engine) { e.doShowThe() })
 	e.prim("romannumeral", func(e *Engine) { e.pushString(roman(e.scanInt())) })
 
 	// e-TeX expressions (see etex.go). Executed on their own they contribute

@@ -127,6 +127,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "gotex: wrote %s (%d page%s)\n", outName, pages, plural(pages))
+	// ⛔ \showthe IS NOT BEHIND A FLAG. The user asked for it by name in the document,
+	// and tex.web:23721-23726 writes it to the log and the terminal whatever the
+	// interaction mode. Putting it behind -messages hid it from our own measurement
+	// tooling, which writes \showthe the way a real TeX documents it (#686).
+	if diag.Shows != "" {
+		fmt.Fprintln(stderr, diag.Shows)
+	}
 	if *showMessages && diag.Messages != "" {
 		fmt.Fprintf(stderr, "gotex: the document said:\n%s\n", diag.Messages)
 	}
