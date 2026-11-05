@@ -176,9 +176,25 @@ const LaTeX2eClassLead = `
 % vertical space above the heading (its sign is LaTeX's indent flag, so the space
 % is its magnitude); afterskip is threaded through to \@gxhead, which puts it below
 % a display heading (positive) or runs the text in beside the heading (negative).
+% ⛔⛔ NO PENALTY WAS CONTRIBUTED AROUND A HEADING. latex.ltx:12774-12778 puts
+% \@secpenalty (-300) before the skip, unless \if@nobreak:
+%
+%	\if@nobreak \everypar{}%
+%	\else \addpenalty\@secpenalty\addvspace\@tempskipa \fi
+%
+% Compared with tectonic's own \showlists on a heading between two paragraphs, our list
+% carried NEITHER that -300 NOR the \penalty 10000 that follows the heading — and that
+% second one is what forbids a page break between a heading and its first line of text,
+% a typographic fault this engine could commit and the reference cannot
+% (go-tex/engine#691).
+%
+% ⚠ \addvspace is still \vskip here. The maximum rule is a separate change with its own
+% measurement (#690), parked because our glue around a heading is ordered differently
+% from the reference's, which is what that comparison turned up.
 \def\@startsection#1#2#3#4#5#6{\par
   \@tempskipa#4\relax
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \if@nobreak\else\addpenalty\@secpenalty\fi
   \vskip\@tempskipa
   \@ifstar{\@gxsec{#1}{#2}{#6}{#5}\@gxstar}{\@gxsec{#1}{#2}{#6}{#5}\@gxnum}}
 \def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
@@ -217,11 +233,18 @@ const LaTeX2eClassLead = `
 % symptom was only 1.99pt per section, and fixing either alone makes headings
 % worse than leaving both — go-tex/engine#620 has the arithmetic:
 % −1.989 + 5.978 − 4.00 ≈ 0.
+% ⛔⛔ \penalty\@M AFTER THE HEADING, which is what \@afterheading's \@nobreaktrue
+% produces in the reference's list (latex.ltx:12852-12857, seen as a penalty of 10000
+% right after the heading hbox in tectonic's \showlists). It forbids a page break
+% between a heading and the first line of its text — a club line of the worst kind,
+% and one this engine could produce because it contributed no penalty at all there.
+% Only the DISPLAY branch takes it: a run-in heading (negative afterskip) continues on
+% the same line, so there is no vertical break to forbid.
 \def\@gxhead#1#2#3{\@tempskipa#3\relax
   \ifdim\@tempskipa<\z@
     \noindent{#1 #2}\hskip-\@tempskipa
   \else
-    \noindent{#1 #2\par}\vskip\@tempskipa
+    \noindent{#1 #2\par}\penalty\@M\vskip\@tempskipa
   \fi}
 % \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection
 % calls once it has read the star, the optional toc title and the title. This
