@@ -105,7 +105,6 @@ func (p *pageSoFar) add(n node, maxDepth int) {
 // glue can SHRINK. Refusing every h > vsize, as this did, throws away pages TeX
 // accepts by tightening them.
 func (p *pageSoFar) badnessOf(goal int) float64 {
-	const awfulBad = 0x3FFFFFFF
 	if p.total < goal {
 		if p.stretch[1] != 0 || p.stretch[2] != 0 || p.stretch[3] != 0 {
 			return 0
@@ -315,13 +314,36 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			// it. A page whose excess exceeds its own shrink is beyond saving; one
 			// that is merely tall is not.
 			b := page.badnessOf(vsize)
-			if b >= 0x3FFFFFFF { // overfull beyond what the page's glue can shrink
+			if b >= awfulBad { // overfull beyond what the page's glue can shrink
 				if best >= 0 {
 					return best
 				}
 				return i
 			}
-			if c := b + float64(pen); c <= least {
+			// ⛔⛔ A PAGE THAT IS INFINITELY BAD COSTS `deplorable`, AND THE PENALTY DOES
+			// NOT BUY IT BACK. tex.web:19556-19560 is a three-way choice, not a sum:
+			//
+			//	if pi<=eject_penalty then c:=pi
+			//	else if b<inf_bad then c:=b+pi+insert_penalties
+			//	else c:=deplorable
+			//
+			// The middle line — the one this had — applies ONLY while b < inf_bad. Once
+			// the page is infinitely bad, every breakpoint on it costs the same 100000
+			// whatever penalty sits there, so TeX stops letting a negative penalty make a
+			// nearly-empty page look attractive. Summing instead, as this did, scored a
+			// \penalty-300 on a badness-10000 page at 9700 — cheaper than a perfectly
+			// full page at any positive penalty.
+			//
+			// That is the arithmetic behind three measured regressions: \addpenalty on
+			// lists (#685), \addvspace (#690) and the sectioning penalties (#691) are all
+			// NEGATIVE penalties, each faithful to latex.ltx, and each made the corpus
+			// worse. They were being compared on a scale that rewarded them for landing
+			// on pages TeX refuses outright.
+			c := b + float64(pen)
+			if b >= infBad {
+				c = deplorable
+			}
+			if c <= least {
 				least, best = c, i
 			}
 		}
