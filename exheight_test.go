@@ -133,8 +133,13 @@ func TestAParInsideAGroupTakesThatGroupsBaselineskip(t *testing.T) {
 //
 // LaTeX's own \@sect is the authority: \begingroup #6\relax … #8\@@par \endgroup.
 func TestGxheadEndsTheHeadingParagraphInsideTheGroup(t *testing.T) {
-	const inside = `\noindent{#1 #2\par}\vskip\@tempskipa`
-	const outside = `\noindent{#1 #2}\par\vskip\@tempskipa`
+	// ⛔ L'INVARIANT EST L'ACCOLADE, PAS LA LIGNE ENTIÈRE. Une première version exigeait
+	// `\noindent{#1 #2\par}\vskip\@tempskipa` en entier et s'est cassée le jour où un
+	// \penalty\@M s'est glissé entre le groupe et le \vskip (#691) — un changement qui
+	// ne touche en rien ce que ce test garde. Une assertion de forme doit nommer la
+	// forme qu'elle garde, sinon elle gèle aussi tout ce qui l'entoure.
+	const inside = `\noindent{#1 #2\par}`
+	const outside = `\noindent{#1 #2}\par`
 	if !strings.Contains(LaTeX2eClassLead, inside) {
 		t.Errorf("\\@gxhead ne termine pas le paragraphe du titre DANS le groupe de style")
 	}

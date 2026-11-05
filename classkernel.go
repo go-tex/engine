@@ -657,7 +657,20 @@ const LaTeX2eClassKernel = `
 \def\numberline#1{#1\gotex@numberlineend}
 \long\def\addtocontents#1#2{}
 \def\addvspace#1{\vskip#1}
-\def\addpenalty#1{}
+% \addpenalty was a no-op body, so every page-break hint the kernel and the classes
+% give was discarded. latex.ltx:6540-6567, in the 2015/01/01 form the tectonic bundle
+% carries and this engine is measured against; the body is in Go (addpenalty.go)
+% because the penalty must go BEFORE the glue already on the list.
+%
+% ⛔ NO BRACES: it scans a NUMBER, as \penalty does, and a brace group is not one —
+% with braces an argument of -77 read as 0, silently. \relax terminates the scan.
+%
+% ⚠ The LIST penalties are deliberately NOT restored here. Contributing them made the
+% corpus measurably worse, twice, on two different page-badness implementations
+% (go-tex/engine#685): Σ|deviation| 275 → 281 and the signed bias +35 → +43. Only the
+% SECTIONING penalties are wired up, and they are measured on their own.
+\def\addpenalty#1{\ifvmode\if@minipage\else\if@nobreak\else
+  \gotex@addpenalty#1\relax\fi\fi\fi}
 \def\nobreakspace{\space}
 % ── diagnostics not already routed by the kernel-helper layer ────────────────
 \def\@font@warning#1{\message{Font Warning: #1}}
