@@ -54,8 +54,31 @@ func TestVspaceStarSurvivesAPageBreak(t *testing.T) {
 
 	sp := pagesOf(starred)
 	y1, y2 := firstBaselineY(t, sp[0]), firstBaselineY(t, sp[1])
-	if diff := y2 - y1; diff < -1 || diff > 1 {
-		t.Errorf("starred: page two starts at %.1f, page one at %.1f — the 50pt did not survive", y2, y1)
+	_ = y1
+
+	// ⛔⛔ "PAGE TWO LINES UP WITH PAGE ONE" IS NOT WHAT THE REFERENCE DOES, and this
+	// assertion used to demand it to within 1pt. On this very document tectonic puts
+	// starred page one at 196.53 and starred page two at 194.48 — **2.05pt apart** —
+	// and the reason is exactly the quantity \@vspacer saves and restores:
+	//
+	//	page one   \prevdepth 0 at the body's start  → \glue(\baselineskip) 4.95
+	//	page two   \prevdepth 2.05998, the depth of page one's line
+	//	                                             → \glue(\baselineskip) 2.89
+	//	                                               4.95 − 2.89 = 2.06
+	//
+	// Two pages whose preceding depth differs are not meant to line up. Demanding it
+	// pinned a coincidence of the old code, where neither page got interline glue at
+	// all because \prevdepth was never restored after the rule.
+	//
+	// ⭐ What "the 50pt survived the break" really means is measured against the
+	// UNSTARRED form, whose glue the page builder discards at a page top: starred
+	// page two must sit a full `amount` below plain page two. In the reference that
+	// is 194.48 against 134.76, a gap of 59.72.
+	pp0 := pagesOf(plain)
+	if plainY2 := firstBaselineY(t, pp0[1]); y2-plainY2 < amount {
+		t.Errorf("starred page two at %.1f, plain page two at %.1f — écart %.1f, "+
+			"au moins %.0f attendu: c'est le filet non rejetable qui retient la "+
+			"colle au sommet de la page", y2, plainY2, y2-plainY2, amount)
 	}
 
 	// ⛔⛔ THE UNSTARRED FORM IS DISCARDED ON PAGE ONE TOO, and this half of the test
