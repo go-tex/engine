@@ -105,7 +105,6 @@ func (p *pageSoFar) add(n node, maxDepth int) {
 // glue can SHRINK. Refusing every h > vsize, as this did, throws away pages TeX
 // accepts by tightening them.
 func (p *pageSoFar) badnessOf(goal int) float64 {
-	const awfulBad = 0x3FFFFFFF
 	if p.total < goal {
 		if p.stretch[1] != 0 || p.stretch[2] != 0 || p.stretch[3] != 0 {
 			return 0
@@ -326,13 +325,51 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			// whose glue could have been tightened stopped one item short, and the
 			// shrink was computed and then never consulted.
 			b := page.badnessOf(vsize)
-			if b >= 0x3FFFFFFF { // overfull beyond what the page's glue can shrink
+			if b >= awfulBad { // overfull beyond what the page's glue can shrink
 				if best >= 0 {
 					return best
 				}
 				return i
 			}
-			if c := b + float64(pen); c <= least {
+			// ⛔⛔ A PAGE THAT IS INFINITELY BAD COSTS `deplorable`, AND THE PENALTY DOES
+			// NOT BUY IT BACK. tex.web:19556-19560 is a three-way choice, not a sum:
+			//
+			//	if pi<=eject_penalty then c:=pi
+			//	else if b<inf_bad then c:=b+pi+insert_penalties
+			//	else c:=deplorable
+			//
+			// The middle line — the one this had — applies ONLY while b < inf_bad. Once
+			// the page is infinitely bad, every breakpoint on it costs the same 100000
+			// whatever penalty sits there, so TeX stops letting a negative penalty make a
+			// nearly-empty page look attractive. Summing instead, as this did, scored a
+			// \penalty-300 on a badness-10000 page at 9700 — cheaper than a perfectly
+			// full page at any positive penalty.
+			//
+			// ⚠ AND IT CHANGES NOTHING ON THE CORPUS, MEASURED TWICE. 154 arXiv papers
+			// against tectonic, on this page builder and again on the one that fires a
+			// page at a breakpoint rather than at the node that crosses \vsize (#693):
+			// ZERO documents moved, both times — not an unchanged Σ that hides
+			// compensating moves, zero displacement.
+			//
+			// This comment first claimed the rule was "the arithmetic behind" the three
+			// measured regressions of #685, #690 and #691, which are all negative
+			// penalties faithful to latex.ltx. That is an explanation nothing supports:
+			// it was written before the sweep and the sweep refused it. The reason the
+			// clause cannot reach those cases is visible in the rule itself — ties go to
+			// the LATER breakpoint (`c <= least`), so when every candidate on a hopeless
+			// page costs the same deplorable, the champion is the same one the sum would
+			// have picked. It bites only where a negative penalty sits EARLIER than a
+			// zero-penalty breakpoint on a page that stays infinitely bad, which the
+			// test below builds deliberately and the corpus does not contain.
+			//
+			// It ships as a port, not as a fix: the equality oracle is tex.web, and a
+			// faithful rule with no measured effect is worth more than an unfaithful one
+			// with none.
+			c := b + float64(pen)
+			if b >= infBad {
+				c = deplorable
+			}
+			if c <= least {
 				least, best = c, i
 			}
 		}
