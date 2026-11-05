@@ -447,19 +447,47 @@ func legalPageBreak(list []node, i, start int) (bool, int) {
 		}
 		return true, n.penalty
 	case glueNode:
-		if i > start && isBoxLike(list[i-1]) {
+		if i > start && precedesBreak(list[i-1]) {
 			return true, 0
 		}
 	}
 	return false, 0
 }
 
-func isBoxLike(n node) bool {
-	switch n.(type) {
-	case *boxNode, ruleNode, charNode, mathNode:
+// precedesBreak is TeX's precedes_break, and it is a test on the node TYPE:
+//
+//	@d precedes_break(#)==(type(#)<math_node)        tex.web:3109
+//
+// `math_node = 9` (`:3092`), so it is true for every type below it: hlist 0, vlist 1,
+// rule 2, ins 3, mark 4, adjust 5, ligature 6, disc 7 — and **whatsit 8** (`:3085`).
+// build_page applies it to the last node already on the page before it will accept a
+// glue node as a breakpoint (`:19496`).
+//
+// ⛔⛔ THIS MUST AGREE WITH vHeightDepth ABOUT WHAT A BOX IS, and the predicate it
+// replaced did not. vHeightDepth calls twelve kinds of node box-like — boxes, rules,
+// chars, display maths, spans, images, frames, decorations, transforms, both kinds of
+// link and a footnote — and charges each one's height and depth to page_total as TeX
+// charges an hlist's. The breakpoint test named FOUR of them. So the page builder
+// would add an image's height to the page and then refuse to break after it: a page
+// carrying a figure, a framed block or a link kept growing past the only place TeX
+// would have stopped it. Two functions that classify the same node must classify it
+// the same way, and the way to make that true is to have one of them answer, not to
+// keep two lists in step.
+//
+// ⚠ mathNode is the one place this engine's model and TeX's numbering disagree, and
+// box-like is the right answer here: TeX's math_node is an inline on/off marker that
+// lives in a HORIZONTAL list and never reaches the main vertical list, while a
+// mathNode on this engine's vertical list is a display equation — which TeX sets as
+// an hlist, type 0.
+func precedesBreak(n node) bool {
+	// A whatsit is type 8 and 8 < 9: \special, \write and friends do not stop a break
+	// from being taken after them. They are not box-like, so vHeightDepth says
+	// nothing about them.
+	if _, ok := n.(specialNode); ok {
 		return true
 	}
-	return false
+	_, _, kind := vHeightDepth(n)
+	return kind == vBoxLike
 }
 
 // pageBadness measures how far a page of height h falls short of \vsize: 0 when
