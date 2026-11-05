@@ -858,9 +858,33 @@ const MiniLaTeXKernel = `
 % and the marks default to \@gobble (:12870-12872) so they cost nothing until a
 % page style redefines them — \ps@headings does
 % \def\sectionmark##1{\markboth{\MakeUppercase{…##1}}{}}.
-\let\sectionmark\@gobble
-\let\subsectionmark\@gobble
-\let\subsubsectionmark\@gobble
+% ⛔⛔ \def, NOT \let\…\@gobble, BECAUSE \@gobble DOES NOT EXIST YET HERE.
+% latex.ltx:12870-12872 writes \let\sectionmark\@gobble and that is right for LaTeX,
+% where \@gobble is defined long before. In this engine \@gobble lives in
+% LaTeX2eKernelHelpers (kernelhelpers.go:71), which LoadLaTeX loads AFTER this block
+% — so \let copied an UNDEFINED meaning into all three marks and they stayed
+% undefined for the whole run. \meaning\sectionmark says so from before
+% \documentclass to the end of the body.
+%
+% The consequence is not a missing running head — this engine has no output routine
+% to show one — it is that \@gxnum calls \csname #1mark\endcsname{⟨title⟩} on every
+% NUMBERED heading (classprims.go), so an undefined control sequence met its
+% argument and lenient mode set that argument AS TEXT. Measured against tectonic:
+%
+%	\subsection{BBBTITREBBB}
+%	reference   "0.1 BBBTITREBBB"
+%	before      "BBBTITREBBB 0.1 BBBTITREBBB"
+%
+% Every numbered \section, \subsection and \subsubsection in every document set its
+% own title an extra time, in body type, ahead of the heading. \section* was never
+% affected: \@gxstar goes straight to \@gxhead and never touches a mark.
+%
+% ⚠ gotex -report-skipped said "no undefined commands skipped" on the very document
+% that proves it, so the instrument built to find exactly this kind of gap could not
+% see it. That is its own defect and is filed separately.
+\long\def\sectionmark#1{}
+\long\def\subsectionmark#1{}
+\long\def\subsubsectionmark#1{}
 % The two page styles the standard classes declare, verbatim from article.cls's
 % one-sided branch (\ps@headings) and latex.ltx (\ps@myheadings). doPagestyle
 % RUNS \ps@name, so defining them here is all a document needs: \@oddhead is read

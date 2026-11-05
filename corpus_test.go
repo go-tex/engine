@@ -116,7 +116,15 @@ var glyphFloor = map[string]int{
 	"21-align-gather":               128,
 	"22-theoremes":                  174,
 	"23-decorations":                95,
-	"24-sommaire":                   173, // lowered from 301: the contents leader now tiles LaTeX's
+	// ⛔⛔ 173 WAS THE DUPLICATE'S FLOOR. Lowered to 165 because the 8 glyphs that went
+	// missing are the ones this fixture should never have drawn: \sectionmark and
+	// \subsectionmark were undefined, so each numbered heading set its own title an
+	// extra time in body type. The oracle settles it line for line — after the fix our
+	// eleven lines carry the same texts in the same order as tectonic's, each title
+	// appearing exactly twice, once in the contents and once as the heading. A floor
+	// measured while a defect was live encodes the defect, and lowering it here is the
+	// opposite of relaxing the check: the ratchet had been set on wrong output.
+	"24-sommaire": 165, // lowered from 173; before that 301: the contents leader now tiles LaTeX's
 	// \@dotsep box instead of \dotfill's, and \l@section carries no leader at all,
 	// so 108 of the glyphs this document used to draw were dots. Control: the text
 	// of the PDF is byte-identical with '.' and spaces removed, before and after.
