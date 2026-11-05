@@ -319,9 +319,29 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 	least := math.Inf(1)
 	for i := start; i < len(list); i++ {
 		if ok, pen := legalPageBreak(list, i, start); ok {
-			if pen <= -10000 {
-				return i // forced break
-			}
+			// ⛔⛔ THE BADNESS IS COMPUTED FIRST, EVEN FOR A FORCED BREAK, because
+			// tex.web:19553-19560 computes b before it looks at pi at all, and the
+			// FIRST thing it tests is b, not the penalty:
+			//
+			//	if b<awful_bad then
+			//	  if pi<=eject_penalty then c:=pi
+			//	  …
+			//	else c:=b;
+			//
+			// So on a page that is already overfull beyond its shrink, a \newpage does
+			// NOT get to choose the break. Its cost is awful_bad like everything else
+			// on that page (:19560), it only becomes the champion if nothing better was
+			// recorded (:19563, least_page_cost starts at awful_bad), and fire_up then
+			// ships `best_page_break` — the earlier champion — leaving the material
+			// between there and the \newpage to the next page, where the forced penalty
+			// is met again.
+			//
+			// Returning at the forced break before computing b, as this did, put every
+			// one of those overfull lines on the page the \newpage ends. Up to a whole
+			// page on a document that ends a section with \newpage or \clearpage.
+			// (go-tex/engine#695)
+			b := page.badnessOf(vsize)
+			forced := pen <= -10000
 			// ⛔ awful_bad, not +Inf: tex.web:19556-19560 compares b against
 			// awful_bad as a NUMBER, and :19572 fires the page when the cost reaches
 			// it. A page whose excess exceeds its own shrink is beyond saving; one
@@ -337,12 +357,14 @@ func (e *Engine) findPageBreak(list []node, start int) int {
 			// merely taller than \vsize. With the early return in place, every page
 			// whose glue could have been tightened stopped one item short, and the
 			// shrink was computed and then never consulted.
-			b := page.badnessOf(vsize)
 			if b >= awfulBad { // overfull beyond what the page's glue can shrink
 				if best >= 0 {
 					return best
 				}
 				return i
+			}
+			if forced {
+				return i // c := pi <= eject_penalty: this break wins and fires (:19557, :19572)
 			}
 			// ⛔⛔ A PAGE THAT IS INFINITELY BAD COSTS `deplorable`, AND THE PENALTY DOES
 			// NOT BUY IT BACK. tex.web:19556-19560 is a three-way choice, not a sum:
