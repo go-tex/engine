@@ -36,7 +36,14 @@ LaTeX engine (`tectonic`).
   `\catcode`, read via `\the`/`\count`; TeX's own number syntaxes in any
   numeric slot (`"FF`, `'17`, `` `A ``) and the glyph metrics
   `\fontcharht`/`\fontchardp`/`\fontcharwd`/`\fontcharic`, which are internal
-  dimensions wherever one is read.
+  dimensions wherever one is read. **`\showthe` prints what `\the` would give**, on a
+  diagnostic stream of its own (`Diagnostics.Shows`, and `gotex` writes it
+  unconditionally): TeX sends `\message` to the log and the terminal but `\showthe` to
+  the terminal, and folding the two together makes a
+  document's own diagnostics indistinguishable from its output. The shape is
+  `print_nl("> "); token_show(…)` (`tex.web` 23721-23725) followed by `error`, and the
+  trailing full stop is `error`'s own first act (`print_char(".")`, 1883-1884) — not
+  part of the value.
 - **Grouping** — `{…}`, `\begingroup`/`\endgroup`, save/restore of meanings,
   registers, and catcodes; `\global` escapes the current group.
 
@@ -320,7 +327,16 @@ Each stage is gated by an objective oracle:
    not charged against the goal and is capped at `\maxdepth` (`tex.web` 19519-19529,
    19594-19599). Summing the two, as this did, refused a page that filled to exactly
    `\textheight` over the descender of its own last line and cost it a line
-   (#622, #648). `\hspace` and `\vspace` read a **glue**, as the reference does by
+   (#622, #648). The page also carries its **glue**: `page_so_far` is eight numbers in
+   TeX (`tex.web` 19226-19232) — the goal, the total, the depth, three orders of
+   infinite stretch, the finite one and the shrink — and the badness that decides a
+   break is a function of the shortfall *over the glue available to absorb it*
+   (19593-19599), not of two heights. A page ending in `\vfill` is badness 0 to TeX and
+   was ~10000 here. That badness is now TeX's own **integer** function (§108, with its
+   three overflow branches and the octal rounding constants) rather than a float
+   `100·(t/s)³`: the two agree on ordinary values and diverge exactly where TeX's
+   rounding decides a close break. Since a breakpoint's cost is `badness + penalty`,
+   every penalty was until then being compared against numbers on the wrong scale. `\hspace` and `\vspace` read a **glue**, as the reference does by
    putting their argument through a skip register (`ltspace.dtx` 1412-1413, 450):
    reading a rigid dimen kept the natural width and dropped the stretch, so
    `\hspace{\fill}` became a 0pt space and the words on either side were set
