@@ -464,7 +464,39 @@ const LaTeX2eKernelHelpers = `
 % accumulators and the named hooks of the 2020 format (see hooks.go), in the order
 % the real format uses: begindocument/before, the \AtBeginDocument code, then
 % begindocument/end, then the document environment's own env/document/begin.
+%
+% ⛔⛔ THE .aux IS READ FIRST AND REOPENED SECOND, which is the order latex.ltx uses
+% and the only one that works: \openout truncates, so opening before reading would
+% destroy the previous pass's answers. \@newl@bel and the two names built on it —
+% \bibcite for citations, \newlabel for references — are what the replayed lines
+% call; without them the file would be read and ignored.
+%
+% The reading is unconditional rather than guarded by \IfFileExists because a first
+% pass simply has no such file and \@input is already a no-op then.
+\def\@newl@bel#1#2#3{\global\@namedef{#1@#2}{#3}}
+\def\bibcite{\@newl@bel b}
+\def\newlabel{\@newl@bel r}
+% ⛔⛔ AND THE LINES THAT DO NOTHING MUST SAY SO. An .aux carries more than answers:
+% \citation{key}, \bibdata{file}, \bibstyle{style} are notes for BibTeX and
+% \@writefile{toc}{…} is a note for the contents file, and LaTeX gobbles all of them
+% on the way back in (\let\citation\@gobble, latex.ltx:13282; \bibdata and \bibstyle
+% :13296-13297). Undefined, each one met its argument and lenient mode set that
+% argument as text: the first line of the witness read "alpha alpha Texte (Author et
+% al., 2021)…" — the citation keys, twice, in the body.
+%
+% That is the same shape as the \sectionmark defect (#708), and it is what makes an
+% .aux round-trip dangerous to open halfway: every name the file can carry has to be
+% defined before the file is read, or the replay prints its own bookkeeping.
+%
+% \def and not \let\…\@gobble: \@gobble exists by this point in this file, but a \let
+% from a name that does not yet exist copies "undefined" silently, and this kernel
+% has already paid for that once.
+\def\citation#1{}
+\def\bibdata#1{}
+\def\bibstyle#1{}
+\def\@writefile#1#2{}
 \def\document{\if1\gotexatasked\else\catcode64=12 \fi\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
+  \@input{\jobname.aux}\immediate\openout\@auxout=\jobname.aux
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 % \enddocument also plants the LastPage label the lastpage package is loaded for,
@@ -483,6 +515,9 @@ const LaTeX2eKernelHelpers = `
 \def\enddocument{\UseHook{env/document/end}\@enddocumenthook\UseHook{enddocument}%
   \UseHook{enddocument/afterlastpage}\UseHook{enddocument/afteraux}%
   \UseHook{enddocument/info}\UseHook{enddocument/end}%
+  % The stream becomes a readable file only at \closeout, and the NEXT pass is what
+  % reads it — it is carried across by carryCrossRefs, beside the label tables.
+  \immediate\closeout\@auxout
   \par\label{LastPage}\vfill\penalty-10000 }
 % ── loaded-package / loaded-class registry (see CONTRACT above) ─────────────
 \def\@ifl@aded#1#2{\@ifundefined{ver@#2.#1}\@secondoftwo\@firstoftwo}

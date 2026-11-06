@@ -422,7 +422,21 @@ const AMSClassSubstrate = `
 \def\scriptstyle{}
 \def\m@th{}
 \def\jobname{texput}
-\def\@auxout{-1}
+% ⛔⛔ \@auxout IS A REAL STREAM. It was \def\@auxout{-1}, a number no \openout ever
+% opens, so everything a package wrote to the .aux went nowhere and nothing was ever
+% read back. That is the channel LaTeX packages use to talk to THEMSELVES across
+% passes, and with it closed no such package can work however faithfully it is
+% loaded: natbib writes \bibcite{key}{Author et al.(2021)…} from \bibitem's optional
+% argument and reads it back to resolve \citep. Measured on a witness with the real
+% natbib.sty next to the document, \citep{alpha} came out "(?)" — an unresolved
+% reference — where tectonic gives "(Author et al., 2021)". Without natbib.sty it
+% came out "[1]". Loading the package made the answer WORSE, because the package was
+% never the missing half (go-tex/engine#711).
+%
+% This engine resolves its own \label/\ref in memory and reruns until the numbers
+% stop moving (api.go), which is a sound design and stays. The .aux is opened
+% alongside it, for the packages that have no other way in.
+\newwrite\@auxout
 % \protected@edef / \protected@xdef must keep a \protect'd (robust) token from
 % expanding while the body is being expanded — real LaTeX makes \protect
 % momentarily unexpandable. Plain \edef/\xdef here expands right through \protect,
