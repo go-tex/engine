@@ -2241,7 +2241,14 @@ func (e *Engine) execCS(t tok) bool {
 	case mToksRef:
 		e.toksRefAssign(m.code) // \t{<toks>} or \t\otherreg
 	case mFont:
-		e.selectFont(m.font) // \rm etc. selects the current font (group-scoped)
+		// ⛔⛔ AT THE SIZE IN FORCE, not at the size the face was bound with.
+		// \rm/\bf/\it/\tt/\sf swap the FAMILY; they must not undo a size switch.
+		// \section's style argument is {\normalfont\Large\bfseries} — size first,
+		// series last — so selecting the bold face as it was bound put every heading
+		// in every document back at body size. Measured against tectonic:
+		// {\Large\bfseries …} came out at 9.96 where {\Large …} alone came out at
+		// 13.95 and the reference gives 14.35 for both.
+		e.selectFont(e.faceAtCurrentSize(m.font)) // \rm etc., group-scoped
 	case mPrim:
 		if !isExpandable(m.name) {
 			m.prim(e)

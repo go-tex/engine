@@ -289,6 +289,44 @@ func (o *OpenTypeFont) atSizePx(px int) fontFace {
 	return &OpenTypeFont{f: o.f, fc: o.f.NewFace(px), upem: o.upem, px: px, data: o.data}
 }
 
+// faceAtCurrentSize re-faces a FAMILY switch at the size already in force.
+//
+// ⛔⛔ \rm, \bf, \it, \tt and \sf change the family; they do not change the size.
+// Each is bound to a face built once, at the document's base size (api.go's
+// bindOptionalFont), so selecting one as bound silently undid any size switch
+// before it. LaTeX's own \section states its style as
+//
+//	{\normalfont\Large\bfseries}
+//
+// — size first, series LAST — so every section heading in every document came out
+// at body size. Measured against tectonic on a two-word witness:
+//
+//	{\Large …}            ours 13.95   reference 14.35
+//	{\Large\bfseries …}   ours  9.96   reference 14.35   ← the defect
+//	{\large …}            ours 11.96   reference 11.96
+//
+// The size the switch must keep is the CURRENT face's, not the base: a heading
+// inside a \small environment is \Large relative to that, and reading e.baseFontPx
+// here would quietly re-anchor it.
+//
+// ⚠ A face that cannot rescale — a test mock, a bitmap — keeps its own size rather
+// than being dropped: a family switch that silently did nothing would be worse than
+// one that ignores the size.
+func (e *Engine) faceAtCurrentSize(f fontFace) fontFace {
+	if f == nil || e.curFont == nil {
+		return f
+	}
+	px := e.curFont.sizePt()
+	if px <= 0 || px == f.sizePt() {
+		return f
+	}
+	sf, ok := f.(scalableFont)
+	if !ok {
+		return f
+	}
+	return sf.atSizePx(px)
+}
+
 // doFontSizeAt implements the \gotex@fontsizeat primitive: it reads the size a
 // class size table states for one of \tiny…\Huge and puts the font there.
 //
