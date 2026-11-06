@@ -124,7 +124,22 @@ var glyphFloor = map[string]int{
 	// appearing exactly twice, once in the contents and once as the heading. A floor
 	// measured while a defect was live encodes the defect, and lowering it here is the
 	// opposite of relaxing the check: the ratchet had been set on wrong output.
-	"24-sommaire": 165, // lowered from 173; before that 301: the contents leader now tiles LaTeX's
+	// ⛔⛔ 165 → 164 BECAUSE #710 SPENDS ONE GLYPH LESS, AND main WAS RED FOR AN HOUR
+	// BETWEEN TWO GREEN PULL REQUESTS. #708 lowered this floor to 165, measured on a
+	// build whose contents line still read "M’ethodes" — the backslash of \'e set as
+	// a character of category escape, with the apostrophe behind it turning into a
+	// right quote. #710 fixed that: `’` + `e` (two glyphs) became `é` (one).
+	//
+	// Neither pull request was red on its own. #710's branch was cut before #708
+	// merged, so its CI measured against the OLD floor of 173 and passed; #708's CI
+	// measured a build that still mangled the accent and passed too. The combination
+	// is 164 against 165, and the conflict gate this project uses
+	// (git merge-base --is-ancestor) only answers "do these texts conflict", never
+	// "do these two measurements interact".
+	//
+	// A floor is a measurement, so two branches that both move one are two branches
+	// that must be re-measured against each other's merge base, not just rebased.
+	"24-sommaire": 164, // lowered from 165 (#710), 173 (#708), 301: the contents leader now tiles LaTeX's
 	// \@dotsep box instead of \dotfill's, and \l@section carries no leader at all,
 	// so 108 of the glyphs this document used to draw were dots. Control: the text
 	// of the PDF is byte-identical with '.' and spaces removed, before and after.
