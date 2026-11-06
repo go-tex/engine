@@ -2673,12 +2673,39 @@ func (e *Engine) loadStomach() {
 	// ABORTED: "Extra }, or forgotten \endgroup", because the dimen scan stopped at
 	// "0pt" and met "plus" where it wanted the closing brace. An error message that
 	// names braces for a defect in a glue scan is why this was probed and not read.
+	// ⛔⛔ AND \@vspacer SAVES AND RESTORES \prevdepth AROUND THE RULE. Those are its
+	// first and last lines, and dropping them costs 2.58pt every time:
+	//
+	//	\def\@vspacer#1{\ifvmode
+	//	  \dimen@\prevdepth              ← latex.ltx:6586
+	//	  \hrule \@height\z@ \nobreak
+	//	  \@vspace@calcify{#1}\vskip\z@skip
+	//	  \prevdepth\dimen@              ← latex.ltx:6591
+	//
+	// A rule sets prev_depth := ignore_depth (tex.web:21025), which suppresses the
+	// interline glue before the NEXT box — and contribute() does exactly that, which
+	// is right. \@vspacer puts the depth back, so the paragraph after the space is
+	// still set on the grid: the rule holds the glue on the page without also eating
+	// the baseline it would otherwise be measured from.
+	//
+	// Measured on `Premiere ligne du document.\par \vspace*{50pt} Apres le vspace
+	// etoile.\par` in article, the two baselines:
+	//
+	//	tectonic     134.76 → 196.53   (62.0: 50pt of glue and one \baselineskip)
+	//	before       134.74 → 193.93   (59.19: the \baselineskip is missing)
+	//
+	// The reference's own node list names the node we were not emitting:
+	// `\glue(\baselineskip) 4.95` between the \vskip and the \hbox.
 	e.prim("vspace", func(e *Engine) {
 		star := e.scanOptStar()
 		g := e.readBraceGlue()
 		if star {
+			saved := e.prevDepth
 			e.contribute(ruleNode{widthRun: true})
 			e.contribute(penaltyNode{penalty: 10000}) // \nobreak
+			e.contribute(glueNode{spec: g})
+			e.prevDepth = saved
+			return
 		}
 		e.contribute(glueNode{spec: g})
 	})
