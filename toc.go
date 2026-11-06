@@ -517,10 +517,54 @@ func (b *tocTokens) boxTo(em float64) {
 }
 
 // text appends the runes of s as character tokens, each with its live catcode
-// (so letters remain letters, spaces remain spaces, digits/punctuation other).
+// (so letters remain letters, spaces remain spaces, digits/punctuation other) —
+// EXCEPT that a backslash starts a control sequence, as TeX's own tokenizer does.
+//
+// ⛔⛔ A BACKSLASH IS NOT A CHARACTER HERE. An entry's title is stored detokenized
+// (readTitleGroupBoth), so `\section{M\'ethodes}` arrives as the seven characters
+// `M\'ethodes`. Appending each rune with its catcode made the backslash a
+// character token OF CATEGORY ESCAPE, which is inert once tokenizing is over: the
+// `\` drew nothing, and the `'` behind it then became a right quote by the ordinary
+// ligature rule. Measured against tectonic on one heading:
+//
+//	source      \section{M\'ethodes et \`apres et \^etre et \"ou}
+//	the heading  Méthodes et àpres et être et öu        ← already right
+//	the contents M’ethodes et ‘apres et etre et "ou     ← this defect
+//	tectonic     Méthodes et àpres et être et öu
+//
+// Every accent, and every other macro a title carries, was lost on the way into the
+// contents list while the heading itself set them correctly.
+//
+// The rule is TeX's (tex.web §354-356): after the escape character, a run of LETTER
+// characters is a control WORD and swallows the spaces that follow it; anything else
+// is a one-character control SYMBOL and swallows nothing. "Letter" is read through
+// the live catcodes, so a class that has made @ a letter gets \@tempa as one name.
+//
+// ⚠ A title containing a literal backslash is now read as a control sequence. TeX's
+// own \scantokens has the same ambiguity and for the same reason: a detokenized
+// string cannot distinguish the two. A title with a literal backslash in it is not
+// something LaTeX can carry through an .aux file either.
 func (b *tocTokens) text(s string) {
-	for _, r := range s {
-		b.ts = append(b.ts, chTok(r, b.e.catOf(r)))
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		if rs[i] != '\\' || i+1 >= len(rs) {
+			b.ts = append(b.ts, chTok(rs[i], b.e.catOf(rs[i])))
+			continue
+		}
+		j := i + 1
+		if b.e.catOf(rs[j]) == catLetter {
+			for j < len(rs) && b.e.catOf(rs[j]) == catLetter {
+				j++
+			}
+			b.cs(string(rs[i+1 : j]))
+			for j < len(rs) && rs[j] == ' ' { // a control word eats its trailing spaces
+				j++
+			}
+		} else {
+			j++
+			b.cs(string(rs[i+1 : j]))
+		}
+		i = j - 1
 	}
 }
 
