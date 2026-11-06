@@ -118,6 +118,31 @@ func (e *Engine) loadTeXParams() {
 		if name == "pagegoal" {
 			e.dimen[e.allocDim] = maxDimenSP
 		}
+		// ⛔⛔ \splitmaxdepth AND \boxmaxdepth ARE \maxdimen, NOT ZERO. ltplain.dtx
+		// sets both on consecutive lines, and LaTeX inherits them:
+		//
+		//	\splitmaxdepth=\maxdimen        ltplain.dtx:872
+		//	\boxmaxdepth=\maxdimen          ltplain.dtx:873
+		//
+		// Measured against tectonic from inside both engines: \splittopskip 10.0pt and
+		// \maxdepth 5.0pt agree, and these two read 0.0pt here against 16383.99998pt
+		// there.
+		//
+		// ⛔ \splitmaxdepth IS THE #622 DEFECT, UNFIXED IN THE \vsplit PATH. It is the
+		// cap vert_break uses for prev_dp (tex.web:19059 passes it as vert_break's d),
+		// and splitVList reads it through splitMaxDepth. At zero every descender is
+		// charged to the running height the moment the next box arrives, so a column
+		// that fills EXACTLY gives up its last line — which is precisely what #622
+		// fixed for the page builder and nobody carried to \vsplit. multicols slices
+		// through the same function.
+		//
+		// ⚠ \boxmaxdepth is inert TODAY: nothing in this engine reads it, so setting it
+		// moves no box. It is set anyway because leaving it at 0 is a trap for whoever
+		// implements vpack's depth cap — the day that lands, a default of 0 would clamp
+		// every \vbox to depth zero and move the excess into its height, silently.
+		if name == "splitmaxdepth" || name == "boxmaxdepth" {
+			e.dimen[e.allocDim] = maxDimenSP
+		}
 		e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, true)
 		e.allocDim++
 	}
