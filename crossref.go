@@ -93,6 +93,43 @@ func (e *Engine) carryCrossRefs(prev *Engine) {
 	e.bibAuthor = prev.bibAuthor // \citet author labels, gathered by the aux \bibliography
 	e.tocSource = prev.tocEntries
 	e.indexSource = prev.indexEntries
+	e.carryAuxFile(prev)
+}
+
+// carryAuxFile hands the next pass the .aux the previous one wrote, so a package
+// that talks to ITSELF across passes finds its own last answers.
+//
+// ⛔⛔ THIS IS THE OTHER HALF OF carryCrossRefs, and it is not redundant with it.
+// Everything above carries state this engine keeps in Go — its own labels, its own
+// \citet authors, its own contents entries. A real LaTeX package keeps none of
+// that: natbib writes \bibcite{key}{Author et al.(2021)…} to \@auxout from
+// \bibitem's optional argument and reads it back next pass to resolve \citep. With
+// \@auxout a null stream, loading the real natbib.sty turned \citep{alpha} from a
+// wrong "[1]" into a broken "(?)" — the package was never the missing half
+// (go-tex/engine#711).
+//
+// Only the .aux is carried, not every written file: \jobname.vrb and friends are a
+// single pass's own scratch, and carrying them would feed a pass the previous
+// pass's material as if it were its own.
+func (e *Engine) carryAuxFile(prev *Engine) {
+	if prev.writtenFile == nil {
+		return
+	}
+	// "" is \jobname's own default, texput (engine.go), and the name the stream was
+	// opened under has to match the one looked up here or the file is silently lost.
+	job := e.jobName
+	if job == "" {
+		job = "texput"
+	}
+	name := job + ".aux"
+	s, ok := prev.writtenFile[name]
+	if !ok {
+		return
+	}
+	if e.writtenFile == nil {
+		e.writtenFile = map[string]string{}
+	}
+	e.writtenFile[name] = s
 }
 
 // crossRefsAgree reports whether the page numbers this run typeset are the ones
