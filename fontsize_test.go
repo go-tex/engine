@@ -121,7 +121,9 @@ func TestClassBaseSize(t *testing.T) {
 		wantBLskip int
 	}{
 		{"10pt", 10, 12 * unity},
-		{"11pt", 11, ptToSP(13.6)},
+		// 10.95, which is what \@xipt is: an 11pt class is named for its option,
+		// not for its body size (#717).
+		{"11pt", 10.95, ptToSP(13.6)},
 		{"12pt", 12, ptToSP(14.5)},
 	} {
 		src := `\documentclass[` + tc.opt + `]{article}\begin{document}Hello world.\end{document}`
@@ -273,14 +275,11 @@ func TestClassSizeTableDrivesTheLadder(t *testing.T) {
 		// 14, 17.28 as 17, 20.74 as 21 — because a face could only be faced at a
 		// whole size, so the test agreed with the engine and neither matched LaTeX.
 		{"10pt", [10]float64{5, 7, 8, 9, 10, 12, 14.4, 17.28, 20.74, 24.88}},
-		// ⛔ 11pt is the table's values times 11/10.95, and that factor is a DEFECT
-		// rather than a feature of the class: size11.clo states \normalsize as
-		// \@xipt = 10.95pt, while classBaseSizes gives an 11pt class a 1100‰ base,
-		// so our body is 11pt where LaTeX's is 10.95pt. The ladder is anchored on
-		// our base and the table's own \normalsize, so the whole row inherits the
-		// 0.46% — which whole-point sizes hid. Named here instead of being folded
-		// into the expectations; see the follow-up issue.
-		{"11pt", scaledLadder(11.0/10.95, [10]float64{6, 8, 9, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88})},
+		// size11.clo, with no correcting factor: the row used to be these values
+		// times 11/10.95, because classBaseSizes gave an 11pt class a 1100‰ base
+		// where \@xipt is 10.95 (#717). \normalsize is 10.95 and NOT 11 — that is
+		// the number the class states, and the one this test exists to hold.
+		{"11pt", [10]float64{6, 8, 9, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88}},
 		// size12.clo: base 12 and \normalsize 12 agree, so the row is the table.
 		{"12pt", [10]float64{6, 8, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88, 24.88}},
 	} {
@@ -304,15 +303,6 @@ func TestClassSizeTableDrivesTheLadder(t *testing.T) {
 			}
 		}
 	}
-}
-
-// scaledLadder multiplies a clo table by a factor, for a class whose base size
-// and whose stated \normalsize do not agree.
-func scaledLadder(f float64, t [10]float64) [10]float64 {
-	for i := range t {
-		t[i] *= f
-	}
-	return t
 }
 
 // glyphSizes reports the point size each letter was set at, first occurrence wins.

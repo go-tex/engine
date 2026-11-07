@@ -1054,7 +1054,17 @@ var classBaseSizes = map[string]struct {
 	"8pt":  {"8", 800, ptToSP(10)},
 	"9pt":  {"9", 900, ptToSP(11)},
 	"10pt": {"0", 1000, 12 * unity},
-	"11pt": {"1", 1100, ptToSP(13.6)},
+	// ⛔ 1095 and not 1100. An 11pt class does not set its body at 11pt: size11.clo
+	// states \normalsize as \@xipt, and \@xipt is 10.95 — the kernel's own number,
+	// which classkernel.go:77 already carries verbatim from latex.ltx:7852-7863.
+	// This table contradicted the constant sitting beside it.
+	//
+	// Every entry of an 11pt document's size ladder is anchored on this base and
+	// divided by the class's own \normalsize, so 1100 multiplied the whole ladder
+	// by 11/10.95 = 1.00457. Whole-point sizes hid it exactly — int(11*14.4/10.95
+	// + 0.5) is 14, the same number the right anchor gives — and #718 made sizes
+	// fractional, which is what let it be seen (#717).
+	"11pt": {"1", 1095, ptToSP(13.6)},
 	"12pt": {"2", 1200, ptToSP(14.5)},
 }
 
