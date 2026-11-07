@@ -382,6 +382,18 @@ Each stage is gated by an objective oracle:
    can decide whether to print the note. `\@citex` — the iteration natbib replaces — is
    **not** executed; one paper in 154 ships `natbib.sty`
    ([#681](https://github.com/go-tex/engine/issues/681)).
+   **A package can talk to itself across passes, so the real `natbib` runs.**
+   `\@auxout` was `\def\@auxout{-1}`, a number no `\openout` ever opens, so
+   everything a package wrote to the `.aux` went nowhere; it is a real stream
+   now, carried to the next pass beside the label tables. Given the genuine
+   `natbib.sty`, `\citep`/`\citet` in `authoryear` mode produce word for word
+   what `tectonic` produces, with no undefined commands skipped
+   ([#712](https://github.com/go-tex/engine/pull/712)). What is left is
+   *reaching* the file rather than running it: `20 of the 154` measured papers
+   `\usepackage{natbib}` and **none of those twenty ships it**, so all twenty
+   fall back to the built-in emulation, where `\citet` loses the author name
+   outright — "obtained by [27]" where LaTeX writes "obtained by Nordbotten
+   et al. [27]" ([#703](https://github.com/go-tex/engine/issues/703)).
    **A display chooses between the long and the short skips.** `tex.web:22578-22585`
    takes `\abovedisplayshortskip`/`\belowdisplayshortskip` when the previous line ends
    to the *left* of where the display begins — they do not collide, so little space is
@@ -441,6 +453,26 @@ Each stage is gated by an objective oracle:
    and sans are each bound to a file, and a glyph is drawn with the face it was
    measured with — `\textbf`, `\texttt` and `\verb` reach the page in their own
    face, not only in their own widths.
+   **The size ladder is the class's table, to the point.** `\tiny` through
+   `\Huge` are ten sizes a `size1x.clo` states, and three of them are not whole
+   — `\Large` is `14.4`, `\LARGE` `17.28`, `\huge` `20.74`. A face held its size
+   as an integer, so `\Large` landed on 14: 2.8 % narrow on every section
+   heading in every document. Reading each line's `Tf` out of the PDF, all ten
+   now agree with `tectonic` (`\Large` 13.95 → **14.35**, `\huge` 21 →
+   **20.66**, `\Huge` 25 → **24.79**), and an `[11pt]` class sets its body at
+   the `10.95` its `\@xipt` states rather than at 11
+   ([#718](https://github.com/go-tex/engine/pull/718),
+   [#719](https://github.com/go-tex/engine/pull/719)).
+   **Kerning comes from every lookup, not the first.** OpenType applies GPOS
+   lookups in LookupList order and their adjustments add; stopping at the first
+   one that *covers* a pair returned a deliberate zero and never reached the
+   real value. Libertinus Serif files `A`/`V` with `0` in one kern lookup and
+   `−112` in a later one, so `\hbox{AV}` at 10pt measured `13.47pt` against
+   XeTeX's `12.35pt`, and now measures `12.35pt`
+   ([go-opentype/opentype#63](https://github.com/go-opentype/opentype/pull/63)).
+   Neither of these shows in the page-count barometer below: a kern, or a
+   heading a third of a point wider, costs a page only when it tips one. The
+   witness is the oracle comparison.
 5. ✅ **Output** — **PDF** (via `go-pdfkit`, embedded subset fonts, selectable
    text, and clickable `/Link` annotations for `\href` URIs and `\hyperlink`
    in-document jumps) and self-contained **SVG** pages; the SVG carries a source
