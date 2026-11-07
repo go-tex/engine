@@ -28,7 +28,13 @@ func TestPagestyleHeadingsDeclaresAHead(t *testing.T) {
 	e.SetFont(spMock{})
 	out, err := e.Run(`\documentclass{article}\pagestyle{headings}\begin{document}` +
 		`\section{Ma Section}\makeatletter\message{[\meaning\@oddhead]}` +
-		`\message{[\gotex@rightmark]}\makeatother\end{document}`)
+		// ⛔ Probed through \rightmark, the name a page style reads, and not
+		// through the pair's storage. These two tests passed against a PRIVATE
+		// pair that only our own \markboth wrote, so they were green on every
+		// document whose class brings its own \markboth — amsart among them —
+		// and #426's head stayed empty. A test that names the storage cannot
+		// tell a mark that was set from a mark that is reachable.
+		`\message{[\rightmark]}\makeatother\end{document}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +44,63 @@ func TestPagestyleHeadingsDeclaresAHead(t *testing.T) {
 	// \section set the mark through \sectionmark, which \ps@headings redefined.
 	if !strings.Contains(out, "Ma Section") {
 		t.Errorf("the section did not reach the mark: %q", out)
+	}
+}
+
+// ⛔⛔ THE TEST #426 NEEDED, AND THE ONE EVERY GREEN TEST HERE WAS MISSING.
+//
+// A class may bring its OWN \markboth, and amsart.cls — one of the four classes
+// this engine advertises running — does (texmf/amsart.cls:335-340):
+//
+//	\def\markboth#1#2{\begingroup
+//	  \@temptokena{{#1}{#2}}\xdef\@themark{\the\@temptokena}%
+//	  \mark{\the\@temptokena}\endgroup …}
+//
+// It writes \@themark, the name the kernel uses (ltpage.dtx:355), and nothing
+// else. Every other link in the chain already worked — \ps@headings does
+// \let\@mkboth\markboth, amsart calls \@mkboth{\shortauthors}{\shorttitle} at
+// :622, the mark was set — and the head was still empty, because \rightmark read
+// a private pair that only OUR \markboth wrote. The engine's \markboth answering
+// correctly in isolation is what made that invisible: a primitive that answers is
+// not a mechanism that is reached.
+func TestAClassThatBringsItsOwnMarkbothReachesTheHead(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	out, err := e.Run(`\documentclass{article}\pagestyle{headings}\makeatletter` +
+		// amsart's idiom, verbatim in shape: the class's own \markboth, which
+		// overrides ours and writes the kernel's name.
+		`\def\markboth#1#2{\@temptokena{{#1}{#2}}\xdef\@themark{\the\@temptokena}}` +
+		`\makeatother\begin{document}\markboth{AUTEURS}{TITRE COURT}` +
+		`\message{[\leftmark|\rightmark]}\end{document}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[AUTEURS|TITRE COURT]") {
+		t.Errorf("a class's own \\markboth does not reach the head: %q", out)
+	}
+}
+
+// \markright replaces the right half and keeps the left, which is why the kernel
+// routes it through \@markright (ltpage.dtx:356-357) instead of assigning both.
+// \ps@headings's \sectionmark IS a \markright, so a wrong \markright wipes the
+// left half of the head at every section.
+func TestMarkrightKeepsTheLeftHalf(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	out, err := e.Run(`\documentclass{article}\begin{document}` +
+		`\markboth{GAUCHE}{DROITE}\markright{AUTRE}` +
+		`\message{[\leftmark|\rightmark]}\end{document}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[GAUCHE|AUTRE]") {
+		t.Errorf("\\markright did not keep the left mark: %q", out)
 	}
 }
 
@@ -71,7 +134,7 @@ func TestOnlyNumberedSectionsMark(t *testing.T) {
 		}
 		e.SetFont(spMock{})
 		out, err := e.Run(`\documentclass{article}\pagestyle{headings}\begin{document}` +
-			src + `\makeatletter\message{[\gotex@rightmark]}\makeatother\end{document}`)
+			src + `\message{[\rightmark]}\end{document}`)
 		if err != nil {
 			t.Fatal(err)
 		}
