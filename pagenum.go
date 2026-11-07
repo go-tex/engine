@@ -48,28 +48,46 @@ func (pageStyleNode) isNode() {}
 // header and footer FIELDS, which are global, so running \ps@empty for one page
 // would clear them for the rest of the document. LaTeX avoids the same trap by
 // running them inside a group in the output routine.
+// The name is kept here for the same reason as in doPagestyle: flattening it made
+// \thispagestyle{headings} ask for the plain path. \thispagestyle{plain} still
+// records "plain" and still beats a class-wide running head — that is the one case
+// the name "plain" is supposed to mean, and now the only one that claims it.
 func (e *Engine) doThisPagestyle() {
-	name := e.readBraceName()
-	switch name {
-	case "empty", "fancy":
-	default:
-		name = "plain"
-	}
-	e.contribute(pageStyleNode{style: name})
+	e.contribute(pageStyleNode{style: e.readBraceName()})
 }
 
+// ⛔⛔ THE STYLE'S OWN NAME IS KEPT. Every name but "empty" and "fancy" used to be
+// recorded as "plain", and two sites then asked different questions about the same
+// page:
+//
+//   - assemblePage routes on the NAME — `style == "fancy" || (style != "plain" &&
+//     hasLatexHead())` — so a style flattened to "plain" took the plain path and
+//     got a centred folio at the FOOT and no head;
+//   - headBand routes on \@oddhead being DEFINED, so it reserved \headheight +
+//     \headsep = 37pt for the head that path had already decided not to draw.
+//
+// \pagestyle{headings} is what book and report declare, and \ps@headings defines
+// \@oddhead as `{\slshape\rightmark}\hfil\thepage` with an EMPTY \@oddfoot
+// (latex.go:898). So the folio went to the band LaTeX leaves empty, the head band
+// held nothing, and the page lost 37pt of text. Measured against tectonic on a
+// witness of 26 sections: our last body line at 616.87 against 672.75, with no
+// head where the reference has "1 SECTION NUMERO 1 1".
+//
+// ⛔ `style != "plain"` is NOT the defect and must stay: it is what makes
+// \thispagestyle{plain} beat a class-wide running head, which
+// TestThisPageStylePlainBeatsAClassWideRunningHead pins. The flattening was the
+// defect — it made every style claim to be that exception.
+//
+// Nothing else compares this field to a closed set: "empty" is tested by name in
+// two places (geometry.go, assemblePage) and "fancy" in one, and an unknown name
+// now reaches the head path exactly when its \ps@name defined a head — which is
+// the question that should have been asked all along.
 func (e *Engine) doPagestyle() {
 	name := e.readBraceName()
-	switch name {
-	case "empty":
-		e.pageStyle = "empty"
-	case "fancy":
-		e.pageStyle = "fancy"
-		if e.headRule == 0 { // fancyhdr default: a rule under the header, none over the foot
-			e.headRule = defaultRule
-		}
-	default:
-		e.pageStyle = "plain"
+	e.pageStyle = name
+	if name == "fancy" && e.headRule == 0 {
+		// fancyhdr default: a rule under the header, none over the foot.
+		e.headRule = defaultRule
 	}
 	// A named style RUNS the definitions stored under \ps@name:
 	//

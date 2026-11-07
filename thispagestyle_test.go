@@ -54,13 +54,29 @@ func TestThisPagestyleAppliesToOnePage(t *testing.T) {
 	if _, _, ok := takePageStyle(rest); ok {
 		t.Error("the override survived its own page")
 	}
-	// An unknown name falls to plain, as \pagestyle does.
+	// ⛔ An unknown name is KEPT, and it is routed by whether a head was declared
+	// rather than by what it is called.
+	//
+	// It used to be rewritten to "plain", mirroring \pagestyle. That mirror was the
+	// defect: assemblePage reads `style != "plain"` to let \thispagestyle{plain}
+	// beat a class-wide running head, so a style flattened to "plain" claimed that
+	// exception — and \pagestyle{headings} lost its head while headBand still
+	// reserved 37pt for it. LaTeX does not flatten either: an undefined \ps@name
+	// goes to \undefinedpagestyle (latex.ltx:13326-13329), not to plain.
+	//
+	// The outcome for a name nobody defined is unchanged, and the second assertion
+	// is what keeps it so: with no \@oddhead, hasLatexHead() is false, so the head
+	// path is not taken and the page is assembled plainly.
 	e2 := New()
 	e2.LoadLaTeX()
 	e2.SetFont(spMock{})
 	e2.Run(`\thispagestyle{nosuchstyle}`)
-	if s, _, ok := takePageStyle(e2.mvl); !ok || s != "plain" {
-		t.Errorf("unknown style = %q/%v, want \"plain\"/true", s, ok)
+	if s, _, ok := takePageStyle(e2.mvl); !ok || s != "nosuchstyle" {
+		t.Errorf("unknown style = %q/%v, want it kept as \"nosuchstyle\"/true", s, ok)
+	}
+	if e2.hasLatexHead() {
+		t.Error("no \\@oddhead was declared, yet hasLatexHead() is true: " +
+			"an unknown style would be routed to the head path by accident")
 	}
 }
 
