@@ -1964,6 +1964,11 @@ func (e *Engine) loadMore() {
 	e.prim("vphantom", func(e *Engine) { e.place(e.makePhantom(phantomV)) })
 	e.prim("smash", func(e *Engine) { e.place(e.makeSmash()) })
 	// Page style and numbering (see pagenum.go): a centred foot number per page.
+	// \mark contributes a node; \topmark/\firstmark/\botmark are NOT registered
+	// here, because they are not commands that do something — they are values the
+	// page builder republishes as macros before each page's head is expanded
+	// (see publishMarks in marks.go).
+	e.prim("mark", func(e *Engine) { e.doMark() })
 	e.prim("pagestyle", func(e *Engine) { e.doPagestyle() })
 	e.prim("thispagestyle", func(e *Engine) { e.doThisPagestyle() })
 	e.prim("pagenumbering", func(e *Engine) { e.doPagenumbering() })

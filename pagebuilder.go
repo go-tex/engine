@@ -547,6 +547,21 @@ func precedesBreak(n node) bool {
 	if _, ok := n.(specialNode); ok {
 		return true
 	}
+	// A mark is type 4, and 4 < 9: the list above this function names it ("ins 3,
+	// mark 4, adjust 5"), so a break may be taken after one. The first version of
+	// marks answered false here, because a markNode is not box-like and nothing
+	// else claimed it.
+	//
+	// ⛔ THIS IS FAITHFUL AND IT FIXED NOTHING, which is worth saying where the
+	// line is rather than only in a commit. It was written as the cause of a
+	// measured regression — 2405.05720 going 9 pages to 10 with its ink identical
+	// — and the re-sweep came back byte-for-byte the same, 273 and 46 again. The
+	// real cause was a `\mark` in a class PREAMBLE being contributed to the main
+	// vertical list (see doMark). Kept because the reference says mark precedes a
+	// break and the engine should agree, not because it repaired that paper.
+	if _, ok := n.(markNode); ok {
+		return true
+	}
 	_, _, kind := vHeightDepth(n)
 	return kind == vBoxLike
 }

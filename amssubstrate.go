@@ -489,8 +489,17 @@ const AMSClassSubstrate = `
 \def\textsc#1{#1}
 \def\textmd#1{#1}
 \def\textnormal#1{#1}
-% \mark{…}: page marks feed running heads the engine does not build; drop the mark.
-\def\mark#1{}
+% ⛔⛔ \mark IS A PRIMITIVE AGAIN. A one-line stub here used to define it away,
+% for the reason it stated: page marks feed running heads the engine does not
+% build. That was true when it was written; the engine builds them now
+% (marks.go), and the commit message carries what the line said. A stub that
+% DISCARDS its argument is the one shape no channel can see: the document says
+% what it wants, the engine says nothing, every test stays green, and the loss
+% shows up only as ink that is not on the page. Here it cost 27 of the 128 corpus
+% papers with a reference their running head (#426), and it survived three
+% separate fixes to the chain above it — the band (#726), the dispatch, and the
+% pair's name (#728) — because each of those was right and this one line still
+% threw the mark away.
 % \/ : italic correction — a zero-width adjustment the engine does not need.
 \def\/{}
 % \hyphenation{…}: exception list — nothing to record here.

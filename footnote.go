@@ -404,6 +404,16 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 			vlist = append(vlist, b)
 		}
 	}
+	// ⛔ THE MARKS ARE PUBLISHED BEFORE ANYTHING DRAWS A HEAD, and this is the one
+	// place every page passes through, so they are published exactly once per page.
+	// A head expands \topmark / \botmark while this page is assembled (amsart reads
+	// its heads out of them, amsart.cls:325-326), so values set after the head is
+	// built would be one page late — the classic form of this defect, and the
+	// reason tex.web updates them at the TOP of fire_up (:19718-19723) before the
+	// output routine runs at all.
+	marksOnPage, vlist := takeMarks(vlist)
+	e.marks.advance(marksOnPage)
+	e.publishMarks()
 	// \thispagestyle's override rides the vertical list and applies to the page it
 	// landed on, then goes with it (see pageStyleNode).
 	style := e.pageStyle

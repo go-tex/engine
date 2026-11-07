@@ -442,6 +442,7 @@ type Engine struct {
 	// e.bpos and scanning advances through them), which makes it a sound progress
 	// signal even while a heavy .cls is loading.
 	afterToken       *tok     // token saved by \afterassignment, inserted after the next one
+	marks            marks    // what \topmark/\firstmark/\botmark report for the page being shipped
 	expandDepth      int      // >0 while an isolated expansion (\edef/\message) is running
 	lookahead        int      // >0 inside a scan that may back its tokens out (see getXToken)
 	textWidth        int      // \textwidth's own value; 0 until a class states it (see setTextWidth)
