@@ -31,8 +31,24 @@ type markNode struct{ toks []tok }
 func (markNode) isNode() {}
 
 // doMark implements \mark{…}.
+//
+// ⛔⛔ A MARK IN THE PREAMBLE IS READ AND DROPPED, and the corpus is the only
+// reason this line exists. ws-fnl.cls:804 carries a bare `\mark{{}{}}` at class
+// level, outside the document body, and 2405.05720 uses that class: with the mark
+// contributed there, the paper went from 9 pages to 10 with its ink IDENTICAL on
+// both sides (23282 glyph units), against a reference of 9 — the one paper the
+// engine had exactly right, lost. Σ 272 -> 273, exact 47 -> 46.
+//
+// The argument is still SCANNED, so the tokens are consumed exactly as they would
+// be inside the body; only the node is not contributed. Nothing in the preamble
+// is typeset here (see inBody), so a node landing on the main vertical list
+// before the body starts is material on a page that does not exist yet.
 func (e *Engine) doMark() {
-	e.contribute(markNode{toks: e.expandList(e.readBraceToks())})
+	toks := e.expandList(e.readBraceToks())
+	if !e.inBody {
+		return
+	}
+	e.contribute(markNode{toks: toks})
 }
 
 // marks holds what \topmark, \firstmark and \botmark report for the page being

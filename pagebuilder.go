@@ -547,21 +547,18 @@ func precedesBreak(n node) bool {
 	if _, ok := n.(specialNode); ok {
 		return true
 	}
-	// ⛔⛔ A MARK IS TYPE 4, AND 4 < 9. The list above this function names it —
-	// "ins 3, mark 4, adjust 5" — and the first version of marks still answered
-	// false here, because a markNode is not box-like and nothing else claimed it.
+	// A mark is type 4, and 4 < 9: the list above this function names it ("ins 3,
+	// mark 4, adjust 5"), so a break may be taken after one. The first version of
+	// marks answered false here, because a markNode is not box-like and nothing
+	// else claimed it.
 	//
-	// The corpus caught it as ONE paper, and the measurement is worth keeping:
-	// 2405.05720 went from 9 pages to 10 with the ink IDENTICAL on both sides
-	// (23282 glyph units), against a reference of 9 — the one paper the engine had
-	// exactly right, lost. Same content, one more page, because the glue after a
-	// mark had stopped being a legal breakpoint, and removing a breakpoint pushes
-	// material forward whether or not anything grew.
-	//
-	// Σ moved 272 -> 273 and exact 47 -> 46 for that alone. "A mark carries no
-	// dimension, so no page can change height" was written on #729 before the
-	// sweep ran, and it is true and beside the point: having no dimension is a
-	// different claim from having no effect on where a page MAY break.
+	// ⛔ THIS IS FAITHFUL AND IT FIXED NOTHING, which is worth saying where the
+	// line is rather than only in a commit. It was written as the cause of a
+	// measured regression — 2405.05720 going 9 pages to 10 with its ink identical
+	// — and the re-sweep came back byte-for-byte the same, 273 and 46 again. The
+	// real cause was a `\mark` in a class PREAMBLE being contributed to the main
+	// vertical list (see doMark). Kept because the reference says mark precedes a
+	// break and the engine should agree, not because it repaired that paper.
 	if _, ok := n.(markNode); ok {
 		return true
 	}
