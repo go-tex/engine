@@ -630,18 +630,62 @@ const LaTeX2eClassKernel = `
 % shows the section current at shipout rather than at the page's first line. The
 % difference needs marks to travel with page breaking, which this page builder
 % does not do yet.
-\gdef\gotex@leftmark{}
-\gdef\gotex@rightmark{}
-\def\markboth#1#2{%
-  \protected@xdef\gotex@leftmark{#1}\protected@xdef\gotex@rightmark{#2}}
-\def\markright#1{\protected@xdef\gotex@rightmark{#1}}
+% ⛔ THE PAIR LIVES IN \@themark, UNDER THE NAME THE KERNEL AND THE CLASSES USE.
+% It was a private pair (\gotex@leftmark / \gotex@rightmark) that only OUR
+% \markboth wrote, and that is why #426's own witness still came out with an
+% empty head after the page style was fixed (#726). amsart.cls — one of the four
+% classes this engine advertises running — brings its OWN \markboth
+% (texmf/amsart.cls:335-340):
+%
+%	\def\markboth#1#2{\begingroup
+%	  \@temptokena{{#1}{#2}}\xdef\@themark{\the\@temptokena}%
+%	  \mark{\the\@temptokena}\endgroup …}
+%
+% It overrides ours, writes \@themark, and never touches a private pair. Reading
+% a name no class knows makes every link in the chain work and the last one
+% empty: \ps@headings does \let\@mkboth\markboth (:318), amsart calls
+% \@mkboth{\@nx\shortauthors}{\@nx\shorttitle} (:622), the mark is set — and
+% \rightmark read somewhere else. A private stand-in for a documented name is
+% only ever right for the classes that do not have one.
+%
+% \@leftmark / \@rightmark are the kernel's own accessors, kept because class
+% code uses them directly: "We can't get rid of them since they are sometimes
+% used in applications" (ltpage.dtx:167-174).
+\let\@leftmark\@firstoftwo
+\let\@rightmark\@secondoftwo
+\def\@themark{{}{}}
+\def\markboth#1#2{\protected@xdef\@themark{{#1}{#2}}}
+% \markright keeps the LEFT mark and replaces only the right, which is why the
+% kernel routes it through \@markright rather than assigning both
+% (ltpage.dtx:356-357):
+%
+%	\def\@markright#1#2#3{\@temptokena {#1}%
+%	  \unrestored@protected@xdef\@themark{{\the\@temptokena}{#3}}}
+%
+% #1#2 destructure the current pair and #3 is the new right, so the left survives
+% a \markright — and \ps@headings's \sectionmark is a \markright, so without this
+% every section would wipe the left half of the head.
+\def\@markright#1#2#3{\@temptokena{#1}%
+  \protected@xdef\@themark{{\the\@temptokena}{#3}}}
+\def\markright#1{\expandafter\@markright\@themark{#1}}
 % \@mkboth stays inert, as latex.ltx leaves it (\let\@mkboth\@gobbletwo at
 % :13335): it is the hook a PAGE STYLE enables, article.cls's \ps@headings doing
 % \let\@mkboth\markboth. A document whose style never asks for marks must not get
 % them from its sectioning.
 \long\def\@mkboth#1#2{}
-\def\leftmark{\gotex@leftmark}
-\def\rightmark{\gotex@rightmark}
+% \leftmark / \rightmark destructure the pair, as the kernel does
+% (ltpage.dtx:341-342):
+%
+%	\def\leftmark{\expandafter\@leftmark\botmark\@empty\@empty}
+%	\def\rightmark{\expandafter\@rightmark\firstmark\@empty\@empty}
+%
+% ⛔ The kernel reads \botmark and \firstmark — the marks that apply to THAT page
+% — where this reads the single live pair, because marks do not travel with page
+% breaking here (#727). The two \@empty are the kernel's guard for a pair that
+% was never set: \@firstoftwo needs two arguments, and an unset \@themark would
+% otherwise eat the text after the mark.
+\def\leftmark{\expandafter\@leftmark\@themark\@empty\@empty}
+\def\rightmark{\expandafter\@rightmark\@themark\@empty\@empty}
 % ── contents recording ───────────────────────────────────────────────────────
 % The engine owns its own contents table (toc.go) and the \@startsection bridge
 % above records every sectioning level through \@tocentry. \chapter and \part are
