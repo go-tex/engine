@@ -547,6 +547,24 @@ func precedesBreak(n node) bool {
 	if _, ok := n.(specialNode); ok {
 		return true
 	}
+	// ⛔⛔ A MARK IS TYPE 4, AND 4 < 9. The list above this function names it —
+	// "ins 3, mark 4, adjust 5" — and the first version of marks still answered
+	// false here, because a markNode is not box-like and nothing else claimed it.
+	//
+	// The corpus caught it as ONE paper, and the measurement is worth keeping:
+	// 2405.05720 went from 9 pages to 10 with the ink IDENTICAL on both sides
+	// (23282 glyph units), against a reference of 9 — the one paper the engine had
+	// exactly right, lost. Same content, one more page, because the glue after a
+	// mark had stopped being a legal breakpoint, and removing a breakpoint pushes
+	// material forward whether or not anything grew.
+	//
+	// Σ moved 272 -> 273 and exact 47 -> 46 for that alone. "A mark carries no
+	// dimension, so no page can change height" was written on #729 before the
+	// sweep ran, and it is true and beside the point: having no dimension is a
+	// different claim from having no effect on where a page MAY break.
+	if _, ok := n.(markNode); ok {
+		return true
+	}
 	_, _, kind := vHeightDepth(n)
 	return kind == vBoxLike
 }
