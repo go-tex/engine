@@ -163,7 +163,7 @@ func (e *Engine) lastLinePreDisplaySize() int {
 		if b, ok := e.mvl[i].(*boxNode); ok && b != nil {
 			quad := 0
 			if e.curFont != nil {
-				quad = e.curFont.sizePt() * unity
+				quad = ptToSP(e.curFont.sizePt())
 			}
 			return preDisplaySize(b, b.shift, quad)
 		}

@@ -75,9 +75,9 @@ type ruleNode struct {                 // \hrule/\vrule
 type charNode struct { // a set character from the current font (metrics in sp)
 	ch                   rune
 	width, height, depth int
-	srcLine              int    // 1-based source line this glyph came from (0 = unknown)
-	size                 int    // font size (px/pt) this glyph was set at (0 = base)
-	color                uint32 // 0xRRGGBB fill colour (0 = default black)
+	srcLine              int     // 1-based source line this glyph came from (0 = unknown)
+	size                 float64 // font size in points this glyph was set at (0 = base)
+	color                uint32  // 0xRRGGBB fill colour (0 = default black)
 	// face is the font this glyph was MEASURED with, which is also the one it must
 	// be DRAWN with. tex.web §134 gives a char_node exactly these two fields —
 	// "@d font == type {the font code in a char_node}" — and this one had only the

@@ -14,7 +14,7 @@ import "testing"
 func TestCaptionPackageSizeOptionIsHonoured(t *testing.T) {
 	for _, c := range []struct {
 		opts string
-		want int
+		want float64
 	}{
 		{`[font=footnotesize]`, 8},
 		{`[font=small]`, 9},
@@ -27,7 +27,7 @@ func TestCaptionPackageSizeOptionIsHonoured(t *testing.T) {
 		if err := e.LoadLaTeX(); err != nil {
 			t.Fatal(err)
 		}
-		e.SetFont(scaleMock{px: 10})
+		e.SetFont(scaleMock{pt: 10})
 		src := `\usepackage` + c.opts + `{caption}` +
 			`\noindent A\begin{figure}\caption{Z}\end{figure}`
 		if _, err := e.Run(src); err != nil {
@@ -35,10 +35,10 @@ func TestCaptionPackageSizeOptionIsHonoured(t *testing.T) {
 		}
 		sizes := glyphSizes(e)
 		if sizes['A'] != 10 {
-			t.Fatalf("%s: body glyph = %d, want 10", c.opts, sizes['A'])
+			t.Fatalf("%s: body glyph = %g, want 10", c.opts, sizes['A'])
 		}
 		if sizes['Z'] != c.want {
-			t.Errorf("\\usepackage%s{caption}: caption glyph = %d, want %d",
+			t.Errorf("\\usepackage%s{caption}: caption glyph = %g, want %g",
 				c.opts, sizes['Z'], c.want)
 		}
 	}

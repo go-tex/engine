@@ -18,7 +18,7 @@ func (f famMock) charDimsSP(rune) (int, int, int) { return f.w * unity, 7 * unit
 func (famMock) spaceSP() glueSpec                 { return glueSpec{width: 3 * unity} }
 func (famMock) glyphPathAt(rune) string           { return "" }
 func (famMock) kernSP(_, _ rune) int              { return 0 }
-func (famMock) sizePt() int                       { return 10 }
+func (famMock) sizePt() float64                   { return 10 }
 
 // \texttt selects the mono face and \textsf the sans face, and both revert to the
 // roman face at the group end — mirroring \textbf/\bf. Deterministic mock faces

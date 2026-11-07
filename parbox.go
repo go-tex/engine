@@ -42,7 +42,7 @@ func (e *Engine) axisHeight() int {
 	if e.curFont == nil {
 		return 0
 	}
-	return e.curFont.sizePt() * unity / 4
+	return ptToSP(e.curFont.sizePt() / 4)
 }
 
 // alignParbox re-anchors a parbox's vertical reference point per [pos]. vpack

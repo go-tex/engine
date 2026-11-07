@@ -12,7 +12,7 @@ func firstSpaceWidth(t *testing.T, src string) int {
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
-	e.SetFont(scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
 	if _, err := e.Run(`\noindent ` + src); err != nil {
 		t.Fatal(err)
 	}

@@ -12,7 +12,13 @@ type OpenTypeFont struct {
 	f    *opentype.Font
 	fc   *opentype.Face
 	upem float64
-	px   int
+	// pt is the face's design size in POINTS, and it is fractional on purpose.
+	// LaTeX's size ladder is a table of points, not a scale factor, and three of
+	// its ten entries are not whole: size10.clo gives \Large 14.4, \LARGE 17.28 and
+	// \huge 20.74. Holding this as an int put \Large on 14 — 2.8% narrow on every
+	// section heading in every document, measured at 13.95 against tectonic's 14.35
+	// (#714, which named this as its residual).
+	pt   float64
 	data []byte // original font bytes (for PDF embedding)
 	// dimCache memoises CharDims per rune. Measuring a glyph's y-extent means
 	// running the (CFF Type2) outline interpreter, which is expensive; a face is
@@ -31,13 +37,13 @@ type OpenTypeFont struct {
 	pathCache map[rune]string
 }
 
-// NewOpenTypeFont builds a metrics source from a font and a pixel size.
-func NewOpenTypeFont(fontBytes []byte, sizePx int) (*OpenTypeFont, error) {
+// NewOpenTypeFont builds a metrics source from a font and a size in points.
+func NewOpenTypeFont(fontBytes []byte, sizePt float64) (*OpenTypeFont, error) {
 	f, err := opentype.Parse(fontBytes)
 	if err != nil {
 		return nil, err
 	}
-	return &OpenTypeFont{f: f, fc: f.NewFace(sizePx), upem: float64(f.UnitsPerEm()), px: sizePx, data: fontBytes}, nil
+	return &OpenTypeFont{f: f, fc: f.NewFaceAt(sizePt), upem: float64(f.UnitsPerEm()), pt: sizePt, data: fontBytes}, nil
 }
 
 // fontBytes returns the original font blob (for the PDF driver to embed).
@@ -65,7 +71,10 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	// (~+1.7% on kern-rich runs), throwing off the first line-breaks of a paragraph.
 	w := o.fc.AdvanceIndexUnits(gid) * o.fc.Scale()
 	segs, _ := o.fc.GlyphOutline(gid)
-	scale := float64(o.px) / o.upem
+	// The face's own scale, not one recomputed from a rounded size: the face is
+	// built at a fractional point size, and float64(px)/upem would quietly put the
+	// outline back on the whole-point ladder the advance above has already left.
+	scale := o.fc.Scale()
 	var minY, maxY float64
 	for _, s := range segs {
 		for _, p := range s.P {
@@ -111,7 +120,7 @@ func (o *OpenTypeFont) glyphPath(r rune) string {
 func (o *OpenTypeFont) Space() (float64, float64, float64) {
 	w := float64(o.fc.Advance(' '))
 	if w == 0 {
-		w = float64(o.px) * 0.25
+		w = o.pt * 0.25
 	}
 	return w, w * 0.5, w / 3
 }
@@ -125,7 +134,7 @@ type fontFace interface {
 	spaceSP() glueSpec
 	glyphPathAt(r rune) string // "" if the font lacks the glyph
 	kernSP(prev, cur rune) int // inter-character kern in sp (0 if none)
-	sizePt() int               // the face's design size in points
+	sizePt() float64           // the face's design size in points (fractional: \Large is 14.4)
 }
 
 // faceProgram identifies the font PROGRAM behind a face, independently of the size
@@ -186,7 +195,7 @@ func (o *OpenTypeFont) kernSP(prev, cur rune) int {
 	return ptToSP(o.fc.KernUnits(prev, cur) * o.fc.Scale())
 }
 
-func (o *OpenTypeFont) sizePt() int { return o.px }
+func (o *OpenTypeFont) sizePt() float64 { return o.pt }
 
 // SetFont sets the current font used to measure and render characters in
 // horizontal mode. Passing an *OpenTypeFont (or any fontFace) is the Go-level
@@ -195,7 +204,7 @@ func (e *Engine) SetFont(f fontFace) {
 	e.curFont = f
 	e.baseFont = f // the size set here is \normalsize — the 100% for \large/\small/…
 	if f != nil {
-		e.baseFontPx = f.sizePt()
+		e.baseFontPt = f.sizePt()
 	}
 }
 
@@ -227,18 +236,18 @@ func (e *Engine) renderFont() fontFace {
 // current group. A font that can't rescale leaves the size unchanged.
 func (e *Engine) doFontSize() {
 	permille := e.scanInt()
-	if e.baseFont == nil || e.baseFontPx == 0 {
+	if e.baseFont == nil || e.baseFontPt == 0 {
 		return
 	}
 	sf, ok := e.baseFont.(scalableFont)
 	if !ok {
 		return
 	}
-	px := (e.baseFontPx*permille + 500) / 1000
-	if px < 1 {
-		px = 1
+	pt := e.baseFontPt * float64(permille) / 1000
+	if pt < 1 {
+		pt = 1
 	}
-	e.selectFont(sf.atSizePx(px))
+	e.selectFont(sf.atSize(pt))
 }
 
 // scaleClassFontsToBase re-faces every bound TEXT face — the \normalsize base
@@ -252,16 +261,16 @@ func (e *Engine) doFontSize() {
 // change to \@setfontsize's tokens. A 10pt class (permille 1000) is a no-op, so
 // 10pt documents stay byte-identical. Non-scalable faces (mocks) are left as-is.
 func (e *Engine) scaleClassFontsToBase(permille int) {
-	if permille == 0 || permille == 1000 || e.baseFontPx == 0 {
+	if permille == 0 || permille == 1000 || e.baseFontPt == 0 {
 		return
 	}
-	px := (e.baseFontPx*permille + 500) / 1000
-	if px < 1 {
-		px = 1
+	pt := e.baseFontPt * float64(permille) / 1000
+	if pt < 1 {
+		pt = 1
 	}
-	e.baseFontPx = px
+	e.baseFontPt = pt
 	if sf, ok := e.baseFont.(scalableFont); ok {
-		e.baseFont = sf.atSizePx(px)
+		e.baseFont = sf.atSize(pt)
 		e.curFont = e.baseFont
 	}
 	// Re-face the family bindings (\rm/\bf/\it/\tt/\sf and their NFSS aliases) so a
@@ -270,23 +279,29 @@ func (e *Engine) scaleClassFontsToBase(permille int) {
 	for _, m := range e.eq {
 		if m != nil && m.kind == mFont && m.font != nil {
 			if sf, ok := m.font.(scalableFont); ok {
-				m.font = sf.atSizePx(px)
+				m.font = sf.atSize(pt)
 			}
 		}
 	}
 }
 
-// scalableFont is a font that can produce a copy of itself at a different pixel
+// scalableFont is a font that can produce a copy of itself at a different point
 // size (same shapes, scaled metrics) — the basis for \large/\small/… . Only real
 // fonts implement it; a mock or a font that can't rescale simply keeps its size.
 type scalableFont interface {
-	atSizePx(px int) fontFace
+	atSize(pt float64) fontFace
 }
 
-// atSizePx returns the same font re-faced at px, sharing the parsed tables and
-// embeddable bytes (a new face is cheap; no re-parse).
-func (o *OpenTypeFont) atSizePx(px int) fontFace {
-	return &OpenTypeFont{f: o.f, fc: o.f.NewFace(px), upem: o.upem, px: px, data: o.data}
+// atSize returns the same font re-faced at pt points, sharing the parsed tables
+// and embeddable bytes (a new face is cheap; no re-parse).
+//
+// NewFaceAt and not NewFace: the latter takes a whole number, so every fractional
+// entry of LaTeX's size table was truncated on the way in. go-opentype v0.17.1
+// added the fractional constructor for exactly this caller; the face still
+// rasterises at a whole ppem, because hinting is whole-pixel, while its metrics
+// scale by the true size (go-opentype/opentype#62).
+func (o *OpenTypeFont) atSize(pt float64) fontFace {
+	return &OpenTypeFont{f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data}
 }
 
 // faceAtCurrentSize re-faces a FAMILY switch at the size already in force.
@@ -316,15 +331,15 @@ func (e *Engine) faceAtCurrentSize(f fontFace) fontFace {
 	if f == nil || e.curFont == nil {
 		return f
 	}
-	px := e.curFont.sizePt()
-	if px <= 0 || px == f.sizePt() {
+	pt := e.curFont.sizePt()
+	if pt <= 0 || pt == f.sizePt() {
 		return f
 	}
 	sf, ok := f.(scalableFont)
 	if !ok {
 		return f
 	}
-	return sf.atSizePx(px)
+	return sf.atSize(pt)
 }
 
 // doFontSizeAt implements the \gotex@fontsizeat primitive: it reads the size a
@@ -350,7 +365,7 @@ func (e *Engine) faceAtCurrentSize(f fontFace) fontFace {
 // like any other, so a group restores it.
 func (e *Engine) doFontSizeAt() {
 	size, ok := e.scanPtArg()
-	if !ok || size <= 0 || e.baseFontPx == 0 {
+	if !ok || size <= 0 || e.baseFontPt == 0 {
 		return
 	}
 	norm := e.classNormalsizePt
@@ -365,11 +380,13 @@ func (e *Engine) doFontSizeAt() {
 	if !sok {
 		return
 	}
-	px := int(float64(e.baseFontPx)*size/norm + 0.5)
-	if px < 1 {
-		px = 1
+	// No rounding: the table's own number is the size. \Large is 14.4 of a 10pt
+	// body, and rounding it here was the whole defect.
+	pt := e.baseFontPt * size / norm
+	if pt < 1 {
+		pt = 1
 	}
-	e.selectFont(sf.atSizePx(px))
+	e.selectFont(sf.atSize(pt))
 }
 
 // doClassNormalsize implements \gotex@classnormalsize: it records the size the

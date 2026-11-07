@@ -17,7 +17,7 @@ import (
 func TestTextLayerCarriesTheWords(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
-	e.SetFont(scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
 	if _, err := e.Run(`\noindent ab cd`); err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestTextLayerCarriesTheWords(t *testing.T) {
 func TestTextLayerPrecedesTheOutlines(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
-	e.SetFont(scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
 	if _, err := e.Run(`\noindent ab`); err != nil {
 		t.Fatal(err)
 	}
@@ -87,10 +87,10 @@ func TestEscapeXMLText(t *testing.T) {
 }
 
 func TestCharSizePt(t *testing.T) {
-	if got := charSizePt(charNode{size: 17}, scaleMock{px: 10}); got != 17 {
+	if got := charSizePt(charNode{size: 17}, scaleMock{pt: 10}); got != 17 {
 		t.Errorf("explicit size = %v, want 17", got)
 	}
-	if got := charSizePt(charNode{}, scaleMock{px: 10}); got != 10 {
+	if got := charSizePt(charNode{}, scaleMock{pt: 10}); got != 10 {
 		t.Errorf("font size = %v, want 10", got)
 	}
 }

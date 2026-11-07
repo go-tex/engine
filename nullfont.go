@@ -13,4 +13,4 @@ func (nullFont) charDimsSP(rune) (int, int, int) { return 0, 0, 0 }
 func (nullFont) spaceSP() glueSpec               { return glueSpec{} }
 func (nullFont) glyphPathAt(rune) string         { return "" }
 func (nullFont) kernSP(rune, rune) int           { return 0 }
-func (nullFont) sizePt() int                     { return 0 }
+func (nullFont) sizePt() float64                 { return 0 }

@@ -46,5 +46,5 @@ func (e *Engine) exHeightSP() int {
 	if _, h, _ := f.charDimsSP('x'); h > 0 {
 		return h
 	}
-	return f.sizePt() * unity / 2
+	return ptToSP(f.sizePt() / 2)
 }

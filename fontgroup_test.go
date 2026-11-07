@@ -10,7 +10,7 @@ func (m sizedMock) charDimsSP(rune) (int, int, int) { return m.s * unity, m.s * 
 func (sizedMock) spaceSP() glueSpec                 { return glueSpec{width: 3 * unity} }
 func (sizedMock) glyphPathAt(rune) string           { return "" }
 func (sizedMock) kernSP(_, _ rune) int              { return 0 }
-func (m sizedMock) sizePt() int                     { return m.s }
+func (m sizedMock) sizePt() float64                 { return float64(m.s) }
 
 // A font selected inside { … } is restored at the group's end.
 func TestFontGroupScoped(t *testing.T) {
@@ -32,6 +32,6 @@ func TestFontGroupScoped(t *testing.T) {
 	}
 	// after the whole run, the current font is back to the 10pt one
 	if e.curFont.sizePt() != 10 {
-		t.Errorf("curFont size=%d want 10 after group", e.curFont.sizePt())
+		t.Errorf("curFont size=%g want 10 after group", e.curFont.sizePt())
 	}
 }

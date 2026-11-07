@@ -5,13 +5,13 @@ package engine
 
 import "testing"
 
-func captionGlyphSizes(t *testing.T, preamble string) map[rune]int {
+func captionGlyphSizes(t *testing.T, preamble string) map[rune]float64 {
 	t.Helper()
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
-	e.SetFont(scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
 	src := `\noindent A` + preamble + `\begin{figure}\caption{Z}\end{figure}`
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
@@ -30,10 +30,10 @@ func captionGlyphSizes(t *testing.T, preamble string) map[rune]int {
 func TestCaptionIsSetAtTheCurrentSize(t *testing.T) {
 	sizes := captionGlyphSizes(t, "")
 	if sizes['A'] != 10 {
-		t.Fatalf("body glyph size = %d, want the 10 the mock declares", sizes['A'])
+		t.Fatalf("body glyph size = %g, want the 10 the mock declares", sizes['A'])
 	}
 	if sizes['Z'] != sizes['A'] {
-		t.Errorf("caption glyph size = %d, want the body's %d", sizes['Z'], sizes['A'])
+		t.Errorf("caption glyph size = %g, want the body's %g", sizes['Z'], sizes['A'])
 	}
 }
 
@@ -45,9 +45,9 @@ func TestCaptionIsSetAtTheCurrentSize(t *testing.T) {
 func TestCaptionFontHookIsHonoured(t *testing.T) {
 	sizes := captionGlyphSizes(t, `\renewcommand\captionfont{\small}`)
 	if sizes['A'] != 10 {
-		t.Fatalf("body glyph size = %d, want 10", sizes['A'])
+		t.Fatalf("body glyph size = %g, want 10", sizes['A'])
 	}
 	if sizes['Z'] != 9 {
-		t.Errorf("caption glyph size = %d with \\captionfont=\\small, want 9", sizes['Z'])
+		t.Errorf("caption glyph size = %g with \\captionfont=\\small, want 9", sizes['Z'])
 	}
 }

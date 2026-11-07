@@ -93,7 +93,7 @@ func (e *Engine) doFont() {
 		e.fail("font file not found: " + file)
 		return
 	}
-	f, err := NewOpenTypeFont(data, int(sizePt+0.5))
+	f, err := NewOpenTypeFont(data, sizePt)
 	if err != nil {
 		e.fail("cannot parse font: " + file)
 		return
