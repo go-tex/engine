@@ -117,9 +117,35 @@ func (o *OpenTypeFont) glyphPath(r rune) string {
 }
 
 // Space returns TeX-like interword glue derived from the space advance.
+//
+// ⛔ AdvanceIndexUnits × Scale and NOT Advance: Advance rounds to a whole pixel,
+// and the space is the one glyph in the font whose advance is most often a half
+// — 250 units at 10pt is 2.5pt, which rounds to 3. That is +0.5pt on EVERY
+// interword space in the document, 20% on a face whose space is a quarter em.
+//
+// Measured against XeTeX on the same file, \hbox{A B} minus \hbox{AB}:
+//
+//	                   ours (rounded)   ours (here)   XeTeX
+//	LibertinusSerif        3.00            2.50        2.50
+//	TeXGyreTermesX         3.00            2.50        2.50
+//
+// and XeTeX's own \fontdimen2 is 2.5pt for both, which is the glyph's advance
+// exactly — so the quantity was never in doubt, only the rounding.
+//
+// This is the same trap kernSP names a few lines down and CharDims avoids by
+// scaling the font-unit advance itself; go-opentype says so in its own API
+// comment (face.go: "AdvanceIndexUnits, KernUnits — precisely to avoid this
+// library's own rounding"). Space was the one caller still reading the rounded
+// value.
 func (o *OpenTypeFont) Space() (float64, float64, float64) {
-	w := float64(o.fc.Advance(' '))
+	var w float64
+	if gid, ok := o.f.GlyphIndex(' '); ok {
+		w = o.fc.AdvanceIndexUnits(gid) * o.fc.Scale()
+	}
 	if w == 0 {
+		// A face with no space glyph at all: a quarter em is what the two faces
+		// measured above happen to state, and it is a size-relative guess rather
+		// than a number taken from this font.
 		w = o.pt * 0.25
 	}
 	return w, w * 0.5, w / 3
