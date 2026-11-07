@@ -278,7 +278,7 @@ func (e *Engine) footnoteMarker(mark string) node {
 		mk = append(mk, charNode{ch: r, width: w, height: h, depth: d, srcLine: e.curSrcLine, size: e.curFont.sizePt(), face: e.curFont})
 	}
 	box := hpackSP(mk, packNatural, 0)
-	box.shift = -(e.curFont.sizePt() * unity * 2 / 5) // negative shift raises (superscript)
+	box.shift = -ptToSP(e.curFont.sizePt() * 2 / 5) // negative shift raises (superscript)
 	return box
 }
 

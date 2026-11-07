@@ -68,6 +68,6 @@ func TestCompileWithCustomFontSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e.curFont.sizePt() != 14 {
-		t.Errorf("size=%d want 14", e.curFont.sizePt())
+		t.Errorf("size=%g want 14", e.curFont.sizePt())
 	}
 }

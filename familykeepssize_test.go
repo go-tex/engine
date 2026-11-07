@@ -23,17 +23,20 @@ import "testing"
 // at 167.70 against the reference's 167.73.
 func TestAFamilySwitchKeepsTheSize(t *testing.T) {
 	e := New()
-	e.SetFont(scaleMock{px: 10})
-	e.baseFontPx = 10
-	e.bindFont("bf", scaleMock{px: 10}) // bound at the base size, as the CLI binds it
+	e.SetFont(scaleMock{pt: 10})
+	e.baseFontPt = 10
+	e.bindFont("bf", scaleMock{pt: 10}) // bound at the base size, as the CLI binds it
 	e.classNormalsizePt = 10
 
 	// \catcode64=11 by its number, not through a backtick: this is a Go raw string.
 	if _, err := e.Run(`\catcode64=11 \gotex@fontsizeat{14.4}\bf`); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.curFont.sizePt(); got != 14 {
-		t.Errorf("après \\Large puis \\bf la fonte est à %dpt, want 14: un changement "+
+	// 14.4 and not 14: the size asked for is the table's own number. This assertion
+	// read "want 14" while the engine truncated it, which is how a test written
+	// against a live defect certifies it.
+	if got := e.curFont.sizePt(); got != 14.4 {
+		t.Errorf("après \\Large puis \\bf la fonte est à %gpt, want 14.4: un changement "+
 			"de FAMILLE ne doit pas défaire un changement de TAILLE — c'est l'ordre "+
 			"que \\section emploie ({\\normalfont\\Large\\bfseries})", got)
 	}
@@ -44,15 +47,15 @@ func TestAFamilySwitchKeepsTheSize(t *testing.T) {
 // would be a coincidence of where the scaling happens.
 func TestTheOtherOrderGivesTheSameSize(t *testing.T) {
 	e := New()
-	e.SetFont(scaleMock{px: 10})
-	e.baseFontPx = 10
-	e.bindFont("bf", scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
+	e.baseFontPt = 10
+	e.bindFont("bf", scaleMock{pt: 10})
 	e.classNormalsizePt = 10
 	if _, err := e.Run(`\catcode64=11 \bf\gotex@fontsizeat{14.4}`); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.curFont.sizePt(); got != 14 {
-		t.Errorf("après \\bf puis \\Large la fonte est à %dpt, want 14", got)
+	if got := e.curFont.sizePt(); got != 14.4 {
+		t.Errorf("après \\bf puis \\Large la fonte est à %gpt, want 14.4", got)
 	}
 }
 
@@ -61,16 +64,16 @@ func TestTheOtherOrderGivesTheSameSize(t *testing.T) {
 // and silently re-anchor a heading written inside a \small environment.
 func TestAFamilySwitchAtBodySizeLeavesItAlone(t *testing.T) {
 	e := New()
-	e.SetFont(scaleMock{px: 10})
-	e.baseFontPx = 10
-	e.bindFont("bf", scaleMock{px: 10})
+	e.SetFont(scaleMock{pt: 10})
+	e.baseFontPt = 10
+	e.bindFont("bf", scaleMock{pt: 10})
 	e.classNormalsizePt = 10
 	// 8pt body, then bold: the bold must be 8, not the 10 it was bound at.
 	if _, err := e.Run(`\catcode64=11 \gotex@fontsizeat{8}\bf`); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.curFont.sizePt(); got != 8 {
-		t.Errorf("après \\small puis \\bf la fonte est à %dpt, want 8: la taille "+
+		t.Errorf("après \\small puis \\bf la fonte est à %gpt, want 8: la taille "+
 			"gardée est celle EN VIGUEUR, pas la taille de base", got)
 	}
 }

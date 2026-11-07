@@ -52,10 +52,18 @@ func (e *Engine) mathRenderer() *texmath.Renderer {
 
 // mathSize is the point size at which math is rendered: the current text font's
 // size, or 10pt when no font is set.
+//
+// ⚠ It rounds, and the rounding is go-tex/math's boundary rather than a choice
+// made here: texmath.Renderer takes a whole-point size. Text faces carry the
+// table's fractional points (\Large is 14.4), so maths inside a \Large heading is
+// set at 14 where the text around it is at 14.4. That is a 2.8% mismatch on the
+// few equations that appear inside a sized heading, and it is bounded by what the
+// maths renderer accepts — widening it is a change to that module's API, not to
+// this one.
 func (e *Engine) mathSize() int {
 	if e.curFont != nil {
 		if s := e.curFont.sizePt(); s > 0 {
-			return s
+			return int(s + 0.5)
 		}
 	}
 	return 10

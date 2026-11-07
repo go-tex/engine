@@ -117,9 +117,9 @@ func (e *Engine) loadTextFontPackage(pkg string) bool {
 	if !ok {
 		return false
 	}
-	px := e.baseFontPx
-	if px <= 0 {
-		px = 10
+	pt := e.baseFontPt
+	if pt <= 0 {
+		pt = 10
 	}
 	load := func(file string) fontFace {
 		if file == "" {
@@ -129,7 +129,7 @@ func (e *Engine) loadTextFontPackage(pkg string) bool {
 		if !ok {
 			return nil
 		}
-		f, err := NewOpenTypeFont(data, px)
+		f, err := NewOpenTypeFont(data, pt)
 		if err != nil {
 			return nil
 		}

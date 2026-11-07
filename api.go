@@ -130,7 +130,7 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if fontBytes == nil {
 		fontBytes = texmath.DefaultFont()
 	}
-	reg, err := NewOpenTypeFont(fontBytes, opt.size())
+	reg, err := NewOpenTypeFont(fontBytes, float64(opt.size()))
 	if err != nil {
 		return nil, fmt.Errorf("texengine: font: %w", err)
 	}
@@ -189,7 +189,7 @@ func (e *Engine) bindOptionalFont(name string, data []byte, size int) error {
 	if data == nil {
 		return nil
 	}
-	f, err := NewOpenTypeFont(data, size)
+	f, err := NewOpenTypeFont(data, float64(size))
 	if err != nil {
 		return fmt.Errorf("texengine: %s font: %w", name, err)
 	}

@@ -117,7 +117,7 @@ type Engine struct {
 	// every value comes from until a document says otherwise.
 	fontDimens map[fontFace]map[int]int
 	baseFont   fontFace // the \normalsize font — glyph source + size reference for scaling
-	baseFontPx int      // \normalsize size in px/pt (the 100% for \large/\small/…)
+	baseFontPt float64  // \normalsize size in points (the 100% for \large/\small/…)
 	// alignDisplay marks the display being placed as an ALIGNMENT (align, gather,
 	// multline), which TeX splices into the page rather than contributing through
 	// append_to_vlist — see placeAlignmentDisplay.
@@ -3328,7 +3328,7 @@ func (e *Engine) applyUnit(intPart, f int) int {
 		// preamble (oupau.cls:101-103) therefore printed "mu mu mu" on the title
 		// page of every document using it.
 		e.skipOneOptSpace()
-		size := 10
+		size := 10.0
 		if e.curFont != nil {
 			size = e.curFont.sizePt()
 		}
@@ -3341,9 +3341,11 @@ func (e *Engine) applyUnit(intPart, f int) int {
 			q, _ := xnOverD(coeff, e.exHeightSP(), unity)
 			return q
 		case "mu":
-			return coeff * size / 18
+			// Truncating, as the "ex" arm above does and for the same reason: TeX
+			// takes these through xn_over_d (§455), which drops the remainder.
+			return int(float64(coeff) * size / 18)
 		}
-		return coeff * size
+		return int(float64(coeff) * size)
 	default:
 		if r, isUnit := unitRatio[key]; isUnit {
 			e.skipOneOptSpace()
