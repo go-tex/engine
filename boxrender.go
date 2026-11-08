@@ -85,7 +85,7 @@ func renderBoxSVG(b *boxNode, margin, vmargin, paperW, paperH float64, font font
 	// very words it highlights. Underneath, the highlight sits behind the glyphs
 	// with no CSS required of the page showing it.
 	var glyphs strings.Builder
-	layer := newTextLayer()
+	layer := newTextLayerFor(font)
 	paintBoxSP(&glyphs, b, margin, vmargin+spToPt(b.height), font, layer)
 	sb.WriteString(layer.String())
 	sb.WriteString(`<g fill="black">`)
