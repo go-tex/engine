@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/go-gfx/gfx v0.37.0
-	github.com/go-opentype/opentype v0.18.0
+	github.com/go-opentype/opentype v0.20.0
 	github.com/go-pdfkit/pdfkit v0.20.0
 	github.com/go-pdfkit/reader v0.9.0
 	github.com/go-tex/math v0.50.0
