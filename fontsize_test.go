@@ -19,6 +19,7 @@ func (s scaleMock) spaceSP() glueSpec          { return glueSpec{width: ptToSP(s
 func (scaleMock) glyphPathAt(rune) string      { return "M0 0" }
 func (scaleMock) kernSP(_, _ rune) int         { return 0 }
 func (s scaleMock) sizePt() float64            { return s.pt }
+func (scaleMock) hasGlyphFor(rune) bool        { return false } // as glyphPathAt "" did
 func (s scaleMock) atSize(pt float64) fontFace { return scaleMock{pt: pt} }
 
 // Size commands scale the base font relative to \normalsize, glyphs carry the size

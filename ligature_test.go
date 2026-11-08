@@ -7,6 +7,12 @@ type ligFont struct{ spMock }
 
 func (ligFont) glyphPathAt(rune) string { return "M0 0" }
 
+// ⛔ And it has to say so through BOTH doors. fontHas now asks hasGlyphFor, so a
+// mock that overrode only glyphPathAt would claim every glyph to the drawing
+// side and none to the ligature program — the two-doors mistake the real defect
+// was made of, where measuring asked the cmap while drawing shaped.
+func (ligFont) hasGlyphFor(rune) bool { return true }
+
 // ligature() folds the standard TeX text pairs and quote/dash forms when the font
 // has the combined glyph, and declines otherwise.
 func TestLigatureLogic(t *testing.T) {
