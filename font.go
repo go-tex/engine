@@ -55,6 +55,25 @@ type embeddableFont interface {
 	fontBytes() []byte
 }
 
+// mathAxisSP returns the face's own math axis in scaled points, and false when
+// the font carries no MATH table — which every text font does, so the caller
+// keeps its Computer Modern quarter for them (see axisHeight).
+//
+// MathConstantUnits and not MathConstant: the axis is a fraction of the em, 258
+// units of 1000 in STIXTwoMath, and the rounded accessor answers whole pixels —
+// 3 where the value is 2.58 at 10pt. go-opentype v0.19.0 added the unrounded
+// form for exactly this.
+func (o *OpenTypeFont) mathAxisSP() (int, bool) {
+	if !o.f.HasMath() {
+		return 0, false
+	}
+	axis := o.fc.MathConstantUnits(opentype.AxisHeight)
+	if axis <= 0 {
+		return 0, false // a MATH table that states no axis states nothing useful
+	}
+	return ptToSP(axis), true
+}
+
 // CharDims returns a glyph's advance width and its ink height above and depth
 // below the baseline, in pixels.
 func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {

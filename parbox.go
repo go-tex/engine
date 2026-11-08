@@ -38,11 +38,47 @@ func (e *Engine) doParbox() *boxNode {
 // against tectonic on a 40pt panel: at 10pt the box comes back 22.5pt/17.5pt, at
 // 12pt 23.0pt/17.0pt, at 24.88pt 26.22pt/13.78pt — 2.5, 3.0 and 6.22, exactly a
 // quarter of each size.
+// ⛔ THE QUARTER IS COMPUTER MODERN'S NUMBER, NOT EVERY FONT'S. An OpenType font
+// states its own axis in the MATH table (axisHeight, MathConstants), and
+// STIXTwoMath — this engine's own built-in face — says 25.8% of the em, not 25%:
+//
+//	10pt      axis 2.5800   quarter 2.5000   +0.0800pt
+//	12pt      axis 3.0960   quarter 3.0000   +0.0960pt
+//	24.88pt   axis 6.4190   quarter 6.2200   +0.1990pt
+//
+// It is a ratio, so it grows with the size, and it is on every \vcenter and every
+// [c]-aligned parbox of every document set in that face.
+//
+// ⛔ The fallback is not a guess and it is why the tectonic figures above still
+// hold: a TEXT font carries no MATH table at all — measured on lmroman10,
+// LibertinusSerif and TeXGyreTermesX, none of them has one — so the quarter
+// remains the only answer available for them, and their renders are unchanged.
+// The validation this comment used to rest on was made with Computer Modern,
+// where \fontdimen22 IS a quarter; it was right about CM and silent about the
+// rest.
 func (e *Engine) axisHeight() int {
 	if e.curFont == nil {
 		return 0
 	}
+	if f, ok := e.curFont.(mathAxisFont); ok {
+		if axis, ok := f.mathAxisSP(); ok {
+			return axis
+		}
+	}
 	return ptToSP(e.curFont.sizePt() / 4)
+}
+
+// mathAxisFont is a face that can state its own math axis.
+//
+// ⛔ An OPTIONAL interface here, and a required method for hasGlyphFor, which is
+// a distinction worth stating rather than a mood: every face must be able to say
+// whether it can set a glyph, so a silent fallback there would hide a wrong
+// answer. A math axis is a capability a face genuinely lacks — no text font has a
+// MATH table — and for exactly those faces the quarter is the measured-correct
+// answer. The precedent is embeddableFont (font.go), which the PDF driver asks
+// the same way.
+type mathAxisFont interface {
+	mathAxisSP() (int, bool)
 }
 
 // alignParbox re-anchors a parbox's vertical reference point per [pos]. vpack
