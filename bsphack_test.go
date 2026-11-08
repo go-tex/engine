@@ -11,9 +11,15 @@ import (
 // primitive silently answers about the wrong list. It used to be a permanently
 // zero \newskip, which is why nothing depending on it worked.
 func TestLastSkipSeesTheBoxBeingBuilt(t *testing.T) {
+	// ⛔ 2.35pt and not 2.0pt: the built-in face is stixtwomath, whose space glyph
+	// advances 235 units — 2.35pt at 10pt. The 2.0 this used to assert was Space()
+	// reading that advance ROUNDED to a whole pixel, and XeTeX reports
+	// \fontdimen2 = 2.35pt for the same file. The stretch and shrink follow at a
+	// half and a third, as they always did. This test was pinning the rounding,
+	// not the primitive it is named for.
 	for _, tc := range []struct{ name, src, want string }{
-		{"paragraphe", `word \the\lastskip`, "2.0ptplus1.0ptminus0.66667pt"},
-		{"dans une hbox", `\hbox{word \the\lastskip}`, "2.0ptplus1.0ptminus0.66667pt"},
+		{"paragraphe", `word \the\lastskip`, "2.35ptplus1.175ptminus0.78334pt"},
+		{"dans une hbox", `\hbox{word \the\lastskip}`, "2.35ptplus1.175ptminus0.78334pt"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, err := compile([]byte(`\documentclass{article}\begin{document}`+tc.src+`\end{document}`),
