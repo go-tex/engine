@@ -282,12 +282,21 @@ func TestClassKernelDeclarations(t *testing.T) {
 		// \@mkboth stays inert — latex.ltx:13335 leaves it \@gobbletwo and a page
 		// style enables it, so sectioning must not set marks on its own.
 		//
-		// This diverges from LaTeX in one way worth naming: there the pair travels
-		// through \mark/\firstmark/\botmark, so \leftmark read before any page has
-		// shipped is EMPTY. Here it reads the current pair. The two agree where it
-		// matters — a head typeset at shipout — and the difference needs marks to
-		// travel with page breaking, which this page builder does not do yet.
-		{"marks", `\markboth{L}{R}\markright{r}\@mkboth{a}{b}\message{[\leftmark|\rightmark]}`, "[L|r]"},
+		// ⛔ That divergence is GONE, and this case had to change with it. It used
+		// to read \leftmark/\rightmark here and expect "[L|r]", with a comment
+		// saying that LaTeX's pair travels through \mark/\firstmark/\botmark — so
+		// \leftmark before any page has shipped is EMPTY there — while this engine
+		// read the current pair instead. The marks travel now, so the engine is
+		// empty at document time for the same reason LaTeX is, and reading them
+		// here would be asserting the old behaviour.
+		//
+		// \@themark is what this case is actually about: the kernel's own name for
+		// the live pair (ltpage.dtx:355), which a class writes and reads — amsart
+		// does — and which shows the composition this table exists to check:
+		// \markboth sets both halves, \markright replaces only the right, and
+		// \@mkboth stays inert. Whether the pair REACHES a head is a different
+		// question, asked against the drawn head in pagestyleheadings_test.go.
+		{"marks", `\markboth{L}{R}\markright{r}\@mkboth{a}{b}\message{[\@themark]}`, "[{L}{r}]"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
