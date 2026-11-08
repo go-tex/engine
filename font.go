@@ -20,6 +20,10 @@ type OpenTypeFont struct {
 	// (#714, which named this as its residual).
 	pt   float64
 	data []byte // original font bytes (for PDF embedding)
+	// ligCache memoises glyphFor's GSUB fallback, where 0 records "this face
+	// cannot ligate that form" — a negative worth caching, since the paragraph
+	// builder asks for every f-pair it meets and shaping is not free.
+	ligCache map[rune]opentype.GlyphIndex
 	// dimCache memoises CharDims per rune. Measuring a glyph's y-extent means
 	// running the (CFF Type2) outline interpreter, which is expensive; a face is
 	// a fixed size, so a glyph's dimensions never change and are safe to cache.
@@ -55,13 +59,74 @@ type embeddableFont interface {
 	fontBytes() []byte
 }
 
+// glyphFor resolves a rune to a glyph, asking the FONT and not only its cmap.
+//
+// ⛔⛔ THE CMAP IS THE WRONG QUESTION FOR A LIGATURE. The paragraph builder folds
+// "fi" into U+FB01 and then everything downstream — this, and the drawing path —
+// looks that presentation form up. A font that files its f-ligatures in GSUB
+// alone, which is ordinary modern practice, has no cmap entry for U+FB01 and so
+// answered "no glyph", though it has the glyph and go-opentype can reach it:
+// Shape("fi", "liga") returns exactly one.
+//
+// Measured on LibertinusSerif at 10pt against XeTeX, per occurrence:
+//
+//	ff   6.20 against 5.82   lost 0.38pt
+//	fi   5.81 against 5.60   lost 0.21pt
+//	fl   6.14 against 5.40   lost 0.74pt
+//	ffi  8.91 against 8.29   lost 0.62pt
+//	ffl  9.24 against 8.15   lost 1.09pt
+//
+// and "fi" is in first, find, file, specific, definition, significant,
+// efficient. TeXGyreTermesX is the control that kept this invisible: it DOES name
+// its ligatures in cmap, so the old question worked there and matched XeTeX
+// exactly.
+//
+// ⛔ The two halves of the same glyph disagreed about how to find it: the drawing
+// path already shapes (pdfdriver.go's TextShaped with "liga"), only measuring
+// went through the cmap — so on a font like Libertinus the fold never happened
+// and the drawing path was never reached.
+//
+// The components come from expandLigature, which already holds this mapping for
+// the text layer; a second table would be a second thing to keep in step.
+func (o *OpenTypeFont) glyphFor(r rune) (opentype.GlyphIndex, bool) {
+	if gid, ok := o.f.GlyphIndex(r); ok {
+		return gid, true
+	}
+	if o.ligCache == nil {
+		o.ligCache = map[rune]opentype.GlyphIndex{}
+	} else if gid, ok := o.ligCache[r]; ok {
+		return gid, gid != 0
+	}
+	comps := expandLigature(r)
+	if len(comps) < 2 {
+		return 0, false // not a form this engine folds into: the cmap was the answer
+	}
+	// Exactly one glyph, and not .notdef: a face that cannot ligate returns the
+	// components unchanged, which is the "no" this has to report.
+	gids := o.fc.Shape(string(comps), "liga")
+	if len(gids) != 1 || gids[0] == 0 {
+		o.ligCache[r] = 0
+		return 0, false
+	}
+	o.ligCache[r] = gids[0]
+	return gids[0], true
+}
+
+// hasGlyphFor reports whether this face can set r as a single glyph — the
+// question the ligature program needs, and which glyphPathAt could not answer
+// for a GSUB-only ligature.
+func (o *OpenTypeFont) hasGlyphFor(r rune) bool {
+	_, ok := o.glyphFor(r)
+	return ok
+}
+
 // CharDims returns a glyph's advance width and its ink height above and depth
 // below the baseline, in pixels.
 func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	if d, ok := o.dimCache[r]; ok {
 		return d[0], d[1], d[2]
 	}
-	gid, ok := o.f.GlyphIndex(r)
+	gid, ok := o.glyphFor(r)
 	if !ok {
 		return 0, 0, 0
 	}
@@ -134,6 +199,11 @@ type fontFace interface {
 	spaceSP() glueSpec
 	glyphPathAt(r rune) string // "" if the font lacks the glyph
 	kernSP(prev, cur rune) int // inter-character kern in sp (0 if none)
+	// hasGlyphFor reports whether the face can set r as ONE glyph. It is not
+	// glyphPathAt(r) != "": a ligature filed in GSUB alone has no cmap entry for
+	// its presentation form, so the path lookup says no about a glyph the font
+	// has (see glyphFor).
+	hasGlyphFor(r rune) bool
 	sizePt() float64           // the face's design size in points (fractional: \Large is 14.4)
 }
 

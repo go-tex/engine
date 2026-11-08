@@ -19,6 +19,7 @@ func (famMock) spaceSP() glueSpec                 { return glueSpec{width: 3 * u
 func (famMock) glyphPathAt(rune) string           { return "" }
 func (famMock) kernSP(_, _ rune) int              { return 0 }
 func (famMock) sizePt() float64                   { return 10 }
+func (famMock) hasGlyphFor(rune) bool             { return false } // as glyphPathAt "" did
 
 // \texttt selects the mono face and \textsf the sans face, and both revert to the
 // roman face at the group end — mirroring \textbf/\bf. Deterministic mock faces
