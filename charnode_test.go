@@ -17,6 +17,16 @@ func (spMock) spaceSP() glueSpec {
 	return glueSpec{width: 3 * unity, stretch: 3 * unity / 2, shrink: unity} // 3pt plus 1.5pt minus 1pt
 }
 func (spMock) glyphPathAt(rune) string { return "" }
+
+// ⛔ false, exactly as glyphPathAt returning "" used to make fontHas answer.
+//
+// The mocks have no font behind them, so they can set nothing as a glyph, and
+// every ligature/dash/quote decision in the mock-driven tests must come out as
+// it did before. Answering true here flipped four of them — bullets, enumitem
+// labels, a revtex author block and the no-glyph fallback test itself — by
+// folding forms the mock cannot draw. The cmap/GSUB distinction hasGlyphFor
+// exists for only arises on a real face, and that is where it is tested.
+func (spMock) hasGlyphFor(rune) bool { return false }
 func (spMock) kernSP(_, _ rune) int    { return 0 }
 func (spMock) sizePt() float64         { return 10 }
 

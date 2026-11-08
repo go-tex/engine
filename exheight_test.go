@@ -20,6 +20,7 @@ func (xhMock) spaceSP() glueSpec       { return glueSpec{width: 3 * unity} }
 func (xhMock) glyphPathAt(rune) string { return "" }
 func (xhMock) kernSP(rune, rune) int   { return 0 }
 func (m xhMock) sizePt() float64       { return float64(m.size) }
+func (xhMock) hasGlyphFor(rune) bool   { return false } // as glyphPathAt "" did
 
 // ⛔⛔ 1ex is the font's X-HEIGHT (tex.web §455 "The x-height for cur_font",
 // §10675 "param[5]=x_height is the size of one ex in the font"), not half its
@@ -78,6 +79,7 @@ func (noXMock) spaceSP() glueSpec               { return glueSpec{width: 3 * uni
 func (noXMock) glyphPathAt(rune) string         { return "" }
 func (noXMock) kernSP(rune, rune) int           { return 0 }
 func (m noXMock) sizePt() float64               { return float64(m.size) }
+func (noXMock) hasGlyphFor(rune) bool           { return false } // as glyphPathAt "" did
 
 // With no current font there is nothing to measure, and the old approximation is
 // right for exactly that case.
