@@ -182,7 +182,12 @@ format and image type, with its status, plus every remaining gap — lives at
   `geometry`, `fancyhdr` (and the class page styles beside it: a
   `\thispagestyle{plain}` page — every chapter opening in a book or report, and
   the first page of its contents list — keeps its folio centred at the foot even
-  though the class declared a running head for the whole document),
+  though the class declared a running head for the whole document; and the
+  running head itself now carries **its own page's** mark, because `\mark`
+  travels with page breaking and `\topmark`/`\firstmark`/`\botmark` are
+  maintained per page as `tex.web` §1012 maintains them, so a head that tracks
+  sections names the section the reader is in rather than the document's last
+  one),
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
   `subcaption`, `algorithm`/`algorithmic`, `listings` (`caption=`, `label=` and
   `captionpos=`, so a listing is numbered, captioned and referable; and
@@ -416,7 +421,30 @@ Each stage is gated by an objective oracle:
    nothing: `\vspace{\fill}` under that style put its word at **143.91** where
    `tectonic` puts it at **664.72**. §19811-19814 sets `vbadness:=inf_bad` and
    `vfuzz:=max_dimen` around that call *"to inhibit error messages"*, so a page that
-   cannot fill itself is packed short in **silence** — it is not a warning. `\\` is a **Go primitive** that scans its own
+   cannot fill itself is packed short in **silence** — it is not a warning.
+   **A running head was four mechanisms, and three correct fixes left it empty.**
+   The band and the folio were right ([#726](https://github.com/go-tex/engine/pull/726)),
+   the page-style dispatch was right, the mark pair moved to `\@themark` — the name
+   the kernel and every class use ([#728](https://github.com/go-tex/engine/pull/728)) —
+   and the head stayed blank, because `amssubstrate.go` carried `\def\mark#1{}`: a
+   stub that **discarded its argument**, one layer below all three. A stub like that
+   is the one shape no channel sees — the document asks, the engine says nothing, the
+   suite stays green, and the loss exists only as ink that is not on the page. It
+   cost 27 of the 128 corpus papers with a reference their head. What found it was a
+   test asking not *is this layer right* but **does the node arrive**
+   ([#729](https://github.com/go-tex/engine/pull/729)). Marks now travel as nodes on
+   the vertical list, their argument expanded at mark time (`scan_toks(false,true)`,
+   so amsart's `\mark{\the\@temptokena}` stores the pair and not the three tokens
+   that would fetch it), and `\topmark`/`\firstmark`/`\botmark` follow §1012's
+   arithmetic (`:19718-19729`, `:19782-19789`) — including the two consequences a
+   plainer reading misses and a head depends on: `\botmark` is **not** cleared on a
+   page with no marks, so a head set once at `\maketitle` stays; and `\firstmark`
+   falls back to `\topmark`, so a page broken mid-section reports the mark in force
+   at its own top. Measured: 6 corpus papers gain ink at **identical page counts**,
+   invisible to Σ and visible only to `hashdiff`, and Σ/bias/exact do not move.
+   A `\mark` in a class **preamble** is read and dropped: `ws-fnl.cls` carries one,
+   and contributing it to a page that does not exist yet turned 9 pages into 10 with
+   the ink identical. `\\` is a **Go primitive** that scans its own
    star and optional length: as a macro built on `\@ifstar` it put `\@ifstar` into the
    maths source and every formula holding a matrix row separator was refused, because
    the maths capture writes a control sequence **verbatim** and never consults its
