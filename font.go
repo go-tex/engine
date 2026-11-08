@@ -225,7 +225,7 @@ type fontFace interface {
 	// its presentation form, so the path lookup says no about a glyph the font
 	// has (see glyphFor).
 	hasGlyphFor(r rune) bool
-	sizePt() float64           // the face's design size in points (fractional: \Large is 14.4)
+	sizePt() float64 // the face's design size in points (fractional: \Large is 14.4)
 }
 
 // faceProgram identifies the font PROGRAM behind a face, independently of the size

@@ -27,8 +27,8 @@ func (spMock) glyphPathAt(rune) string { return "" }
 // folding forms the mock cannot draw. The cmap/GSUB distinction hasGlyphFor
 // exists for only arises on a real face, and that is where it is tested.
 func (spMock) hasGlyphFor(rune) bool { return false }
-func (spMock) kernSP(_, _ rune) int    { return 0 }
-func (spMock) sizePt() float64         { return 10 }
+func (spMock) kernSP(_, _ rune) int  { return 0 }
+func (spMock) sizePt() float64       { return 10 }
 
 func TestCharNodeMetrics(t *testing.T) {
 	cases := []struct {
