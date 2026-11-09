@@ -144,10 +144,11 @@ func (e *Engine) doBigURL() {
 //
 // The optional declaration is the interesting half, and it is not decoration:
 // picTeX, TikZ and forest use the same name for something else entirely, and
-// whoever is loaded FIRST keeps it. So this binds only when url or hyperref is
-// loaded and no pgf-family package came before — see bindURLPath. Binding it
-// unconditionally was measured and was worse: forest's
-// \path [draw, \forestoption{edge}] came out as a URL and 2402.04711 lost a page.
+// whoever DEFINED it first keeps it. So this binds only when url, xurl or hyperref
+// is loaded — see bindURLPath — and, in a document that also loads a pgf package,
+// only for the braced or |-fenced form. Binding it unconditionally was measured and
+// was worse: forest's \path [draw, \forestoption{edge}] came out as a URL and
+// 2402.04711 lost a page.
 func (e *Engine) doPath() {
 	if !e.urlPathBound {
 		// url.sty has not been loaded (nor hyperref, which loads it), or a pgf-family
@@ -155,6 +156,13 @@ func (e *Engine) doPath() {
 		// \path, and behaving as if it were mangles the other one: 2402.04711 draws
 		// its trees with forest, whose \path [draw, \forestoption{edge}] would be
 		// set as a URL. Fall back to exactly what an unbound name did before.
+		e.skipUndefined("path")
+		return
+	}
+	if e.pgfLoaded() && !e.urlPathArgFollows() {
+		// TikZ's \path at top level (the engine gobbles a {tikzpicture} whole but not
+		// the \tikz short form): its argument is a path, "(0,0) -- (1,1);" or "[draw]",
+		// never a braced or |-fenced URL. Same fallback as an unbound name.
 		e.skipUndefined("path")
 		return
 	}
@@ -167,6 +175,23 @@ func (e *Engine) doPath() {
 		return
 	}
 	e.placeInline(inner)
+}
+
+// urlPathArgFollows reports whether the source continues with a braced or |-fenced
+// argument, the two spellings of \path{…} / \path|…| that a document loading a pgf
+// package writes for url.sty. From an expansion it answers true, as readUrlArg's
+// braced fallback is the only reader there.
+func (e *Engine) urlPathArgFollows() bool {
+	if len(e.lists) > 0 {
+		return true
+	}
+	for p := e.bpos; p < len(e.base); p++ {
+		if cc := e.catOf(e.base[p]); cc == catSpace || cc == catEOL {
+			continue
+		}
+		return e.base[p] == '{' || e.base[p] == '|'
+	}
+	return false
 }
 
 // readUrlArg reads a url.sty command's argument, which may be braced OR fenced by
