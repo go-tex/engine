@@ -81,7 +81,9 @@ func TestMathAlphabetsAreAllHonouredByTheMathLayer(t *testing.T) {
 	for name := range mathAlphabet {
 		pair, ok := subjects[name]
 		if !ok {
-			pair = [2]string{`$\` + name + `{A}$`, `$A$`}
+			// "Afg": in Latin Modern Math the capital A has the same advance roman and
+			// italic, so a bare A proved nothing; f and g do not.
+			pair = [2]string{`$\` + name + `{Afg}$`, `$Afg$`}
 		}
 		got, plain := mathGeom(t, pair[0]), mathGeom(t, pair[1])
 		if got.width == plain.width && got.height == plain.height && got.depth == plain.depth {

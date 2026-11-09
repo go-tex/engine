@@ -30,3 +30,10 @@ var lmRomanItalic []byte
 
 //go:embed fonts/lm/lmmono10-regular.otf
 var lmMonoRegular []byte
+
+// lmMath is Latin Modern Math (OpenType with a MATH table), the maths face of the same
+// distribution and licence (its copyright field names the GUST Font License too);
+// go-tex/math sets every formula from it.
+//
+//go:embed fonts/lm/latinmodern-math.otf
+var lmMath []byte

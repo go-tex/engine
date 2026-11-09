@@ -40,7 +40,7 @@ func (mathNode) isNode() {}
 // mathRenderer lazily builds the go-tex/math renderer with its embedded MATH font.
 func (e *Engine) mathRenderer() *texmath.Renderer {
 	if e.mathR == nil {
-		r, err := texmath.New(texmath.DefaultFont())
+		r, err := texmath.New(lmMath)
 		if err != nil {
 			e.fail("cannot init math renderer: " + err.Error())
 			return nil
