@@ -107,3 +107,42 @@ func TestParityDefaultFaceBaseFonts(t *testing.T) {
 		}
 	}
 }
+
+// A fontspec article with no \setmainfont: the SET of font families in the PDF, which
+// is exact where a page count is not. tectonic 0.17.0 names (testdata) lmroman 10/12/
+// 8/7/6, lmmono 10/8, lmmonolt10-bold and CMR/CMMI/CMEX for the maths. The engine
+// named only STIXTwoMath-Regular before the default face became Latin Modern; it now
+// names the four regular-size text faces, every one of them a member of tectonic's
+// set. Still missing, and said so: the optical sizes (lmroman12/8/7/6, lmmono8,
+// lmmonolt10-bold) and the Computer Modern maths faces (the maths face is a later
+// step of the same issue).
+func TestParityFontspecFamilySet(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("testdata", "parity", "fontspecfamilies.tex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := os.ReadFile(filepath.Join("testdata", "parity", "fontspecfamilies.tectonic.fonts.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	refSet := map[string]bool{}
+	for _, n := range strings.Fields(string(ref)) {
+		refSet[n] = true
+	}
+	var buf bytes.Buffer
+	if _, err := CompileToPDF(src, Options{}, &buf); err != nil {
+		t.Fatalf("strict compile: %v", err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("STIXTwoMath")) {
+		t.Error("the PDF still embeds STIXTwoMath, which tectonic's never does")
+	}
+	var found int
+	for n := range refSet {
+		if bytes.Contains(buf.Bytes(), []byte("+"+n)) {
+			found++
+		}
+	}
+	if found < 4 {
+		t.Errorf("only %d of tectonic's %d families are embedded, want at least the four text faces", found, len(refSet))
+	}
+}
