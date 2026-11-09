@@ -132,3 +132,28 @@ func TestUrlPathIsNotBoundWithoutThepackage(t *testing.T) {
 		}
 	}
 }
+
+// With a pgf package loaded FIRST, url.sty's \path still holds outside a picture:
+// TikZ installs its own only inside {tikzpicture}. The identifier used to vanish in
+// lenient mode, and strict mode died on the underscore.
+func TestUrlPathHoldsOutsideAPictureAfterTikz(t *testing.T) {
+	for _, pkgs := range []string{`\usepackage{tikz}\usepackage{url}`, `\usepackage{tikz}\usepackage{xurl}`,
+		`\usepackage{pgf}\usepackage{hyperref}`} {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		e.lenient = true
+		src := `\documentclass{article}` + pkgs + `\begin{document}\path{max_parallel_requests}\par\end{document}`
+		if _, err := e.Run(src); err != nil {
+			t.Fatalf("%s: %v", pkgs, err)
+		}
+		if got := glyphString(e.mvl) + glyphString(e.parList); !strings.Contains(got, "max_parallel_requests") {
+			t.Errorf("%s: the identifier did not reach the page: %q", pkgs, got)
+		}
+		if e.SkippedCommands()["path"] != 0 {
+			t.Errorf("%s: \\path was skipped as undefined", pkgs)
+		}
+	}
+}

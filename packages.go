@@ -709,7 +709,7 @@ func (e *Engine) doUsepackageLoad() {
 		if !e.loadTextFontPackage(name) {
 			e.noteFontSubstitution(name)
 		}
-		if name == "url" || name == "hyperref" {
+		if name == "url" || name == "xurl" || name == "hyperref" {
 			e.bindURLPath()
 		}
 		if name == "geometry" {
@@ -1604,15 +1604,31 @@ const IEEEtranTitlePlain = `
 //	% picTeX defines \path, so declare it optionally:
 //	\@ifundefined{path}{\DeclareUrlCommand\path{\urlstyle{tt}}}{}
 //
-// so the package loaded FIRST keeps the name. pkgRequested records what the
-// document has asked for so far, in order, which is exactly the test url.sty
-// makes — a document that drew with tikz or forest before loading url keeps
-// their \path, and one that never loads url or hyperref never has url's at all.
+// so a package that has defined \path GLOBALLY before keeps the name. PiCTeX
+// does (that is the "picTeX" of the comment). TikZ, PGF and forest do NOT: TikZ
+// installs its \path only inside a {tikzpicture} (\tikz@installcommands), so at the
+// top level the name is still free when url.sty tests it, and a document that loads
+// tikz and then xurl has url's \path outside a picture and TikZ's inside — tectonic
+// 0.17.0 typesets \path{max_parallel_requests} and \path{%USERPROFILE%\.continue}
+// there with 0 errors, which only url's catcodes can read. The earlier rule (any
+// pgf-family package first keeps the name) read the picture scope as global and
+// dropped the identifier. What the picture scope still means for the engine, which
+// gobbles a picture whole but meets \tikz[...]\path (0,0) -- (1,1); at top level, is
+// handled in doPath (pgfPathFollows).
 func (e *Engine) bindURLPath() {
-	for name := range e.pkgRequested {
-		if isPGFFamily(name) || name == "forest" || name == "pictex" {
-			return // their \path, not url's
-		}
+	if e.pkgRequested["pictex"] {
+		return // their \path, not url's
 	}
 	e.urlPathBound = true
+}
+
+// pgfLoaded reports whether TikZ, PGF or forest has been requested: a document in
+// which a top-level \path may be TikZ's (inside \tikz, or a forest option).
+func (e *Engine) pgfLoaded() bool {
+	for name := range e.pkgRequested {
+		if isPGFFamily(name) || name == "forest" {
+			return true
+		}
+	}
+	return false
 }
