@@ -1720,6 +1720,9 @@ const MiniLaTeXKernel = `
 \def\nopagebreak{\@testopt\@no@pgbk4}
 \def\linebreak{\@testopt{\@no@lnbk-}4}
 \def\nolinebreak{\@testopt\@no@lnbk4}
+% \allowbreak, latex.ltx:600 verbatim — a break opportunity of penalty 0 and nothing
+% else. It was undefined in text: strict mode aborted on \texttt{a\_\allowbreak b}.
+\def\allowbreak{\penalty \z@}
 % \@getpen, ltspace.dtx:529-531 verbatim. The optional argument is a DEGREE, not a
 % penalty: 0 means "no opinion" and 4 means "absolutely".
 \def\@getpen#1{\ifcase #1 \z@ \or \@lowpenalty\or
