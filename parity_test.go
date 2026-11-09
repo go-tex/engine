@@ -60,3 +60,15 @@ func TestParityAllowbreakInText(t *testing.T) {
 		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
 	}
 }
+
+// url.sty's \path with TikZ loaded FIRST. TikZ installs its \path only inside a
+// {tikzpicture} (\tikz@installcommands), so at the top level the name is still free
+// when url.sty tests it — \@ifundefined{path}{\DeclareUrlCommand\path…} — and url's
+// holds there. The characters _ % and \. can only compile in text mode if url.sty's
+// catcodes read the argument; tectonic 0.17.0 typesets both with 0 errors.
+func TestParityUrlPathAfterTikz(t *testing.T) {
+	_, got, want := parityPair(t, "urlpath")
+	if got != want {
+		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
+	}
+}

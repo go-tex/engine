@@ -28,7 +28,7 @@ import "strings"
 //     maths, and after "(" "[" or another mark (class punctnul, :411-413).
 //
 // Not done, and said so: \today (the engine has no clock, Options.Date is the
-// document date and is left alone), the ordinal part names, the guillemet spacing
+// document date and is left alone), the part ordinals above ten, the guillemet spacing
 // of \og \fg, the " – " caption separator, \selectlanguage's captions (it moves the
 // punctuation spacing only), and every language but french.
 
