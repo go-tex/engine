@@ -435,8 +435,12 @@ func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 		if shape.vspaceBefore > 0 {
 			// \l@chapter opens with \vskip 1.0em and article's \l@section with
 			// \addvspace{1.0em}: the top entries stand apart from the ones under them.
+			// Braced: \addvspace takes ONE argument, and "1em" unbraced is "1" and an "em"
+			// typeset on the page.
 			b.cs("addvspace")
+			b.begin()
 			b.text(strconv.FormatFloat(shape.vspaceBefore, 'f', -1, 64) + "em")
+			b.end()
 		}
 		b.cs("par")
 		b.cs("noindent")
