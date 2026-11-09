@@ -158,3 +158,14 @@ func TestParityAddvspaceTakesTheMaximum(t *testing.T) {
 		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
 	}
 }
+
+// An unnumbered section a document adds to the contents by hand,
+// \section*{…}\addcontentsline{toc}{section}{…}: tectonic lists it, flush with the
+// numbers above it (an entry with no \numberline has no number box). The engine
+// recorded only \part and \chapter, so the entry was missing from the list.
+func TestParityUnnumberedSectionInContents(t *testing.T) {
+	_, got, want := parityPair(t, "tocunnumbered")
+	if got != want {
+		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
+	}
+}
