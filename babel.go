@@ -99,6 +99,10 @@ func (e *Engine) applyBabel(opts []string) {
 		`\let\gotexttORI\ttfamily\def\ttfamily{\gotexfrenchoff=1 \gotexttORI}` +
 		`\let\gotexrmORI\rmfamily\def\rmfamily{\gotexfrenchoff=0 \gotexrmORI}` +
 		`\let\gotexsfORI\sffamily\def\sffamily{\gotexfrenchoff=0 \gotexsfORI}` +
+		// french.ldf:1816-1824 (\bbl@frenchindent): \let\@afterindentfalse\@afterindenttrue,
+		// so the paragraph after a heading is indented in French, as the typography
+		// there has it.
+		`\expandafter\let\csname @afterindentfalse\expandafter\endcsname\csname @afterindenttrue\endcsname` +
 		`\AtBeginDocument{` + frenchCaptions + `}` +
 		`\def\selectlanguage#1{\gotexselectlanguage{#1}}`)
 }
