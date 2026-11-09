@@ -71,11 +71,15 @@ func (e *Engine) doTOCEntry() {
 // \addcontentsline themselves (book.cls:318,359) — so nothing else records them,
 // and a book's contents list came out with no chapters in it at all.
 //
-// Everything else is dropped on purpose. A class calls \addcontentsline for its
-// sections and its captions too, and both of those already reach the table by
-// their own route (\@gxnum in classprims.go and the redefined \caption), so
-// recording them here would put every section in the list twice.
-var tocAddLevels = map[string]int{"part": -1, "chapter": 0}
+// The sectioning names are recorded too (an unnumbered section a document adds to
+// the contents by hand, \section*{…}\addcontentsline{toc}{section}{…}, was missing),
+// but a numbered section already reaches the table by its own route (\@gxnum in
+// classprims.go), so an entry that repeats the previous one at the same place is
+// dropped. Captions are not recorded here at all: the redefined \caption has them.
+var tocAddLevels = map[string]int{
+	"part": -1, "chapter": 0,
+	"section": 1, "subsection": 2, "subsubsection": 3, "paragraph": 4, "subparagraph": 5,
+}
 
 // numberlineEnd is what \numberline{N} leaves after the number (classkernel.go),
 // so the recorder can tell the entry's number from its title. A class writes the
@@ -95,6 +99,16 @@ func (e *Engine) doAddContentsLine() {
 		return
 	}
 	number, title := splitNumberline(text)
+	// A numbered section already reached the table by its own route (\@gxnum), so a
+	// class that ALSO calls \addcontentsline for it, at the same place with the same
+	// title, must not list it twice. What this records for a section is what nothing
+	// else does: the entry a document writes by hand after \section*, and the ones a
+	// class's own sectioning commands write.
+	if level >= 1 && len(e.tocEntries) > 0 {
+		if last := e.tocEntries[len(e.tocEntries)-1]; last.marker == len(e.mvl) && last.title == title {
+			return
+		}
+	}
 	// The plain rendering (for a PDF bookmark) drops control sequences, so the
 	// marker is not in it and the number is simply glued to the front: "1One".
 	// Take it off by the number the detokenized text yielded.
@@ -451,14 +465,17 @@ func (e *Engine) emitTOCEntryTokens(b *tocTokens, entries []tocEntry) {
 		if shape.bold {
 			b.cs("bfseries")
 		}
-		// The number sits left-aligned in a box of the level's width, so the title
-		// starts at the same place whether or not the entry carries a number.
-		b.boxTo(shape.numWidth)
+		// The number sits left-aligned in a box of the level's width. An entry with no
+		// number has NO box: \numberline is what makes it (ltsect: \hb@xt@\@tempdima),
+		// and \@dottedtocline's \hskip -\leftskip puts the title at the entry's
+		// indent, so an unnumbered section is flush with the numbers above it, as
+		// tectonic sets "Historique des versions" under "1 Le matériel".
 		if en.number != "" {
+			b.boxTo(shape.numWidth)
 			b.text(en.number)
+			b.cs("hfil")
+			b.end()
 		}
-		b.cs("hfil")
-		b.end()
 		b.text(en.title)
 		b.cs("nobreak")
 		if shape.dotted {
