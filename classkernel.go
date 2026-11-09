@@ -700,7 +700,11 @@ const LaTeX2eClassKernel = `
 % number lands in its own box instead of running into the title.
 \def\numberline#1{#1\gotex@numberlineend}
 \long\def\addtocontents#1#2{}
-\def\addvspace#1{\vskip#1}
+% \addvspace was a plain \vskip, so two in a row ADDED where LaTeX takes the LARGER.
+% latex.ltx:6527-6539 with \@xaddvskip at :6513-6526; the body is in Go (addvspace.go)
+% because the rule needs the skip already on the list, which TeX reaches through
+% \lastskip and a pair of cancelling \vskip's.
+\def\addvspace#1{\ifvmode\if@minipage\else\gotex@addvspace#1\relax\fi\fi}
 \def\addpenalty#1{}
 \def\nobreakspace{\space}
 % ── diagnostics not already routed by the kernel-helper layer ────────────────

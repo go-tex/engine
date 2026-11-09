@@ -147,6 +147,18 @@ func TestParityFontspecFamilySet(t *testing.T) {
 	}
 }
 
+// \addvspace is a maximum against the skip already on the list (latex.ltx:6513-6539),
+// not a sum: after a skip of 8pt, \addvspace{12pt} leaves 12pt, not 20. The negative
+// branch is the sum, and two negatives leave the first. Witness testdata/parity/
+// addvspace.tex prints \lastskip after each; tectonic's are recorded. On a contents
+// page it is the 9.9pt between the heading and the first entry that the engine added.
+func TestParityAddvspaceTakesTheMaximum(t *testing.T) {
+	_, got, want := parityPair(t, "addvspace")
+	if got != want {
+		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
+	}
+}
+
 // An unnumbered section a document adds to the contents by hand,
 // \section*{…}\addcontentsline{toc}{section}{…}: tectonic lists it, flush with the
 // numbers above it (an entry with no \numberline has no number box). The engine
