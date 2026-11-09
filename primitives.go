@@ -2245,6 +2245,7 @@ func (e *Engine) loadMore() {
 	e.prim("urldef", func(e *Engine) { e.doUrldef() })                       // url.sty: define, do not typeset
 	e.prim("url", func(e *Engine) { e.doURL() })                             // hyperref: literal, clickable URL
 	e.prim("gotexselectlanguage", func(e *Engine) { e.doSelectLanguage() })  // babel french: see babel.go
+	e.prim("setmainfont", func(e *Engine) { e.doSetMainFont() })             // fontspec: records a face the engine lacks
 	e.prim("path", func(e *Engine) { e.doPath() })                           // url.sty: literal, NOT a link
 	e.prim("printbibliography", func(e *Engine) { e.doPrintBibliography() }) // biblatex
 	e.prim("Url", func(e *Engine) { e.doBigURL() })                          // url.sty low-level \Url: typeset + close its \begingroup

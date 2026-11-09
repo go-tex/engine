@@ -3,6 +3,8 @@
 
 package engine
 
+import "strings"
+
 // Text-font packages, and why asking for one is worth reporting.
 //
 // The engine sets everything in ONE built-in face. A document that loads a text-font
@@ -73,7 +75,35 @@ var textFontPackages = map[string]string{
 	"tgadventor":       "TeX Gyre Adventor",
 	"tgcursor":         "TeX Gyre Cursor",
 	"anttor":           "Antykwa Torunska",
-	"fontspec":         "a font named by \\setmainfont",
+	// fontspec is NOT here: loaded alone it sets Latin Modern, the face the engine
+	// sets, so it wants nothing it lacks. A \setmainfont naming another face is what
+	// asks for a substitution; see doSetMainFont.
+}
+
+// doSetMainFont is fontspec's \setmainfont[opts]{name}[opts]. The engine has no
+// metrics for the named face, so unless it is Latin Modern the request is recorded
+// like any text-font package's, under "fontspec", with the face the document named.
+// (go-tex/engine#370: the warning used to fire on \usepackage{fontspec} alone.)
+func (e *Engine) doSetMainFont() {
+	e.scanBracketList()
+	name, _ := e.readRawBracedArg()
+	e.skipOptDateBracket()
+	name = strings.TrimSpace(name)
+	if name == "" || isLatinModernName(name) {
+		return
+	}
+	if e.fontSubst == nil {
+		e.fontSubst = map[string]string{}
+	}
+	e.fontSubst["fontspec"] = name
+}
+
+// isLatinModernName reports whether a fontspec family name is Latin Modern's, in the
+// spellings the distribution gives: "Latin Modern Roman", "LM Roman 10", the file
+// stem "lmroman10-regular" and the PostScript name.
+func isLatinModernName(name string) bool {
+	n := strings.ToLower(strings.NewReplacer(" ", "", "-", "").Replace(name))
+	return strings.HasPrefix(n, "latinmodernroman") || strings.HasPrefix(n, "lmroman")
 }
 
 // textFontFiles names the OpenType files behind the packages the engine can actually
