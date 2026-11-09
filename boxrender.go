@@ -5,6 +5,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -135,7 +136,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			if c.leader != leaderNone {
 				lg.close()
 			}
-			paintLeader(sb, c.leader, cx, baseline, w, spToPt(c.cell), font)
+			paintLeader(sb, c.leader, x, cx, baseline, w, spToPt(c.cell), font)
 			if c.leader == leaderNone {
 				// Ordinary inter-word glue: the space a reader would type.
 				lg.text.addSpace()
@@ -363,7 +364,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 // paintLeader draws a glue node's set width as a leader: leaderRule fills the
 // span with a thin baseline rule (\hrulefill), leaderDots tiles a row of dots
 // (\dotfill). leaderNone (ordinary glue) paints nothing. w is the set width (pt).
-func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w, cell float64, font fontFace) {
+func paintLeader(sb *strings.Builder, kind glueLeader, edge, x, baseline, w, cell float64, font fontFace) {
 	if w <= 0 {
 		return
 	}
@@ -372,8 +373,26 @@ func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w, cell floa
 		th := spToPt(defaultRule)
 		rect(sb, x, baseline-th, w, th)
 	case leaderDots:
-		paintDotLeader(sb, x, baseline, w, cell, font)
+		paintDotLeader(sb, edge, x, baseline, w, cell, font)
 	}
+}
+
+// dotLeaderOrigins is where the tiles of an ALIGNED leader start. \leaders (not
+// \cleaders or \xleaders) lays its boxes on a grid anchored to the left edge of the
+// enclosing box, not to the glue (tex.web §626: cur_h = left_edge + leader_wd *
+// ((cur_h - left_edge) div leader_wd), and a tile is set only if it fits whole). So
+// the dots of a contents line line up from one entry to the next, and the first one
+// is NOT at the end of the title: tectonic sets "Un détail . . ." where the engine,
+// tiling from the glue's own start, set "Un détail. . .".
+func dotLeaderOrigins(edge, x, w, cell float64) []float64 {
+	if cell <= 0 || w <= 0 {
+		return nil
+	}
+	var out []float64
+	for o := edge + math.Ceil((x-edge)/cell-1e-9)*cell; o+cell <= x+w+1e-9; o += cell {
+		out = append(out, o)
+	}
+	return out
 }
 
 // dotLeaderGeom returns how many dot cells fit across width w (pt) and the cell
@@ -393,7 +412,7 @@ func dotLeaderGeom(w, emPt, cell float64) (int, float64) {
 
 // paintDotLeader tiles '.' glyphs centred in successive .44em cells across
 // [x, x+w], approximating TeX's \dotfill (\leaders\hbox to .44em{\hss.\hss}).
-func paintDotLeader(sb *strings.Builder, x, baseline, w, cell float64, font fontFace) {
+func paintDotLeader(sb *strings.Builder, edge, x, baseline, w, cell float64, font fontFace) {
 	if font == nil {
 		return
 	}
@@ -401,11 +420,10 @@ func paintDotLeader(sb *strings.Builder, x, baseline, w, cell float64, font font
 	if d == "" {
 		return
 	}
-	n, cell := dotLeaderGeom(w, float64(font.sizePt()), cell)
+	_, cell = dotLeaderGeom(w, float64(font.sizePt()), cell)
 	dotW := spToPt(func() int { w, _, _ := font.charDimsSP('.'); return w }())
-	for i := 0; i < n; i++ {
-		cx := x + float64(i)*cell + (cell-dotW)/2
-		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+	for _, o := range dotLeaderOrigins(edge, x, w, cell) {
+		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(o+(cell-dotW)/2), f(baseline), d)
 	}
 }
 
