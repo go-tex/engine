@@ -709,6 +709,9 @@ func (e *Engine) doUsepackageLoad() {
 		if !e.loadTextFontPackage(name) {
 			e.noteFontSubstitution(name)
 		}
+		if name == "babel" {
+			e.applyBabel(opts)
+		}
 		if name == "url" || name == "xurl" || name == "hyperref" {
 			e.bindURLPath()
 		}

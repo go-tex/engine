@@ -21,13 +21,18 @@ import (
 // The comparison drops every white-space rune: pageText holds characters, not the
 // glue between them, so spacing is asserted separately where a witness is about it.
 
+// ligatures spells out what the engine sets as one glyph and pdftotext reads back as
+// letters (it expands them in the reference's text; the engine's page text keeps the
+// presentation form).
+var ligatures = strings.NewReplacer("ﬀ", "ff", "ﬁ", "fi", "ﬂ", "fl", "ﬃ", "ffi", "ﬄ", "ffl")
+
 func stripSpace(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsSpace(r) {
 			return -1
 		}
 		return r
-	}, s)
+	}, ligatures.Replace(s))
 }
 
 // parityPair compiles testdata/parity/<name>.tex strictly and returns the engine,
