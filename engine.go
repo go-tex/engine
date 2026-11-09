@@ -336,6 +336,10 @@ type Engine struct {
 	// urlPathBound says \path carries url.sty's meaning — set when url or hyperref
 	// is loaded and no pgf-family package owns the name already. See bindURLPath.
 	urlPathBound bool
+
+	// frenchPunct says babel's french is the language in force: a thin space goes
+	// before ; ! ? and a full one before :. See babel.go.
+	frenchPunct bool
 	// fontSubst records the text-font packages the document asked for, by package
 	// name -> the face it wanted. The engine sets one built-in face, so each of
 	// these is a silent substitution of a DIFFERENT WIDTH — see fontsubst.go.
@@ -2062,6 +2066,9 @@ func (e *Engine) stepToken(t tok) bool {
 		case catLetter, catOther, catParam:
 			// catParam here is a stray literal '#' (a ## reduced by scanBody that was
 			// not consumed as a parameter char by a nested \def); typeset it as text.
+			if t.cat == catOther {
+				e.frenchHighPunct(t.ch)
+			}
 			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
 		case catSpace:
 			if e.inPar && e.curFont != nil {
