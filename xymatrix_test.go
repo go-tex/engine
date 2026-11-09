@@ -201,7 +201,9 @@ func TestALabelOutsideTheGridIsNotClipped(t *testing.T) {
 	if !ok {
 		t.Fatal("the unlabelled diagram did not draw")
 	}
-	labelled, ok := e.makeXymatrix("", `A \ar[d]_f & B \\ C & D`, "")
+	// A long label: with Latin Modern Math a one-letter "f" no longer reaches past the
+	// column's own margin, so it proved nothing; this one always does.
+	labelled, ok := e.makeXymatrix("", `A \ar[d]_{longlabel} & B \\ C & D`, "")
 	if !ok {
 		t.Fatal("the labelled diagram did not draw")
 	}
