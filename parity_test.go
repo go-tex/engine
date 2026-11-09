@@ -49,6 +49,13 @@ func parityPair(t *testing.T, name string) (*Engine, string, string) {
 	return e, stripSpace(pageText(e)), stripSpace(string(ref))
 }
 
+func TestParityAllowbreakInText(t *testing.T) {
+	_, got, want := parityPair(t, "allowbreak")
+	if got != want {
+		t.Errorf("page text differs from tectonic's\n got: %q\nwant: %q", got, want)
+	}
+}
+
 // url.sty's \path with TikZ loaded FIRST. TikZ installs its \path only inside a
 // {tikzpicture} (\tikz@installcommands), so at the top level the name is still free
 // when url.sty tests it — \@ifundefined{path}{\DeclareUrlCommand\path…} — and url's
