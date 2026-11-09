@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-
-	texmath "github.com/go-tex/math"
 )
 
 // This file is the high-level compile API: one call turns TeX source into a PDF
@@ -128,7 +126,18 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	}
 	fontBytes := opt.Font
 	if fontBytes == nil {
-		fontBytes = texmath.DefaultFont()
+		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
+		// caller that names only some faces keeps exactly what it named.
+		fontBytes = lmRomanRegular
+		if opt.BoldFont == nil {
+			opt.BoldFont = lmRomanBold
+		}
+		if opt.ItalicFont == nil {
+			opt.ItalicFont = lmRomanItalic
+		}
+		if opt.MonoFont == nil {
+			opt.MonoFont = lmMonoRegular
+		}
 	}
 	reg, err := NewOpenTypeFont(fontBytes, float64(opt.size()))
 	if err != nil {

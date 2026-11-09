@@ -1,0 +1,15 @@
+LMRoman12-Bold
+LMRoman10-Regular
+LMRoman10-Bold
+LMRoman10-Italic
+LMMono10-Regular
+LMRoman7-Regular
+CMMI10
+CMR7
+CMMI7
+CMR10
+CMEX10
+LMMonoLt10-Bold
+LMMono8-Regular
+LMRoman6-Regular
+LMRoman8-Regular
