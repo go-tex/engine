@@ -178,7 +178,8 @@ const LaTeX2eClassLead = `
 % a display heading (positive) or runs the text in beside the heading (negative).
 \def\@startsection#1#2#3#4#5#6{\par
   \@tempskipa#4\relax
-  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \@afterindenttrue
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
   \vskip\@tempskipa
   \@ifstar{\@gxsec{#1}{#2}{#6}{#5}\@gxstar}{\@gxsec{#1}{#2}{#6}{#5}\@gxnum}}
 \def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
@@ -222,6 +223,7 @@ const LaTeX2eClassLead = `
     \noindent{#1 #2}\hskip-\@tempskipa
   \else
     \noindent{#1 #2\par}\vskip\@tempskipa
+    \@afterheading
   \fi}
 % \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection
 % calls once it has read the star, the optional toc title and the title. This
@@ -240,15 +242,21 @@ const LaTeX2eClassLead = `
 % loaded first.
 \def\@sect#1#2#3#4#5#6[#7]#8{\par
   \@tempskipa#4\relax
-  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \@afterindenttrue
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
   \vskip\@tempskipa
   \@gxnum{#1}{#2}{#6}{#5}{#8}}
 \def\@ssect#1#2#3#4#5{\par
   \@tempskipa#2\relax
-  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa\fi
+  \@afterindenttrue
+  \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
   \vskip\@tempskipa
   \@gxhead{#4}{#5}{#3}}
-\def\@afterheading{}
+% \@afterheading (latex.ltx \@xsect): when the heading's beforeskip was negative
+% (\@afterindentfalse) the paragraph after it is not indented — \section in article
+% and report, where tectonic sets the first paragraph flush with the margin. The
+% engine indented it, 15pt of width on the first line of every section.
+\def\@afterheading{\if@afterindent\else\gotexnoindentnext\fi}
 % \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
 % optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title
 % as the optional one too — without this, \chapter{T} mis-parses (\@chapter would
