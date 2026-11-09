@@ -534,7 +534,8 @@ const AMSClassSubstrate = `
 % this one macro is 179 of the corpus's 199 abandoned calls, 44 on a single paper.
 \long\def\@hangfrom#1#2{\global\let\@svsechd\relax\par\noindent#1#2}
 \def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
-\def\@afterheading{}
+% (\@afterheading is classprims.go's: it used to be stubbed empty HERE, which loads
+% later and silently undid it — the first paragraph after a heading kept its indent.)
 % \@ifclasswith{class}{opt}{then}{else}: the class-file analogue of
 % \@ifpackagewith, consulting the option list the loader recorded in opt@class.cls.
 \def\@ifclasswith#1#2{\@ifundefined{opt@#1.cls}{\@secondoftwo}{\@ifinlist{#2}{\@nameuse{opt@#1.cls}}\ifin@\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}}

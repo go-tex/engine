@@ -160,6 +160,7 @@ type Engine struct {
 	lineskiplimit   int
 	parindent       int  // width of the indentation box at a paragraph's start (sp)
 	prevDepth       int  // \prevdepth for interline glue (ignoreDepth = suppress)
+	noIndentNext    bool // the next paragraph starts unindented, once (\@afterheading under \@afterindentfalse)
 	suppressParskip bool // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
 	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
@@ -2149,6 +2150,13 @@ func lastChar(list []node) (rune, bool) {
 // (an empty hbox of that width) as TeX does for an indented paragraph.
 func (e *Engine) beginParagraph(indent bool) {
 	e.inPar = true
+	// \@afterheading with \@afterindentfalse (a heading whose beforeskip was negative,
+	// which is every \section of the standard classes): the paragraph that follows is
+	// not indented, once. See \gotexnoindentnext in classprims.go.
+	if e.noIndentNext {
+		indent = false
+		e.noIndentNext = false
+	}
 	// TeX puts \parskip glue on the vertical list before a paragraph that begins
 	// in vertical mode (it is discarded at a page top). \parskip is ~0 in the
 	// standard classes, so this is a no-op for a plain article; but parskip.sty and
