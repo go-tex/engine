@@ -616,8 +616,16 @@ func (e *Engine) buildBoxList() []node {
 					list = append(list, glueNode{spec: e.spaceGlueForFactor(e.curFont)})
 				}
 			case catMath:
+				// The line the `$` opened on, read BEFORE scanning past the
+				// formula: a display spanning several lines belongs to the one
+				// the author would go looking for it at, not to its last.
+				opened := e.curSrcLine
 				src, display := e.scanMathSource()
-				list = append(list, e.makeMath(src, display))
+				m := e.makeMath(src, display)
+				if opened > 0 {
+					m.srcLine = opened
+				}
+				list = append(list, m)
 			}
 			continue
 		}

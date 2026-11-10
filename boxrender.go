@@ -170,8 +170,20 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += spToPt(c.width)
 		case mathNode:
 			lg.close()
-			// embed the math SVG with its top at (cx, baseline-height): centred
-			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
+			// ⛔ The formula's group carries its SOURCE LINE, like the prose
+			// around it. It used to carry none: lg.close() ends the open
+			// <g data-l="N"> and the formula went into a bare group, so every
+			// consumer that reads those groups — the playground measures each
+			// one's box in the DOM to build its click-to-source bands — saw a
+			// page where the equations did not exist. Measured: five line
+			// groups on a page, two formulas, both outside all of them.
+			//
+			// It is a group of its own rather than material inside the
+			// surrounding line's, because a display formula is not on that line
+			// and an inline one still wants its own box rather than its
+			// neighbours'.
+			fmt.Fprintf(sb, `<g data-l="%d" transform="translate(%s,%s)">%s</g>`,
+				c.srcLine, f(cx), f(baseline-spToPt(c.height)), c.svg)
 			// What the formula SAYS, over the formula: its own outlines carry no
 			// characters either, and without this the sentence around it reads with
 			// a silent hole where the equation was.
@@ -350,6 +362,20 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			paintInternalLinkSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
+			// ⚠ THIS PAINTER APPEARS TO BE UNREACHABLE, and it is left alone
+			// deliberately rather than "fixed" to match its horizontal twin.
+			//
+			// Probed by panicking here and running the engine's own maths
+			// corpus: 131 tests matching Math/Display/Align/Equation, and the
+			// panic never fired. Every formula measured — inline, `\[…\]`, and
+			// an `align` environment — reaches the page through the HORIZONTAL
+			// painter instead, which is the one that now stamps data-l.
+			//
+			// Stamping a line here too would have been one line and would have
+			// looked like thoroughness. It would have been unexercised code
+			// carrying a confident comment, which is worse than an honest gap:
+			// whether this branch is dead or merely untested is its own
+			// question, and answering it by editing it would have hidden it.
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			tl.addPhrase(c.src, x, spToPt(c.width), cy+spToPt(c.height), mathLayerSize(c))
 			cy += spToPt(c.height + c.depth)

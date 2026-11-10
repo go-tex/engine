@@ -31,7 +31,25 @@ type mathNode struct {
 	// silent hole where the equation was. The source is what the author typed
 	// and what they would type to search for it again; a spoken form ("E equals
 	// m c squared") is a separate, language-dependent problem.
-	src                  string
+	src string
+	// srcLine is the 1-based source line the formula OPENED on, 0 when unknown —
+	// the same stamp charNode carries, for the same reason.
+	//
+	// ⛔ A FORMULA USED TO CARRY NONE, and that is a hole in the feature this
+	// file's siblings exist for. srcmap.go says the point of the stamps is
+	// "source ↔ output navigation (click a glyph → jump to its line, à la
+	// SyncTeX)"; collectHSpans skipped mathNode, so SourceSpans emitted nothing
+	// for a formula and LineAt returned 0 over one. boxrender.go closes the open
+	// <g data-l="N"> before embedding the formula's SVG, so the rendered page
+	// carried nothing either: measured on a page with one inline and one display
+	// formula, five line groups and both formulas outside all of them.
+	//
+	// A reader clicking a displayed equation to find it in their source was
+	// therefore clicking the one thing on the page that could not answer.
+	//
+	// It is the line the formula OPENS on, not the line it ends on: a display
+	// spanning three lines belongs to the one the author would look for it at.
+	srcLine              int
 	width, height, depth int
 }
 
@@ -268,7 +286,13 @@ func (e *Engine) makeMath(src string, display bool) mathNode {
 	// so the math baseline aligns with the surrounding text baseline (Height above,
 	// Depth below) instead of being centred on height/2 — which dropped inline math
 	// below the line — and the tight width removes the old padding's side-space.
-	return mathNode{svg: svg, src: src, width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
+	// srcLine defaults to where the reader is NOW, which for a formula on one
+	// line is the right answer. A caller that knows where the formula OPENED —
+	// the stomach, which sees the `$` before scanning past it — overwrites this,
+	// because a display spanning three lines would otherwise be stamped with its
+	// last one.
+	return mathNode{svg: svg, src: src, srcLine: e.curSrcLine,
+		width: ptToSP(m.Width), height: ptToSP(m.Height), depth: ptToSP(m.Depth)}
 }
 
 // renderMathResolvingMacros renders src, and when go-tex/math rejects a command it
