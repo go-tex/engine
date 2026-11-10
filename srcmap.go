@@ -158,7 +158,19 @@ func collectHSpans(out *[]SourceSpan, b *boxNode, x, baseline float64) {
 			})
 			cx += w
 		case mathNode:
-			cx += spToPt(c.width)
+			// ⛔ This used to advance the cursor and emit NOTHING, so a formula
+			// was invisible to LineAt and to RectsForLine — in the one file
+			// whose purpose is "click a glyph → jump to its line". A reader
+			// clicking an equation was clicking the only thing on the page that
+			// could not answer.
+			w := spToPt(c.width)
+			if c.srcLine > 0 {
+				*out = append(*out, SourceSpan{
+					Line: c.srcLine, X: cx, Y: baseline - spToPt(c.height),
+					W: w, H: spToPt(c.height + c.depth),
+				})
+			}
+			cx += w
 		case ruleNode:
 			cx += spToPt(c.width)
 		case *boxNode:
@@ -182,6 +194,10 @@ func collectVSpans(out *[]SourceSpan, b *boxNode, x, top float64) {
 			collectBoxSpans(out, c, x+spToPt(c.shift), cy+spToPt(c.height))
 			cy += spToPt(c.height + c.depth)
 		case mathNode:
+			// ⚠ Left alone for the same reason as its twin in boxrender.go: no
+			// formula measured reaches a vertical list — inline, `\[…\]` and
+			// `align` all arrive through collectHSpans — so a span emitted here
+			// would be unexercised code. See the note there.
 			cy += spToPt(c.height + c.depth)
 		}
 	}
