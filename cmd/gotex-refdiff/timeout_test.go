@@ -136,6 +136,19 @@ func TestARunThatLostPapersToTheClockSaysSoLoudly(t *testing.T) {
 // the context knows. This runs a genuinely slow child — not a pre-expired
 // context, which would never reach the kill path.
 func TestASlowChildIsReportedAsATimeoutNotAsAFailure(t *testing.T) {
+	// ⛔ PROBE FIRST, AND THE PROBE IS THE CONTROL. The qemu architecture lanes
+	// run this suite through `go test -exec=qemu-<arch>`, so the test binary is
+	// FOREIGN to the host and re-executing it depends on binfmt_misc being
+	// registered in the container. Where it is not, the child fails instantly
+	// with an exec error and the assertion below would be red for a reason that
+	// has nothing to do with timeouts. So ask whether a child can start at all,
+	// with a helper that exits at once — and say out loud when it cannot, rather
+	// than skipping on a condition nobody can see.
+	t.Setenv("GOTEX_REFDIFF_HELPER", "exit")
+	if err := runCmd(30*time.Second, os.Args[0], "-test.run", "^TestHelperProcessExitsAtOnce$"); err != nil {
+		t.Skipf("this environment cannot re-execute the test binary (%v), so the kill path cannot be reached here; the lanes that can still assert it", err)
+	}
+
 	t.Setenv("GOTEX_REFDIFF_HELPER", "sleep")
 	start := time.Now()
 	err := runCmd(200*time.Millisecond, os.Args[0], "-test.run", "^TestHelperProcessSleeps$")
@@ -201,4 +214,14 @@ func TestHelperProcessSleeps(t *testing.T) {
 		t.Skip("not the helper child")
 	}
 	time.Sleep(30 * time.Second)
+}
+
+// TestHelperProcessExitsAtOnce is not a test either. It is the probe child:
+// running it answers "can a child be started here at all", which separates an
+// environment that cannot re-execute this binary from a timeout that did not
+// fire.
+func TestHelperProcessExitsAtOnce(t *testing.T) {
+	if os.Getenv("GOTEX_REFDIFF_HELPER") != "exit" {
+		t.Skip("not the probe child")
+	}
 }
