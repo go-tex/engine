@@ -25,6 +25,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -424,8 +425,9 @@ func lineBreakAgreement(pairs []alignPair, ref, got []normWord) float64 {
 
 // layoutResult is one paper's layout outcome, mirroring paperResult. status is
 // one of the shared statusXxx constants (statusOK, statusNoToplevel,
-// statusRefMissing, statusGotexFailed, statusExtractError). diag carries a
-// human-readable reason when status is statusExtractError.
+// statusRefMissing, statusGotexFailed, statusExtractError, statusTimedOut).
+// diag carries a human-readable reason when status is statusExtractError or
+// statusTimedOut.
 type layoutResult struct {
 	id     string
 	class  string
@@ -459,7 +461,16 @@ func analyzeLayout(dir, id, workDir string, pipe layoutPipeline) layoutResult {
 	// (a real PDF that the bbox extractor could not read) apart from a genuinely
 	// missing reference or a gotex compile that produced nothing, so a broken
 	// extractor cannot masquerade as total layout divergence.
-	_ = pipe.compileRef(tex, refPDF)
+	//
+	// ⛔ And, as there, the clock is asked first on BOTH sides: a compile that
+	// only ran out of its budget leaves no PDF, exactly like one that gave up,
+	// and the paper leaves the measurement either way it happened. See
+	// [errTimedOut] and #751.
+	if err := pipe.compileRef(tex, refPDF); errors.Is(err, errTimedOut) {
+		res.status = statusTimedOut
+		res.diag = "reference: " + err.Error()
+		return res
+	}
 	refX := pipe.extract(refPDF)
 	refWords := normalize(refX.layout)
 	if s, diag := classifyExtraction(refX.toolErr, refX.nonTrivial, len(refWords), "reference", statusRefMissing); s != "" {
@@ -468,7 +479,12 @@ func analyzeLayout(dir, id, workDir string, pipe layoutPipeline) layoutResult {
 		return res
 	}
 
-	_ = pipe.compileGot(tex, gotPDF)
+	if err := pipe.compileGot(tex, gotPDF); errors.Is(err, errTimedOut) {
+		res.status = statusTimedOut
+		res.diag = "gotex: " + err.Error()
+		res.score.refPages = len(refX.layout.pages)
+		return res
+	}
 	gotX := pipe.extract(gotPDF)
 	gotWords := normalize(gotX.layout)
 	if s, diag := classifyExtraction(gotX.toolErr, gotX.nonTrivial, len(gotWords), "gotex", statusGotexFailed); s != "" {
@@ -517,7 +533,7 @@ func reportLayout(results []layoutResult, w io.Writer) {
 		fmt.Fprintf(w, "\nmean divergence over scored papers: %.3f\n", sum/float64(len(scored)))
 	}
 	if len(unscored) > 0 {
-		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, or a failed extractor):\n")
+		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, a failed extractor, or a compile that ran out of time):\n")
 		for _, r := range unscored {
 			fmt.Fprintf(w, "  %-12s %-14s %s%s\n", r.id, truncate(r.class, 14), r.status, diagSuffix(r.diag))
 		}
