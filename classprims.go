@@ -364,7 +364,63 @@ const LaTeX2eClassLead = `
 %
 % The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
 % run through \@trivlist directly and already match the reference.
-\def\list#1#2{\@trivlist}
+%
+% ⛔⛔ AND IT RUNS ITS SECOND ARGUMENT, which is where the class puts the list's
+% geometry. ltlists.dtx:552-573 is the whole macro:
+%
+%	\def\list#1#2{%
+%	  \ifnum \@listdepth >5\relax \@toodeep \else \global\advance\@listdepth\@ne \fi
+%	  \rightmargin\z@ \listparindent\z@ \itemindent\z@
+%	  \csname @list\romannumeral\the\@listdepth\endcsname
+%	  \def\@itemlabel{#1}\let\makelabel\@mklab \@nmbrlistfalse
+%	  #2\relax
+%	  \@trivlist
+%	  \parskip\parsep \parindent\listparindent
+%	  \advance\linewidth -\rightmargin \advance\linewidth -\leftmargin
+%	  \advance\@totalleftmargin \leftmargin
+%	  \parshape \@ne \@totalleftmargin \linewidth
+%	  \ignorespaces}
+%
+% A two-argument stub expanding to \@trivlist threw BOTH arguments away, so for every
+% list in every real class the label vanished and so did \leftmargin, \labelwidth,
+% \usecounter and whatever else the class wrote in that block. article.cls:568-573
+% computes a bibliography's measure there:
+%
+%	\list{\@biblabel{\@arabic\c@enumiv}}%
+%	     {\settowidth\labelwidth{\@biblabel{#1}}%
+%	      \leftmargin\labelwidth \advance\leftmargin\labelsep …}
+%
+% Measured against tectonic on a two-entry bibliography: our entries began at
+% x=116.91 where the reference begins them at 133.77 — the text margin itself — and
+% continued at 133.77 where the reference continues at 149.27. Every line was about
+% 32pt wider than the reference's, so every entry used fewer lines than it should.
+%
+% ⚠ \leftskip AND \rightskip IN PLACE OF \parshape, and that substitution is stated
+% rather than hidden: this engine has neither \parshape nor \@totalleftmargin. For a
+% list, \parshape \@ne ⟨indent⟩ ⟨width⟩ sets ONE shape for every line, which is
+% exactly what a pair of skips does; the two differ only for a list whose shape
+% changes line by line, which \list never asks for. \leftskip is already how
+% \itemize, \enumerate and \description indent here, and it is measurably right —
+% our itemize continuation lands at 157.68 against the reference's 158.67.
+\newcount\@listdepth
+% \@toodeep is an error in LaTeX (ltlists.dtx) and a no-op here: a sixth nesting
+% level is a document's problem, not a reason to stop rendering it.
+\def\@toodeep{}
+% \@mklab is the default \makelabel: the label is set flush RIGHT in a box of
+% \labelwidth (ltlists.dtx:\@mklab is \hfil#1), which is what \llap reproduces at
+% the item.
+\def\@mklab#1{\hfil #1}
+\let\makelabel\@mklab
+\def\list#1#2{%
+\ifnum\@listdepth>5\relax\@toodeep\else\global\advance\@listdepth\@ne\fi
+\rightmargin\z@ \listparindent\z@ \itemindent\z@
+\csname @list\romannumeral\the\@listdepth\endcsname
+\def\@itemlabel{#1}\let\makelabel\@mklab \@nmbrlistfalse
+#2\relax
+\@trivlist
+\parskip\parsep \parindent\listparindent
+\advance\leftskip\leftmargin \advance\rightskip\rightmargin
+\ignorespaces}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -372,7 +428,7 @@ const LaTeX2eClassLead = `
 % \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
 % \par those three stayed open past \end{itemize}, and every \end after them closed one
 % group too high.
-\def\endlist{\endtrivlist}
+\def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
@@ -394,7 +450,21 @@ const LaTeX2eClassLead = `
 \def\@trivlist{\@topsepadd\topsep\ifvmode\advance\@topsepadd\partopsep\else\par\fi
   \addvspace\@topsepadd\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
-\def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
+% ⛔⛔ THE \par COMES BEFORE THE \endgroup, and the order is the whole point. This
+% read \endgroup\par, so a list's LAST item was typeset after its group had closed —
+% under the enclosing \leftskip, \parindent and \parsep rather than the list's.
+% latex.ltx's \endtrivlist ends the paragraph first (\ifhmode\unskip\par\fi) and only
+% then unwinds, and this engine already pays for that rule elsewhere: a \par inside a
+% group ends the paragraph under THAT group's parameters, which is what
+% TestAParInsideAGroupTakesThatGroupsBaselineskip asserts and what \@gxhead's brace
+% is placed for.
+%
+% Invisible until \list started doing its job: with \list a stub, no list ever set
+% \leftskip, so there was nothing for the early \endgroup to lose. Measured on a
+% two-entry bibliography the moment \list ran its settings block — entry one began at
+% x=133.77, the reference's margin, and entry two at 116.91, the margin less the
+% label width, because its paragraph was built after the group went away.
+\def\endtrivlist{\par\endgroup\addvspace\@topsepadd}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the

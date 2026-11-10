@@ -350,8 +350,32 @@ const MiniLaTeXKernel = `
 % writing \def\@biblabel#1{<<#1>>} rendered BYTE-IDENTICALLY to one that did not.
 \def\@biblabel#1{[#1]}
 \def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
-\def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
-\def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
+% ⛔⛔ AND A BIBLIOGRAPHY ENTRY IS AN \item, SO IT CARRIES \itemsep — AND \itemsep
+% ALONE, now that \list sets \parskip to \parsep.
+%
+% article.cls:565-583 builds thebibliography on \list, and the kernel's \@lbibitem
+% and \@bibitem open each entry with \item (latex.ltx:13275, 13279). \@item adds
+% \itemsep (latex.ltx:11567); the other half of the gap is \parskip, which \list sets
+% to \parsep (ltlists.dtx:567) and which the paragraph break between two entries then
+% carries by itself. Here the entries were separated by a bare \par.
+%
+% ⚠ THIS IS WHY IT IS \itemsep AND NOT \itemsep+\parsep. \@iteminterspace adds both,
+% because \itemize and \enumerate in this kernel never go through \list and so never
+% get \parskip\parsep — its comment records the measurement that settled it (18.1pt
+% against the reference's 22.5 with \itemsep alone). The moment \list runs its
+% settings block that stops being true here, and adding both would overshoot by 4pt
+% per entry. The two changes cannot be measured apart, which is why they are in one
+% branch.
+%
+% Measured against tectonic on two entries, last baseline of one to first of the next:
+%
+%	reference               19.93pt
+%	before anything         11.96pt   (one \baselineskip: a \par and nothing else)
+%	with \list alone        15.94pt   (\parskip is \parsep now: 4pt of the 8)
+%	with \list and this     19.9pt
+\def\@bibitemopt[#1]#2{\par\@bibitemsep\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
+\def\@bibitemnoopt#1{\par\@bibitemsep\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
+\def\@bibitemsep{\if@listfirst\@listfirstfalse\else\ifdim\itemsep>\z@\vskip\itemsep\fi\fi}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
 % arguments after an optional occurrence number (xstring.tex:444,
 % \xs_newmacro*3\IfSubStr{1}{2}{0}). Undefined it consumed nothing, and acmart opens
