@@ -16,7 +16,10 @@
 // project pinned so `pkgx pdftotext` does not stall on MultipleProjects). A real
 // PDF that the extractor fails to read is marked extract-error and excluded from
 // the score — never scored as lost content — and surfaced loudly on stderr, so a
-// broken extractor cannot silently corrupt a measurement. Example:
+// broken extractor cannot silently corrupt a measurement. A compile that merely
+// exhausts -timeout is marked timed-out and excluded on EITHER side, for the same
+// reason and with the same banner: a clock running out is not a fidelity result.
+// Example:
 //
 //	GOWORK=off go run ./cmd/gotex-refdiff -corpus /path/to/arxiv/work -n 40
 //
@@ -38,6 +41,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -126,6 +130,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			results = append(results, analyzeLayout(dir, id, filepath.Join(work, id), pipe))
 		}
 		warnExtractErrors(stderr, layoutDiagnostics(results))
+		warnTimedOut(stderr, layoutTimeoutDiagnostics(results))
 		reportLayout(results, stdout)
 		return 0
 	}
@@ -138,6 +143,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		results = append(results, analyzePaper(dir, id, filepath.Join(work, id), pipe))
 	}
 	warnExtractErrors(stderr, paperDiagnostics(results))
+	warnTimedOut(stderr, timeoutDiagnostics(results))
 	report(results, stdout)
 	return 0
 }
@@ -164,6 +170,43 @@ func layoutDiagnostics(results []layoutResult) []string {
 		}
 	}
 	return out
+}
+
+// timeoutDiagnostics collects the "id: diag" lines of every paper whose compile
+// ran out of the per-engine budget, in recall mode.
+func timeoutDiagnostics(results []paperResult) []string {
+	var out []string
+	for _, r := range results {
+		if r.status == statusTimedOut {
+			out = append(out, r.id+": "+r.diag)
+		}
+	}
+	return out
+}
+
+// layoutTimeoutDiagnostics is timeoutDiagnostics for layout mode.
+func layoutTimeoutDiagnostics(results []layoutResult) []string {
+	var out []string
+	for _, r := range results {
+		if r.status == statusTimedOut {
+			out = append(out, r.id+": "+r.diag)
+		}
+	}
+	return out
+}
+
+// warnTimedOut prints a loud, unmissable summary to stderr when any paper's
+// compile ran out of its budget, so a mean resting on fewer papers than were
+// sampled cannot be read as though it rested on all of them. It prints nothing
+// when diags is empty.
+func warnTimedOut(stderr io.Writer, diags []string) {
+	if len(diags) == 0 {
+		return
+	}
+	fmt.Fprintf(stderr, "gotex-refdiff: WARNING: %d paper(s) ran out of the per-engine compile budget and were EXCLUDED from the score — a clock, not a fidelity result. The mean below rests on fewer papers than were sampled; raise -timeout, or measure on a quieter machine:\n", len(diags))
+	for _, d := range diags {
+		fmt.Fprintf(stderr, "    %s\n", d)
+	}
 }
 
 // warnExtractErrors prints a loud, unmissable summary to stderr when any paper
@@ -211,7 +254,8 @@ func samplePapers(dirs []string, n int, seed int64) []string {
 }
 
 // paperResult is one paper's outcome. status is one of the statusXxx constants.
-// diag carries a human-readable reason when status is statusExtractError.
+// diag carries a human-readable reason when status is statusExtractError or
+// statusTimedOut.
 type paperResult struct {
 	id       string
 	class    string
@@ -228,7 +272,21 @@ const (
 	statusRefMissing   = "ref-unavailable" // tectonic produced no text — nothing to score against
 	statusGotexFailed  = "gotex-failed"    // gotex produced no text — it lost everything (ratio 0)
 	statusExtractError = "extract-error"   // a real PDF compiled but the text extractor failed on it — NOT a scorable result
+	statusTimedOut     = "timed-out"       // a compile exhausted the per-engine budget — a clock, NOT a fidelity result
 )
+
+// errTimedOut marks a compile that the per-engine budget cut short, as opposed
+// to one that ran to completion and produced nothing. Wrapped by runCmd and
+// tested for with errors.Is, so an injected pipeline can report a timeout the
+// same way the real one does.
+//
+// ⛔ The two are indistinguishable by their RESULT — neither leaves a PDF — and
+// the sampler used to have no other evidence, because both call sites discarded
+// the compile error. The difference matters because the sampler does not treat
+// the two sides alike: an empty reference EXCLUDES the paper, an empty gotex
+// SCORES it zero (see report). So a slow paper, or a loaded machine, moved the
+// mean in one direction only. See #751.
+var errTimedOut = errors.New("compile timed out")
 
 // nonTrivialPDFBytes is the size above which a compiled PDF is taken to carry
 // real content. A genuine multi-page arXiv PDF is tens to hundreds of KB; a
@@ -328,7 +386,16 @@ func analyzePaper(dir, id, workDir string, pipe pipeline) paperResult {
 	// empty extraction from a real reference PDF is a tool failure, not a missing
 	// ground truth — classifyExtraction keeps the two apart so a broken extractor
 	// cannot silently corrupt the measurement.
-	_ = pipe.compileRef(tex, refPDF)
+	//
+	// ⛔ THE CLOCK IS ASKED FIRST, ON BOTH SIDES. A compile that merely ran out
+	// of its budget leaves no PDF, exactly like one that gave up, and the paper
+	// is removed from the measurement either way it happened — not scored zero
+	// on one side and dropped on the other. See [errTimedOut] and #751.
+	if err := pipe.compileRef(tex, refPDF); errors.Is(err, errTimedOut) {
+		res.status = statusTimedOut
+		res.diag = "reference: " + err.Error()
+		return res
+	}
 	refX := pipe.extract(refPDF)
 	refWords := contentWords(refX.text)
 	if s, diag := classifyExtraction(refX.toolErr, refX.nonTrivial, len(refWords), "reference", statusRefMissing); s != "" {
@@ -337,7 +404,12 @@ func analyzePaper(dir, id, workDir string, pipe pipeline) paperResult {
 		return res
 	}
 
-	_ = pipe.compileGot(tex, gotPDF)
+	if err := pipe.compileGot(tex, gotPDF); errors.Is(err, errTimedOut) {
+		res.status = statusTimedOut
+		res.diag = "gotex: " + err.Error()
+		res.refWords = len(refWords)
+		return res
+	}
 	gotX := pipe.extract(gotPDF)
 	gotWords := contentWords(gotX.text)
 	if s, diag := classifyExtraction(gotX.toolErr, gotX.nonTrivial, len(gotWords), "gotex", statusGotexFailed); s != "" {
@@ -383,7 +455,7 @@ func report(results []paperResult, w io.Writer) {
 		fmt.Fprintf(w, "\nmean recall over scored papers: %.1f%%\n", sum/float64(len(scored))*100)
 	}
 	if len(unscored) > 0 {
-		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, or a failed extractor):\n")
+		fmt.Fprintf(w, "\nnot scored (no ground truth, no top-level .tex, a failed extractor, or a compile that ran out of time):\n")
 		for _, r := range unscored {
 			fmt.Fprintf(w, "  %-12s %-16s %s%s\n", r.id, truncate(r.class, 16), r.status, diagSuffix(r.diag))
 		}
@@ -509,12 +581,20 @@ func captureRunner(name string) func(timeout time.Duration, pdf string) (string,
 }
 
 // runCmd runs a command with a timeout, discarding its output; only its
-// success/failure matters to the sampler.
+// success/failure — and, since #751, WHY it failed — matters to the sampler.
+//
+// CommandContext kills the child when the deadline passes, so cmd.Run reports a
+// signal and nothing in that error says "the budget ran out". The context does
+// know, so it is asked, and the answer is wrapped as [errTimedOut].
 func runCmd(timeout time.Duration, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("%s: %w after %s", name, errTimedOut, timeout)
+	}
+	return err
 }
 
 // replaceExt replaces the extension of name with ext (e.g. "a.tex" -> "a.pdf").
