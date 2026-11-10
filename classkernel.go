@@ -654,7 +654,14 @@ const LaTeX2eClassKernel = `
 \let\@leftmark\@firstoftwo
 \let\@rightmark\@secondoftwo
 \def\@themark{{}{}}
-\def\markboth#1#2{\protected@xdef\@themark{{#1}{#2}}}
+% ⛔ AND THE PAIR IS EMITTED AS A \mark, so it travels to the page it belongs to.
+% \@themark alone is ONE live pair for the whole document, which is why a head
+% that tracks sections showed the document's LAST section on every page (#727):
+% our \ps@headings redefines \sectionmark as a \markright, and with one pair the
+% last one wins everywhere. The kernel keeps the pair in \@themark too, and emits
+% the \mark beside it (ltpage.dtx:239-244, 265-267) — the pair is for the class to
+% read back, the mark is for the page builder.
+\def\markboth#1#2{\protected@xdef\@themark{{#1}{#2}}\mark{\@themark}}
 % \markright keeps the LEFT mark and replaces only the right, which is why the
 % kernel routes it through \@markright rather than assigning both
 % (ltpage.dtx:356-357):
@@ -667,7 +674,7 @@ const LaTeX2eClassKernel = `
 % every section would wipe the left half of the head.
 \def\@markright#1#2#3{\@temptokena{#1}%
   \protected@xdef\@themark{{\the\@temptokena}{#3}}}
-\def\markright#1{\expandafter\@markright\@themark{#1}}
+\def\markright#1{\expandafter\@markright\@themark{#1}\mark{\@themark}}
 % \@mkboth stays inert, as latex.ltx leaves it (\let\@mkboth\@gobbletwo at
 % :13335): it is the hook a PAGE STYLE enables, article.cls's \ps@headings doing
 % \let\@mkboth\markboth. A document whose style never asks for marks must not get
@@ -679,13 +686,20 @@ const LaTeX2eClassKernel = `
 %	\def\leftmark{\expandafter\@leftmark\botmark\@empty\@empty}
 %	\def\rightmark{\expandafter\@rightmark\firstmark\@empty\@empty}
 %
-% ⛔ The kernel reads \botmark and \firstmark — the marks that apply to THAT page
-% — where this reads the single live pair, because marks do not travel with page
-% breaking here (#727). The two \@empty are the kernel's guard for a pair that
-% was never set: \@firstoftwo needs two arguments, and an unset \@themark would
-% otherwise eat the text after the mark.
-\def\leftmark{\expandafter\@leftmark\@themark\@empty\@empty}
-\def\rightmark{\expandafter\@rightmark\@themark\@empty\@empty}
+% ⛔ THEY READ \botmark AND \firstmark, the marks that apply to THAT page, and no
+% longer the single live pair. The two \@empty are the kernel's guard for a page
+% whose marks were never set: \@firstoftwo needs two arguments, and an empty
+% \botmark would otherwise eat the text after it.
+%
+% Consequence worth stating because it reads like a regression and is not: at
+% DOCUMENT time, before any page has been shipped, \leftmark and \rightmark are
+% empty here — as they are in a real LaTeX, for the same reason. The values belong
+% to a page, and outside a page there is none. latex.ltx carries a note about this
+% exact awkwardness, kept since 1993: "Stopgap solution to make \leftmark and
+% \rightmark work without initializing mark until the problem is solved"
+% (ltpage.dtx:318-323), with a \task on it that is still open upstream.
+\def\leftmark{\expandafter\@leftmark\botmark\@empty\@empty}
+\def\rightmark{\expandafter\@rightmark\firstmark\@empty\@empty}
 % ── contents recording ───────────────────────────────────────────────────────
 % The engine owns its own contents table (toc.go) and the \@startsection bridge
 % above records every sectioning level through \@tocentry. \chapter and \part are
