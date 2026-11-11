@@ -182,8 +182,17 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			// surrounding line's, because a display formula is not on that line
 			// and an inline one still wants its own box rather than its
 			// neighbours'.
-			fmt.Fprintf(sb, `<g data-l="%d" transform="translate(%s,%s)">%s</g>`,
-				c.srcLine, f(cx), f(baseline-spToPt(c.height)), c.svg)
+			// ⛔ AND ITS RANGE, because a LINE cannot be edited. data-l answers
+			// "scroll the source here"; it cannot say which characters are the
+			// formula, and two formulas on one line share it exactly. data-m
+			// carries the range the way the editor counts — 1-based line,
+			// 0-based RUNE column, both ends being the delimiters' own
+			// positions — so a tap can select the equation rather than its
+			// neighbourhood. Omitted entirely when the formula carries no
+			// stamp: an attribute reading "0:0-0:0" is a position, and a
+			// consumer would act on it.
+			fmt.Fprintf(sb, `<g data-l="%d"%s transform="translate(%s,%s)">%s</g>`,
+				c.srcLine, mathRangeAttr(c), f(cx), f(baseline-spToPt(c.height)), c.svg)
 			// What the formula SAYS, over the formula: its own outlines carry no
 			// characters either, and without this the sentence around it reads with
 			// a silent hole where the equation was.
@@ -275,6 +284,21 @@ func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font f
 		crect(sb, x+w-ru, top, ru, total, fr.ruleColor) // right edge
 	}
 	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font, tl)
+}
+
+// mathRangeAttr renders a formula's source range as a data-m attribute, or
+// nothing at all when the formula carries no stamp.
+//
+// ⛔ NOTHING, rather than zeros. "0:0-0:0" is a well-formed position and a
+// consumer would act on it — scrolling to the top of the file and selecting
+// nothing, which looks like a bug in the consumer rather than a missing stamp
+// in the producer. An absent attribute is a question the consumer can ask;
+// a zero is an answer it cannot doubt.
+func mathRangeAttr(c mathNode) string {
+	if c.srcLine <= 0 || c.srcEndLine <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(` data-m="%d:%d-%d:%d"`, c.srcLine, c.srcCol, c.srcEndLine, c.srcEndCol)
 }
 
 // mathLayerSize is the font size the text layer gives a formula's source: the
