@@ -49,7 +49,31 @@ type mathNode struct {
 	//
 	// It is the line the formula OPENS on, not the line it ends on: a display
 	// spanning three lines belongs to the one the author would look for it at.
-	srcLine              int
+	srcLine int
+	// srcCol, srcEndLine and srcEndCol complete the stamp into a RANGE: where
+	// the formula starts and where it ends in the source. Columns are 0-based
+	// and counted in RUNES, which is what both ends already speak — the engine
+	// reads the document as []rune (engine.go) and the editor this feeds
+	// addresses its caret as "the 0-based rune column on its line"
+	// (go-widgets/toolkit, TextView.CursorCol). There is no byte/rune
+	// conversion anywhere along the path, and none should be invented.
+	//
+	// ⛔ A LINE IS NOT ENOUGH TO EDIT A FORMULA. srcLine answers "which line did
+	// this come from", which is what a click-to-scroll needs; it cannot answer
+	// "which characters ARE this formula", which is what selecting an equation
+	// to edit needs, and two formulas on one line are indistinguishable by it.
+	//
+	// ⚠ BOTH POSITIONS ARE THE DELIMITERS' OWN, not the body's: srcLine/srcCol
+	// is where the opening `$` (or `\[`) sits, and srcEndLine/srcEndCol is where
+	// the CLOSING one sits. The formula's body is strictly between them. The end
+	// is not advanced past the closing delimiter because its length is not one
+	// thing — `$`, `$$` and `\]` are one, two and two runes — and the engine
+	// records where a token began, never how long it was. A consumer holding the
+	// buffer can read the delimiter at that position; one that guessed a length
+	// would be wrong on two cases out of three.
+	srcCol               int
+	srcEndLine           int
+	srcEndCol            int
 	width, height, depth int
 }
 
@@ -1619,15 +1643,50 @@ func (e *Engine) recordMathSkip(errMsg string) {
 // math box. Inline math ($…$) joins the current line; display math ($$…$$) ends
 // the paragraph and is centred on its own line (to \hsize with \hfil on each side).
 func (e *Engine) doMath() {
+	open := e.srcMark()
 	src, display := e.scanMathSource()
-	e.placeMath(e.mathOrDiagram(src, display), display)
+	e.placeMath(e.stampSrcRange(e.mathOrDiagram(src, display), open), display)
 }
 
 // doDelimitedMath handles LaTeX's \(…\) (inline) and \[…\] (display): it collects
 // the raw math source up to the closing control sequence and places it.
 func (e *Engine) doDelimitedMath(closeName string, display bool) {
+	open := e.srcMark()
 	src := e.collectMathUntilCS(closeName)
-	e.placeMath(e.mathOrDiagram(src, display), display)
+	e.placeMath(e.stampSrcRange(e.mathOrDiagram(src, display), open), display)
+}
+
+// srcMark is where the reader is now: the position of the token just read,
+// which at the start of a formula is its opening delimiter.
+type srcMark struct{ line, col int }
+
+func (e *Engine) srcMark() srcMark { return srcMark{e.curSrcLine, e.curSrcCol} }
+
+// stampSrcRange gives a formula the source range it occupies: open is where its
+// opening delimiter sat, and the reader is now on the closing one.
+//
+// ⛔ THIS IS WHERE THE STAMP HAS TO HAPPEN, and #750 put it somewhere else.
+// That change stamped the catMath branch of the stomach's main loop, with a
+// comment promising that "a display spanning several lines belongs to the one
+// the author would go looking for it at, not to its last". A probe in that
+// branch never fires: `$…$` arrives through doMath (engine.go's primitive
+// dispatch) and `\[…\]` through doDelimitedMath, and neither went past it.
+// What made #750's tests pass was makeMath's own default, srcLine =
+// e.curSrcLine, read AFTER the scan — which equals the opening line for a
+// one-line formula, and every fixture in that change was one line.
+//
+// Measured on a display opening on line 5 and closing on line 8: stamped line
+// 8. The comment described behaviour the code did not have, and the tests could
+// not tell, because they never spanned a line boundary.
+func (e *Engine) stampSrcRange(m mathNode, open srcMark) mathNode {
+	if open.line <= 0 {
+		return m
+	}
+	m.srcLine, m.srcCol = open.line, open.col
+	if e.curSrcLine > 0 {
+		m.srcEndLine, m.srcEndCol = e.curSrcLine, e.curSrcCol
+	}
+	return m
 }
 
 // mathOrDiagram renders a formula, or draws it when the formula is a diagram.
