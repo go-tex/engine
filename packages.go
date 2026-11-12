@@ -1103,7 +1103,18 @@ func (e *Engine) setPtsize(opts []string) {
 		// KOMA-Script's classes default to 11pt where the standard ones default to
 		// 10pt (scrguide, \KOMAoption{fontsize}). A named size option below still
 		// wins, exactly as it does for a standard class.
-		pt, permille, leading = "1", 1100, ptToSP(13.6)
+		//
+		// ⛔ 1095, AND IT SAID 1100 UNTIL NOW — the same defect as the one the
+		// comment on "11pt" above describes at length, in the line that sets the
+		// DEFAULT instead of the line that reads an option. #717 fixed the table
+		// and missed this, which is what a fix applied to a table rather than to
+		// the quantity does.
+		//
+		// scrsize11pt.clo:76 is \@xipt, and \@xipt is 10.95 (latex.ltx:7858). A
+		// KOMA class with no size option was therefore anchored 11/10.95 =
+		// 1.00457 high on EVERY size of its ladder — the same 0.46% the standard
+		// classes carried before #717.
+		pt, permille, leading = "1", 1095, ptToSP(13.6)
 	}
 	for _, o := range opts {
 		if sz, ok := classBaseSizes[strings.TrimSpace(o)]; ok {
