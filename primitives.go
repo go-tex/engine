@@ -2764,6 +2764,10 @@ func (e *Engine) loadStomach() {
 		}
 	})
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
+	// \clearpage's empty \hbox, which is why \prevdepth is 0 at a document
+	// body's start in the reference. See clearpagestrut.go — in particular why
+	// LaTeX's own \ifdim\pagetotal<\topskip guard is NOT ported literally.
+	e.prim("gotex@clearpagestrut", func(e *Engine) { e.doClearpageStrut() })
 	// Box shifting: \raise/\lower move an hbox/vbox off the baseline (horizontal
 	// mode); \moveleft/\moveright shift a box horizontally (vertical mode). TeX's
 	// shift_amount is positive downward, so \raise and \moveleft negate it.
@@ -2782,7 +2786,19 @@ func (e *Engine) loadStomach() {
 	// \twocolumn[span] / \onecolumn switch the page column mode (twocolumn.go). Under the
 	// two-column opt-in they start a fresh region; otherwise they keep the historical
 	// no-op (gobble the optional [span] and do nothing), so the default corpus is untouched.
+	// ⛔ BOTH OPEN WITH \clearpage IN THE REFERENCE, AND THAT IS NOT A DETAIL OF
+	// COLUMNS. latex.ltx:15076-15077 is `\def\onecolumn{\clearpage …}`, and
+	// \clearpage contributes an empty \hbox when the page is still empty
+	// (15065). article.cls:640 runs \onecolumn at CLASS LOAD, so that box is the
+	// reason \prevdepth is 0.0pt rather than -1000pt at a LaTeX document body's
+	// start — measured against tectonic, bisected to that line (#699).
+	//
+	// Here \onecolumn was a complete no-op outside the two-column opt-in, so the
+	// box could never arrive however \clearpage was defined. The strut is
+	// therefore contributed on BOTH paths and outside the opt-in: it is about
+	// \clearpage's behaviour, not about how many columns follow.
 	e.prim("twocolumn", func(e *Engine) {
+		e.doClearpageStrut()
 		if e.twoColLive || twoColumnOptIn() {
 			e.startTwoColumn()
 			return
@@ -2790,6 +2806,7 @@ func (e *Engine) loadStomach() {
 		e.scanOptBracketToks()
 	})
 	e.prim("onecolumn", func(e *Engine) {
+		e.doClearpageStrut()
 		if e.twoColLive || twoColumnOptIn() {
 			e.startOneColumn()
 		}
