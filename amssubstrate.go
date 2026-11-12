@@ -273,7 +273,27 @@ const AMSClassSubstrate = `
 % or "this document wants none".
 \newdimen\jot
 \jot=3pt
-\newdimen\hangafter
+% ⛔ \hangafter IS NOT A DIMENSION, AND DECLARING IT AS ONE DELETED TEXT.
+% tex.web §236 makes it an INTEGER parameter, and texparams.go already lists it
+% among texIntParams with TeX's initial value 1. A \newdimen\hangafter here ran
+% afterwards and rebound the name to a dimension register, which is not an
+% equivalent spelling: the two SCAN DIFFERENTLY. \hangafter=1 against an
+% integer reads the 1 and stops; against a dimension it scans a <dimen>, which
+% REQUIRES a unit, so it reads past the 1 into the following text looking for
+% one. TeX's units are ordinary letter pairs (in, pt, pc, bp, cm, mm, dd, cc,
+% sp, ex, em), so "\hangafter=1 integers follow" came out as
+%
+%	BEFOREtegersfollow
+%
+% — the "in" taken out of the middle of a word and never seen again.
+%
+% ⚠ MEASURED INCIDENCE, AND IT IS NOT WHAT I FIRST WROTE HERE. I claimed every
+% \bibitem sets \hangafter=1; nothing in this repository sets \hangafter at all,
+% and LaTeX's bibliography takes its hanging indent from \list, not from this
+% parameter. A census over the 2935-paper corpus (comments stripped) finds 109
+% papers that WRITE \hangafter and ZERO where the scan eats a word. So this is a
+% latent trap removed and a type made right, not a corpus defect closed — the
+% witness is exact and its reach is small. See hangafter_probe_test.go.
 \newskip\tabskip
 \newskip\spaceskip
 \newskip\xspaceskip
