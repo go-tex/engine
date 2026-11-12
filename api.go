@@ -203,6 +203,19 @@ func (e *Engine) bindOptionalFont(name string, data []byte, size int) error {
 		return fmt.Errorf("texengine: %s font: %w", name, err)
 	}
 	e.bindFont(name, f)
+	// ⛔ THE TYPEWRITER FACE IS NOT HYPHENATED, and the reference says so in its
+	// font-shape declaration rather than anywhere a document can see:
+	// tulmtt.fd:51 is `\hyphenchar \font\m@ne`. tex.web §896 then refuses to
+	// hyphenate any word set in it — which is how code, identifiers and file
+	// names survive a narrow measure intact.
+	//
+	// This engine reads no .fd files, so this binding is the equivalent place.
+	// It applies to whatever face the host supplied for "tt": a host that passes
+	// its own monospace font gets the same rule, because the rule is about what
+	// the face is FOR and not about which file it is.
+	if name == "tt" {
+		e.setHyphenChar(f, -1)
+	}
 	return nil
 }
 

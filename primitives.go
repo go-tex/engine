@@ -2764,6 +2764,10 @@ func (e *Engine) loadStomach() {
 		}
 	})
 	e.prim("penalty", func(e *Engine) { e.place(penaltyNode{penalty: e.scanInt()}) })
+	// \hyphenchar<font>=<number>. Negative forbids hyphenation in that font
+	// outright (tex.web §896), which is how a class or a .fd file stops code
+	// being broken across lines. See hyphenchar.go.
+	e.prim("hyphenchar", func(e *Engine) { e.doHyphenChar() })
 	// \clearpage's empty \hbox, which is why \prevdepth is 0 at a document
 	// body's start in the reference. See clearpagestrut.go — in particular why
 	// LaTeX's own \ifdim\pagetotal<\topskip guard is NOT ported literally.
