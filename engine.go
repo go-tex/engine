@@ -331,7 +331,14 @@ type Engine struct {
 	// lenient mode (see Options.Lenient): when set, an undefined control sequence
 	// is skipped (with its likely argument block) instead of aborting, and its
 	// name is tallied here for reporting. nil until the first skip.
-	lenient   bool
+	lenient bool
+	// hyphenChars is \hyphenchar, keyed on the font PROGRAM rather than on a
+	// face at a size (see hyphenCharKey): a size switch re-makes the face and
+	// would otherwise lose the setting. A program that is absent permits
+	// hyphenation; a negative value forbids it outright (tex.web §896). See
+	// hyphenchar.go for why this does NOT fall back to \defaulthyphenchar.
+	hyphenChars map[any]int
+
 	skippedCS map[string]int
 
 	// urlPathBound says \path carries url.sty's meaning — set when url or hyperref

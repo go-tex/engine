@@ -204,6 +204,18 @@ func (e *Engine) hyphenateList(list []node) []node {
 			break
 		}
 		breakAfter := map[int]bool{}
+		// ⛔ A FONT WHOSE \hyphenchar IS NEGATIVE IS NEVER HYPHENATED (tex.web
+		// §896: `if hyf_char<0 then goto done1`). tulmtt.fd:51 sets exactly that
+		// for the typewriter family, which is how the reference stops code and
+		// identifiers being broken across lines — measured: the same word at a
+		// 72pt measure breaks in the roman face and does not in \texttt.
+		//
+		// The word is still EMITTED below; only its break points are withheld.
+		if !e.wordIsHyphenatable(wordNodes) {
+			out = append(out, wordNodes...)
+			i = j
+			continue
+		}
 		// ⛔ TeX DOES NOT HYPHENATE A WORD LONGER THAN max_hyphenatable_length
 		// (tex.web §891: "if l > max_hyphenatable_length then goto done1"), and
 		// neither does this — which is faithfulness and, here, also a bound.
