@@ -63,7 +63,16 @@ func TestALongWordIsNotHyphenated(t *testing.T) {
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
 	count := func(word string) int {
-		list := make([]node, 0, len(word))
+		// ⛔ THE LEADING GLUE IS NOT DECORATION. tex.web §894/§896 start the
+		// hyphenation scan at a glue node, so a word with nothing before it is not
+		// hyphenated at all — which is correct, and which made this test's own
+		// control fire ("a 55-letter word got no hyphenation points") the moment
+		// that rule was implemented. A bare list of characters is not a paragraph.
+		//
+		// What this test is about is the 63-letter ceiling, so the word is given
+		// the context a real one has rather than the rule being weakened for it.
+		list := make([]node, 0, len(word)+1)
+		list = append(list, glueNode{spec: glueSpec{width: 3 * unity}})
 		for _, r := range word {
 			list = append(list, charNode{ch: r})
 		}
