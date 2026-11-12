@@ -5,20 +5,40 @@ package engine
 
 import "testing"
 
-// firstGlueWidth returns the width of the first glue on the main vertical list
-// wider than a hair, which for these documents is the gap opened above the block.
+// firstGlueWidth returns the width of the glue that opens the gap ABOVE the
+// block, for a document shaped "AVANT\n\n<block>\n\nAPRES".
+//
+// ⛔ IT SKIPS PAST THE FIRST BOX, AND THAT IS NOT A DETAIL. It used to return
+// the first glue on the list wider than a hair, which was the block's surround
+// only for as long as NOTHING preceded the first box. Once \prevdepth is 0 at a
+// document body's start — which is what the reference does, see #699 — the
+// first line of AVANT takes interline glue, and that glue is wider than a hair.
+// The helper then answered 4.84pt for both of the tests below, which is neither
+// \medskipamount nor \topsep+\partopsep and is not about listings at all.
+//
+// A helper whose heuristic silently starts measuring a different quantity is
+// worse than a wrong expectation: both tests would have been "fixed" by writing
+// 4.84 into them, and the thing they exist to pin would have stopped being
+// pinned. So the rule is now the one the name claims: the gap above the block
+// is the first glue AFTER the paragraph that precedes it.
 func firstGlueWidth(t *testing.T, src string) int {
 	t.Helper()
 	e, err := compile([]byte(src), Options{Lenient: true})
 	if err != nil {
 		t.Fatal(err)
 	}
+	seenBox := false
 	for _, n := range e.mvl {
-		if g, ok := n.(glueNode); ok && g.spec.width > unity {
+		if _, ok := n.(*boxNode); ok {
+			seenBox = true
+			continue
+		}
+		if g, ok := n.(glueNode); ok && seenBox && g.spec.width > unity {
 			return g.spec.width
 		}
 	}
-	t.Fatal("no vertical glue found")
+	t.Fatal("no vertical glue found after the first box: the document did not take the " +
+		"shape this helper assumes, so it is measuring nothing")
 	return 0
 }
 

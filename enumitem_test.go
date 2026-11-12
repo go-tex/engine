@@ -201,13 +201,41 @@ func TestEnumitemSpacing(t *testing.T) {
 	if g2[1].glue != base[1].glue {
 		t.Errorf("nosep inter-item glue = %d, want %d (baseline, no extra)", g2[1].glue, base[1].glue)
 	}
-	if g2[0].glue != 0 {
-		t.Errorf("nosep: leading glue before first item = %d, want 0 (topsep removed)", g2[0].glue)
-	}
 	// A plain list keeps a positive \topsep leading (which nosep removes).
 	gp := lead(``)
 	if gp[0].glue <= 0 {
 		t.Errorf("plain leading glue = %d, want > 0 (topsep)", gp[0].glue)
+	}
+	// ⛔ THIS USED TO DEMAND EXACTLY ZERO, AND THAT CONFLATED TWO GLUES.
+	//
+	// What nosep does is zero \topsep. It has never had anything to say about
+	// the INTERLINE glue a document's first box takes, and that glue was zero
+	// here only as long as \prevdepth was ignore_depth at a body's start — which
+	// was itself the defect #699 records: the reference reads 0.0pt there,
+	// because article.cls:640 runs \onecolumn, which runs \clearpage, which
+	// contributes an empty box (latex.ltx:15065).
+	//
+	// So the assertion is now the one the test always meant: nosep REMOVES
+	// \topsep, measured as a difference against a plain list, and what is left
+	// is whatever a first line gets anyway — pinned against a control that has
+	// no list in it at all, so this cannot drift into asserting a constant.
+	//
+	// ⚠ And the glue in question never reaches a page: prunePageTop deletes
+	// every glue before the first box. Measured on a document whose first
+	// content is an enumitem list — the rendered page is BYTE-IDENTICAL before
+	// and after the \prevdepth fix.
+	if g2[0].glue >= gp[0].glue {
+		t.Errorf("nosep leading glue = %d, plain = %d: nosep must REMOVE \\topsep, "+
+			"so it has to be strictly less", g2[0].glue, gp[0].glue)
+	}
+	headLead := itemLeadGlue(runEI(t, `\documentclass{article}\begin{document}x\par y`).mvl)
+	if len(headLead) == 0 {
+		t.Fatal("the control document produced no leading glue reading: it measures nothing")
+	}
+	if g2[0].glue != headLead[0].glue {
+		t.Errorf("nosep leading glue = %d, want %d — the interline glue a first line takes "+
+			"with no list involved at all. A difference here is \\topsep surviving nosep, "+
+			"not the \\prevdepth of #699", g2[0].glue, headLead[0].glue)
 	}
 }
 

@@ -732,7 +732,14 @@ const MiniLaTeXKernel = `
 \def\ldots{...}
 \def\dots{...}
 \def\newpage{\par\penalty-10000 }
-\def\clearpage{\par\penalty-10000 }
+% \clearpage opens with LaTeX's empty \hbox (latex.ltx:15065), contributed only
+% while the main vertical list is still empty. That box is why \prevdepth is
+% 0.0pt rather than -1000pt at a document body's start in the reference (#699):
+% nothing assigns \prevdepth, appending a BOX sets it. article.cls:640 runs
+% \onecolumn at class load, \onecolumn runs \clearpage, and that is the whole
+% chain. See clearpagestrut.go for why the reference's \pagetotal guard is not
+% ported as written.
+\def\clearpage{\gotex@clearpagestrut\par\penalty-10000 }
 % \cleardoublepage starts a page, and in TWOSIDE also leaves a blank one when the
 % next page would be even (LaTeX: \clearpage\if@twoside\ifodd\c@page\else
 % \hbox{}\newpage\fi\fi). The engine decides page numbers in the page builder and
