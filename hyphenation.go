@@ -126,6 +126,29 @@ func (e *Engine) hyphenPenalty() int {
 // try to hyphenate (tex.web §891). Longer words are set unhyphenated.
 const maxHyphenatableLength = 63
 
+// precededByGlue reports whether the character at i begins a word TeX would
+// consider for hyphenation: one reached from a glue node.
+//
+// ⚠ IT STEPS OVER KERNS AND WHATSITS, which is what §896-§899 do on the way
+// from the glue to the first letter — a font kern or a \write between the space
+// and the word does not make the word unhyphenatable. It does NOT step over a
+// box, maths or a discretionary: those are exactly the cases §891:17476 names
+// as ending the scan, and stepping over them would reintroduce the defect this
+// exists to remove.
+func precededByGlue(list []node, i int) bool {
+	for k := i - 1; k >= 0; k-- {
+		switch list[k].(type) {
+		case glueNode:
+			return true
+		case kernNode, specialNode:
+			continue // transparent on the way from the glue to the letter
+		default:
+			return false
+		}
+	}
+	return false // nothing precedes it: the start of the list is not a glue
+}
+
 func (e *Engine) hyphenateList(list []node) []node {
 	h := e.activeHyphenator()
 	if h == nil {
@@ -135,6 +158,27 @@ func (e *Engine) hyphenateList(list []node) []node {
 	i := 0
 	for i < len(list) {
 		if _, ok := list[i].(charNode); !ok {
+			out = append(out, list[i])
+			i++
+			continue
+		}
+		// ⛔ A WORD IS HYPHENATED ONLY WHERE A GLUE PRECEDES IT. tex.web §894 and
+		// §896 start the hyphenation scan at a glue node: "cur_p points to a glue
+		// node" is the precondition, not a detail of how the loop is written.
+		//
+		// This engine hyphenated every maximal run of characters whatever sat on
+		// either side, which differs from the reference in two ways that both move
+		// line counts:
+		//
+		//   * A PARAGRAPH'S FIRST WORD IS NEVER HYPHENATED BY TeX, because what
+		//     precedes it is the \parindent box. We hyphenated it, on every
+		//     paragraph of every document.
+		//   * Nor is a word after a box, after maths, or after a user's own
+		//     discretionary (§891:17476). We hyphenated those too.
+		//
+		// The list's very start is the same case: nothing precedes it, so nothing
+		// is glue, so TeX would not hyphenate there either.
+		if !precededByGlue(list, i) {
 			out = append(out, list[i])
 			i++
 			continue
