@@ -411,6 +411,13 @@ type Engine struct {
 	// endlineReg is the \count register \endlinechar is bound to (see
 	// loadTeXParams), cached because the mouth reads it at every line end.
 	endlineReg int
+	// hangIndentReg is the \dimen register \hangindent landed on, cached the same
+	// way endlineReg is, so the write path can recognise an assignment to it
+	// without a map lookup per dimension set. -1 when the parameter is not
+	// bound — and -1 rather than 0 ON PURPOSE: register 0 is a real register
+	// somebody else holds, so a zero default would report every assignment to it
+	// as a dropped hanging indent. See noteDroppedShape.
+	hangIndentReg int
 	// escapeReg is the \count register \escapechar is bound to; read every time a
 	// control-sequence name is printed (see escapeStr).
 	escapeReg int
@@ -1148,6 +1155,18 @@ func (e *Engine) define(name string, m *meaning, global bool) {
 		e.save = append(e.save, saveItem{kind: 0, name: name, old: e.eq[name]})
 	}
 	e.eq[name] = m
+	// ⛔ THE \hangindent CACHE IS MAINTAINED HERE, WHERE EVERY BINDING PASSES,
+	// and not at the end of loadTeXParams where it would have been natural.
+	// classkernel.go runs afterwards and declares \newdimen\hangindent, rebinding
+	// the name to a DIFFERENT register: a value cached earlier would name a
+	// register nothing writes to, so noteDroppedShape would report nothing for
+	// ever while looking perfectly alive. The same load-order trap took
+	// \prevdepth (#438) and \hangafter (#759), and in both cases the wrong
+	// binding won silently. One string comparison per define is the price of not
+	// depending on the order of two files.
+	if name == "hangindent" && m != nil && m.kind == mDimenRef {
+		e.hangIndentReg = m.code
+	}
 }
 
 // forgetSaved drops the pending restores for one quantity, which is what makes an
@@ -1207,7 +1226,50 @@ func (e *Engine) setDimen(i, v int, global bool) {
 		e.save = append(e.save, saveItem{kind: 3, idx: i, oldd: e.dimen[i]})
 	}
 	e.dimen[i] = v
+	e.noteDroppedShape(i, v)
 }
+
+// noteDroppedShape records a \hangindent a document asked for and this engine
+// will not honour.
+//
+// ⛔ A FEATURE SILENTLY DROPPED IS WORSE THAN ONE REFUSED. \hangindent is
+// declared (classkernel.go) and listed among the dimension parameters a
+// document may set (texparams.go), the assignment succeeds, \the\hangindent
+// reads back what was written — and NOTHING EVER CONSULTS IT. Measured against
+// tectonic on a document whose first paragraph is a control, set on a uniform
+// measure and identical in both engines: the second asks for
+// \hangindent=4em \hangafter=1 and comes out flush left here, AND re-broken,
+// because four ems more text per line moves where the lines end (#757).
+//
+// It took an audit to find that, and an audit is the most expensive way to
+// learn something the engine could have said on the first document that asked.
+// The channel already exists — the skip census the engine reports at the end of
+// every run — so this costs one comparison on an assignment that was happening
+// anyway.
+//
+// ⛔ ONLY A NON-ZERO VALUE IS A DROP. \hangindent=0pt is "no hanging indent",
+// which is exactly what this engine does, so honouring it by doing nothing is
+// correct and reporting it would be noise. LaTeX's own \@endparenv and friends
+// zero it routinely.
+//
+// ⚠ IT SAYS WHAT WAS ASKED FOR, NOT WHAT IT COST. How many lines, or pages, a
+// dropped indent moves is not knowable from here and is not claimed: the
+// breaker cannot be told a per-line measure at all yet
+// (go-typeset/linebreak#11), so there is no second reading to compare against.
+func (e *Engine) noteDroppedShape(i, v int) {
+	if i != e.hangIndentReg || v == 0 {
+		return
+	}
+	if e.skippedCS == nil {
+		e.skippedCS = map[string]int{}
+	}
+	e.skippedCS[droppedHangIndent]++
+}
+
+// droppedHangIndent is the census key. It is a sentence rather than a bare
+// command name because the reader of a census needs to know this was ASKED FOR
+// and ignored, which "\hangindent" alone would not tell them.
+const droppedHangIndent = `\hangindent set and not honoured: the paragraph is set on one measure`
 
 func (e *Engine) setSkip(i int, v glueSpec, global bool) {
 	if i < 0 || i >= 256 {
