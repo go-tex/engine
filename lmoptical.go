@@ -5,6 +5,7 @@ package engine
 
 import (
 	_ "embed"
+	"strconv"
 	"sync"
 
 	"github.com/go-opentype/opentype"
@@ -172,6 +173,37 @@ var (
 		{0, lmMono12Regular, "lmmono12-regular"},
 	}
 )
+
+// opticalDesignPt is the size a Latin Modern file was DRAWN for, read out of
+// its own name: lmroman9-regular is a 9pt design.
+//
+// ⚠ IT IS NOT THE SIZE THE FACE IS SET AT. lmroman10 at 10.95pt is a 10pt
+// design used at 10.95, which is exactly the case tex.web §472 prints
+// " at 10.95pt" for and a bare name otherwise. Reading it from the filename
+// rather than from the font is deliberate: these are the distribution's own
+// optical sizes and the number in the name is what tulmr.fd's ranges are
+// written against, so the two cannot drift apart without the table being wrong
+// too.
+func opticalDesignPt(name string) float64 {
+	digits := ""
+	for _, r := range name {
+		if r >= '0' && r <= '9' {
+			digits += string(r)
+			continue
+		}
+		if digits != "" {
+			break // the first run of digits is the design size
+		}
+	}
+	if digits == "" {
+		return 0
+	}
+	v, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0
+	}
+	return float64(v)
+}
 
 // opticalOf returns the table a set of font bytes belongs to, or nil for bytes
 // that are not one of ours.
