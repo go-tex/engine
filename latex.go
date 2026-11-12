@@ -1350,8 +1350,31 @@ const MiniLaTeXKernel = `
 \def\normalem{}
 \def\ULforem{}
 \def\useunder{}
-\def\sloppy{}
-\def\fussy{}
+% \sloppy and \fussy, verbatim from latex.ltx:13367-13378.
+%
+% ⛔ BOTH WERE EMPTY, AND \sloppy IS IN 775 OF THE 2935 CORPUS PAPERS — 26.4%,
+% measured with TeX comments stripped. A quarter of the corpus asked the line
+% breaker to loosen and this engine answered by doing nothing.
+%
+% \tolerance is live here (paragraph.go:195 reads it through namedInt), so this
+% takes effect rather than being decoration. \emergencystretch, \hfuzz and
+% \vfuzz are accept-and-ignore parameters, which is exactly what they already
+% are when a document assigns them directly — writing them here changes nothing
+% about how they behave and keeps the commands' definitions honest for a
+% document that reads them back.
+%
+% ⚠ \sloppy's effect is CONDITIONAL, which is worth knowing before expecting
+% much from it: measured against tectonic, the same paragraph at \hsize=100pt
+% comes out IDENTICAL under \fussy and \sloppy, because it already fits within
+% \tolerance=200. It takes a paragraph that genuinely fails at 200 — \hsize=45pt
+% on a witness here — before the two part, and there the reference goes from 5
+% lines to 8.
+%
+% ⚠ And a larger divergence sits beside this one: our DEFAULT breaking is
+% already about as loose as the reference's \sloppy (5 lines against our 8 on
+% that witness). That is #768 and is not addressed here.
+\def\sloppy{\tolerance 9999\emergencystretch 3em\hfuzz .5pt\vfuzz\hfuzz}
+\def\fussy{\emergencystretch 0pt\tolerance 200\hfuzz .1pt\vfuzz\hfuzz}
 \def\raggedbottom{}
 \def\flushbottom{}
 \def\MFUhyphentrue{}
