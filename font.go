@@ -20,6 +20,12 @@ type OpenTypeFont struct {
 	// (#714, which named this as its residual).
 	pt   float64
 	data []byte // original font bytes (for PDF embedding)
+	// optical is this face's family size→file table, or nil for a font the host
+	// supplied. Latin Modern draws a separate face per optical size and the
+	// reference picks among them through tulmr.fd; carrying the table here is
+	// what lets a size switch take the right FILE rather than this one scaled.
+	// See lmoptical.go.
+	optical opticalFamily
 	// ligCache memoises glyphFor's GSUB fallback, where 0 records "this face
 	// cannot ligate that form" — a negative worth caching, since the paragraph
 	// builder asks for every f-pair it meets and shaping is not free.
@@ -47,7 +53,36 @@ func NewOpenTypeFont(fontBytes []byte, sizePt float64) (*OpenTypeFont, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OpenTypeFont{f: f, fc: f.NewFaceAt(sizePt), upem: float64(f.UnitsPerEm()), pt: sizePt, data: fontBytes}, nil
+	o := &OpenTypeFont{f: f, fc: f.NewFaceAt(sizePt), upem: float64(f.UnitsPerEm()), pt: sizePt, data: fontBytes}
+	// A Latin Modern face carries its family's size→file table, so a later
+	// \footnotesize or \Large takes the file the reference takes rather than this
+	// one scaled. A host's own font gets nil and is never re-faced. See
+	// lmoptical.go.
+	o.optical = opticalOf(fontBytes)
+	return o.atOptical(sizePt), nil
+}
+
+// atOptical returns the face for pt, switching to the optical size's own file
+// when the family has one and the requested size is outside this file's range.
+//
+// ⛔ IT IS A CONSTRUCTOR, NOT A MUTATOR. A face is shared — \rm, \bf and the
+// NFSS aliases all hold one — so re-pointing this font's program would change
+// the size of every holder. Each size gets its own face over its own program.
+func (o *OpenTypeFont) atOptical(pt float64) *OpenTypeFont {
+	if o.optical == nil {
+		return o
+	}
+	f, data, _ := opticalProgram(o.optical, pt)
+	if f == nil {
+		return o // an embedded file that will not parse: scale what we have
+	}
+	if f == o.f {
+		return o
+	}
+	return &OpenTypeFont{
+		f: f, fc: f.NewFaceAt(pt), upem: float64(f.UnitsPerEm()),
+		pt: pt, data: data, optical: o.optical,
+	}
 }
 
 // fontBytes returns the original font blob (for the PDF driver to embed).
@@ -391,8 +426,16 @@ type scalableFont interface {
 // added the fractional constructor for exactly this caller; the face still
 // rasterises at a whole ppem, because hinting is whole-pixel, while its metrics
 // scale by the true size (go-opentype/opentype#62).
+// ⛔ AND IT CONSULTS THE OPTICAL TABLE FIRST. Latin Modern is an optically
+// sized family: \footnotesize is lmroman9, not lmroman10 at 9pt. atOptical
+// returns this font unchanged when the family has no table (a host's own font)
+// or when the size stays inside this file's range, so the common case is the
+// same allocation it always was.
 func (o *OpenTypeFont) atSize(pt float64) fontFace {
-	return &OpenTypeFont{f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data}
+	if n := o.atOptical(pt); n != o {
+		return n
+	}
+	return &OpenTypeFont{f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data, optical: o.optical}
 }
 
 // faceAtCurrentSize re-faces a FAMILY switch at the size already in force.
