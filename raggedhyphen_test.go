@@ -71,6 +71,36 @@ func TestJustifiedTextStillHyphenates(t *testing.T) {
 	}
 }
 
+// ⛔⛔ CENTRED TEXT IS NOT HYPHENATED EITHER, AND THAT IS THE WHOLE POINT OF
+// ASKING ABOUT THE BACKGROUND RATHER THAN ABOUT \raggedright.
+//
+// §852 is about a line carrying infinite stretch, not about which command put
+// it there. \centering sets BOTH skips to 0pt plus 1fil, so its paragraphs take
+// the same first pass and are not hyphenated.
+//
+// ⭐ MEASURED, tectonic 0.17.0, this paragraph inside \begin{center} at
+// \hsize=100pt: 6 lines, 0 hyphens, no warning — character for character what
+// it sets the same text \raggedright.
+//
+// ⚠ THIS TEST IS WHY raggedBackground ASKS `||` AND NOT `&&`. Narrowing it to a
+// strictly right-ragged background (right skip infinite, left skip finite)
+// excludes \centering, and buys back 3 words of corpus word-recall on two
+// revtex papers — measured, on #772. It also makes the engine hyphenate centred
+// text, which the reference does not. The corpus score is a proxy; this is the
+// oracle.
+func TestCentredTextIsNotHyphenated(t *testing.T) {
+	src := `\documentclass{article}\begin{document}\hsize=100pt ` +
+		`\begin{center}` + raggedProbeText + `\end{center}\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pageChars(e); strings.Count(got, "-") != 0 {
+		t.Errorf("a centred paragraph came out with %d hyphen(s); tectonic sets "+
+			"this text centred with none: %q", strings.Count(got, "-"), got)
+	}
+}
+
 // ⛔⛔ AND RAGGED TEXT IS STILL HYPHENATED WHEN THE LINE WOULD NOT OTHERWISE
 // FIT. The rule is NOT "do not hyphenate when ragged": TeX's first pass
 // succeeds because every line is good, and a line holding a word wider than the
