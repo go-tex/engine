@@ -473,6 +473,30 @@ Each stage is gated by an objective oracle:
    (#665), and a line ended by a forced break is **not justified** here — `\parfillskip`
    is appended to every forced-break fragment instead of once per paragraph, so the
    slack it should give the interword glue is absorbed (#666).
+   **Hyphenation is Liang's algorithm on the embedded US-English patterns**
+   (`go-typeset/hyphenation`), with `\lefthyphenmin`/`\righthyphenmin`,
+   `\hyphenchar` — a face that files it negative is never broken, which is how
+   `\texttt` keeps code whole (`tex.web` §896) — and the document's own
+   `\hyphenation{…}` exception list. Two defects there were invisible to every
+   test:
+   **an accented word broke at an offset**, because the library built its value
+   array over the word by BYTE index and read it back by RUNE index — the two
+   agree for exactly as long as every letter is one byte, which is every
+   English word and no French one. `élémentaires` broke as `éléme-ntaires`,
+   between the m and the n of a syllable, where no pattern can put a break;
+   with the fix it is whole and `présentation` breaks `présenta-tion`, which is
+   where tectonic breaks it
+   ([go-typeset/hyphenation#8](https://github.com/go-typeset/hyphenation/pull/8),
+   [#774](https://github.com/go-tex/engine/pull/774)).
+   **And `\hyphenation{…}` was a stub that discarded its argument** — a document
+   writes it for the words the patterns get *wrong*, so the silence fell exactly
+   on the words it was asked about. An entry now replaces the patterns for its
+   word (`tex.web` §937), including an entry with no hyphen at all, which says
+   the word may never be broken
+   ([#775](https://github.com/go-tex/engine/pull/775)).
+   ⚠ **Only English patterns are embedded.** A paper in another language is set
+   unhyphenated where a real TeX hyphenates it; that gap is tracked in
+   [#754](https://github.com/go-tex/engine/issues/754).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
