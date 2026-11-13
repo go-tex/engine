@@ -10,7 +10,7 @@ require (
 	github.com/go-tex/math v0.50.0
 	github.com/go-tex/pdfrender v0.3.2
 	github.com/go-tex/texmf v0.7.0
-	github.com/go-typeset/hyphenation v1.0.0
+	github.com/go-typeset/hyphenation v1.0.1
 	github.com/go-typeset/linebreak v1.3.0
 	golang.org/x/text v0.43.0
 )
