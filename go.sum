@@ -17,6 +17,8 @@ github.com/go-opentype/opentype v0.19.0 h1:EYFpDqZoAR9CfcokzE6uMvAgzC4j703r1eMo1
 github.com/go-opentype/opentype v0.19.0/go.mod h1:cyTZyPcwVFR4MTHnCj7a6tk2tGIB6deakpefu/apDjg=
 github.com/go-opentype/opentype v0.20.0 h1:5YePvRwcnfseDSdP4oDHp7uBDtPxQd1I3Q2ZbOxFLfs=
 github.com/go-opentype/opentype v0.20.0/go.mod h1:cyTZyPcwVFR4MTHnCj7a6tk2tGIB6deakpefu/apDjg=
+github.com/go-opentype/opentype v0.21.1 h1:axfaZjo6acnY9OcFHC/q5gaSqyc/KjuaNJ6Z7UBOJPI=
+github.com/go-opentype/opentype v0.21.1/go.mod h1:cyTZyPcwVFR4MTHnCj7a6tk2tGIB6deakpefu/apDjg=
 github.com/go-pdfkit/pdffont v0.4.0 h1:3CV2HnmUGHiIYuZ5dJWRLKvi7hMHGWS1RjgNYkEZ0Gk=
 github.com/go-pdfkit/pdffont v0.4.0/go.mod h1:l7es3IPbKewQF+sSgPh/bQL18jSewoI0cMjttk7uPlc=
 github.com/go-pdfkit/pdfkit v0.20.0 h1:AvIGB6abZEqeUlzXXweplAfdtSdmHjpo7GsgEMUm6wg=
