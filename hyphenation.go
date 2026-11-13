@@ -227,7 +227,17 @@ func (e *Engine) hyphenateList(list []node) []node {
 		// lookups, and the run never ended. A real word is tens of letters; the
 		// longest paragraph in the whole fidelity corpus is 8_881 nodes and no word
 		// in it comes near this limit.
-		if len(letters) <= maxHyphenatableLength {
+		// ⛔ AN EXCEPTION REPLACES THE PATTERNS, IT DOES NOT ADD TO THEM
+		// (tex.web §937). A word in \hyphenation{…} breaks only where its entry
+		// says — including nowhere, for an entry written with no hyphen at all
+		// — and the patterns are never consulted for it. Consulting both would
+		// hand a document that spelled a word out the very breaks it wrote the
+		// entry to prevent.
+		if pts, isException := e.hyphExcept.lookup(string(letters)); isException {
+			for _, t := range pts {
+				breakAfter[t] = true
+			}
+		} else if len(letters) <= maxHyphenatableLength {
 			for _, t := range h.Points(string(letters)) {
 				breakAfter[t] = true
 			}

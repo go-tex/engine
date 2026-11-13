@@ -163,20 +163,21 @@ type Engine struct {
 	noIndentNext    bool // the next paragraph starts unindented, once (\@afterheading under \@afterindentfalse)
 	suppressParskip bool // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
-	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
-	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns
-	hyphenpenalty  int         // penalty at a discretionary hyphen
-	leftskip       glueSpec    // glue at the left of every line
-	rightskip      glueSpec    // glue at the right of every line (fil ⇒ ragged right)
-	columnsep      int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
-	columnseprule  int         // \columnseprule: rule thickness between columns (sp, 0 = none)
-	twoColumn      bool        // class/\twocolumn two-column page layout (see twocolumn.go)
-	twoColLive     bool        // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
-	revtexReprint  bool        // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
-	twoColApplied  bool        // guard: the column measure has been applied to e.hsize once
-	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
-	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
-	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
+	hyphExcept     hyphExceptions // \hyphenation{…}: the words a document spells out itself
+	hyph           *hyphenator    // a document's own \patterns, if any (nil = none loaded)
+	enHyph         *hyphenator    // lazily built cache of the embedded US-English patterns
+	hyphenpenalty  int            // penalty at a discretionary hyphen
+	leftskip       glueSpec       // glue at the left of every line
+	rightskip      glueSpec       // glue at the right of every line (fil ⇒ ragged right)
+	columnsep      int            // \columnsep: gap between multicols columns AND two-column page columns (sp)
+	columnseprule  int            // \columnseprule: rule thickness between columns (sp, 0 = none)
+	twoColumn      bool           // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColLive     bool           // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
+	revtexReprint  bool           // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
+	twoColApplied  bool           // guard: the column measure has been applied to e.hsize once
+	oneColHsize    int            // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
+	colRegions     []colRegion    // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
+	classPaperSize string         // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
 	// hasClass records that the document declared a \documentclass at all. A
 	// document has a PAPER — US letter unless something says otherwise — while a
 	// bare snippet run through the engine has none and is sized to its own content

@@ -1847,6 +1847,7 @@ func (e *Engine) loadMore() {
 	e.prim("par", func(e *Engine) { e.suppressParskip = false; e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
+	e.prim("hyphenation", func(e *Engine) { e.doHyphenation() })
 	e.prim("documentclass", func(e *Engine) { e.doDocumentClass() })
 	e.prim("usepackage", func(e *Engine) { e.doUsepackageLoad() })
 	e.prim("LoadClass", func(e *Engine) { e.doLoadClass(false) })
