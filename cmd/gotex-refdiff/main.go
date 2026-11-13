@@ -52,6 +52,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/go-tex/engine/internal/pdftext"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -330,24 +332,15 @@ func classifyExtraction(toolErr, nonTrivial bool, tokens int, side, genuineEmpty
 	}
 }
 
-// popplerProject is the pkgx project id that unambiguously provides poppler's
-// command-line tools. On some machines a bare `pkgx pdftotext` fails with
-// MultipleProjects (ambiguous between poppler.freedesktop.org and
-// freedesktop.org/poppler-qt5); pinning the project resolves it so the pkgx
-// fallback runs the extractor instead of silently producing no text.
-const popplerProject = "poppler.freedesktop.org"
+// The extractor itself — which binary, how it is found, the poppler pin — now
+// lives in internal/pdftext, so that gotex-worddiff reads a PDF through exactly
+// the same path this scorer does. Two extractors would report their own
+// difference in these units. What stays here is what this tool MAKES of the
+// text: word recall, and the genuine-empty versus tool-error distinction below.
+const popplerProject = pdftext.PopplerProject
 
-// pkgxArgs builds the argument list after `pkgx` to run tool name with toolArgs,
-// pinning the poppler project for poppler's ambiguous tools (pdftotext,
-// pdftoppm) so pkgx resolves a single package rather than erroring. Other tools
-// are passed through unpinned.
 func pkgxArgs(name string, toolArgs ...string) []string {
-	args := make([]string, 0, len(toolArgs)+2)
-	if name == "pdftotext" || name == "pdftoppm" {
-		args = append(args, "+"+popplerProject)
-	}
-	args = append(args, name)
-	return append(args, toolArgs...)
+	return pdftext.PkgxArgs(name, toolArgs...)
 }
 
 // pipeline is the set of external actions analyzePaper needs, injected so the
@@ -558,26 +551,10 @@ func toolRunner(name string) func(timeout time.Duration, args ...string) error {
 	}
 }
 
-// captureRunner returns a function that runs a text-producing tool (pdftotext)
-// on a PDF, writing to stdout ("-"), and returns the captured text. Like
-// toolRunner it decides PATH-vs-pkgx once.
+// captureRunner runs a text-producing tool (pdftotext) on a PDF and returns the
+// captured text. It is internal/pdftext's, shared with gotex-worddiff.
 func captureRunner(name string) func(timeout time.Duration, pdf string) (string, error) {
-	usePkgx := false
-	if _, err := exec.LookPath(name); err != nil {
-		usePkgx = true
-	}
-	return func(timeout time.Duration, pdf string) (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		var cmd *exec.Cmd
-		if usePkgx {
-			cmd = exec.CommandContext(ctx, "pkgx", pkgxArgs(name, pdf, "-")...)
-		} else {
-			cmd = exec.CommandContext(ctx, name, pdf, "-")
-		}
-		out, err := cmd.Output()
-		return string(out), err
-	}
+	return pdftext.CaptureRunner(name)
 }
 
 // runCmd runs a command with a timeout, discarding its output; only its
