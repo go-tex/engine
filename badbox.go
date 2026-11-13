@@ -55,6 +55,48 @@ type badBoxes struct {
 	worst float64
 }
 
+// lineOverflowSP returns how far a line's own content runs past the measure, in
+// scaled points, and 0 when it fits. It is the ONE place that answers "is this
+// line overfull".
+//
+// ⛔ ASK THE WIDTH, BECAUSE THE RATIO BELONGS TO WHOEVER BUILT THE Line. That
+// is this file's lesson, and the precise shape of it is worth keeping: the
+// ratio is right when the breaker computed it and MEANINGLESS when something
+// else synthesised the Line. greedyLines (lastresort.go) never sets Ratio at
+// all, and neither did the one-line fallback it replaced, so every line they
+// produce carries 0 — which is why `Ratio < -1` counted nothing while a line
+// hung 133pt into the margin. The width does not care who built the Line.
+func lineOverflowSP(list []node, ln Line, targetSP int) int {
+	if ln.Start < 0 || ln.End > len(list) || ln.Start >= ln.End {
+		return 0
+	}
+	if natural := hpackSP(list[ln.Start:ln.End], packNatural, 0).width; natural > targetSP {
+		return natural - targetSP
+	}
+	return 0
+}
+
+// anyLineOverflows reports whether any line runs past the measure. It is the
+// precondition breakSegment's ragged first pass keeps: §852 makes every line
+// of a ragged paragraph GOOD, but a line that does not fit is not good at any
+// \rightskip, and TeX's first pass does not accept one.
+//
+// ⚠ IT HAS NO WITNESS. Removing it entirely leaves the whole suite green, and
+// on every ragged document traced it either agreed with `Ratio < -1` or was
+// never reached, because a measure narrow enough to overfull a line makes the
+// first pass fail outright. It is kept because it is the condition tex.web
+// states, not because a document was found that needs it — and the comment says
+// so rather than implying a defect that was never observed.
+func anyLineOverflows(list []node, lines []Line, lineWidthPt float64) bool {
+	target := ptToSP(lineWidthPt)
+	for _, ln := range lines {
+		if lineOverflowSP(list, ln, target) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // noteBadLines records what a finished paragraph's lines look like.
 //
 // ⚠ IT IS CALLED WITH THE LINES THAT WERE ADOPTED, not with every pass's
@@ -63,30 +105,23 @@ type badBoxes struct {
 // report badness the reader never sees.
 //
 // ⛔⛔ IT MEASURES THE LINE, IT DOES NOT ASK FOR ITS RATIO — and the first
-// version of this did, which made it miss the worst case there is.
-//
-// Line carries only Start, End and Ratio, and the ratio is the GLUE adjustment:
-// how far the line's stretch or shrink had to work. A line whose content is one
-// unbreakable token wider than the measure has NO shrinkable glue at all, so
-// there is no ratio to be past -1 — and `Ratio < -1` reported nothing.
-//
-// Measured on a \texttt token at \hsize=40pt: the line came out 173.25pt wide,
-// which is 133.25pt past the margin and is exactly the number tectonic prints
-// for the same document ("Overfull \hbox (133.25pt too wide)"). The reference
-// reported it three times and this counted zero. The overflow a reader actually
-// sees is the width, so the width is what is measured.
+// version of this did, which made it miss the worst case there is. Measured on
+// a \texttt token at \hsize=40pt: the line came out 173.25pt wide, which is
+// 133.25pt past the margin and is exactly the number tectonic prints for the
+// same document ("Overfull \hbox (133.25pt too wide)"). The reference reported
+// it three times and this counted zero. lineOverflowSP above holds the
+// measurement and the reason.
 func (e *Engine) noteBadLines(list []node, lines []Line, lineWidthPt float64) {
 	target := ptToSP(lineWidthPt)
 	for _, ln := range lines {
 		if ln.Start < 0 || ln.End > len(list) || ln.Start >= ln.End {
 			continue
 		}
-		natural := hpackSP(list[ln.Start:ln.End], packNatural, 0).width
-		switch {
-		case natural > target:
+		switch over := lineOverflowSP(list, ln, target); {
+		case over > 0:
 			e.badBox.overfull++
-			if over := spToPt(natural - target); over > e.badBox.worst {
-				e.badBox.worst = over
+			if pt := spToPt(over); pt > e.badBox.worst {
+				e.badBox.worst = pt
 			}
 		case ln.Ratio > 100:
 			// A line stretched far past comfort still has glue, so the ratio is

@@ -212,8 +212,47 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	if pre := e.namedInt("pretolerance"); pre >= 0 {
 		q := p
 		q.Tolerance = float64(pre)
+		ragged := e.raggedBackground()
+		if ragged {
+			// ⛔ UNDER \raggedright EVERY LINE IS ALREADY PERFECT, AND THIS PASS
+			// MUST BE ABLE TO SAY SO. tex.web §852 gives badness 0 and fitness
+			// `decent` to any line carrying INFINITE stretch, so TeX's first
+			// pass — no hyphenation, at \pretolerance — succeeds outright on a
+			// ragged paragraph and it never reaches the hyphenating pass.
+			//
+			// go-typeset/linebreak carries one float of stretch and flattens a
+			// fil to a large finite number (its issue #12, item 1), so the lines
+			// come out with a large but FINITE badness, this pass fails, and the
+			// hyphens appear. Measured against tectonic 0.17.0 at \hsize=120pt,
+			// same face and same measure on both sides:
+			//
+			//	reference  justified 2 hyphens   \raggedright 0 hyphens
+			//	here       justified 2 hyphens   \raggedright 2 hyphens — the SAME breaks
+			//
+			// Our two paragraphs were identical, which is "breaks as if
+			// justified, then gets its glue afterwards" seen rather than argued.
+			//
+			// ⚠ THIS IS NOT "DO NOT HYPHENATE WHEN RAGGED". TeX still hyphenates
+			// under \raggedright when a word would otherwise overfull the line —
+			// what changes is that it has no REASON to otherwise. So the
+			// tolerance is opened and the overfull test below is kept: a line
+			// that does not fit still sends the paragraph to the next pass.
+			q.Tolerance = maxBadRatio
+		}
 		plain := e.withParFill(hlist)
 		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
+			return plain, lines, true
+		} else if ragged && ok && !anyLineOverflows(plain, lines, lineWidth) {
+			// Loose is not bad when the background is infinite; only overfull
+			// is — and overfull is asked of the WIDTH, through the same
+			// lineOverflowSP that counts bad boxes (badbox.go), so that one
+			// implementation answers the question for both callers.
+			//
+			// ⚠ NO DOCUMENT WAS FOUND THAT NEEDS THIS TEST. Removing it leaves
+			// the suite green: at any measure narrow enough to overfull a line,
+			// the first pass fails outright and never reaches here. It stays
+			// because §852 says a line that does not fit is not good at any
+			// \rightskip, not because it was seen to catch anything.
 			return plain, lines, true
 		}
 	}
@@ -318,6 +357,18 @@ func (e *Engine) withParFill(list []node) []node {
 	// breaker needs the break named. It is the classic Knuth–Plass paragraph
 	// terminator and it changes nothing about where the other lines fall.
 	return append(out, glueNode{spec: fill}, penaltyNode{penalty: -int(InfPenalty)})
+}
+
+// raggedBackground reports whether the glue that will be added to every line
+// carries INFINITE stretch — \raggedright's `0pt plus 1fil`, and \centering's
+// pair of them.
+//
+// ⚠ IT IS THE ORDER, NOT THE AMOUNT. A \rightskip of `0pt plus 100pt` is a very
+// stretchy margin and still a finite one: TeX balances looseness against it as
+// usual. Only an infinite order collapses badness to 0 (§852), and that is the
+// distinction \raggedright turns on.
+func (e *Engine) raggedBackground() bool {
+	return e.rightskip.stretchOrder > 0 || e.leftskip.stretchOrder > 0
 }
 
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio
