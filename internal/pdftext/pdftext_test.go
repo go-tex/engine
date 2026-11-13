@@ -56,6 +56,46 @@ func TestCaptureRunnerReturnsStdout(t *testing.T) {
 	}
 }
 
+// ⭐ opts REACH THE TOOL, AND THEY REACH IT BEFORE THE FILE, which is where
+// pdftotext takes its options.
+//
+// It matters because of what `-layout` turned out to be worth. Without it,
+// pdftotext reads a two-column page as ONE stream and fuses the end of one
+// column's line onto the start of another's — `disFigure`, `participaentire`,
+// `quaThe` are real tokens from one revtex paper. WHICH boundaries fuse depends
+// on where the lines break, so a line-breaking change moves them.
+//
+// Measured on #772's two papers: scoring them with `-layout` extraction made
+// one of the two "regressions" vanish outright (1327 matched words against
+// 1327, where the plain extraction had reported −0.2), and reduced the other to
+// a single word. ⚠ It also moved the ABSOLUTE scores by nine points on both
+// sides (96.5% → 87.6%), so it is a diagnostic and not a free improvement to
+// the scorer.
+func TestOptsReachTheToolBeforeTheFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "f.txt")
+	if err := os.WriteFile(p, []byte("one two"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// `cat -u f -` is cat with an option before the file: if opts landed after
+	// the path, cat would treat "-u" as a second file to read, and on macOS it
+	// reads stdin for "-" either way — so the assertion is that the OPTION was
+	// accepted, i.e. no error and the file's text came back.
+	out, err := CaptureRunner("cat", "-u")(5*time.Second, p)
+	if err != nil {
+		t.Fatalf("cat -u: %v", err)
+	}
+	if out != "one two" {
+		t.Errorf("captured %q, want the file's text — the option did not reach "+
+			"the tool in front of the file", out)
+	}
+	// And PkgxArgs carries them through in the same order.
+	got := PkgxArgs("pdftotext", "-layout", "f.pdf", "-")
+	want := []string{"+" + PopplerProject, "pdftotext", "-layout", "f.pdf", "-"}
+	if !equal(got, want) {
+		t.Fatalf("PkgxArgs with opts = %v want %v", got, want)
+	}
+}
+
 // ⛔ A TOOL THAT IS NOT THERE MUST ERROR, not return an empty string: an empty
 // extraction and a missing extractor are different facts and the caller cannot
 // tell them apart afterwards.

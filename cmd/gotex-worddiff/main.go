@@ -56,11 +56,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	timeout := fs.Duration("timeout", 60*time.Second, "per-PDF extraction timeout")
 	quiet := fs.Bool("q", false, "print only the counts, not the words")
+	layout := fs.Bool("layout", false, "extract with pdftotext -layout, which keeps COLUMNS apart; without it a two-column page is read as one stream and the end of one column's line fuses to the start of another's")
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "usage: gotex-worddiff [-timeout d] [-q] <a.pdf> <b.pdf>\n\n"+
+		fmt.Fprint(stderr, "usage: gotex-worddiff [-timeout d] [-q] [-layout] <a.pdf> <b.pdf>\n\n"+
 			"Reports which words a.pdf holds that b.pdf does not, and the reverse,\n"+
 			"as a multiset difference. Exit 0 when they hold the same words, 1 when\n"+
-			"they differ, 2 on a usage or extraction error.\n")
+			"they differ, 2 on a usage or extraction error.\n\n"+
+			"On a TWO-COLUMN paper, run it both ways: differences that vanish under\n"+
+			"-layout were the extractor fusing columns, not the engine setting\n"+
+			"different words.\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -70,7 +74,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.Usage()
 		return 2
 	}
-	return compare(pdftext.CaptureRunner("pdftotext"), *timeout, fs.Arg(0), fs.Arg(1), *quiet, stdout, stderr)
+	var opts []string
+	if *layout {
+		opts = append(opts, "-layout")
+	}
+	return compare(pdftext.CaptureRunner("pdftotext", opts...), *timeout, fs.Arg(0), fs.Arg(1), *quiet, stdout, stderr)
 }
 
 func compare(ex extractor, timeout time.Duration, aPath, bPath string, quiet bool, stdout, stderr io.Writer) int {

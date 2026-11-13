@@ -44,12 +44,23 @@ func PkgxArgs(name string, toolArgs ...string) []string {
 }
 
 // CaptureRunner returns a function that runs a text-producing tool (pdftotext)
-// on a PDF, writing to stdout ("-"), and returns the captured text.
+// on a PDF, writing to stdout ("-"), and returns the captured text. opts are
+// passed to the tool BEFORE the file, which is where pdftotext takes its
+// options.
 //
 // ⚠ THE PATH-OR-pkgx DECISION IS MADE ONCE, not per call, so a genuinely
 // failing tool is not silently retried through pkgx — a retry would turn "this
 // binary is broken" into "this page has no text".
-func CaptureRunner(name string) func(timeout time.Duration, pdf string) (string, error) {
+//
+// ⭐ opts EXISTS FOR `-layout`, AND THAT IS NOT A COSMETIC CHOICE. Without it
+// pdftotext reads a two-column page in a single stream and FUSES the end of one
+// column's line to the start of another's: `disFigure`, `participaentire`,
+// `quaThe` are real tokens from one revtex paper. Which boundaries fuse depends
+// on where the lines break, so a line-breaking change moves them — and a score
+// built on these tokens partly measures the extractor's column handling rather
+// than the engine's. Callers that compare two layouts should say -layout and
+// find out.
+func CaptureRunner(name string, opts ...string) func(timeout time.Duration, pdf string) (string, error) {
 	usePkgx := false
 	if _, err := exec.LookPath(name); err != nil {
 		usePkgx = true
@@ -57,11 +68,12 @@ func CaptureRunner(name string) func(timeout time.Duration, pdf string) (string,
 	return func(timeout time.Duration, pdf string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
+		args := append(append([]string{}, opts...), pdf, "-")
 		var cmd *exec.Cmd
 		if usePkgx {
-			cmd = exec.CommandContext(ctx, "pkgx", PkgxArgs(name, pdf, "-")...)
+			cmd = exec.CommandContext(ctx, "pkgx", PkgxArgs(name, args...)...)
 		} else {
-			cmd = exec.CommandContext(ctx, name, pdf, "-")
+			cmd = exec.CommandContext(ctx, name, args...)
 		}
 		out, err := cmd.Output()
 		return string(out), err
