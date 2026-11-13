@@ -332,6 +332,11 @@ type Engine struct {
 	// is skipped (with its likely argument block) instead of aborting, and its
 	// name is tallied here for reporting. nil until the first skip.
 	lenient bool
+	// badBox tallies the overfull and underfull lines of the paragraphs the
+	// document actually got. The breaker has always judged them — hasBadLine
+	// decides which pass to run — and nothing ever reported it. See badbox.go.
+	badBox badBoxes
+
 	// hyphenChars is \hyphenchar, keyed on the font PROGRAM rather than on a
 	// face at a size (see hyphenCharKey): a size switch re-makes the face and
 	// would otherwise lose the setting. A program that is absent permits
@@ -2459,6 +2464,18 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+	// OverfullLines and UnderfullLines count the lines the breaker itself judged
+	// bad in the paragraphs the document ACTUALLY GOT, and WorstOverfull is the
+	// largest overflow among them, as a fraction of the line's shrink.
+	//
+	// ⛔ THE ENGINE KNEW THIS ALL ALONG AND SAID NOTHING. hasBadLine decides
+	// which line-breaking pass to run and reached no caller — the same shape as
+	// the \hangindent defect of #760, and worse, because an overfull line is the
+	// single most common thing a real TeX complains about. See badbox.go for why
+	// the thresholds are the breaker's own and not \hbadness/\hfuzz.
+	OverfullLines  int
+	UnderfullLines int
+	WorstOverfull  float64
 	// Messages is what the document itself said: the text of every \message and
 	// \typeout, in order. A real TeX prints this to the terminal and the log, and
 	// it is how a document (or a package) reports what it decided — which branch of
@@ -2617,6 +2634,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		Runaway:          e.runaway,
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
+		OverfullLines:    e.badBox.overfull,
+		UnderfullLines:   e.badBox.underfull,
+		WorstOverfull:    e.badBox.worst,
 		Messages:         e.out.String(),
 		Shows:            e.shows.String(),
 		RunawayArgs:      e.runawayArgs,

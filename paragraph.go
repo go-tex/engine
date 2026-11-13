@@ -81,8 +81,19 @@ func (e *Engine) layoutSegment(hlist []node) {
 	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
 	list, lines, ok := e.breakSegment(hlist, lineWidth)
 	if !ok || len(lines) == 0 {
-		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
+		// ⛔ NOT "one line, nothing lost" ANY MORE. That kept every node and gave
+		// the reader a single line 254pt off the page; everything was there and
+		// none of it readable. See lastresort.go, including why #766 is what made
+		// this path reachable.
+		lines = greedyLines(list, lineWidth)
 	}
+	// ⛔ SAY WHICH LINES CAME OUT BAD. The breaker has judged this since line
+	// breaking was written — hasBadLine decides which pass runs — and no caller
+	// could ever see it, so a document whose lines run into the margin compiled
+	// in silence. Counted HERE, on the lines actually adopted, rather than
+	// inside breakSegment where the rejected attempts of earlier passes would be
+	// counted too. See badbox.go.
+	e.noteBadLines(list, lines, lineWidth)
 	for i, ln := range lines {
 		// ⛔⛔ THE PARAGRAPH'S FIRST LINE IS NEVER PRUNED — and "the paragraph's", not
 		// "this fragment's". go-typeset/linebreak v1.2.1 stopped discarding a
