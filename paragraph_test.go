@@ -166,6 +166,47 @@ func TestLineSkipsNarrowTheMeasureBeforeBreaking(t *testing.T) {
 	if ragged < plain-20 {
 		t.Errorf("a width-less \\rightskip narrowed the measure to %.2f from %.2f; ragged setting must not move the margin", ragged, plain)
 	}
+
+	// ⛔⛔ AND THE WIDTH IS TAKEN OFF ONCE, WHICH THE MARGIN CANNOT SEE.
+	//
+	// Everything above measures how far right the ink reaches, and #780 passed
+	// all of it while counting \leftskip and \rightskip TWICE: the margin was
+	// still right — the lines are justified to the narrowed measure either way —
+	// but the breaker thought 100pt less would fit, so it packed less text and
+	// stretched what it packed. Five lines where the reference sets three, each
+	// one stretched to the same correct margin.
+	//
+	// So the question has to be asked of the TEXT, not the edge. tectonic 0.17.0
+	// on this paragraph at \rightskip=100pt sets THREE lines, the first being
+	// `A fairly long subsection title that has to wrap onto a` and ending at
+	// x1=377.85; we end at 377.87 and split it identically.
+	lines := func(src string) int {
+		t.Helper()
+		e, err := compile([]byte(`\documentclass{article}`+"\n"+`\begin{document}`+"\n"+src+"\n"+`\end{document}`), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, p := range e.Pages() {
+			for _, nd := range p.list {
+				if b, ok := nd.(*boxNode); ok && b.kind == hbox && lineInkWidth(b) > 0 {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	// The page number is an hbox too, so the comparison is between the two
+	// paragraphs rather than against an absolute count.
+	plainLines := lines(`\noindent ` + text)
+	narrowLines := lines(`{\rightskip=100pt` + "\n" + `\noindent ` + text + `\par}`)
+	if narrowLines > plainLines+1 {
+		t.Errorf("\\rightskip=100pt gave %d line(s) against %d unconstrained: more than one "+
+			"extra line means the skip's width was taken off the measure TWICE — the "+
+			"caller narrows lineWidth AND skipBackground() carried the width (#780, "+
+			"against #583's witness, where the reference sets 3 and the double count "+
+			"gave 5)", narrowLines, plainLines)
+	}
 }
 
 // lineInkWidth is how far right the characters of one line reach, which is the
