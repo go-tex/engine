@@ -24,15 +24,31 @@ import (
 // \hyphenation for the words the patterns get WRONG; that is the whole reason
 // to write it. 170 of the 2935 corpus papers do (5.8%).
 //
-// ⭐ MEASURED, tectonic 0.17.0, \hyphenation{photo-graphy manu-script} at
-// \hsize=58pt: the reference leaves `photography` whole and breaks
-// `manu-script`, never `pho-tography`. The patterns' own answer for that word
-// is `pho-tog-ra-phy`, so a break after `pho` is the shape that proves the
-// entry was ignored.
+// ⭐ MEASURED, tectonic 0.17.0, \hyphenation{photo-graphy manu-script}. The
+// patterns' own answer for that word is `pho-tog-ra-phy`, so a break after
+// `pho` is the shape that proves the entry was ignored.
+//
+// ⛔⛔ AND THE MEASURE IS 40pt, NOT 58pt, BECAUSE THIS TEST USED TO ASSERT
+// SOMETHING THE REFERENCE DOES NOT DO. At \hsize=58pt tectonic sets
+//
+//	A photography / and a manu- / script and a bib- / liography fol- / low here.
+//
+// — `photography` WHOLE. The old fixture asserted `photo-` was present at that
+// measure, which the reference's own output contradicts; the line simply fits,
+// so no break inside the word is needed and TeX takes none. The assertion
+// passed only because an emergency pass at an effectively infinite tolerance
+// used to hyphenate far more than the reference (#768 finding (2)).
+//
+// At 40pt the word cannot fit and the reference takes the entry's point:
+//
+//	A photo- / graphy and / a manuscript / follow here.
+//
+// which is the fixture below. The lesson is the one in this package's notes
+// already: a want-list is only a check if its entries are the reference's.
 func TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse(t *testing.T) {
 	src := `\documentclass{article}\hyphenation{photo-graphy manu-script}` +
-		`\begin{document}\hsize=58pt ` +
-		`A photography and a manuscript and a bibliography follow here.\end{document}`
+		`\begin{document}\hsize=40pt ` +
+		`A photography and a manuscript follow here.\end{document}`
 	e, err := compile([]byte(src), Options{Lenient: true})
 	if err != nil {
 		t.Fatal(err)
@@ -42,16 +58,32 @@ func TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse(t *testing.T) {
 	// ⛔ The entry's own point, and NOT the patterns'.
 	if !strings.Contains(got, "photo-") {
 		t.Errorf("`photography` was not broken at the point the document gave "+
-			"(`photo-`): %q", got)
+			"(`photo-`), which is where tectonic breaks it at this measure: %q", got)
 	}
 	if strings.Contains(got, "pho-tog") || strings.Contains(got, "pho-to") {
 		t.Errorf("`photography` was broken where the PATTERNS say, not where the "+
 			"document says: the exception was ignored: %q", got)
 	}
-	// ⚠ A word with no entry still gets the patterns: an exception list replaces
-	// the patterns for ITS words only, and a test that did not check this would
-	// pass for an engine that had stopped hyphenating altogether.
-	if !strings.Contains(got, "bibliog-") {
+}
+
+// ⚠ A word with no entry still gets the patterns: an exception list replaces
+// the patterns for ITS words only, and a test that did not check this would
+// pass for an engine that had stopped hyphenating altogether.
+//
+// Its own measure, because the two questions want different ones: this needs a
+// line narrow enough that `bibliography` must break, and the test above needs
+// one narrow enough that `photography` must.
+func TestAWordWithNoEntryStillGetsThePatterns(t *testing.T) {
+	src := `\documentclass{article}\hyphenation{photo-graphy manu-script}` +
+		`\begin{document}\hsize=40pt ` +
+		`A bibliography follows here.\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pageChars(e); !strings.Contains(got, "bib") ||
+		!(strings.Contains(got, "bibliog-") || strings.Contains(got, "bib-") ||
+			strings.Contains(got, "bibli-") || strings.Contains(got, "bibliogra-")) {
 		t.Errorf("`bibliography`, which has no entry, lost its pattern breaks: %q", got)
 	}
 }

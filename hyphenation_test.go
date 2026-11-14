@@ -43,7 +43,21 @@ func TestHyphenationInsertsHyphen(t *testing.T) {
 	e.hyph.AddPattern("a1a") // breaks allowed between a's
 	e.hsize = 32 * unity
 	e.parindent = 0
-	if _, err := e.Run(`aa aaaaaa\par`); err != nil {
+	// ⛔⛔ THE TOLERANCE IS PART OF THE FIXTURE, and leaving it at 200 made this
+	// test assert something its own arithmetic does not support.
+	//
+	// spMock sets letters at 5pt and the interword space at 3pt (+1.5/−1), so on a
+	// 32pt measure the best hyphenated first line is `aa aa-` = 10+3+10+5 = 28pt:
+	// 4pt short with 1.5pt of stretch, a ratio of 2.67, a badness near 1900. At
+	// \tolerance=200 that line is INFEASIBLE, so there is no feasible hyphenated
+	// solution at all and the breaker is right to prefer one overfull line —
+	// exactly what tex.web does once the final pass is reachable.
+	//
+	// It passed only because an emergency pass at an effectively infinite
+	// tolerance used to run and make everything feasible (#768 finding (2), gone
+	// now). The subject of this test is that a hyphenation point is USED, so the
+	// fixture is given a tolerance in which a hyphenated line can be chosen.
+	if _, err := e.Run(`\tolerance=10000 aa aaaaaa\par`); err != nil {
 		t.Fatal(err)
 	}
 	var lines []*boxNode
