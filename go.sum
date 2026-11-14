@@ -41,6 +41,8 @@ github.com/go-typeset/hyphenation v1.0.1 h1:ce5eCamkShBajudWO+KTLB/NVIjqIKN3yzQl
 github.com/go-typeset/hyphenation v1.0.1/go.mod h1:WE5Rw0ZV2ud8pKmc0a+mijaYqRG4NQ8cuK0UBYyioUI=
 github.com/go-typeset/linebreak v1.3.0 h1:xI/NMOtwMiQkr3YrYDUysHk5/un69cKdxUHjNjIZQEQ=
 github.com/go-typeset/linebreak v1.3.0/go.mod h1:S/vHegR6mWFqHzeh+s4cePj4GRUt3cPV/0hzI1tdOEw=
+github.com/go-typeset/linebreak v1.4.0 h1:EUGxdvy4ymcufm6f7cUMBbiStglRE94e9vMkNe8qu/8=
+github.com/go-typeset/linebreak v1.4.0/go.mod h1:S/vHegR6mWFqHzeh+s4cePj4GRUt3cPV/0hzI1tdOEw=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/klauspost/compress v1.4.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
 github.com/klauspost/cpuid v1.2.0/go.mod h1:Pj4uuM528wm8OyEC2QMXAi2YiTZ96dNQPGgoMS4s3ek=
