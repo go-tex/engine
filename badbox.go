@@ -123,10 +123,25 @@ func (e *Engine) noteBadLines(list []node, lines []Line, lineWidthPt float64) {
 			if pt := spToPt(over); pt > e.badBox.worst {
 				e.badBox.worst = pt
 			}
-		case ln.Ratio > 100:
+		case ln.StretchOrder == 0 && ln.Ratio > 100:
 			// A line stretched far past comfort still has glue, so the ratio is
 			// the right question for THIS half and the width is not: an
 			// underfull line is narrower than its measure by construction.
+			//
+			// ⛔⛔ BUT THE RATIO MUST BE READ WITH ITS ORDER, and this read it
+			// alone. TeX reports a line underfull by its BADNESS (§660, §16790),
+			// and a line carrying any fil/fill/filll has badness 0 — it is
+			// perfect, so it is never underfull however far its fil had to
+			// stretch. `Ratio` at an infinite order is measured against that
+			// order's own total, so a last line taking up 300pt of slack through
+			// a `\parfillskip = 0pt plus 1fil` reports a ratio of 300 and tripped
+			// this test on an ORDINARY paragraph the moment the orders became
+			// real (go-typeset/linebreak v1.5.0 carries them; before, the fil was
+			// flattened to 1e6 and the ratio came out near zero by accident).
+			//
+			// So the finite order is the only one this question applies to, which
+			// is also what makes the counter agree with the reference's log:
+			// tectonic reports no underfull box for a normal last line either.
 			e.badBox.underfull++
 		}
 	}

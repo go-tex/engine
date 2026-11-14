@@ -208,51 +208,31 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 		AdjDemerits: float64(e.namedInt("adjdemerits")),
 		DoubleHyph:  float64(e.namedInt("doublehyphendemerits")),
 		FinalHyph:   float64(e.namedInt("finalhyphendemerits")),
+		Background:  e.skipBackground(),
 	}
 	if pre := e.namedInt("pretolerance"); pre >= 0 {
 		q := p
 		q.Tolerance = float64(pre)
-		ragged := e.raggedBackground()
-		if ragged {
-			// ⛔ UNDER \raggedright EVERY LINE IS ALREADY PERFECT, AND THIS PASS
-			// MUST BE ABLE TO SAY SO. tex.web §852 gives badness 0 and fitness
-			// `decent` to any line carrying INFINITE stretch, so TeX's first
-			// pass — no hyphenation, at \pretolerance — succeeds outright on a
-			// ragged paragraph and it never reaches the hyphenating pass.
-			//
-			// go-typeset/linebreak carries one float of stretch and flattens a
-			// fil to a large finite number (its issue #12, item 1), so the lines
-			// come out with a large but FINITE badness, this pass fails, and the
-			// hyphens appear. Measured against tectonic 0.17.0 at \hsize=120pt,
-			// same face and same measure on both sides:
-			//
-			//	reference  justified 2 hyphens   \raggedright 0 hyphens
-			//	here       justified 2 hyphens   \raggedright 2 hyphens — the SAME breaks
-			//
-			// Our two paragraphs were identical, which is "breaks as if
-			// justified, then gets its glue afterwards" seen rather than argued.
-			//
-			// ⚠ THIS IS NOT "DO NOT HYPHENATE WHEN RAGGED". TeX still hyphenates
-			// under \raggedright when a word would otherwise overfull the line —
-			// what changes is that it has no REASON to otherwise. So the
-			// tolerance is opened and the overfull test below is kept: a line
-			// that does not fit still sends the paragraph to the next pass.
-			q.Tolerance = maxBadRatio
-		}
+		// ⛔⛔ AND THE RAGGED SPECIAL CASE IS GONE, because the rule now applies.
+		//
+		// This pass used to raise its own tolerance to maxBadRatio whenever the
+		// background was infinite, and then accept a merely-loose answer so long as
+		// no line overflowed. Both halves were standing in for one sentence of
+		// tex.web (§16790-16793): a line carrying any fil has badness 0 and fitness
+		// `decent`, so under \raggedright every line is PERFECT and this pass — which
+		// has no hyphens at all — succeeds by the ordinary test.
+		//
+		// It could not say so while the library flattened a fil into a large finite
+		// stretch (go-typeset/linebreak#12 item 1). Since its v1.5.0 the order is
+		// carried and \leftskip/\rightskip are the background, so `q.Tolerance` is
+		// \pretolerance and nothing else, and `hasBadLine` is the only test needed.
+		//
+		// ⚠ THIS IS STILL NOT "DO NOT HYPHENATE WHEN RAGGED". TeX hyphenates under
+		// \raggedright when a word would otherwise overfull the line; what changes is
+		// that it has no reason to otherwise, and an overfull line still has
+		// b = awful_bad and sends the paragraph to the next pass.
 		plain := e.withParFill(hlist)
 		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
-			return plain, lines, true
-		} else if ragged && ok && !anyLineOverflows(plain, lines, lineWidth) {
-			// Loose is not bad when the background is infinite; only overfull
-			// is — and overfull is asked of the WIDTH, through the same
-			// lineOverflowSP that counts bad boxes (badbox.go), so that one
-			// implementation answers the question for both callers.
-			//
-			// ⚠ NO DOCUMENT WAS FOUND THAT NEEDS THIS TEST. Removing it leaves
-			// the suite green: at any measure narrow enough to overfull a line,
-			// the first pass fails outright and never reaches here. It stays
-			// because §852 says a line that does not fit is not good at any
-			// \rightskip, not because it was seen to catch anything.
 			return plain, lines, true
 		}
 	}
@@ -303,15 +283,27 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	// feasible, so TeX would rather overhang the margin than take the hyphens — which
 	// is #768's corrected diagnosis ("we will not leave a line overfull, and TeX
 	// will") read back from the other side.
-	if !ok || hasBadLine(lines) {
-		q := p
-		q.Tolerance = maxBadRatio
-		if l2, ok2 := KnuthPlassWith(items, lineWidth, q); ok2 {
-			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
-				lines, ok = l2, true
-			}
-		}
-	}
+	// ⛔⛔ AND IT IS GONE. #768's finding (2) was this pass, and the reason it had
+	// to stay was go-typeset/linebreak#12 item (1), which its v1.5.0 fixes.
+	//
+	// Measured on #768's witness (\hsize=45pt, \fussy), with the face, the
+	// interword space and \tolerance verified identical on both sides:
+	//
+	//	reference    5 lines, FOUR overfull boxes (18.1, 13.92, 14.3, 18.16pt)
+	//	with it      7 lines, every one of them fitting
+	//	without it   the reference's five
+	//
+	// The pass above had already found the reference's answer; this one threw it
+	// away, because `hasBadLine` is true of a solution TeX deliberately chose. At
+	// \tolerance=200 a short line with no stretch has badness 10000 and is not
+	// feasible, so TeX would rather overhang the margin than take more hyphens.
+	//
+	// It survived one removal attempt (#778) because four tests then stopped
+	// hyphenating words that must be hyphenated — \raggedright lines that TeX
+	// scores at badness 0 were infeasible here, so our pass 2 had no solution where
+	// TeX's had one, and the wide-open tolerance was hiding it by making everything
+	// feasible. The background and the glue orders remove that cause rather than
+	// its symptom.
 	// ⛔ SO WHY IS IT STILL HERE. Removing it turns six tests red, and four of them
 	// say the same thing: a word that MUST be hyphenated stops being hyphenated.
 	//
@@ -385,6 +377,38 @@ func (e *Engine) withParFill(list []node) []node {
 	return append(out, glueNode{spec: fill}, penaltyNode{penalty: -int(InfPenalty)})
 }
 
+// skipBackground is tex.web §16307-16315: \leftskip and \rightskip are not items
+// in the list, they are the BACKGROUND every line's totals start from.
+//
+//	q:=left_skip; r:=right_skip; background[1]:=width(q)+width(r);
+//	background[2+stretch_order(q)]:=stretch(q);
+//	background[2+stretch_order(r)]:=background[2+stretch_order(r)]+stretch(r);
+//	background[6]:=shrink(q)+shrink(r);
+//
+// ⛔⛔ THIS IS WHERE \raggedright BELONGS, AND IT USED TO BE TWO WORKAROUNDS.
+// The skips were added to each line AFTER breaking (applyLineSkips), so the
+// breaker never saw them: it broke the paragraph justified and the ragged glue
+// was painted on afterwards. Two patches stood in for this — the measure was
+// never narrowed by \leftskip (#583), and the first pass had its TOLERANCE
+// opened when the background happened to be infinite, to imitate the badness 0
+// that §16790-16793 gives such a line outright.
+//
+// With the background where TeX puts it, both become unnecessary: a fil in the
+// background makes every line perfect by the rule rather than by a special case,
+// and the width narrows the measure because that is what `background[1]` is.
+//
+// ⚠ Shrink is summed without order: §16806, "Shrinkability is never infinite in
+// a paragraph".
+func (e *Engine) skipBackground() LineBackground {
+	var bg LineBackground
+	for _, s := range []glueSpec{e.leftskip, e.rightskip} {
+		bg.Width += spToPt(s.width)
+		bg.Stretch[glueOrder(s.stretchOrder)] += spToPt(s.stretch)
+		bg.Shrink += spToPt(s.shrink)
+	}
+	return bg
+}
+
 // raggedBackground reports whether the glue that will be added to every line
 // carries INFINITE stretch — \raggedright's `0pt plus 1fil`, and \centering's
 // pair of them.
@@ -399,9 +423,30 @@ func (e *Engine) raggedBackground() bool {
 
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio
 // well outside the normal [-1, small] range — the capped/infinite bad values).
+//
+// ⛔⛔ AND A RATIO IS NOTHING WITHOUT ITS ORDER. This read `ln.Ratio > 100`
+// alone, which was harmless only while a fil was flattened into the finite
+// stretch column: the \parfillskip's 1e6 made the last line's ratio come out
+// near zero, by accident.
+//
+// With the orders real (go-typeset/linebreak v1.5.0), Ratio on such a line is
+// measured against its ONE unit of fil, so an ordinary last line taking up 300pt
+// of slack reports 300 — and this said "bad line" about EVERY paragraph. The
+// first pass therefore failed on all of them and every document went to the
+// hyphenating pass, which is a far larger change than the one being made: the
+// symptom that found it was a space vanishing between a formula and the next
+// word, three breaks away.
+//
+// tex.web has no such ambiguity because it never divides: §16790-16793 gives a
+// line with any infinite stretch b = 0 and asks no further question. So the
+// test applies to the finite order only — and overfull stays unconditional,
+// because shrinking has no orders at all (§16806).
 func hasBadLine(lines []Line) bool {
 	for _, ln := range lines {
-		if ln.Ratio < -1 || ln.Ratio > 100 {
+		if ln.Ratio < -1 {
+			return true // overfull past its shrink, at any order
+		}
+		if ln.StretchOrder == 0 && ln.Ratio > 100 {
 			return true
 		}
 	}
@@ -483,15 +528,29 @@ func toItems(list []node) []Item {
 		case kernNode:
 			items[i] = Box(spToPt(c.width))
 		case glueNode:
-			st := spToPt(c.spec.stretch)
-			if c.spec.stretchOrder > 0 {
-				st = 1e6
-			}
+			// ⛔⛔ THE ORDER IS CARRIED, NOT FLATTENED. This read
+			//
+			//	if c.spec.stretchOrder > 0 { st = 1e6 }
+			//
+			// which turned `plus 1fil` into a large FINITE stretch. tex.web
+			// §16790-16793 gives any line carrying fil/fill/filll badness 0 and
+			// fitness `decent` — it is perfect, not merely very good — so a flattened
+			// fil came out with a large but finite badness and a \raggedright
+			// paragraph failed the first pass and took the hyphens of a justified one.
+			// go-typeset/linebreak carries the four columns since v1.5.0 (its #12
+			// item 1), so the order can simply be passed through.
+			//
+			// ⚠ SHRINK STILL HAS NO ORDERS, and that is tex.web's own sentence
+			// (§16806): "Shrinkability is never infinite in a paragraph". A
+			// `minus 1fil` is still flattened, because the breaker has nowhere to put
+			// it; it can only ever make a line narrower, and a line being shrunk has
+			// no infinite case at all.
 			sh := spToPt(c.spec.shrink)
 			if c.spec.shrinkOrder > 0 {
 				sh = 1e6
 			}
-			items[i] = Glue(spToPt(c.spec.width), st, sh)
+			items[i] = GlueOrder(spToPt(c.spec.width), spToPt(c.spec.stretch),
+				glueOrder(c.spec.stretchOrder), sh)
 		case penaltyNode:
 			items[i] = Penalty(0, float64(c.penalty), false)
 		case discNode:

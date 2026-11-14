@@ -26,6 +26,9 @@ type (
 	Line = linebreak.Line
 	// LineBreakParams carries TeX's demerit parameters to the optimiser.
 	LineBreakParams = linebreak.Params
+	// LineBackground is \leftskip + \rightskip as the breaker sees them: the glue
+	// every line carries before its own material (tex.web §16307-16315).
+	LineBackground = linebreak.Background
 )
 
 const (
@@ -36,11 +39,27 @@ const (
 var (
 	Box            = linebreak.Box
 	Glue           = linebreak.Glue
+	GlueOrder      = linebreak.GlueOrder
 	Glyph          = linebreak.Glyph
 	Penalty        = linebreak.Penalty
 	KnuthPlass     = linebreak.KnuthPlass
 	KnuthPlassWith = linebreak.KnuthPlassWith
 )
+
+// glueOrder maps this engine's glue order onto the library's. They are the same
+// numbers — 0 points, 1 fil, 2 fill, 3 filll — and the clamp is here so that a
+// spec built from a document's own \hskip cannot index past the library's four
+// columns.
+func glueOrder(order int) uint8 {
+	switch {
+	case order <= 0:
+		return linebreak.OrderPt
+	case order >= int(linebreak.OrderFilll):
+		return linebreak.OrderFilll
+	default:
+		return uint8(order)
+	}
+}
 
 // hyphenator is the engine's name for the upstream Hyphenator.
 type hyphenator = hyphenation.Hyphenator
