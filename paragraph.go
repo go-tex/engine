@@ -399,10 +399,34 @@ func (e *Engine) withParFill(list []node) []node {
 //
 // ⚠ Shrink is summed without order: §16806, "Shrinkability is never infinite in
 // a paragraph".
+// ⛔⛔ AND THE WIDTH IS DELIBERATELY NOT CARRIED, BECAUSE THE CALLER ALREADY
+// TOOK IT OFF THE MEASURE. #780 added this background and set Width here too,
+// which counted \leftskip and \rightskip TWICE: breakSegment is handed
+//
+//	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
+//
+// at paragraph.go:81, and the background was then added to every line's natural
+// width on top of that.
+//
+// tex.web keeps line_width at \hsize and puts the widths in background[1]
+// (§16307-16315); this engine subtracts them from the measure instead. The two
+// are the same arithmetic and either is faithful — doing BOTH is not.
+//
+// Measured on #583's own witness (`\rightskip=100pt` on a 343.7pt measure, the
+// right margin at 477.50):
+//
+//	reference      3 lines, `A fairly long subsection title that has to wrap onto a`, x1 377.85
+//	before #780    3 lines, the same split, x1 377.87  — matched
+//	#780           5 lines, `A fairly long subsection title that`, stretched to 377.87
+//	this           3 lines, the reference's split again
+//
+// The margin was right in all of them; what the double count moved was how much
+// text the breaker thought would fit, and five stretched lines where the
+// reference sets three is the visible cost. #583's first defect was already
+// fixed before #780 and #780 reopened it.
 func (e *Engine) skipBackground() LineBackground {
 	var bg LineBackground
 	for _, s := range []glueSpec{e.leftskip, e.rightskip} {
-		bg.Width += spToPt(s.width)
 		bg.Stretch[glueOrder(s.stretchOrder)] += spToPt(s.stretch)
 		bg.Shrink += spToPt(s.shrink)
 	}
