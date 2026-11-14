@@ -23,14 +23,49 @@ import (
 //go:embed hyph_en_us_patterns.txt
 var enUSPatterns []byte
 
+// extraPatternsMarker is the line ushyphmax.tex puts between the two halves of
+// this file. Everything before it is hyphen.tex — Knuth's patterns, which
+// hyph-en-us.tex ships and which LaTeX loads for \language0. Everything after it
+// is ushyphmax's own additions, which a LaTeX document does NOT get.
+const extraPatternsMarker = "% hyphen.tex patterns end here"
+
 // newEnglishHyphenator builds a Hyphenator preloaded with the embedded US-English
 // patterns. Comment lines (a leading %) and blanks are skipped; every other token
 // is one Liang pattern.
+//
+// ⛔⛔ AND IT STOPS AT THE MARKER, BECAUSE THE REFERENCE'S SET STOPS THERE.
+//
+// The file is ushyphmax.tex: hyphen.tex's 4447 patterns, then 492 more from the
+// US word list. LaTeX's language.dat loads hyph-en-us.tex, which is the FIRST
+// half only, so loading all of it hyphenated differently from the reference
+// wherever one of the extra patterns applies — and an extra pattern wins by
+// Liang's rule whenever its value is higher, including when it is EVEN and
+// therefore FORBIDS a break the first half allows.
+//
+// Measured, not reasoned. `every` on tectonic 0.17.0 at \hsize=18pt:
+//
+//	reference   ev-/ery
+//	here        every, overhanging the margin by 5pt
+//
+// because `.ev2` (an addition) outranks `ev1er` (hyphen.tex) at the same
+// position and 2 is even. Loading only the first half gives `ev-ery` and leaves
+// `incomprehensibilities`, `overwhelm`, `paragraph`, `photography`,
+// `typographical` and `democracy` at exactly the points they already had.
+//
+// It was the last divergence on #768's witness: with it, our five lines are the
+// reference's five.
+//
+// ⚠ The extra patterns are KEPT IN THE FILE, after the marker, rather than
+// deleted: the file is a verbatim extract and its provenance is the licence
+// header. What changes is which half is loaded.
 func newEnglishHyphenator() *hyphenator {
 	h := newHyphenator()
 	sc := bufio.NewScanner(bytes.NewReader(enUSPatterns))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, extraPatternsMarker) {
+			break
+		}
 		if line == "" || strings.HasPrefix(line, "%") {
 			continue
 		}
