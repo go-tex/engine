@@ -51,8 +51,24 @@ func TestSubcaptionboxLetteringAndLabels(t *testing.T) {
 			`\end{figure}`); err != nil {
 		t.Fatal(err)
 	}
+	// ⛔⛔ `Sec-ond` IS WHAT THE REFERENCE DOES, AND `Second` WAS OUR OWN ARTEFACT.
+	//
+	// \subcaptionbox sets its caption in a \parbox as wide as the PANEL — here a
+	// 20pt rule — with \centering. That is a 20pt measure and an infinitely
+	// stretchy background, where tex.web §852 scores any short line at badness 0,
+	// so the reference breaks the word rather than overhang. Measured on the same
+	// shape, tectonic 0.17.0 (\parbox[b]{20pt}{\centering\rule{20pt}{20pt}\\
+	// {\small(b) Second}}):
+	//
+	//	(b)
+	//	Sec-
+	//	ond
+	//
+	// with no overfull box at all. We produced `Second` whole only because the
+	// second pass used to succeed by recording the paragraph's forced end however
+	// badly it fitted — go-typeset/linebreak#12 item (5), fixed in v1.4.0.
 	txt := mvlText(e.mvl)
-	for _, want := range []string{"(a)First", "(b)Second", "Figure1:Panels"} {
+	for _, want := range []string{"(a)First", "(b)Sec-ond", "Figure1:Panels"} {
 		if !strings.Contains(txt, want) {
 			t.Errorf("subcaption text %q not found in %q", want, txt)
 		}

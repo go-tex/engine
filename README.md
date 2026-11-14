@@ -473,6 +473,27 @@ Each stage is gated by an objective oracle:
    (#665), and a line ended by a forced break is **not justified** here — `\parfillskip`
    is appended to every forced-break fragment instead of once per paragraph, so the
    slack it should give the interword glue is absorbed (#666).
+   **The second pass is the final pass**, as `tex.web` §863 says in one line:
+   `final_pass:=(emergency_stretch<=0)`, set on *entering* it. `\emergencystretch`
+   is accept-and-ignore here, so there is no third pass and TeX's
+   `artificial_demerits` — a break taken at zero cost where the line is hopeless,
+   nothing feasible was recorded and one node is active — belongs to the second.
+   It could not be armed while `go-typeset/linebreak` recorded every forced break
+   whatever its badness and ran that clause outside §16769's branch; both are
+   fixed in its v1.4.0.
+   ⚠ **One pass here is not TeX's**, and it is the open end of
+   [#768](https://github.com/go-tex/engine/issues/768): when the passes above
+   leave a bad line, the paragraph is broken again at an effectively infinite
+   tolerance. `tex.web` has no such pass — it would rather leave a line overfull
+   than take more hyphens. On #768's witness (`\hsize=45pt`, `\fussy`) the
+   reference sets **5 lines with four overfull boxes**; with that pass we set 7
+   that all fit, and without it we set the reference's 5, its first three lines
+   matching to 0.02pt. It stays because removing it stops four other tests
+   hyphenating at all: `go-typeset/linebreak` carries one float of stretch and
+   flattens `plus 1fil` to a large finite number, so a `\raggedright` line TeX
+   scores at badness 0 is infeasible here (its
+   [#12](https://github.com/go-typeset/linebreak/issues/12) item 1). That is the
+   order: item (1), then the pass, then #768.
    **Hyphenation is Liang's algorithm on the embedded US-English patterns**
    (`go-typeset/hyphenation`), with `\lefthyphenmin`/`\righthyphenmin`,
    `\hyphenchar` — a face that files it negative is never broken, which is how
@@ -494,6 +515,16 @@ Each stage is gated by an objective oracle:
    word (`tex.web` §937), including an entry with no hyphen at all, which says
    the word may never be broken
    ([#775](https://github.com/go-tex/engine/pull/775)).
+   **And the engine loaded MORE patterns than the reference has.** The embedded
+   file is `ushyphmax.tex`: `hyphen.tex`'s patterns, a marker line, then 492
+   additions. LaTeX's `language.dat` loads `hyph-en-us.tex`, which is the first
+   half only, so every addition that applied changed a word's break points —
+   including when it *forbade* a break, since Liang takes the highest value and
+   an even one is a refusal. `.ev2` is one, and it outranks `hyphen.tex`'s
+   `ev1er`: `every` could not be broken at all. tectonic 0.17.0 at `\hsize=18pt`
+   sets `ev-`/`ery`. Loading stops at the marker now, and `incomprehensibilities`,
+   `overwhelm`, `paragraph`, `photography` and `typographical` break exactly where
+   they did — which is why nothing noticed for as long as the whole file was read.
    ⚠ **Only English patterns are embedded.** A paper in another language is set
    unhyphenated where a real TeX hyphenates it; that gap is tracked in
    [#754](https://github.com/go-tex/engine/issues/754).

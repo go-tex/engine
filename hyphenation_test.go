@@ -127,6 +127,20 @@ func TestEmbeddedPatternsBreakPoints(t *testing.T) {
 		"incomprehensibility": {2, 5, 8, 11, 13, 16}, // in-com-pre-hen-si-bil-ity (rmin=3 blocks i-ty)
 		"considers":           {3, 6},                // con-sid-ers
 		"results":             {2},                   // re-sults
+		// ⛔⛔ `every` IS THE ONE THAT SAYS WHICH HALF OF THE FILE IS LOADED, and
+		// it is the only word here whose answer CHANGES with that choice.
+		//
+		// The embedded file is ushyphmax.tex: hyphen.tex's patterns, a marker line,
+		// then 492 additions. LaTeX loads hyph-en-us.tex — the first half only.
+		// `.ev2` is an addition and outranks hyphen.tex's `ev1er` at the same
+		// position; 2 is even, so it FORBIDS the break. Loading the whole file left
+		// `every` unbreakable, and tectonic 0.17.0 at \hsize=18pt sets `ev-/ery`.
+		//
+		// The other words in this table are identical under either half, which is
+		// why none of them caught it for as long as the whole file was loaded.
+		"every":       {2},       // ev-ery
+		"democracy":   {5},       // democ-racy
+		"photography": {3, 6, 8}, // pho-tog-ra-phy
 	}
 	for w, want := range cases {
 		pts := h.Points(w)

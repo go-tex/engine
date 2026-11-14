@@ -258,46 +258,51 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	}
 	list := e.withParFill(e.hyphenateList(hlist)) // insert discretionary hyphens (if patterns loaded)
 	items := toItems(list)
+	// ⛔⛔ THE SECOND PASS IS THE FINAL PASS HERE, AND tex.web §863 SAYS SO IN ONE LINE:
+	//
+	//	second_pass:=true; final_pass:=(emergency_stretch<=0);
+	//
+	// set on ENTERING the second pass. A third pass exists only to add
+	// \emergencystretch to the background; with none set there is nothing for it to
+	// do, and TeX does not run it. \emergencystretch is accept-and-ignore in this
+	// engine (go-typeset/linebreak#12 item 6), so it is always zero as far as breaking
+	// is concerned and this pass is always the final one.
+	//
+	// ⚠ THE FLAG USED TO BE LEFT OFF, with a measured reason that has since been FIXED
+	// AT ITS SOURCE. Arming it hyphenated titles — "THETI-TLE" across eleven class
+	// tests — because the library's artificial_demerits clause sat OUTSIDE §16769's
+	// branch and fired at ordinary breakpoints merely past the threshold, at zero cost,
+	// where tex.web says `goto continue`. That, and the forced break recorded whatever
+	// its badness, are go-typeset/linebreak#12 item (5) and its neighbour, both fixed
+	// in v1.4.0 — which is why this line can now say what TeX says.
+	p.FinalPass = true
 	lines, ok := KnuthPlassWith(items, lineWidth, p)
-	// The second pass can "succeed" with a single over/underfull line via the forced
-	// final break. Two more passes follow, in this order, and each is adopted only if
-	// it removes the bad line.
+	// ⛔⛔ THE WIDE-OPEN PASS STAYS, AND IT IS NOT TeX. IT IS A WORKAROUND FOR
+	// go-typeset/linebreak#12 ITEM (1), AND THAT IS NOW MEASURED RATHER THAN SUSPECTED.
 	//
-	// ⛔⛔ FIRST THE REAL FINAL PASS: \tolerance unchanged, artificial_demerits armed
-	// (go-typeset/linebreak v1.2.2, Params.FinalPass; tex.web §16769-16771). At a
-	// breakpoint where NOTHING is feasible and only one node is active, the break is
-	// recorded at ZERO cost rather than the node being deactivated.
+	// It reads: if the pass above returned a bad line, run it again at
+	// \tolerance=maxBadRatio and adopt that instead. Nothing in tex.web does this.
+	// §863 has exactly three passes — \pretolerance without hyphens, \tolerance with
+	// them, and a third that adds \emergencystretch to the BACKGROUND — and none of
+	// them raises the tolerance. Raising it says "every line is acceptable however
+	// badly it fits", which is a different algorithm with a different answer, and the
+	// answer it gave was: never leave a line overfull, take more hyphens instead.
 	//
-	// Zero is what decides it. A line past inf_bad costs 1e8, so two hopeless lines
-	// (2e8) otherwise lose to ONE overfull line (1e8) — and the breaker returned the
-	// overfull one. Measured with spMock: two unbreakable 35pt words and a 3pt rigid
-	// space on a 40pt measure came back as one line 33pt over the margin
-	// (TestActiveTieDoesNotBreakLine), where the reference sets two.
+	// Measured on #768's own witness (\hsize=45pt, \fussy, `Typographical
+	// incomprehensibilities overwhelm every paragraph.`), against tectonic 0.17.0 with
+	// the face, the space and \tolerance all verified identical:
 	//
-	// ⛔ AND IT MUST COME BEFORE THE WIDE-OPEN PASS, not with it. Raising the tolerance
-	// to maxBadRatio makes a hopeless line FEASIBLE at its full 1e8, which DEFEATS the
-	// clause: artificial demerits only fire when nothing feasible was recorded there.
-	// Setting both at once left the test failing exactly as before.
+	//	reference      5 lines, FOUR overfull boxes (18.1, 13.92, 14.3, 18.16pt)
+	//	with this pass 7 lines, every one of them fitting
+	//	without it     5 lines, and lines 1-3 the reference's to 0.02pt
+	//	               (`Typographical`, `incomprehen-`, `sibilities over-`)
 	//
-	// None of this showed while every forced-break fragment got its own \parfillskip:
-	// that spurious glue was a legal breakpoint at the end of each fragment, and the
-	// overfull single-line node was deactivated there BY ACCIDENT. Removing the glue
-	// removed the accident, and the missing clause surfaced.
-	// ⛔⛔ FinalPass IS NOT ARMED HERE YET, AND THAT IS A MEASURED DECISION.
-	//
-	// Arming it hyphenated titles — "THETI-TLE" across eleven class tests — because
-	// TeX reaches its final pass only when pass 2 failed OUTRIGHT, and pass 2 does not
-	// fail here for a reason the library does not yet reproduce: TeX refuses to record
-	// a forced break whose line is past the threshold (tex.web §16769 → §16824-16831,
-	// "else if b>threshold then goto deactivate"), while the library records every
-	// forced break unconditionally. Until that is faithful the clause fires at
-	// breakpoints TeX never reaches, and at ZERO cost, so it wins everywhere.
-	//
-	// Arming it TOGETHER with the wide-open tolerance below is worse still: raising the
-	// tolerance makes a hopeless line feasible at its full 1e8, which defeats the
-	// clause — artificial demerits only fire when nothing feasible was recorded there.
-	//
-	// So the wide-open pass stays as it was, alone, and #666 carries the rest.
+	// The pass above had ALREADY FOUND the reference's answer; this one then throws it
+	// away, because `hasBadLine` is true of a solution TeX deliberately chose. At
+	// \tolerance=200 a short line with no stretch has badness 10000 and is NOT
+	// feasible, so TeX would rather overhang the margin than take the hyphens — which
+	// is #768's corrected diagnosis ("we will not leave a line overfull, and TeX
+	// will") read back from the other side.
 	if !ok || hasBadLine(lines) {
 		q := p
 		q.Tolerance = maxBadRatio
@@ -307,6 +312,27 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 			}
 		}
 	}
+	// ⛔ SO WHY IS IT STILL HERE. Removing it turns six tests red, and four of them
+	// say the same thing: a word that MUST be hyphenated stops being hyphenated.
+	//
+	//	TestRaggedTextStillHyphenatesAWordThatCannotFit — the reference breaks
+	//	  `incomprehen-/sibilities`; without this pass we leave it whole
+	//	TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse — a \hyphenation
+	//	  exception stops being used
+	//	TestHyphenationInsertsHyphen — one line where two are wanted
+	//	TestPageIsOneTextElement — a lost space at a break
+	//
+	// That is go-typeset/linebreak#12 item (1), seen from the consumer: the library
+	// carries ONE float of stretch and flattens `0pt plus 1fil` to a large finite
+	// number, so under \raggedright (and wherever the background is infinite) a line
+	// TeX scores at badness 0 is scored here at 10000 and is INFEASIBLE. TeX's pass 2
+	// has a feasible solution and hyphenates inside it; ours has none, falls to
+	// artificial demerits, and takes the single overfull line instead. The wide-open
+	// tolerance hides that by making everything feasible.
+	//
+	// ⚠ THE ORDER IS THEREFORE FIXED: item (1) in the library, then this pass goes,
+	// then #768's finding (2) is closed. Taking it out first trades a measured
+	// 7-lines-for-5 on one witness against hyphenation that stops working on four.
 	return list, lines, ok
 }
 
