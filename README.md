@@ -481,19 +481,31 @@ Each stage is gated by an objective oracle:
    It could not be armed while `go-typeset/linebreak` recorded every forced break
    whatever its badness and ran that clause outside §16769's branch; both are
    fixed in its v1.4.0.
-   ⚠ **One pass here is not TeX's**, and it is the open end of
-   [#768](https://github.com/go-tex/engine/issues/768): when the passes above
-   leave a bad line, the paragraph is broken again at an effectively infinite
-   tolerance. `tex.web` has no such pass — it would rather leave a line overfull
-   than take more hyphens. On #768's witness (`\hsize=45pt`, `\fussy`) the
-   reference sets **5 lines with four overfull boxes**; with that pass we set 7
-   that all fit, and without it we set the reference's 5, its first three lines
-   matching to 0.02pt. It stays because removing it stops four other tests
-   hyphenating at all: `go-typeset/linebreak` carries one float of stretch and
-   flattens `plus 1fil` to a large finite number, so a `\raggedright` line TeX
-   scores at badness 0 is infeasible here (its
-   [#12](https://github.com/go-typeset/linebreak/issues/12) item 1). That is the
-   order: item (1), then the pass, then #768.
+   ⭐ **And the passes are now only TeX's**, which closed
+   [#768](https://github.com/go-tex/engine/issues/768)'s second finding. A fourth
+   pass used to run at an effectively infinite tolerance whenever the others left
+   a bad line; `tex.web` has no such pass — §863 has three and none of them
+   raises the tolerance — and it would rather leave a line overfull than take
+   more hyphens. On #768's witness (`\hsize=45pt`, `\fussy`) the reference sets
+   **5 lines with four overfull boxes**; with that pass we set 7 that all fit,
+   and we now set the reference's **5**, its first three lines matching to
+   **0.02pt**.
+   It could not go until `\leftskip`/`\rightskip` became the **background** of
+   every line and a `fil` stopped being flattened into the finite stretch column
+   (`go-typeset/linebreak` v1.5.0, its
+   [#12](https://github.com/go-typeset/linebreak/issues/12) item 1): §16790-16793
+   gives a line carrying any `fil` badness 0, so under `\raggedright` the first
+   pass — which has no hyphens — succeeds outright, where before every such line
+   was merely *loose* and four tests stopped hyphenating when the fourth pass was
+   taken away.
+   ⚠ **The corpus says faithful, not better.** Over 40 papers scored both sides:
+   line agreement 91.23 → **91.34%**, papers whose page count is exactly the
+   reference's 12 → **13/40**, one paper that did not render now rendering and
+   landing exactly right — against Σ|page error| 123 → **125** and mean
+   divergence 3.884 → **3.935**. Three papers moved one page, two of them
+   *missing* pages, which is [#381](https://github.com/go-tex/engine/issues/381)
+   (our lines hold more than the reference's) exposed a little further now that
+   lines are no longer padded out with extra hyphens.
    **Hyphenation is Liang's algorithm on the embedded US-English patterns**
    (`go-typeset/hyphenation`), with `\lefthyphenmin`/`\righthyphenmin`,
    `\hyphenchar` — a face that files it negative is never broken, which is how
