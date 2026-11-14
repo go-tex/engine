@@ -26,6 +26,14 @@ type OpenTypeFont struct {
 	// what lets a size switch take the right FILE rather than this one scaled.
 	// See lmoptical.go.
 	optical opticalFamily
+	// fileName is the file this face was opened from ("lmroman9-regular"), and
+	// design the size that file was drawn for. Both exist so \fontname can
+	// ANSWER — which optical size was chosen is the question #449 and #612 turn
+	// on, and before #762 the only way to find out was to render to SVG and
+	// subtract glyph positions. Empty for a font the host supplied, which has no
+	// name we are entitled to invent.
+	fileName string
+	design   float64
 	// ligCache memoises glyphFor's GSUB fallback, where 0 records "this face
 	// cannot ligate that form" — a negative worth caching, since the paragraph
 	// builder asks for every f-pair it meets and shaping is not free.
@@ -59,6 +67,13 @@ func NewOpenTypeFont(fontBytes []byte, sizePt float64) (*OpenTypeFont, error) {
 	// one scaled. A host's own font gets nil and is never re-faced. See
 	// lmoptical.go.
 	o.optical = opticalOf(fontBytes)
+	// Name the file we opened, so \fontname can answer. atOptical may hand back
+	// a different face for this size; when it hands back THIS one, it is because
+	// this file is the right one for the size, and the name belongs to it.
+	if o.optical != nil {
+		_, name := o.optical.pick(sizePt)
+		o.fileName, o.design = name, opticalDesignPt(name)
+	}
 	return o.atOptical(sizePt), nil
 }
 
@@ -72,7 +87,7 @@ func (o *OpenTypeFont) atOptical(pt float64) *OpenTypeFont {
 	if o.optical == nil {
 		return o
 	}
-	f, data, _ := opticalProgram(o.optical, pt)
+	f, data, name := opticalProgram(o.optical, pt)
 	if f == nil {
 		return o // an embedded file that will not parse: scale what we have
 	}
@@ -82,6 +97,7 @@ func (o *OpenTypeFont) atOptical(pt float64) *OpenTypeFont {
 	return &OpenTypeFont{
 		f: f, fc: f.NewFaceAt(pt), upem: float64(f.UnitsPerEm()),
 		pt: pt, data: data, optical: o.optical,
+		fileName: name, design: opticalDesignPt(name),
 	}
 }
 
@@ -435,7 +451,10 @@ func (o *OpenTypeFont) atSize(pt float64) fontFace {
 	if n := o.atOptical(pt); n != o {
 		return n
 	}
-	return &OpenTypeFont{f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data, optical: o.optical}
+	return &OpenTypeFont{
+		f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data,
+		optical: o.optical, fileName: o.fileName, design: o.design,
+	}
 }
 
 // faceAtCurrentSize re-faces a FAMILY switch at the size already in force.

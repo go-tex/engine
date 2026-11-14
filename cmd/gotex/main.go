@@ -159,6 +159,23 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	if d.PageCapHit {
 		fmt.Fprintln(w, "gotex: WARNING pagination hit the page cap — a page-count explosion")
 	}
+	// ⛔ OVERFULL AND UNDERFULL LINES, which this engine has always detected and
+	// never mentioned. It is the single most common thing a real TeX complains
+	// about, and the reason a reader opens the log at all: a line past the
+	// margin is visible on the page and nowhere else.
+	if d.OverfullLines > 0 {
+		// ⚠ POINTS PAST THE MARGIN, which is the number a real TeX prints
+		// ("Overfull \hbox (133.25pt too wide)"). The first version of this said
+		// "overruns its shrink by 133.2x" — wording left over from a draft that
+		// measured the glue ratio, which cannot see a line with no shrinkable
+		// glue at all. The unit changed and the sentence did not.
+		fmt.Fprintf(w, "gotex: WARNING %d overfull line(s) — text runs past the margin; "+
+			"the worst by %.2fpt\n", d.OverfullLines, d.WorstOverfull)
+	}
+	if d.UnderfullLines > 0 {
+		fmt.Fprintf(w, "gotex: WARNING %d underfull line(s) — stretched far past comfort "+
+			"(a narrow measure, or a word that could not be broken)\n", d.UnderfullLines)
+	}
 	if d.RunawayArgs > 0 {
 		fmt.Fprintf(w, "gotex: WARNING %d macro call(s) abandoned — a \\par ended an argument "+
 			"(tex.web §392); each drops what the call would have set\n", d.RunawayArgs)

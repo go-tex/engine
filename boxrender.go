@@ -128,7 +128,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 				// A space the author typed, held as a kern so it cannot stretch
 				// (verbatim). The text layer is told, exactly as it is for glue —
 				// the geometric guess below cannot see a space this narrow.
-				lg.text.addSpace()
+				lg.space()
 			}
 			cx += spToPt(c.width)
 		case glueNode:
@@ -139,7 +139,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			paintLeader(sb, c.leader, x, cx, baseline, w, spToPt(c.cell), font)
 			if c.leader == leaderNone {
 				// Ordinary inter-word glue: the space a reader would type.
-				lg.text.addSpace()
+				lg.space()
 			}
 			cx += w
 		case charNode:
@@ -329,6 +329,36 @@ type lineGrouper struct {
 	tl   *textLayer // the page-wide searchable text layer
 	line int        // current open group's line; -1 = none open
 	text textRun    // the characters painted since the group opened
+}
+
+// space records an inter-word space for the text layer, wherever it falls.
+//
+// ⛔⛔ GLUE ARRIVING WHILE THE RUN IS EMPTY USED TO BE DISCARDED, and that threw
+// away the only EXACT information about a word boundary.
+//
+// textRun.addSpace ignores glue before the run's first word, on the grounds that
+// "the boundary in front of a run is the cursor's decision" — but the cursor was
+// never told, so it had nothing to decide with and fell back to the geometric
+// guess. That is the case after a formula: the math closes the run, THEN the
+// inter-word glue arrives, and `$E = mc^2$ exactly` came out as `mc^2exactly`
+// whenever the line's spaces were narrow enough for the gap to read as a kern.
+//
+// ⚠ IT WAS THE SPACING THAT CHANGED, NOT THE LAYER. The gap only fell below the
+// bar once the line was set at the width the reference sets it — on this witness
+// tectonic ends that line at x1=408.21 and the engine now ends it at 406.91,
+// where it used to end at 477.50, almost 70pt wide. A threshold tuned against
+// our own loose spacing passed for years; the exact signal has to be used
+// instead of widened.
+func (g *lineGrouper) space() {
+	if len(g.text.words) > 0 {
+		g.text.addSpace()
+		return
+	}
+	// The run is empty: tell the cursor, which is what decides the boundary in
+	// front of the next run. wantsSpace reads `owed` before any gap test.
+	if g.tl != nil {
+		g.tl.cur.owed = true
+	}
 }
 
 func (g *lineGrouper) set(line int) {

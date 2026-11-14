@@ -39,7 +39,13 @@ func formatPt(sp int) string {
 var expandableSet = map[string]bool{
 	"expandafter": true, "csname": true, "noexpand": true, "string": true,
 	"the": true, "number": true, "romannumeral": true, "jobname": true,
-	"if": true, "ifnum": true, "ifx": true, "ifodd": true, "ifcase": true,
+	// ⛔ \fontname IS A CONVERT PRIMITIVE AND CONVERT PRIMITIVES EXPAND.
+	// tex.web §468-472 puts it with \string, \number and \jobname — all of
+	// which are here — and a document asks for it inside \message, \edef or an
+	// \ifx comparison, never as a standalone command. Registered as an ordinary
+	// primitive it printed its own tokens in exactly the place it was wanted.
+	"fontname": true,
+	"if":       true, "ifnum": true, "ifx": true, "ifodd": true, "ifcase": true,
 	"iftrue": true, "iffalse": true, "else": true, "fi": true, "or": true, "ifcat": true,
 	"ifdim":   true,
 	"ifmmode": true, "ifhmode": true, "ifvmode": true, "ifinner": true,
@@ -1202,6 +1208,18 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "spacefactor":
 				e.pushString(strconv.Itoa(e.spaceFactor))
 				return
+			// ⛔ \the OF A FONT'S OWN QUANTITIES. Both were assignable and
+			// neither was readable, so `\the\fontdimen2\font` produced the
+			// literal tokens where tectonic answers 3.33pt (#762). tex.web
+			// reaches \fontdimen through scan_something_internal §413 -> §425,
+			// which is §578's scan_int-then-scan_font_ident; \hyphenchar is the
+			// same shape with no number.
+			case m.kind == mPrim && m.name == "fontdimen":
+				e.pushString(e.doTheFontDimen())
+				return
+			case m.kind == mPrim && m.name == "hyphenchar":
+				e.pushString(e.doTheHyphenChar())
+				return
 			case m.kind == mPrim && m.name == "count":
 				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
 				return
@@ -1829,6 +1847,7 @@ func (e *Engine) loadMore() {
 	e.prim("par", func(e *Engine) { e.suppressParskip = false; e.endParagraph() })
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
+	e.prim("hyphenation", func(e *Engine) { e.doHyphenation() })
 	e.prim("documentclass", func(e *Engine) { e.doDocumentClass() })
 	e.prim("usepackage", func(e *Engine) { e.doUsepackageLoad() })
 	e.prim("LoadClass", func(e *Engine) { e.doLoadClass(false) })
@@ -2768,6 +2787,12 @@ func (e *Engine) loadStomach() {
 	// outright (tex.web §896), which is how a class or a .fd file stops code
 	// being broken across lines. See hyphenchar.go.
 	e.prim("hyphenchar", func(e *Engine) { e.doHyphenChar() })
+	// \fontname<font> is a CONVERT primitive (tex.web §468-472), not a \the: it
+	// expands to the name of the file the face was opened from, with " at
+	// <size>pt" when the face is used at other than its design size. It is the
+	// command that answers "which optical size did you pick", which is the
+	// question #449 and #612 turn on.
+	e.prim("fontname", func(e *Engine) { e.pushString(e.doFontName()) })
 	// \clearpage's empty \hbox, which is why \prevdepth is 0 at a document
 	// body's start in the reference. See clearpagestrut.go — in particular why
 	// LaTeX's own \ifdim\pagetotal<\topskip guard is NOT ported literally.

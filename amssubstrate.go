@@ -522,8 +522,24 @@ const AMSClassSubstrate = `
 % threw the mark away.
 % \/ : italic correction — a zero-width adjustment the engine does not need.
 \def\/{}
-% \hyphenation{…}: exception list — nothing to record here.
-\def\hyphenation#1{}
+% \hyphenation{…} is NOT stubbed here any more: there is now somewhere to record
+% it (hyphexception.go), and the primitive must be the one that runs.
+%
+% ⛔ THE STUB THAT WAS HERE IS THE SHAPE THE PARAGRAPH ABOVE WARNS ABOUT, six
+% lines further up, written about \mark: "DISCARDS its argument is the one shape
+% no channel can see — the document says what it wants, the engine says nothing,
+% every test stays green, and the loss shows up only as ink that is not on the
+% page." The stub was exactly that, and its own comment said so in the words
+% "nothing to record here" — true when it was written, and silently false
+% afterwards.
+%
+% ⚠ The backticks that first wrapped that stub's name in THIS comment ended the
+% Go raw string holding the substrate, which the compiler caught at once. A
+% LaTeX source embedded in Go cannot quote Go.
+%
+% A document writes \hyphenation for the words the patterns get WRONG. So the
+% silence fell precisely on the cases it was asked about: 170 of the 2935 corpus
+% papers (5.8%).
 % Sectioning support for classes that define their OWN \@startsection→\@sect (amsart)
 % rather than using the engine's built-in \@startsection (article/report/book). Real
 % LaTeX's \@hangfrom sets a hanging indent with the label #1 followed by body #2; the

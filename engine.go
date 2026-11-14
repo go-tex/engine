@@ -163,20 +163,21 @@ type Engine struct {
 	noIndentNext    bool // the next paragraph starts unindented, once (\@afterheading under \@afterindentfalse)
 	suppressParskip bool // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
-	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
-	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns
-	hyphenpenalty  int         // penalty at a discretionary hyphen
-	leftskip       glueSpec    // glue at the left of every line
-	rightskip      glueSpec    // glue at the right of every line (fil ⇒ ragged right)
-	columnsep      int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
-	columnseprule  int         // \columnseprule: rule thickness between columns (sp, 0 = none)
-	twoColumn      bool        // class/\twocolumn two-column page layout (see twocolumn.go)
-	twoColLive     bool        // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
-	revtexReprint  bool        // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
-	twoColApplied  bool        // guard: the column measure has been applied to e.hsize once
-	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
-	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
-	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
+	hyphExcept     hyphExceptions // \hyphenation{…}: the words a document spells out itself
+	hyph           *hyphenator    // a document's own \patterns, if any (nil = none loaded)
+	enHyph         *hyphenator    // lazily built cache of the embedded US-English patterns
+	hyphenpenalty  int            // penalty at a discretionary hyphen
+	leftskip       glueSpec       // glue at the left of every line
+	rightskip      glueSpec       // glue at the right of every line (fil ⇒ ragged right)
+	columnsep      int            // \columnsep: gap between multicols columns AND two-column page columns (sp)
+	columnseprule  int            // \columnseprule: rule thickness between columns (sp, 0 = none)
+	twoColumn      bool           // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColLive     bool           // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
+	revtexReprint  bool           // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
+	twoColApplied  bool           // guard: the column measure has been applied to e.hsize once
+	oneColHsize    int            // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
+	colRegions     []colRegion    // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
+	classPaperSize string         // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
 	// hasClass records that the document declared a \documentclass at all. A
 	// document has a PAPER — US letter unless something says otherwise — while a
 	// bare snippet run through the engine has none and is sized to its own content
@@ -332,6 +333,11 @@ type Engine struct {
 	// is skipped (with its likely argument block) instead of aborting, and its
 	// name is tallied here for reporting. nil until the first skip.
 	lenient bool
+	// badBox tallies the overfull and underfull lines of the paragraphs the
+	// document actually got. The breaker has always judged them — hasBadLine
+	// decides which pass to run — and nothing ever reported it. See badbox.go.
+	badBox badBoxes
+
 	// hyphenChars is \hyphenchar, keyed on the font PROGRAM rather than on a
 	// face at a size (see hyphenCharKey): a size switch re-makes the face and
 	// would otherwise lose the setting. A program that is absent permits
@@ -2459,6 +2465,18 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+	// OverfullLines and UnderfullLines count the lines the breaker itself judged
+	// bad in the paragraphs the document ACTUALLY GOT, and WorstOverfull is the
+	// largest overflow among them, as a fraction of the line's shrink.
+	//
+	// ⛔ THE ENGINE KNEW THIS ALL ALONG AND SAID NOTHING. hasBadLine decides
+	// which line-breaking pass to run and reached no caller — the same shape as
+	// the \hangindent defect of #760, and worse, because an overfull line is the
+	// single most common thing a real TeX complains about. See badbox.go for why
+	// the thresholds are the breaker's own and not \hbadness/\hfuzz.
+	OverfullLines  int
+	UnderfullLines int
+	WorstOverfull  float64
 	// Messages is what the document itself said: the text of every \message and
 	// \typeout, in order. A real TeX prints this to the terminal and the log, and
 	// it is how a document (or a package) reports what it decided — which branch of
@@ -2617,6 +2635,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		Runaway:          e.runaway,
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
+		OverfullLines:    e.badBox.overfull,
+		UnderfullLines:   e.badBox.underfull,
+		WorstOverfull:    e.badBox.worst,
 		Messages:         e.out.String(),
 		Shows:            e.shows.String(),
 		RunawayArgs:      e.runawayArgs,
