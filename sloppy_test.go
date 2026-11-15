@@ -14,10 +14,13 @@ import "testing"
 //	\sloppy  \tolerance 9999  \emergencystretch 3em  \hfuzz .5\p@  \vfuzz\hfuzz
 //	\fussy   \emergencystretch \z@  \tolerance 200   \hfuzz .1\p@  \vfuzz\hfuzz
 //
-// \tolerance is the one this engine acts on, so it is the one asserted. The
-// others are accept-and-ignore parameters here — the same as they are when a
-// document assigns them directly — and are set so the definitions stay honest
-// for a document that reads them back.
+// \tolerance is the one this test asserts, and it is no longer the only one the
+// engine acts on: \emergencystretch now reaches the line breaker through §863's
+// third pass (see emergencystretch_test.go, where \sloppy takes this engine from
+// three overfull lines to none on a 72pt measure). \hfuzz and \vfuzz remain
+// accept-and-ignore here — the same as they are when a document assigns them
+// directly — and are set so the definitions stay honest for a document that
+// reads them back.
 func TestSloppyAndFussySetTheTolerance(t *testing.T) {
 	probe := func(body string) int {
 		t.Helper()
