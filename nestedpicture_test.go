@@ -4,9 +4,10 @@
 package engine
 
 import (
-	"os"
 	"strings"
 	"testing"
+
+	"github.com/go-tex/texmf"
 )
 
 // The driver declares four events — a picture opening and closing, and a box's
@@ -97,9 +98,7 @@ func TestOriginBackReferencesFollowTheStack(t *testing.T) {
 // through (0,0) (1,1) (2,4) RISES; with the map applied twice it fell, because
 // the y-flip cancels itself and the plot then lies about its data.
 func TestNestedPictureDoesNotFlipTwice(t *testing.T) {
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
-	}
+	withTeXMF(t, texmf.PGF)
 	t.Setenv("GOTEX_PGF", "1")
 	e, err := buildEngine(Options{Lenient: true, NoProgressLimit: NoProgressLimitHeavy}, true)
 	if err != nil {

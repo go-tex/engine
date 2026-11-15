@@ -4,9 +4,10 @@
 package engine
 
 import (
-	"os"
 	"strings"
 	"testing"
+
+	"github.com/go-tex/texmf"
 )
 
 // These tests pin the SVG a basic tikzpicture renders through the real pgf/TikZ
@@ -30,9 +31,7 @@ import (
 // concatenated SVG of every page.
 func renderPicture(t *testing.T, body string) string {
 	t.Helper()
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
-	}
+	withTeXMF(t, texmf.PGF)
 	t.Setenv("GOTEX_PGF", "1")
 	e, err := buildEngine(Options{Lenient: true, NoProgressLimit: NoProgressLimitHeavy}, true)
 	if err != nil {

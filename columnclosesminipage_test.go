@@ -4,9 +4,10 @@
 package engine
 
 import (
-	"os"
 	"strings"
 	"testing"
+
+	"github.com/go-tex/texmf"
 )
 
 // beamer's \column always begins by running \beamer@colclose, which holds the
@@ -22,9 +23,7 @@ import (
 // column swallowed its sibling and everything after the frame: a talk with two
 // columns in a [fragile] frame rendered ONE page instead of its seven.
 func TestTwoColumnsInAFragileFrame(t *testing.T) {
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("needs a texmf tree with the real beamer.cls")
-	}
+	withTeXMF(t, texmf.Beamer)
 	e, err := compile([]byte(`\documentclass{beamer}
 \begin{document}
 \begin{frame}{Un}A\end{frame}
