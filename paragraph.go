@@ -164,6 +164,58 @@ func (e *Engine) layoutSegment(hlist []node) {
 			}
 		}
 	}
+	e.normalParagraph()
+}
+
+// normalParagraph is tex.web's procedure of the same name (:20756-20761), run at
+// the end of a paragraph and from eight other places, `vmode+par_end` — every
+// \par — among them:
+//
+//	procedure normal_paragraph;
+//	begin if looseness<>0 then eq_word_define(int_base+looseness_code,0);
+//	if hang_indent<>0 then eq_word_define(dimen_base+hang_indent_code,0);
+//	if hang_after<>1 then eq_word_define(int_base+hang_after_code,1);
+//	if par_shape_ptr<>null then eq_define(par_shape_loc,shape_ref,null);
+//	end;
+//
+// ⛔⛔ A PARAGRAPH SHAPE LASTS EXACTLY ONE PARAGRAPH, and this engine kept it for
+// ever. While \hangindent was accept-and-ignore that cost nothing and no test
+// could have seen it; #795 made it shape the line breaker, and the same omission
+// then hung every FOLLOWING paragraph. Measured before this landed: the same
+// second paragraph came out as
+//
+//	after a hung first:   "measure that is wrong" / "by a centimetre is wrong"
+//	after a plain first:  "sure that is wrong by a cen-" / "timetre is wrong on every"
+//
+// — a document's second paragraph set differently because of what its FIRST one
+// asked for. A latent bug that one change turned load-bearing, which is the
+// shape of defect worth naming: the parameter's LIFETIME only matters once the
+// parameter matters.
+//
+// ⚠ Most LaTeX survived it anyway, because an assignment inside a group is
+// restored by the save stack and \@hangfrom and friends are grouped. The
+// top-level assignment is the one that leaked.
+//
+// ⚠ \parshape is not here because this engine has no such primitive yet; when it
+// grows one, its reset belongs on the line below.
+//
+// It writes through setCount/setDimen rather than the slices, so the assignment
+// takes part in grouping exactly as TeX's eq_word_define does — a reset that
+// escaped its group would be a second bug of the same family.
+func (e *Engine) normalParagraph() {
+	if e.namedInt("looseness") != 0 {
+		if m := e.eq["looseness"]; m != nil && m.kind == mCountRef {
+			e.setCount(m.code, 0, false)
+		}
+	}
+	if e.hangIndentReg >= 0 && e.hangIndentReg < len(e.dimen) && e.dimen[e.hangIndentReg] != 0 {
+		e.setDimen(e.hangIndentReg, 0, false)
+	}
+	if e.namedInt("hangafter") != 1 {
+		if m := e.eq["hangafter"]; m != nil && m.kind == mCountRef {
+			e.setCount(m.code, 1, false)
+		}
+	}
 }
 
 // extractAdjusts takes the \vadjust material out of a line and returns the line
