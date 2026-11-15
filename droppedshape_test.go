@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// hangIndentDrops counts what the census says about a dropped hanging indent.
+// hangIndentDrops counts anything the census still says about \hangindent.
 func hangIndentDrops(t *testing.T, body string) (int, *Engine) {
 	t.Helper()
 	src := `\documentclass{article}\begin{document}` + body + `\end{document}`
@@ -25,56 +25,56 @@ func hangIndentDrops(t *testing.T, body string) (int, *Engine) {
 	return n, e
 }
 
-// ⛔ A FEATURE SILENTLY DROPPED IS WORSE THAN ONE REFUSED.
+// ⭐ THE DROP IS GONE, AND SO IS ITS REPORT.
 //
-// \hangindent is declared, listed among the dimension parameters a document may
-// set, assignable, and readable back — and nothing consults it. Measured against
-// tectonic (#757): a paragraph asking for \hangindent=4em comes out flush left
-// AND re-broken, because four ems more text per line moves where the lines end.
+// This file used to assert the opposite: \hangindent was declared, settable,
+// readable back and consulted by nothing, so the engine reported it as a
+// silently dropped feature — "a feature silently dropped is worse than one
+// refused", which was the right thing to do while it was true.
 //
-// It took an audit to find that. The engine already had a channel for saying so.
-func TestASetHangIndentIsReported(t *testing.T) {
+// It is no longer true. tex.web §847-850 takes one measure per line, and the
+// line breaker can now express that (go-typeset/linebreak v1.10.0's Measure), so
+// paragraphShape builds a HangIndent and the paragraph is broken on it. A census
+// entry saying the engine drops the parameter would now be a false report, which
+// is worse than either the drop or the silence — see hangindent_test.go for the
+// witness that the words actually move.
+func TestASetHangIndentIsNoLongerReportedAsDropped(t *testing.T) {
 	n, _ := hangIndentDrops(t, `\hangindent=4em Some text that asks for a hanging indent.`)
-	if n == 0 {
-		t.Error(`a document set \hangindent=4em and the census says nothing: ` +
-			`the engine drops it in silence, which is the defect`)
-	}
-}
-
-// ⛔ ZERO IS NOT A DROP. \hangindent=0pt asks for no hanging indent, which is
-// exactly what this engine does — honouring it by doing nothing is correct, and
-// reporting it would be noise on every document, since LaTeX's own \@endparenv
-// and friends zero it routinely.
-func TestAZeroHangIndentIsNotReported(t *testing.T) {
-	n, _ := hangIndentDrops(t, `\hangindent=0pt Some ordinary text.`)
 	if n != 0 {
-		t.Errorf(`\hangindent=0pt was reported %d time(s) as a drop; asking for no `+
-			`indent is a request this engine HONOURS`, n)
+		t.Errorf(`\hangindent=4em was reported %d time(s) as dropped, but the engine now `+
+			`honours it: the census is lying about its own behaviour`, n)
 	}
 }
 
-// The control, without which the two above could both pass on an engine that
-// reports a drop for everything or for nothing in particular.
-func TestADocumentThatSetsNoHangIndentReportsNone(t *testing.T) {
-	n, _ := hangIndentDrops(t, `Some ordinary text with no paragraph shape at all.`)
-	if n != 0 {
-		t.Errorf(`a document that never mentions \hangindent was reported %d time(s)`, n)
+// The control that keeps the test above from passing on an engine whose census
+// has simply stopped working: a command the engine really does skip must still
+// be reported.
+func TestTheCensusStillReportsSomethingItReallyDrops(t *testing.T) {
+	src := `\documentclass{article}\begin{document}\thiscommanddoesnotexist text\end{document}`
+	e, err := compile([]byte(src), Options{Lenient: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.SkippedCommands()) == 0 {
+		t.Error("an undefined command produced no entry in the skip census: the reporting " +
+			"channel is dead, so the zero above says nothing about \\hangindent")
 	}
 }
 
-// ⛔⛔ THE REGISTER CACHE MUST SURVIVE A REBINDING, AND THIS IS THE TEST THAT
-// SAYS SO.
+// ⛔⛔ THE REGISTER CACHE MUST SURVIVE A REBINDING, AND IT MATTERS MORE NOW THAN
+// IT DID.
 //
 // The natural place to cache \hangindent's register is the end of
 // loadTeXParams, beside \endlinechar and \escapechar. It would be WRONG:
 // classkernel.go runs afterwards and declares \newdimen\hangindent, rebinding
 // the name to a different register. A value cached earlier names a register
-// nothing writes to, so the census reports nothing for ever while looking
-// perfectly alive — the same load-order trap that took \prevdepth (#438) and
+// nothing writes to — the same load-order trap that took \prevdepth (#438) and
 // \hangafter (#759), silently, both times.
 //
-// This asserts the cache tracks the binding that WON: the register the name
-// resolves to after everything has loaded is the one the engine watches.
+// ⭐ When this cache only fed a census, a stale value meant a report that never
+// fired. Now it feeds paragraphShape, so a stale value means EVERY \hangindent
+// IS SILENTLY IGNORED AGAIN — the defect comes back, wearing the same clothes,
+// and the only thing standing in front of it is this test.
 func TestTheWatchedRegisterIsTheBindingThatWon(t *testing.T) {
 	_, e := hangIndentDrops(t, `\hangindent=4em text`)
 	m := e.eq["hangindent"]
@@ -85,31 +85,28 @@ func TestTheWatchedRegisterIsTheBindingThatWon(t *testing.T) {
 		t.Fatalf(`\hangindent is kind %d, not a dimen register`, int(m.kind))
 	}
 	if e.hangIndentReg != m.code {
-		t.Errorf("the engine watches dimen register %d but \\hangindent resolves to %d: "+
-			"the cache was taken before the binding that won, so every assignment a "+
-			"document makes is invisible to the census", e.hangIndentReg, m.code)
+		t.Errorf("the engine reads dimen register %d but \\hangindent resolves to %d: "+
+			"the cache was taken before the binding that won, so every hanging indent a "+
+			"document asks for is invisible to the line breaker", e.hangIndentReg, m.code)
 	}
 }
 
 // …and a document may rebind it itself, which is the same trap one level up.
 func TestADocumentsOwnRebindingIsFollowed(t *testing.T) {
-	n, e := hangIndentDrops(t, `\newdimen\hangindent \hangindent=4em text`)
+	_, e := hangIndentDrops(t, `\newdimen\hangindent \hangindent=4em text`)
 	if m := e.eq["hangindent"]; m != nil && e.hangIndentReg != m.code {
-		t.Errorf("after the document's own \\newdimen the engine still watches %d, "+
+		t.Errorf("after the document's own \\newdimen the engine still reads %d, "+
 			"but \\hangindent is register %d", e.hangIndentReg, m.code)
-	}
-	if n == 0 {
-		t.Error("a document that re-declared and then set \\hangindent was not reported")
 	}
 }
 
 // The register index must never default to 0: register 0 is a real register
-// somebody else holds, and a zero default would report every assignment to it
-// as a dropped hanging indent.
+// somebody else holds, and a zero default would make every assignment to it
+// shape a paragraph that asked for nothing.
 func TestTheUnboundRegisterIsNotZero(t *testing.T) {
 	e := New()
 	if e.hangIndentReg == 0 {
 		t.Error("hangIndentReg defaults to 0, which is a REAL register: every " +
-			"assignment to dimen 0 would be reported as a dropped hanging indent")
+			"assignment to dimen 0 would hang-indent a paragraph")
 	}
 }

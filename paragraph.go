@@ -79,7 +79,8 @@ func (e *Engine) layoutSegment(hlist []node) {
 	// 0pt plus 1fil — narrows nothing, which is right: ragged setting does not
 	// move the margin, it only stops justifying to it.
 	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
-	list, lines, ok := e.breakSegment(hlist, lineWidth)
+	shape := e.paragraphShape(lineWidth)
+	list, lines, ok := e.breakSegment(hlist, lineWidth, shape)
 	if !ok || len(lines) == 0 {
 		// ⛔ NOT "one line, nothing lost" ANY MORE. That kept every node and gave
 		// the reader a single line 254pt off the page; everything was there and
@@ -133,8 +134,26 @@ func (e *Engine) layoutSegment(hlist []node) {
 		// and appends the resulting material onto the list that ends at adjust_tail".
 		// §17435 arms that list immediately before hpack.
 		seg, adjusts := extractAdjusts(seg)
+		// ⛔ THE SHAPE IS APPLIED HERE, AND IT IS NOT A SHIFT. TeX hpacks the line
+		// to ITS OWN line_width and gives the box shift_amount := cur_indent
+		// (§847-850). This engine has no shift on a line box, so the same geometry
+		// is built from the material it already uses for \leftskip: a RIGID kern of
+		// the margin in front, and a target reduced by whatever the line gave up.
+		//
+		// ⚠ BOTH ARE NEEDED, and a negative \hangindent is why. There the margin is
+		// ZERO and the line is still shorter by |indent| (:16729-16730), so a kern
+		// alone would leave the target at the full measure and the rightskip glue
+		// would stretch the text back across it — the indent would vanish into the
+		// justification. Reducing the target instead leaves the slack as empty page,
+		// which is what indenting from the right means.
+		indent, lnWidth := shape.LineShape(i + 1)
+		if indent != 0 {
+			seg = append([]node{kernNode{width: ptToSP(indent)}}, seg...)
+		}
+		// The skips go OUTSIDE the margin: \leftskip first, then the hanging
+		// indent, which is the order tex.web sets them in.
 		seg = e.applyLineSkips(seg)
-		e.appendToPage(hpackSP(seg, packTo, e.hsize))
+		e.appendToPage(hpackSP(seg, packTo, e.hsize-ptToSP(lineWidth-indent-lnWidth)))
 		// ⛔ AND IT GOES IN AFTER THE LINE BOX, not before. §17413-17418 is explicit
 		// about the order: append_to_vlist(just_box) first, THEN the adjustment, then
 		// adjust_tail is cleared. Emitting it first would put a \vadjust's space above
@@ -193,6 +212,36 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 	return seg
 }
 
+// paragraphShape builds the Measure this paragraph is broken on, which is
+// tex.web §847-850's choice of line_width per line.
+//
+// ⛔ A SHAPE IS A LINE-BREAKING PARAMETER, NOT A PLACEMENT ONE. The width is an
+// input to the badness of every candidate break, so a paragraph asking for
+// \hangindent is not the uniform paragraph moved over — it BREAKS somewhere
+// else. Measured against tectonic on go-tex/engine#757's witness: not only was
+// the indent missing, a phrase on the reference's line 4 was on our line 3.
+//
+// \hangafter is an INTEGER parameter, not a dimension, and the two scan
+// differently — `\hangafter=1 integers follow` loses the "in" if it is read as a
+// dimension looking for a unit. hangafter_probe_test.go pins that, and this
+// reads it through namedInt for the same reason.
+//
+// ⚠ \parshape is NOT here: it is not a primitive in this engine at all, so a
+// document writing it gets an undefined command rather than a silently dropped
+// shape. go-typeset/linebreak's ParShape is ready for it when it is added.
+func (e *Engine) paragraphShape(lineWidth float64) Measure {
+	if e.hangIndentReg < 0 || e.hangIndentReg >= len(e.dimen) {
+		return Uniform(lineWidth)
+	}
+	indent := spToPt(e.dimen[e.hangIndentReg])
+	if indent == 0 {
+		// tex.web:16689: "if hang_indent=0, the value of hang_after is
+		// irrelevant" — and a uniform measure is cheaper to consult.
+		return Uniform(lineWidth)
+	}
+	return HangIndent(lineWidth, indent, e.namedInt("hangafter"))
+}
+
 // breakSegment runs TeX's line-breaking passes over one paragraph fragment and
 // returns the node list its line indices refer to (tex.web §16986-16999). The
 // FIRST pass tries the paragraph with no hyphenation at all, at \pretolerance:
@@ -201,7 +250,7 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 // always has the hyphens in hand. Only when that pass finds nothing is the second
 // pass run over the hyphenated list at \tolerance, and then an emergency pass at
 // a large tolerance if a bad line survives.
-func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, bool) {
+func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([]node, []Line, bool) {
 	p := LineBreakParams{
 		Tolerance:   float64(e.namedInt("tolerance")),
 		LinePenalty: float64(e.namedInt("linepenalty")),
@@ -232,7 +281,7 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 		// that it has no reason to otherwise, and an overfull line still has
 		// b = awful_bad and sends the paragraph to the next pass.
 		plain := e.withParFill(hlist)
-		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
+		if lines, ok := KnuthPlassShaped(toItems(plain), shape, q); ok && !hasBadLine(lines) {
 			return plain, lines, true
 		}
 	}
@@ -274,7 +323,7 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 		emergency = spToPt(sp)
 	}
 	p.FinalPass = emergency <= 0
-	lines, ok := KnuthPlassWith(items, lineWidth, p)
+	lines, ok := KnuthPlassShaped(items, shape, p)
 	// THE THIRD PASS, §863: re-break with \emergencystretch in the background. TeX
 	// runs it only when the second pass left something unset, and only when there
 	// is stretch to add — with none, the second pass above was already final and
@@ -284,7 +333,7 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 		q := p
 		q.FinalPass = true
 		q.EmergencyStretch = emergency
-		if l3, ok3 := KnuthPlassWith(items, lineWidth, q); ok3 {
+		if l3, ok3 := KnuthPlassShaped(items, shape, q); ok3 {
 			lines, ok = l3, ok3
 		}
 	}
