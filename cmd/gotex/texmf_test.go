@@ -110,8 +110,16 @@ func TestAttachIsSilentWithoutABundle(t *testing.T) {
 // Offline with nothing cached must not fail the compile: the engine still has
 // its emulation, and a talk rendered by the emulation beats a talk not rendered.
 func TestAttachOfflineReportsAndCarriesOn(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())           // a cache directory of its own…
-	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // …on both conventions
+	// ⛔ THREE CONVENTIONS, NOT TWO. os.UserCacheDir reads $HOME/Library/Caches
+	// on darwin, $XDG_CACHE_HOME (else $HOME/.cache) on unix, and
+	// %LocalAppData% on WINDOWS — which neither of the first two reaches. This
+	// test set only the unix pair and passed on windows anyway, because CI's real
+	// cache was always empty there; the day a job warmed it (the step added for
+	// #783) this became the only red test on that runner, asserting "no cache"
+	// against a populated one.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LocalAppData", t.TempDir())
 	var opt engine.Options
 	var errb bytes.Buffer
 	attachTeXMF(&opt, []byte(`\documentclass{beamer}`), true, &errb)

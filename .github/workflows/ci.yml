@@ -65,6 +65,11 @@ jobs:
           go run ./cmd/gotex -lenient .texmfwarm/pgf.tex
           go run ./cmd/gotex -lenient .texmfwarm/beamer.tex
           rm -rf .texmfwarm pgf.pdf beamer.pdf
+          # Says, to the tests in THIS job only, that the tree is expected. The
+          # arch and wasm jobs do not warm the cache and must keep skipping;
+          # keying the tests on CI instead failed thirty of them in lanes that
+          # were never meant to have a tree.
+          echo "GOTEX_TEXMF_WARMED=1" >> "$GITHUB_ENV"
       - name: test + conformance ratchet
         shell: bash
         run: |

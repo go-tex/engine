@@ -58,14 +58,22 @@ func texmfPath(t *testing.T, b texmf.Bundle) string {
 			// correct for a user rendering a talk, useless as a gate. So if the fetch
 			// failed silently, THIS is what says so.
 			//
-			// CI is set by GitHub Actions itself, not by us: an opt-in variable of our
-			// own would be one more thing no workflow sets, which is the shape of
-			// #783 all over again.
-			if os.Getenv("CI") != "" {
-				t.Fatalf("%s@%s is not in the texmf cache (%v) and CI is set, so this is a "+
-					"FAILURE and not a skip: the cache-warming step did not get this bundle, "+
-					"and `gotex` exits 0 when a fetch fails. Ten assertions in this package "+
-					"depend on it (#783)", d.Name, d.Version, err)
+			// ⛔⛔ AND IT KEYS ON THE WARMING STEP, NOT ON `CI`. My first version read
+			// CI, which GitHub sets in EVERY job — so it demanded the cache in the
+			// qemu architecture lanes and the wasm build, which do not and should not
+			// warm it, and thirty tests failed in lanes that were never meant to have
+			// a tree. An assertion may only hold where its precondition was
+			// established, and the step that establishes it is the one that says so:
+			// the warming step exports GOTEX_TEXMF_WARMED into $GITHUB_ENV.
+			//
+			// That is not the "opt-in variable nobody sets" this lesson warns about:
+			// it is set three lines from where it is read, in the same job, by the
+			// step whose success it reports.
+			if os.Getenv("GOTEX_TEXMF_WARMED") != "" {
+				t.Fatalf("%s@%s is not in the texmf cache (%v) although the warming step "+
+					"ran in this job, so this is a FAILURE and not a skip: `gotex` exits 0 "+
+					"when a fetch fails, and ten assertions in this package depend on the "+
+					"tree (#783)", d.Name, d.Version, err)
 			}
 			t.Skipf("%s@%s is not in the texmf cache (%v) — compile one document that "+
 				"needs it with `gotex`, or point GOTEX_TEXMF at a tree holding its files",
