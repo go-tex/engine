@@ -179,8 +179,9 @@ func (e *Engine) hyphenPenalty() int {
 // hyphenateList returns a copy of a paragraph's horizontal list with discretionary
 // hyphen nodes inserted at every legal break inside each word. A word is a maximal
 // run of characters (font kerns between them are kept as interior material).
-// maxHyphenatableLength is TeX's own ceiling on the length of a word it will
-// try to hyphenate (tex.web §891). Longer words are set unhyphenated.
+// maxHyphenatableLength is the capacity of TeX's own hu/hc buffers, which hold
+// the word being hyphenated (tex.web:17602). A longer word is hyphenated in its
+// first 63 letters, not left unhyphenated: see the citation at the use site.
 const maxHyphenatableLength = 63
 
 // precededByGlue reports whether the character at i begins a word TeX would
@@ -273,11 +274,18 @@ func (e *Engine) hyphenateList(list []node) []node {
 			i = j
 			continue
 		}
-		// ⛔ TeX DOES NOT HYPHENATE A WORD LONGER THAN max_hyphenatable_length
-		// (tex.web §891: "if l > max_hyphenatable_length then goto done1"), and
-		// neither does this — which is faithfulness and, here, also a bound.
+		// ⛔ THIS USED TO CITE A LINE tex.web DOES NOT CONTAIN. It read: «TeX does
+		// not hyphenate a word longer than max_hyphenatable_length (tex.web §891:
+		// "if l > max_hyphenatable_length then goto done1")». The identifier
+		// `max_hyphenatable_length` does not occur ANYWHERE in tex.web — grepped
+		// over all 25010 lines, with `hn=63` at :17602 and 44 hits for
+		// "hyphenate" as positive controls — so that quote came from some other
+		// engine and was attributed to Knuth. It is also the opposite of what
+		// :17602 does; see the citation at the use site below.
 		//
-		// Liang's algorithm looks up every substring of the word, so its cost is
+		// What remains true, and is the REASON for the ceiling rather than its
+		// authority: Liang's algorithm looks up every substring of the word, so
+		// its cost is
 		// QUADRATIC in the word's length. A document with no space in it hands this
 		// one enormous "word": profiled on a macro that expands exponentially,
 		// 98.6% of the engine's time was inside Hyphenator.Points, hashing pattern
@@ -294,8 +302,29 @@ func (e *Engine) hyphenateList(list []node) []node {
 			for _, t := range pts {
 				breakAfter[t] = true
 			}
-		} else if len(letters) <= maxHyphenatableLength {
-			for _, t := range h.Points(string(letters)) {
+		} else {
+			// ⛔ TeX TRUNCATES, it does not refuse. tex.web:17602's
+			// `if hn=63 then goto done3` stops COLLECTING letters at 63;
+			// done3 (:17615) is that loop's normal exit — the same label a
+			// font change or a non-letter reaches — and `hyphenate` runs
+			// right after it (:17550-17552). The only length refusal is
+			// :17637, `if hn<l_hyf+r_hyf then goto done1`, for a word too
+			// SHORT. :17548 settles it: `if l_hyf+r_hyf>63 then goto done1`
+			// refuses only when the MINIMUMS alone exceed 63, which makes 63
+			// a buffer capacity and not a policy against long words.
+			//
+			// So a 110-letter word is hyphenated in its first 63 letters, and
+			// \righthyphenmin counts back from the PREFIX rather than from the
+			// real end of the word — TeX will break inside a long word.
+			//
+			// ⭐ The DoS bound this ceiling was added for is untouched: Points
+			// still sees at most 63 runes, so Liang's quadratic cost stays
+			// O(63²) per word however long the word is.
+			word := letters
+			if len(word) > maxHyphenatableLength {
+				word = word[:maxHyphenatableLength]
+			}
+			for _, t := range h.Points(string(word)) {
 				breakAfter[t] = true
 			}
 		}
