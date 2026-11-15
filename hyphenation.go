@@ -157,8 +157,9 @@ func (e *Engine) hyphenPenalty() int {
 // hyphenateList returns a copy of a paragraph's horizontal list with discretionary
 // hyphen nodes inserted at every legal break inside each word. A word is a maximal
 // run of characters (font kerns between them are kept as interior material).
-// maxHyphenatableLength is TeX's own ceiling on the length of a word it will
-// try to hyphenate (tex.web §891). Longer words are set unhyphenated.
+// maxHyphenatableLength is the capacity of TeX's own hu/hc buffers, which hold
+// the word being hyphenated (tex.web:17602). A longer word is hyphenated in its
+// first 63 letters, not left unhyphenated: see the citation at the use site.
 const maxHyphenatableLength = 63
 
 // precededByGlue reports whether the character at i begins a word TeX would
@@ -272,8 +273,29 @@ func (e *Engine) hyphenateList(list []node) []node {
 			for _, t := range pts {
 				breakAfter[t] = true
 			}
-		} else if len(letters) <= maxHyphenatableLength {
-			for _, t := range h.Points(string(letters)) {
+		} else {
+			// ⛔ TeX TRUNCATES, it does not refuse. tex.web:17602's
+			// `if hn=63 then goto done3` stops COLLECTING letters at 63;
+			// done3 (:17615) is that loop's normal exit — the same label a
+			// font change or a non-letter reaches — and `hyphenate` runs
+			// right after it (:17550-17552). The only length refusal is
+			// :17637, `if hn<l_hyf+r_hyf then goto done1`, for a word too
+			// SHORT. :17548 settles it: `if l_hyf+r_hyf>63 then goto done1`
+			// refuses only when the MINIMUMS alone exceed 63, which makes 63
+			// a buffer capacity and not a policy against long words.
+			//
+			// So a 110-letter word is hyphenated in its first 63 letters, and
+			// \righthyphenmin counts back from the PREFIX rather than from the
+			// real end of the word — TeX will break inside a long word.
+			//
+			// ⭐ The DoS bound this ceiling was added for is untouched: Points
+			// still sees at most 63 runes, so Liang's quadratic cost stays
+			// O(63²) per word however long the word is.
+			word := letters
+			if len(word) > maxHyphenatableLength {
+				word = word[:maxHyphenatableLength]
+			}
+			for _, t := range h.Points(string(word)) {
 				breakAfter[t] = true
 			}
 		}
