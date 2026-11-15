@@ -49,6 +49,26 @@ type Options struct {
 	// caller exercising the guard wants it tight.
 	NoProgressLimit int
 
+	// StepLimit raises the ABSOLUTE ceiling on expansion steps — the coarse
+	// backstop that stops a compile however well the input is advancing. Zero
+	// keeps the engine's own.
+	//
+	// ⛔ A program that renders whole documents should ask for StepLimitHeavy.
+	// The engine's own ceiling carries the comment "a large real document stays
+	// well under it", and that is false for a figure-heavy paper: one tikzDevice
+	// picture of 489 KB — R's output, thousands of coordinates, every one of them
+	// through pgfmath — spends tens of millions of steps inside a single \path.
+	// Measured on arXiv 2405.11065 with the real pgf sources: at the engine's own
+	// ceiling it renders 7 pages of 18 and reports a runaway; with this raised it
+	// renders all 18 and reports none. The no-progress ceiling is NOT what was
+	// stopping it — raised twentyfold it changes nothing, which is the mistake
+	// go-tex/engine#360 recorded for seven weeks.
+	//
+	// It is not the default for the same reason NoProgressLimit is not: a caller
+	// exercising the guard wants it tight, and a genuine loop that also fails to
+	// trip the no-progress guard would run far longer before this one caught it.
+	StepLimit int
+
 	// Resolve supplies class, package and \input files that the process cannot
 	// read from disk, so a host can hand the engine a texmf tree it holds in
 	// memory. It is given the file name the document asked for, already carrying
@@ -106,6 +126,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	e.jobName = opt.JobName
 	if opt.NoProgressLimit > 0 {
 		e.tightLimit = opt.NoProgressLimit
+	}
+	if opt.StepLimit > 0 {
+		e.stepLimit = opt.StepLimit
 	}
 	if !opt.NoPlain {
 		if err := e.LoadPlain(); err != nil {
@@ -372,3 +395,8 @@ func isLaTeX(src []byte) bool {
 // should put in Options.NoProgressLimit. See tightLoopStepsHeavy for what it
 // costs and what it buys.
 const NoProgressLimitHeavy = tightLoopStepsHeavy
+
+// StepLimitHeavy is the absolute ceiling a program that renders whole documents
+// should put in Options.StepLimit. See maxExpandStepsHeavy for the measurement
+// that sets it.
+const StepLimitHeavy = maxExpandStepsHeavy
