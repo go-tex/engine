@@ -33,6 +33,38 @@ jobs:
             exit 1
           fi
       - run: go build ./...
+      # ⛔ WITHOUT THIS STEP TEN ASSERTIONS SKIP, which is the defect #783
+      # recorded: eight TikZ and two beamer tests read a texmf tree, nothing in
+      # this workflow ever provided one, and every runner skipped them while the
+      # package still printed ok. They now take the tree from go-tex/texmf's
+      # cache, which this step fills by compiling two documents that name the
+      # bundles — the CLI's own code path, so the fetch is exercised rather than
+      # imitated.
+      #
+      # The network lives HERE, in a step with a name, and never inside an
+      # assertion. And `gotex` reports a bundle it could not fetch and carries on
+      # with its own emulation, exiting 0 — right for a user, useless as a gate —
+      # so the tests assert the cache themselves: texmftree_test.go FAILS instead
+      # of skipping when CI is set. A silent miss here lands as a red test, not
+      # as ten quiet skips.
+      # ⛔ THE DOCUMENTS ONLY NAME THE PACKAGES, and -lenient is not laziness.
+      # What fills the cache is the \usepackage scan that runs BEFORE the compile
+      # (cmd/gotex/texmf.go), so the fetch is all this step needs. Making the
+      # documents actually USE the packages couples a cache-warming step to this
+      # engine's completeness, and measured here it fails for reasons that have
+      # nothing to do with fetching: `\tikz` is undefined without GOTEX_PGF, and
+      # the real beamer.cls wants `\leaders`, which this engine does not have.
+      - name: warm the texmf cache (pgf, beamer) so the rendering tests RUN
+        shell: bash
+        run: |
+          mkdir -p .texmfwarm
+          printf '%s\n' '\documentclass{article}' '\usepackage{tikz}' \
+            '\begin{document}warm\end{document}' > .texmfwarm/pgf.tex
+          printf '%s\n' '\documentclass{beamer}' \
+            '\begin{document}\begin{frame}warm\end{frame}\end{document}' > .texmfwarm/beamer.tex
+          go run ./cmd/gotex -lenient .texmfwarm/pgf.tex
+          go run ./cmd/gotex -lenient .texmfwarm/beamer.tex
+          rm -rf .texmfwarm pgf.pdf beamer.pdf
       - name: test + conformance ratchet
         shell: bash
         run: |

@@ -4,9 +4,10 @@
 package engine
 
 import (
-	"os"
 	"strings"
 	"testing"
+
+	"github.com/go-tex/texmf"
 )
 
 // \tikz \draw …; — the form with no braces — is handled by \tikz@@single, which
@@ -21,9 +22,7 @@ import (
 // The picture is the same drawing either way, so the two forms must produce the
 // same geometry and leave no group open.
 func TestTikzSingleMatchesBracedForm(t *testing.T) {
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
-	}
+	withTeXMF(t, texmf.PGF)
 	t.Setenv("GOTEX_PGF", "1")
 	const preamble = `\documentclass{article}\usepackage{tikz}`
 	run := func(body string) (string, int) {
@@ -61,9 +60,7 @@ func TestTikzSingleMatchesBracedForm(t *testing.T) {
 // unscoped here, each node wiped its predecessors and a two-node path drew one
 // node.
 func TestTikzAllNodesOnAPathAreDrawn(t *testing.T) {
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("pgf sources absent: point GOTEX_TEXMF at a tree holding tikz.code.tex")
-	}
+	withTeXMF(t, texmf.PGF)
 	t.Setenv("GOTEX_PGF", "1")
 	for _, c := range []struct {
 		name, body string
