@@ -242,11 +242,9 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	//
 	//	second_pass:=true; final_pass:=(emergency_stretch<=0);
 	//
-	// set on ENTERING the second pass. A third pass exists only to add
-	// \emergencystretch to the background; with none set there is nothing for it to
-	// do, and TeX does not run it. \emergencystretch is accept-and-ignore in this
-	// engine (go-typeset/linebreak#12 item 6), so it is always zero as far as breaking
-	// is concerned and this pass is always the final one.
+	// set on ENTERING the second pass. So the second pass is the final one ONLY
+	// when \emergencystretch is zero; with a positive one there is a THIRD pass,
+	// and it is that pass which carries the stretch.
 	//
 	// ⚠ THE FLAG USED TO BE LEFT OFF, with a measured reason that has since been FIXED
 	// AT ITS SOURCE. Arming it hyphenated titles — "THETI-TLE" across eleven class
@@ -255,8 +253,41 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, 
 	// where tex.web says `goto continue`. That, and the forced break recorded whatever
 	// its badness, are go-typeset/linebreak#12 item (5) and its neighbour, both fixed
 	// in v1.4.0 — which is why this line can now say what TeX says.
-	p.FinalPass = true
+	//
+	// ⛔ AND IT USED TO SAY \emergencystretch IS ALWAYS ZERO HERE, which was true of
+	// this engine and not of the documents: \emergencystretch was accept-and-ignore
+	// (go-typeset/linebreak#12 item 6), so `final_pass` was hard-coded true and the
+	// third pass could not exist. The library grew the knob in v1.9.0 and this reads
+	// the dimen instead.
+	//
+	// ⭐ IT IS NOT A RARE PARAMETER, WHICH IS WHY THIS MATTERS. latex.go:1376 is
+	// LaTeX's own \sloppy:
+	//
+	//	\def\sloppy{\tolerance 9999\emergencystretch 3em\hfuzz .5pt\vfuzz\hfuzz}
+	//
+	// so every \sloppy paragraph asks for 3em of emergency stretch. Measured with
+	// gotex-paramcensus over the 154-paper list: 4 papers set \emergencystretch
+	// directly and 8 more use \sloppy, disjointly — 12 of 154, where counting only
+	// the literal name said 4.
+	emergency := 0.0
+	if sp, ok := e.namedDimen("emergencystretch"); ok && sp > 0 {
+		emergency = spToPt(sp)
+	}
+	p.FinalPass = emergency <= 0
 	lines, ok := KnuthPlassWith(items, lineWidth, p)
+	// THE THIRD PASS, §863: re-break with \emergencystretch in the background. TeX
+	// runs it only when the second pass left something unset, and only when there
+	// is stretch to add — with none, the second pass above was already final and
+	// this is unreachable, so a document that does not set the parameter reaches
+	// identical code.
+	if emergency > 0 && (!ok || hasBadLine(lines)) {
+		q := p
+		q.FinalPass = true
+		q.EmergencyStretch = emergency
+		if l3, ok3 := KnuthPlassWith(items, lineWidth, q); ok3 {
+			lines, ok = l3, ok3
+		}
+	}
 	// ⛔⛔ THE WIDE-OPEN PASS STAYS, AND IT IS NOT TeX. IT IS A WORKAROUND FOR
 	// go-typeset/linebreak#12 ITEM (1), AND THAT IS NOW MEASURED RATHER THAN SUSPECTED.
 	//
