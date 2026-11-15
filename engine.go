@@ -484,16 +484,41 @@ type Engine struct {
 	outStream       map[int]*strings.Builder
 	outName         map[int]string
 	writtenFile     map[string]string
-	pendingLong     bool // a \long prefix is waiting for the \def it applies to
-	scanningNonLong bool // arguments being read for a macro that is NOT \long (§392)
-	progBpos        int  // e.bpos at the last observed forward progress
-	noProgSteps     int  // expansion steps since e.bpos last advanced
-	tightLimit      int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
+	pendingLong     bool   // a \long prefix is waiting for the \def it applies to
+	scanningNonLong bool   // arguments being read for a macro that is NOT \long (§392)
+	progBpos        int    // e.bpos at the last observed forward progress
+	noProgSteps     int    // expansion steps since e.bpos last advanced
+	noProgPeak      int    // the longest such run this compile, for Diagnostics
+	tripCeiling     string // which ceiling stopped the compile: "" until one does
+	tightLimit      int    // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
-	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
+	// maxExpandStepsHeavy is that ceiling for a program that RENDERS documents,
+	// where the sentence above is not true.
+	//
+	// ⛔ MEASURED, on arXiv 2405.11065 with the real pgf sources (two tikzDevice
+	// figures of ~489 KB each, R's output): the paper takes 106_315_622 expansion
+	// steps. Against the 60M ceiling above it was cut off at 7 pages of 18 and
+	// reported as a possible loop. Its longest run reading NO new input is
+	// 3_117_166 — six times under the no-progress ceiling of 20M, which it
+	// therefore never approached. That is why raising THAT ceiling twentyfold
+	// changed nothing (go-tex/engine#360), and it is the evidence that the
+	// document never looped: it advanced the whole way, it is simply enormous.
+	//
+	// 600M leaves this paper a factor of 5.6, which the corpus needs: #410 lists
+	// a 333-page paper losing 232 pages on this same path, and it will want more
+	// than 106M. Measuring that one is the next step, named in the pull request
+	// rather than guessed at here.
+	//
+	// ⚠ THE COST IS REAL AND IT IS NOT A HANG. A document whose input keeps
+	// advancing may now spend 600M steps before it aborts — minutes, where 60M
+	// was tens of seconds. What it is NOT is slower loop detection: a loop stops
+	// at the no-progress ceiling in under half a second whatever this is set to,
+	// which TestALoopIsStillCaughtByTheNoProgressCeilingAtShippedLimits holds.
+	maxExpandStepsHeavy = 600_000_000
+	maxInputDepth       = 200_000 // input-stack depth ceiling (catches immediate left-recursion)
 	// maxParNodes bounds the material ONE paragraph may hold. The step and depth
 	// ceilings above count expansion; they do not count what the expansion
 	// PRODUCES, so a document whose macros nest ten deep and ten wide — the
@@ -2567,6 +2592,16 @@ type Diagnostics struct {
 	// block — put a stray "#" on a real paper's title page and made \noalign and
 	// \everycr look undefined (#602). nil/empty when every alignment was entered.
 	AlignmentsAbandoned map[string]int
+	// ExpansionSteps is how many expansion steps the compile took, and
+	// NoProgressPeak the longest run of them that read no new base input. The
+	// guard that stops a runaway has TWO ceilings, and without these a reader
+	// cannot tell which one a document is near — nor that it is near one at all
+	// until it is over. A loop pins NoProgressPeak to the tight ceiling while
+	// ExpansionSteps stays small; a document that is merely enormous does the
+	// opposite. Reported for every compile, so the margin is visible BEFORE a
+	// document crosses it.
+	ExpansionSteps int
+	NoProgressPeak int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2650,6 +2685,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		ReadsOutsideTree: e.readsOutside,
 
 		AlignmentsAbandoned: alignAbandoned,
+
+		ExpansionSteps: e.steps,
+		NoProgressPeak: max(e.noProgPeak, e.noProgSteps),
 	}
 }
 
@@ -2666,12 +2704,36 @@ func (e *Engine) stepOverrun() bool {
 	e.steps++
 	if e.bpos > e.progBpos { // the mouth consumed new base input: real forward progress
 		e.progBpos = e.bpos
+		if e.noProgSteps > e.noProgPeak {
+			e.noProgPeak = e.noProgSteps
+		}
 		e.noProgSteps = 0
 		e.traceHead = e.traceHead[:0] // the loop, if one starts, starts after here
 	} else {
 		e.noProgSteps++
 	}
-	return e.steps > e.stepLimit || e.noProgSteps > e.tightLimit
+	// ⛔ WHICH ceiling fired is the whole diagnosis, and reporting both the same
+	// way cost seven weeks once: go-tex/engine#360 read "possible infinite loop"
+	// on a document that had no loop at all, concluded the pgf path layer failed
+	// to advance, and raised the no-progress ceiling tenfold — the ceiling that
+	// was never the binding one. Measured on 2405.11065: at twenty times the
+	// no-progress ceiling the compile stops at the SAME byte with the same seven
+	// pages; raising the ABSOLUTE one instead renders all eighteen with no trip.
+	//
+	// The no-progress test comes first because it is the specific one: it means
+	// the input stopped moving, which is what a loop looks like. Exhausting the
+	// absolute ceiling while the input kept advancing is a document that needs
+	// more budget than it was given, which is not the same failure and must not
+	// be reported as one.
+	switch {
+	case e.noProgSteps > e.tightLimit:
+		e.tripCeiling = "no-progress"
+		return true
+	case e.steps > e.stepLimit:
+		e.tripCeiling = "absolute"
+		return true
+	}
+	return false
 }
 
 // printTrace prints a trace with runs collapsed: a loop repeats one macro
@@ -2720,8 +2782,36 @@ func (e *Engine) tripRunaway() {
 	e.lists = nil
 	e.noBase = true
 	if !e.tolerant() {
-		e.fail("runaway expansion: aborted after too many macro expansions (possible infinite loop)")
+		e.fail(e.runawayReason())
 	}
+}
+
+// runawayReason reports the EVIDENCE and names both readings of it, rather than
+// choosing between them.
+//
+// ⛔ TWO THINGS THIS MUST NOT DO, each learned from a measurement.
+//
+// It must not report only "possible infinite loop". That message sent
+// go-tex/engine#360 after the pgf path layer for seven weeks on arXiv 2405.11065,
+// which has no loop: raising the no-progress ceiling twentyfold stops the compile
+// at the same byte with the same 7 pages of 18, while raising the ABSOLUTE
+// ceiling renders all 18 and trips nothing. The counters are in the message
+// because without them there is nothing to reason from.
+//
+// And it must not announce WHICH failure it is from which ceiling fired. A real
+// loop trips the absolute ceiling first whenever that ceiling is set lower than
+// the no-progress one — which is what every test that lowers stepLimit does, and
+// TestRunawayGuardStrict (a genuine \def\lx{\lx}\lx) caught exactly that claim
+// being false. Nor do the counters settle it: a single tikzDevice \path of
+// thousands of coordinates spends tens of millions of steps reading no new input,
+// which is also what a loop looks like. The engine cannot tell them apart, so it
+// says what it saw and names the knob that does tell them apart.
+func (e *Engine) runawayReason() string {
+	return fmt.Sprintf("runaway expansion: stopped after %d expansion steps, %d of them since the input last advanced "+
+		"(ceiling reached: %s). Either a non-terminating expansion, or a document that needs more than the budget it was "+
+		"given — one large tikzDevice picture does this. Raising Options.StepLimit and Options.NoProgressLimit "+
+		"(StepLimitHeavy, NoProgressLimitHeavy) tells the two apart: a loop stops at the same place however high they go",
+		e.steps, e.noProgSteps, e.tripCeiling)
 }
 
 // tripCapacity ends the run because one paragraph grew past maxParNodes.

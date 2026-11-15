@@ -132,6 +132,34 @@ engine. The LaTeX2e option mechanism runs too: `\DeclareOption`,
 skipped, so a real class contributes what it can — and a **runaway-expansion
 guard** bounds macro expansion so a pathological or partially-supported file can
 never hang (it stops with partial output in lenient mode, an error in strict).
+
+⛔ That guard has **two** ceilings, and which one stops a document says something
+different about it. The **no-progress** ceiling measures TeX-style forward
+progress — expansion steps taken while the mouth reads no new input — and a
+self-referential macro crosses it in under half a second. The **absolute** one is
+a coarse backstop on total steps, and its old comment, *"a large real document
+stays well under it"*, is false for a figure-heavy paper: one tikzDevice picture
+(R's output — 489 KB, thousands of coordinates, each through `pgfmath`) spends
+tens of millions of steps inside a single `\path`, with the input advancing the
+whole way. Measured on arXiv `2405.11065` with the real pgf sources: it takes
+**106 315 622** expansion steps — against a 60M ceiling, so **7 pages of 18** and
+a report of a possible loop; with `Options.StepLimit: engine.StepLimitHeavy`
+(600M), which `gotex` now passes beside `NoProgressLimitHeavy`, **all 18 and no
+trip**. Its longest run reading no new input is **3 117 166**, six times *under*
+the no-progress ceiling, which it never approached — the document advanced the
+whole way and simply needed more budget. Raising the *no-progress* ceiling twentyfold changes
+nothing on that paper — it stops at the same byte with the same seven pages,
+which is the wrong turn #360 recorded for seven weeks.
+
+So the report carries its evidence instead of a verdict: both counters, the
+ceiling reached, and the two readings of it, because the engine cannot tell them
+apart — a legitimate `\path` and a loop both spend millions of steps reading no
+input. What *does* tell them apart is raising the ceilings: a loop stops at the
+same place however high they go. `GOTEX_TRACE=1` prints the margin to each
+ceiling on **every** compile, including one that succeeds, since a margin is only
+useful before it is crossed. Raising the absolute ceiling does not slow a loop
+down: the no-progress ceiling still catches one first, which
+`TestALoopIsStillCaughtByTheNoProgressCeilingAtShippedLimits` holds.
 Distribution-heavy packages the engine emulates natively or better as stubs
 (`geometry`, `tikz`, `hyperref`, `graphicx`, encodings, …) are not loaded from
 disk.
