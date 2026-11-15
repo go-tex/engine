@@ -104,6 +104,61 @@ func TestNoHyphenationForNonEnglishLanguage(t *testing.T) {
 	}
 }
 
+// ⛔ tex.web:18261-18263's set_cur_lang MAPS \language to cur_lang rather than
+// using it directly, and everything outside 0..255 maps to language ZERO:
+//
+//	@d set_cur_lang==if language<=0 then cur_lang:=0
+//	  else if language>255 then cur_lang:=0
+//	  else cur_lang:=language
+//
+// So \language=-1 and \language=300 are ENGLISH to TeX and get hyphenated.
+// Reading the register directly made them "not language 0" and hyphenated
+// neither, which is engine#765 item (8).
+//
+// ⭐ The 255/256 pair is the point of this table: it pins the cutoff itself, so
+// an off-by-one in the comparison fails here rather than passing on the easy
+// values. 255 is in range and has no embedded patterns; 256 is out of range and
+// is English.
+func TestOutOfRangeLanguageIsEnglishAsSetCurLangSays(t *testing.T) {
+	for _, tc := range []struct {
+		lang    string
+		hyphens bool
+		why     string
+	}{
+		{"-1", true, "language<=0 maps to cur_lang 0"},
+		{"0", true, "language 0 is English directly"},
+		{"1", false, "in range, and no patterns are embedded for it"},
+		{"255", false, "the last in-range value: still not English"},
+		{"256", true, "the first out-of-range value: language>255 maps to 0"},
+		{"300", true, "language>255 maps to cur_lang 0"},
+	} {
+		t.Run("language="+tc.lang, func(t *testing.T) {
+			e := New()
+			e.SetFont(spMock{}) // 5pt letters, 3pt space
+			e.hsize = 60 * unity
+			e.parindent = 0
+			src := `\language=` + tc.lang + ` the internationalization of hyphenation patterns\par`
+			if _, err := e.Run(src); err != nil {
+				t.Fatal(err)
+			}
+			hyphenSeen := false
+			for _, n := range e.mvl {
+				if b, ok := n.(*boxNode); ok {
+					for _, c := range b.list {
+						if ch, ok := c.(charNode); ok && ch.ch == '-' {
+							hyphenSeen = true
+						}
+					}
+				}
+			}
+			if hyphenSeen != tc.hyphens {
+				t.Errorf("\\language=%s: hyphenated=%v, want %v (%s)",
+					tc.lang, hyphenSeen, tc.hyphens, tc.why)
+			}
+		})
+	}
+}
+
 // Out of the box (\language 0, no \patterns), English prose is hyphenated using
 // the embedded US-English pattern set: a long word amid glue is broken with a
 // discretionary so the narrow measure does not overfull.
