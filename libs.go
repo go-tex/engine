@@ -26,6 +26,10 @@ type (
 	Line = linebreak.Line
 	// LineBreakParams carries TeX's demerit parameters to the optimiser.
 	LineBreakParams = linebreak.Params
+	// Measure is the per-line width source a shaped paragraph is broken on.
+	Measure = linebreak.Measure
+	// Shape is one \parshape pair: a left margin and a width.
+	Shape = linebreak.Shape
 	// LineBackground is \leftskip + \rightskip as the breaker sees them: the glue
 	// every line carries before its own material (tex.web §16307-16315).
 	LineBackground = linebreak.Background
@@ -44,6 +48,16 @@ var (
 	Penalty        = linebreak.Penalty
 	KnuthPlass     = linebreak.KnuthPlass
 	KnuthPlassWith = linebreak.KnuthPlassWith
+
+	// The SHAPED breaker, for a paragraph whose lines are not all the same
+	// width: \hangindent with \hangafter, and \parshape when this engine grows
+	// the primitive. tex.web §847-850 takes one measure per line, and the width
+	// is an input to every candidate break's badness — so a shape is a
+	// line-breaking parameter and not a placement one.
+	KnuthPlassShaped = linebreak.KnuthPlassShaped
+	Uniform          = linebreak.Uniform
+	HangIndent       = linebreak.HangIndent
+	ParShape         = linebreak.ParShape
 )
 
 // glueOrder maps this engine's glue order onto the library's. They are the same

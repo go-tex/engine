@@ -83,7 +83,7 @@ func TestFirstPassSetsTheParagraphWithoutHyphens(t *testing.T) {
 
 	// 113pt is exactly two words and the space between them: the first pass sets
 	// that line with no stretch at all, well inside \pretolerance.
-	list, lines, ok := e.breakSegment(hl, 113)
+	list, lines, ok := e.breakSegment(hl, 113, Uniform(113))
 	if !ok || len(lines) == 0 {
 		t.Fatalf("first pass found nothing: ok=%v lines=%d", ok, len(lines))
 	}
@@ -92,7 +92,7 @@ func TestFirstPassSetsTheParagraphWithoutHyphens(t *testing.T) {
 	}
 
 	e.count[e.eq["pretolerance"].code] = -1 // \pretolerance<0: straight to the second pass
-	list2, _, ok2 := e.breakSegment(hl, 113)
+	list2, _, ok2 := e.breakSegment(hl, 113, Uniform(113))
 	if !ok2 {
 		t.Fatal("second pass found nothing")
 	}
@@ -107,7 +107,7 @@ func TestSecondPassHyphenatesWhatTheFirstCannotSet(t *testing.T) {
 	e := New()
 	e.SetFont(spMock{})
 	hl := wordList(e, "hyphenation hyphenation")
-	list, lines, ok := e.breakSegment(hl, 70) // one word (55pt) alone stretches far too much
+	list, lines, ok := e.breakSegment(hl, 70, Uniform(70)) // one word (55pt) alone stretches far too much
 	if !ok || len(lines) == 0 {
 		t.Fatalf("no solution: ok=%v lines=%d", ok, len(lines))
 	}
