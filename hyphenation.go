@@ -86,16 +86,38 @@ func (e *Engine) namedInt(name string) int {
 	return texIntParams[name]
 }
 
+// curLang maps \language to TeX's internal cur_lang, which is NOT the same
+// number. tex.web:18261-18263 sends every value outside 0..255 to language
+// ZERO rather than treating it as a language of its own:
+//
+//	@d set_cur_lang==if language<=0 then cur_lang:=0
+//	  else if language>255 then cur_lang:=0
+//	  else cur_lang:=language
+//
+// So \language=-1 and \language=300 select English here and ARE hyphenated,
+// where reading the register directly hyphenated neither.
+//
+// ⚠ An in-range \language is a different question and deliberately unchanged:
+// \language=5 names patterns this engine embeds none of, and returning nil
+// there is a choice — hyphenating one language with another's patterns breaks
+// words where no reader would accept it — not this defect.
+func (e *Engine) curLang() int {
+	if lang := e.namedInt("language"); lang > 0 && lang <= 255 {
+		return lang
+	}
+	return 0
+}
+
 // activeHyphenator returns the Hyphenator to use for the current paragraph, or nil
 // when the text must not be hyphenated. A document's own \patterns always win. With
-// no document patterns, English (\language 0) gets the embedded default set, built
-// once and cached; any other \language gets nothing, since no patterns are embedded
+// no document patterns, English (cur_lang 0) gets the embedded default set, built
+// once and cached; any other language gets nothing, since no patterns are embedded
 // for it and guessing would break at the wrong places. Either way the live
 // \lefthyphenmin / \righthyphenmin decide the affix limits, as in real TeX.
 func (e *Engine) activeHyphenator() *hyphenator {
 	h := e.hyph
 	if h == nil {
-		if e.namedInt("language") != 0 {
+		if e.curLang() != 0 {
 			return nil
 		}
 		if e.enHyph == nil {
