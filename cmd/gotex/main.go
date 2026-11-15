@@ -107,6 +107,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		// expands for millions of steps without reading further — pgfplots does
 		// — must not be mistaken for a loop.
 		NoProgressLimit: engine.NoProgressLimitHeavy,
+		// And the ABSOLUTE ceiling for the same reason, which is a different one:
+		// a figure-heavy paper spends tens of millions of steps inside a single
+		// \path while the input advances perfectly well. Without this a real
+		// tikzDevice figure is cut off mid-document and reported as a loop.
+		StepLimit: engine.StepLimitHeavy,
 		// \jobname is the input file's own name: a document reads back what it (or
 		// BibTeX) wrote beside it — \jobname.bbl above all.
 		JobName: strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))}
@@ -136,6 +141,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if *showMessages && diag.Messages != "" {
 		fmt.Fprintf(stderr, "gotex: the document said:\n%s\n", diag.Messages)
+	}
+	if os.Getenv("GOTEX_TRACE") != "" {
+		// ⛔ NOT behind -report-skipped: that flag is about what a LENIENT render
+		// dropped, and this is about the two expansion ceilings, which stop a
+		// strict render just as dead. It is also the margin to them, and the
+		// margin is only useful BEFORE a document crosses it — gating it on the
+		// flag that reports losses would print it only once the loss happened.
+		// GOTEX_TRACE is the switch that already means "explain the guard".
+		fmt.Fprintf(stderr, "gotex: %d expansion step(s), longest run reading no new input: %d\n",
+			diag.ExpansionSteps, diag.NoProgressPeak)
 	}
 	if *reportSkipped {
 		reportDiagnostics(stderr, diag)
