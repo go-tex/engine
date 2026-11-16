@@ -29,8 +29,16 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/go-tex/engine/cmd/internal/pdfruns"
 )
+
+// ftoa came back here when the PDF reading moved to cmd/internal/pdfruns: it
+// formats THIS tool's report and no caller there used it, so exporting it would
+// have published a decimal convention as part of a PDF-reading API.
+func ftoa(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }
 
 func main() {
 	page := flag.Int("page", 1, "page to read, 1-based")
@@ -126,26 +134,26 @@ func linesOf(path string, opt reportOptions) ([]Line, float64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	doc, err := openPDF(b)
+	doc, err := pdfruns.Open(b)
 	if err != nil {
 		return nil, 0, err
 	}
 	if opt.page < 1 || opt.page > doc.PageCount() {
 		return nil, 0, fmt.Errorf("page %d of %d", opt.page, doc.PageCount())
 	}
-	runs, err := PageRuns(doc, opt.page) // the reader numbers pages from 1
+	runs, err := pdfruns.PageRuns(doc, opt.page) // the reader numbers pages from 1
 	if err != nil {
 		return nil, 0, err
 	}
-	h := pageHeight(doc, opt.page)
+	h := pdfruns.PageHeight(doc, opt.page)
 	return groupLines(runs, h, opt), h, nil
 }
 
 // groupLines gathers runs that share a baseline. Runs are grouped by their y
 // rounded to a hundredth of a point: two glyphs a renderer puts on one line can
 // differ in the last digit, and two real lines never differ by so little.
-func groupLines(runs []Run, pageH float64, opt reportOptions) []Line {
-	byY := map[int][]Run{}
+func groupLines(runs []pdfruns.Run, pageH float64, opt reportOptions) []Line {
+	byY := map[int][]pdfruns.Run{}
 	for _, r := range runs {
 		byY[int(r.Y*100+0.5)] = append(byY[int(r.Y*100+0.5)], r)
 	}
@@ -171,7 +179,7 @@ func groupLines(runs []Run, pageH float64, opt reportOptions) []Line {
 	return out
 }
 
-func lineOf(rs []Run, pageH float64) Line {
+func lineOf(rs []pdfruns.Run, pageH float64) Line {
 	l := Line{Y: pageH - rs[0].Y, X0: rs[0].X, Font: rs[0].Font, Size: rs[0].Size}
 	var sb strings.Builder
 	var prevEnd float64
@@ -218,7 +226,7 @@ func lineOf(rs []Run, pageH float64) Line {
 // of a dotted contents line is "Title. . . . . 7" whichever tile width was used,
 // so a reader comparing two engines on their text alone cannot see that one of
 // them tiled twice as densely as the other. The x of each tile can.
-func leaderOf(rs []Run) (int, float64) {
+func leaderOf(rs []pdfruns.Run) (int, float64) {
 	best, bestAt := 0, 0
 	for i := 0; i < len(rs); {
 		if len([]rune(rs[i].Text)) != 1 {
