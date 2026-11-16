@@ -2593,6 +2593,10 @@ func (e *Engine) loadStomach() {
 	})
 	e.prim("vtop", func(e *Engine) { e.place(e.makeVtop()) })
 	e.prim("vsplit", func(e *Engine) { e.place(e.doVsplit()) })
+	// \parshape: a count then that many (indent, width) pairs, and the paragraph
+	// is broken on them. See parshape.go for tex.web:23275-23286 and the three
+	// rules those six lines carry.
+	e.prim("parshape", func(e *Engine) { e.doParShape() })
 	e.prim("box", func(e *Engine) {
 		i := e.scanInt()
 		e.place(e.getBox(i))
