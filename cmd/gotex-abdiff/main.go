@@ -38,6 +38,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/go-tex/engine/cmd/internal/loadguard"
 )
 
 type result struct {
@@ -59,11 +61,24 @@ func main() {
 		top     = flag.Int("top", 12, "how many movers to list")
 		keep    = flag.Bool("keep-going", false, "report even when a paper failed to compile on one side")
 	)
+	underLoad := flag.String("under-load", "", "measure even on a busy machine; the reason is STAMPED into the report")
 	flag.Parse()
 	if *list == "" || *refs == "" {
 		fmt.Fprintln(os.Stderr, "gotex-abdiff: -list and -refs are required")
 		os.Exit(2)
 	}
+	// ⛔ THE LOAD IS CHECKED BEFORE THE FOUR MINUTES OF COMPILING, not after.
+	// Until this was here the check was a human running `uptime` either side of
+	// each run and pasting the result into a pull request by hand — a dozen times
+	// in one day, and one run still went out at a 1-minute average of 8.46 with a
+	// caveat attached instead of being refused. loadguard refuses when it cannot
+	// READ the load too: an unreadable machine is not an idle one.
+	load, err := loadguard.Check(*underLoad)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)
+		os.Exit(2)
+	}
+	fmt.Println(loadguard.Banner(load, *underLoad))
 	if *base == "" {
 		if err := rank(*list, *refs, *repo, *head, *texmf, *timeout, *top); err != nil {
 			fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)

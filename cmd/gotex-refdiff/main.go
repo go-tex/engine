@@ -53,6 +53,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-tex/engine/cmd/internal/loadguard"
 	"github.com/go-tex/engine/internal/pdftext"
 )
 
@@ -69,6 +70,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	layout := fs.Bool("layout", false, "geometric layout-diff mode: rank papers by how far matched words drift plus page-count and line-break divergence (needs pdftotext -bbox), instead of the default word-recall")
 	gotexPath := fs.String("gotex", "", "a gotex binary to measure instead of building this checkout's — run it twice, once per side of a change, with the same -seed and -n")
 	list := fs.String("list", "", "a file of paper paths, one per line, to sample from instead of walking -corpus (the same list gotex-abdiff takes)")
+	underLoad := fs.String("under-load", "", "measure even on a busy machine; the reason is STAMPED into the report")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -77,6 +79,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 		return 2
 	}
+	// ⛔ THE LOAD GATE, shared with gotex-abdiff (cmd/internal/loadguard) rather
+	// than written twice. This tool is the one that documents why load matters at
+	// all: "a compile that merely exhausts -timeout is marked timed-out and
+	// excluded on EITHER side … a slow paper, or a loaded machine, moved the mean
+	// one way only". The check therefore belongs here, before any compiling, and
+	// it refuses when it cannot READ the load — an unreadable machine is not an
+	// idle one.
+	load, loadErr := loadguard.Check(*underLoad)
+	if loadErr != nil {
+		fmt.Fprintln(stderr, "gotex-refdiff:", loadErr)
+		return 2
+	}
+	fmt.Fprintln(stdout, loadguard.Banner(load, *underLoad))
 
 	papers, err := choosePapers(*corpus, *list)
 	if err != nil {

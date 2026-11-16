@@ -68,14 +68,61 @@ func TestEveryCommandIsIgnoredAtTheRoot(t *testing.T) {
 	if err != nil {
 		t.Skip("no cmd/ directory here")
 	}
+	var checked int
 	for _, d := range dirs {
 		if !d.IsDir() {
 			continue
 		}
+		// ⛔ A DIRECTORY UNDER cmd/ IS NOT NECESSARILY A COMMAND, and this test
+		// used to assume it was. cmd/internal/ holds packages SHARED BY the
+		// commands (loadguard); `go build` produces no root binary for them, so
+		// demanding a .gitignore line would assert something false — and adding
+		// "/internal" to .gitignore to quiet this would ignore any internal
+		// directory at the root into the bargain.
+		//
+		// The invariant is unchanged and is in the test's own name: every
+		// COMMAND is ignored at the root. Only the way a command is recognised
+		// moved, from "is a directory" to "declares package main".
+		if !holdsPackageMain(t, filepath.Join("cmd", d.Name())) {
+			continue
+		}
+		checked++
 		if !lines["/"+d.Name()] {
 			t.Errorf("cmd/%s builds to ./%s but .gitignore has no \"/%s\" line", d.Name(), d.Name(), d.Name())
 		}
 	}
+	// ⛔ And the control, because a premise that narrowed could narrow to nothing:
+	// a run that recognised no command at all would pass this test in silence.
+	if checked == 0 {
+		t.Fatal("no directory under cmd/ was recognised as a command: the package-main " +
+			"test is wrong and this guard is checking nothing")
+	}
+}
+
+// holdsPackageMain reports whether dir contains a non-test .go file declaring
+// package main — that is, whether `go build ./dir` yields a binary.
+func holdsPackageMain(t *testing.T, dir string) bool {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range ents {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, n))
+		if err != nil {
+			continue
+		}
+		for _, l := range strings.Split(string(b), "\n") {
+			if strings.TrimSpace(l) == "package main" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // trackedFiles asks git what it holds. A tree git cannot be asked about is not a
