@@ -20,6 +20,24 @@ type OpenTypeFont struct {
 	// (#714, which named this as its residual).
 	pt   float64
 	data []byte // original font bytes (for PDF embedding)
+	// optical is this face's family size→file table, or nil for a font the host
+	// supplied. Latin Modern draws a separate face per optical size and the
+	// reference picks among them through tulmr.fd; carrying the table here is
+	// what lets a size switch take the right FILE rather than this one scaled.
+	// See lmoptical.go.
+	optical opticalFamily
+	// fileName is the file this face was opened from ("lmroman9-regular"), and
+	// design the size that file was drawn for. Both exist so \fontname can
+	// ANSWER — which optical size was chosen is the question #449 and #612 turn
+	// on, and before #762 the only way to find out was to render to SVG and
+	// subtract glyph positions. Empty for a font the host supplied, which has no
+	// name we are entitled to invent.
+	fileName string
+	design   float64
+	// ligCache memoises glyphFor's GSUB fallback, where 0 records "this face
+	// cannot ligate that form" — a negative worth caching, since the paragraph
+	// builder asks for every f-pair it meets and shaping is not free.
+	ligCache map[rune]opentype.GlyphIndex
 	// dimCache memoises CharDims per rune. Measuring a glyph's y-extent means
 	// running the (CFF Type2) outline interpreter, which is expensive; a face is
 	// a fixed size, so a glyph's dimensions never change and are safe to cache.
@@ -43,7 +61,44 @@ func NewOpenTypeFont(fontBytes []byte, sizePt float64) (*OpenTypeFont, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OpenTypeFont{f: f, fc: f.NewFaceAt(sizePt), upem: float64(f.UnitsPerEm()), pt: sizePt, data: fontBytes}, nil
+	o := &OpenTypeFont{f: f, fc: f.NewFaceAt(sizePt), upem: float64(f.UnitsPerEm()), pt: sizePt, data: fontBytes}
+	// A Latin Modern face carries its family's size→file table, so a later
+	// \footnotesize or \Large takes the file the reference takes rather than this
+	// one scaled. A host's own font gets nil and is never re-faced. See
+	// lmoptical.go.
+	o.optical = opticalOf(fontBytes)
+	// Name the file we opened, so \fontname can answer. atOptical may hand back
+	// a different face for this size; when it hands back THIS one, it is because
+	// this file is the right one for the size, and the name belongs to it.
+	if o.optical != nil {
+		_, name := o.optical.pick(sizePt)
+		o.fileName, o.design = name, opticalDesignPt(name)
+	}
+	return o.atOptical(sizePt), nil
+}
+
+// atOptical returns the face for pt, switching to the optical size's own file
+// when the family has one and the requested size is outside this file's range.
+//
+// ⛔ IT IS A CONSTRUCTOR, NOT A MUTATOR. A face is shared — \rm, \bf and the
+// NFSS aliases all hold one — so re-pointing this font's program would change
+// the size of every holder. Each size gets its own face over its own program.
+func (o *OpenTypeFont) atOptical(pt float64) *OpenTypeFont {
+	if o.optical == nil {
+		return o
+	}
+	f, data, name := opticalProgram(o.optical, pt)
+	if f == nil {
+		return o // an embedded file that will not parse: scale what we have
+	}
+	if f == o.f {
+		return o
+	}
+	return &OpenTypeFont{
+		f: f, fc: f.NewFaceAt(pt), upem: float64(f.UnitsPerEm()),
+		pt: pt, data: data, optical: o.optical,
+		fileName: name, design: opticalDesignPt(name),
+	}
 }
 
 // fontBytes returns the original font blob (for the PDF driver to embed).
@@ -55,13 +110,74 @@ type embeddableFont interface {
 	fontBytes() []byte
 }
 
+// glyphFor resolves a rune to a glyph, asking the FONT and not only its cmap.
+//
+// ⛔⛔ THE CMAP IS THE WRONG QUESTION FOR A LIGATURE. The paragraph builder folds
+// "fi" into U+FB01 and then everything downstream — this, and the drawing path —
+// looks that presentation form up. A font that files its f-ligatures in GSUB
+// alone, which is ordinary modern practice, has no cmap entry for U+FB01 and so
+// answered "no glyph", though it has the glyph and go-opentype can reach it:
+// Shape("fi", "liga") returns exactly one.
+//
+// Measured on LibertinusSerif at 10pt against XeTeX, per occurrence:
+//
+//	ff   6.20 against 5.82   lost 0.38pt
+//	fi   5.81 against 5.60   lost 0.21pt
+//	fl   6.14 against 5.40   lost 0.74pt
+//	ffi  8.91 against 8.29   lost 0.62pt
+//	ffl  9.24 against 8.15   lost 1.09pt
+//
+// and "fi" is in first, find, file, specific, definition, significant,
+// efficient. TeXGyreTermesX is the control that kept this invisible: it DOES name
+// its ligatures in cmap, so the old question worked there and matched XeTeX
+// exactly.
+//
+// ⛔ The two halves of the same glyph disagreed about how to find it: the drawing
+// path already shapes (pdfdriver.go's TextShaped with "liga"), only measuring
+// went through the cmap — so on a font like Libertinus the fold never happened
+// and the drawing path was never reached.
+//
+// The components come from expandLigature, which already holds this mapping for
+// the text layer; a second table would be a second thing to keep in step.
+func (o *OpenTypeFont) glyphFor(r rune) (opentype.GlyphIndex, bool) {
+	if gid, ok := o.f.GlyphIndex(r); ok {
+		return gid, true
+	}
+	if o.ligCache == nil {
+		o.ligCache = map[rune]opentype.GlyphIndex{}
+	} else if gid, ok := o.ligCache[r]; ok {
+		return gid, gid != 0
+	}
+	comps := expandLigature(r)
+	if len(comps) < 2 {
+		return 0, false // not a form this engine folds into: the cmap was the answer
+	}
+	// Exactly one glyph, and not .notdef: a face that cannot ligate returns the
+	// components unchanged, which is the "no" this has to report.
+	gids := o.fc.Shape(string(comps), "liga")
+	if len(gids) != 1 || gids[0] == 0 {
+		o.ligCache[r] = 0
+		return 0, false
+	}
+	o.ligCache[r] = gids[0]
+	return gids[0], true
+}
+
+// hasGlyphFor reports whether this face can set r as a single glyph — the
+// question the ligature program needs, and which glyphPathAt could not answer
+// for a GSUB-only ligature.
+func (o *OpenTypeFont) hasGlyphFor(r rune) bool {
+	_, ok := o.glyphFor(r)
+	return ok
+}
+
 // CharDims returns a glyph's advance width and its ink height above and depth
 // below the baseline, in pixels.
 func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	if d, ok := o.dimCache[r]; ok {
 		return d[0], d[1], d[2]
 	}
-	gid, ok := o.f.GlyphIndex(r)
+	gid, ok := o.glyphFor(r)
 	if !ok {
 		return 0, 0, 0
 	}
@@ -117,9 +233,30 @@ func (o *OpenTypeFont) glyphPath(r rune) string {
 }
 
 // Space returns TeX-like interword glue derived from the space advance.
+//
+// ⛔ AdvanceUnits and NOT Advance: Advance rounds to a whole pixel, and the space
+// is the one glyph whose advance is most often a half — 235 units at 10pt is
+// 2.35pt, 250 units is 2.5pt — so the rounded form answered 2 or 3 and was wrong
+// on both. That is up to half a point on EVERY interword space in the document,
+// about 20% of the space itself, and ~3.9pt per 66-character line.
+//
+// Measured against XeTeX on the same file, \hbox{A B} minus \hbox{AB}:
+//
+//	                   ours (rounded)   ours (here)   XeTeX
+//	LibertinusSerif        3.00            2.50        2.50
+//	TeXGyreTermesX         3.00            2.50        2.50
+//
+// and XeTeX's own \fontdimen2 is 2.5pt for both — the glyph's advance exactly, so
+// the quantity was never in doubt, only the rounding.
+//
+// The unrounded accessor is go-opentype's (v0.19.0), added there rather than
+// spelled out here as AdvanceIndexUnits × Scale, so that every consumer of that
+// library gets the exact path as cheaply as the lossy one.
 func (o *OpenTypeFont) Space() (float64, float64, float64) {
-	w := float64(o.fc.Advance(' '))
+	w := o.fc.AdvanceUnits(' ')
 	if w == 0 {
+		// No space glyph at all: a quarter em is a stated convention rather than
+		// a number taken from this font.
 		w = o.pt * 0.25
 	}
 	return w, w * 0.5, w / 3
@@ -134,7 +271,12 @@ type fontFace interface {
 	spaceSP() glueSpec
 	glyphPathAt(r rune) string // "" if the font lacks the glyph
 	kernSP(prev, cur rune) int // inter-character kern in sp (0 if none)
-	sizePt() float64           // the face's design size in points (fractional: \Large is 14.4)
+	// hasGlyphFor reports whether the face can set r as ONE glyph. It is not
+	// glyphPathAt(r) != "": a ligature filed in GSUB alone has no cmap entry for
+	// its presentation form, so the path lookup says no about a glyph the font
+	// has (see glyphFor).
+	hasGlyphFor(r rune) bool
+	sizePt() float64 // the face's design size in points (fractional: \Large is 14.4)
 }
 
 // faceProgram identifies the font PROGRAM behind a face, independently of the size
@@ -300,8 +442,19 @@ type scalableFont interface {
 // added the fractional constructor for exactly this caller; the face still
 // rasterises at a whole ppem, because hinting is whole-pixel, while its metrics
 // scale by the true size (go-opentype/opentype#62).
+// ⛔ AND IT CONSULTS THE OPTICAL TABLE FIRST. Latin Modern is an optically
+// sized family: \footnotesize is lmroman9, not lmroman10 at 9pt. atOptical
+// returns this font unchanged when the family has no table (a host's own font)
+// or when the size stays inside this file's range, so the common case is the
+// same allocation it always was.
 func (o *OpenTypeFont) atSize(pt float64) fontFace {
-	return &OpenTypeFont{f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data}
+	if n := o.atOptical(pt); n != o {
+		return n
+	}
+	return &OpenTypeFont{
+		f: o.f, fc: o.f.NewFaceAt(pt), upem: o.upem, pt: pt, data: o.data,
+		optical: o.optical, fileName: o.fileName, design: o.design,
+	}
 }
 
 // faceAtCurrentSize re-faces a FAMILY switch at the size already in force.

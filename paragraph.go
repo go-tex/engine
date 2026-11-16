@@ -79,10 +79,22 @@ func (e *Engine) layoutSegment(hlist []node) {
 	// 0pt plus 1fil — narrows nothing, which is right: ragged setting does not
 	// move the margin, it only stops justifying to it.
 	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
-	list, lines, ok := e.breakSegment(hlist, lineWidth)
+	shape := e.paragraphShape(lineWidth)
+	list, lines, ok := e.breakSegment(hlist, lineWidth, shape)
 	if !ok || len(lines) == 0 {
-		lines = []Line{{Start: 0, End: len(list)}} // last resort: one line, nothing lost
+		// ⛔ NOT "one line, nothing lost" ANY MORE. That kept every node and gave
+		// the reader a single line 254pt off the page; everything was there and
+		// none of it readable. See lastresort.go, including why #766 is what made
+		// this path reachable.
+		lines = greedyLines(list, lineWidth)
 	}
+	// ⛔ SAY WHICH LINES CAME OUT BAD. The breaker has judged this since line
+	// breaking was written — hasBadLine decides which pass runs — and no caller
+	// could ever see it, so a document whose lines run into the margin compiled
+	// in silence. Counted HERE, on the lines actually adopted, rather than
+	// inside breakSegment where the rejected attempts of earlier passes would be
+	// counted too. See badbox.go.
+	e.noteBadLines(list, lines, lineWidth)
 	for i, ln := range lines {
 		// ⛔⛔ THE PARAGRAPH'S FIRST LINE IS NEVER PRUNED — and "the paragraph's", not
 		// "this fragment's". go-typeset/linebreak v1.2.1 stopped discarding a
@@ -122,8 +134,26 @@ func (e *Engine) layoutSegment(hlist []node) {
 		// and appends the resulting material onto the list that ends at adjust_tail".
 		// §17435 arms that list immediately before hpack.
 		seg, adjusts := extractAdjusts(seg)
+		// ⛔ THE SHAPE IS APPLIED HERE, AND IT IS NOT A SHIFT. TeX hpacks the line
+		// to ITS OWN line_width and gives the box shift_amount := cur_indent
+		// (§847-850). This engine has no shift on a line box, so the same geometry
+		// is built from the material it already uses for \leftskip: a RIGID kern of
+		// the margin in front, and a target reduced by whatever the line gave up.
+		//
+		// ⚠ BOTH ARE NEEDED, and a negative \hangindent is why. There the margin is
+		// ZERO and the line is still shorter by |indent| (:16729-16730), so a kern
+		// alone would leave the target at the full measure and the rightskip glue
+		// would stretch the text back across it — the indent would vanish into the
+		// justification. Reducing the target instead leaves the slack as empty page,
+		// which is what indenting from the right means.
+		indent, lnWidth := shape.LineShape(i + 1)
+		if indent != 0 {
+			seg = append([]node{kernNode{width: ptToSP(indent)}}, seg...)
+		}
+		// The skips go OUTSIDE the margin: \leftskip first, then the hanging
+		// indent, which is the order tex.web sets them in.
 		seg = e.applyLineSkips(seg)
-		e.appendToPage(hpackSP(seg, packTo, e.hsize))
+		e.appendToPage(hpackSP(seg, packTo, e.hsize-ptToSP(lineWidth-indent-lnWidth)))
 		// ⛔ AND IT GOES IN AFTER THE LINE BOX, not before. §17413-17418 is explicit
 		// about the order: append_to_vlist(just_box) first, THEN the adjustment, then
 		// adjust_tail is cleared. Emitting it first would put a \vadjust's space above
@@ -134,6 +164,64 @@ func (e *Engine) layoutSegment(hlist []node) {
 			}
 		}
 	}
+	e.normalParagraph()
+}
+
+// normalParagraph is tex.web's procedure of the same name (:20756-20761), run at
+// the end of a paragraph and from eight other places, `vmode+par_end` — every
+// \par — among them:
+//
+//	procedure normal_paragraph;
+//	begin if looseness<>0 then eq_word_define(int_base+looseness_code,0);
+//	if hang_indent<>0 then eq_word_define(dimen_base+hang_indent_code,0);
+//	if hang_after<>1 then eq_word_define(int_base+hang_after_code,1);
+//	if par_shape_ptr<>null then eq_define(par_shape_loc,shape_ref,null);
+//	end;
+//
+// ⛔⛔ A PARAGRAPH SHAPE LASTS EXACTLY ONE PARAGRAPH, and this engine kept it for
+// ever. While \hangindent was accept-and-ignore that cost nothing and no test
+// could have seen it; #795 made it shape the line breaker, and the same omission
+// then hung every FOLLOWING paragraph. Measured before this landed: the same
+// second paragraph came out as
+//
+//	after a hung first:   "measure that is wrong" / "by a centimetre is wrong"
+//	after a plain first:  "sure that is wrong by a cen-" / "timetre is wrong on every"
+//
+// — a document's second paragraph set differently because of what its FIRST one
+// asked for. A latent bug that one change turned load-bearing, which is the
+// shape of defect worth naming: the parameter's LIFETIME only matters once the
+// parameter matters.
+//
+// ⚠ Most LaTeX survived it anyway, because an assignment inside a group is
+// restored by the save stack and \@hangfrom and friends are grouped. The
+// top-level assignment is the one that leaked.
+//
+// It writes through setCount/setDimen rather than the slices, so the assignment
+// takes part in grouping exactly as TeX's eq_word_define does — a reset that
+// escaped its group would be a second bug of the same family.
+func (e *Engine) normalParagraph() {
+	if e.namedInt("looseness") != 0 {
+		if m := e.eq["looseness"]; m != nil && m.kind == mCountRef {
+			e.setCount(m.code, 0, false)
+		}
+	}
+	if e.hangIndentReg >= 0 && e.hangIndentReg < len(e.dimen) && e.dimen[e.hangIndentReg] != 0 {
+		e.setDimen(e.hangIndentReg, 0, false)
+	}
+	if e.namedInt("hangafter") != 1 {
+		if m := e.eq["hangafter"]; m != nil && m.kind == mCountRef {
+			e.setCount(m.code, 1, false)
+		}
+	}
+	// :20760, `if par_shape_ptr<>null then eq_define(par_shape_loc,shape_ref,null)`.
+	//
+	// ⚠ This one is NOT grouped the way the three above are: parShape is a plain
+	// field, not a register, so it is not on the save stack and a \parshape set
+	// inside a group is not restored when the group ends. TeX's eq_define does
+	// restore it. For a shape that lasts one paragraph the difference is only
+	// visible to a group that opens and closes WITHIN a paragraph without a \par,
+	// which is narrow — but it is a real divergence and better said than hidden.
+	e.parShape = nil
 }
 
 // extractAdjusts takes the \vadjust material out of a line and returns the line
@@ -182,6 +270,47 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 	return seg
 }
 
+// paragraphShape builds the Measure this paragraph is broken on, which is
+// tex.web §847-850's choice of line_width per line.
+//
+// ⛔ A SHAPE IS A LINE-BREAKING PARAMETER, NOT A PLACEMENT ONE. The width is an
+// input to the badness of every candidate break, so a paragraph asking for
+// \hangindent is not the uniform paragraph moved over — it BREAKS somewhere
+// else. Measured against tectonic on go-tex/engine#757's witness: not only was
+// the indent missing, a phrase on the reference's line 4 was on our line 3.
+//
+// \hangafter is an INTEGER parameter, not a dimension, and the two scan
+// differently — `\hangafter=1 integers follow` loses the "in" if it is read as a
+// dimension looking for a unit. hangafter_probe_test.go pins that, and this
+// reads it through namedInt for the same reason.
+//
+// ⚠ \parshape is NOT here: it is not a primitive in this engine at all, so a
+// document writing it gets an undefined command rather than a silently dropped
+// shape. go-typeset/linebreak's ParShape is ready for it when it is added.
+func (e *Engine) paragraphShape(lineWidth float64) Measure {
+	// ⭐ \parshape WINS, and :16706 is where that is settled:
+	//
+	//	if par_shape_ptr=null then (the hang_indent branch)
+	//	else (the parshape branch)
+	//
+	// so a document setting both gets the shape and \hangindent is not consulted
+	// at all. Reading them in the other order would silently prefer the simpler
+	// parameter wherever a class set it for its own reasons.
+	if len(e.parShape) > 0 {
+		return ParShape(e.parShape)
+	}
+	if e.hangIndentReg < 0 || e.hangIndentReg >= len(e.dimen) {
+		return Uniform(lineWidth)
+	}
+	indent := spToPt(e.dimen[e.hangIndentReg])
+	if indent == 0 {
+		// tex.web:16689: "if hang_indent=0, the value of hang_after is
+		// irrelevant" — and a uniform measure is cheaper to consult.
+		return Uniform(lineWidth)
+	}
+	return HangIndent(lineWidth, indent, e.namedInt("hangafter"))
+}
+
 // breakSegment runs TeX's line-breaking passes over one paragraph fragment and
 // returns the node list its line indices refer to (tex.web §16986-16999). The
 // FIRST pass tries the paragraph with no hyphenation at all, at \pretolerance:
@@ -190,73 +319,148 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 // always has the hyphens in hand. Only when that pass finds nothing is the second
 // pass run over the hyphenated list at \tolerance, and then an emergency pass at
 // a large tolerance if a bad line survives.
-func (e *Engine) breakSegment(hlist []node, lineWidth float64) ([]node, []Line, bool) {
+func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([]node, []Line, bool) {
 	p := LineBreakParams{
 		Tolerance:   float64(e.namedInt("tolerance")),
 		LinePenalty: float64(e.namedInt("linepenalty")),
 		AdjDemerits: float64(e.namedInt("adjdemerits")),
 		DoubleHyph:  float64(e.namedInt("doublehyphendemerits")),
 		FinalHyph:   float64(e.namedInt("finalhyphendemerits")),
+		Background:  e.skipBackground(),
 	}
 	if pre := e.namedInt("pretolerance"); pre >= 0 {
 		q := p
 		q.Tolerance = float64(pre)
+		// ⛔⛔ AND THE RAGGED SPECIAL CASE IS GONE, because the rule now applies.
+		//
+		// This pass used to raise its own tolerance to maxBadRatio whenever the
+		// background was infinite, and then accept a merely-loose answer so long as
+		// no line overflowed. Both halves were standing in for one sentence of
+		// tex.web (§16790-16793): a line carrying any fil has badness 0 and fitness
+		// `decent`, so under \raggedright every line is PERFECT and this pass — which
+		// has no hyphens at all — succeeds by the ordinary test.
+		//
+		// It could not say so while the library flattened a fil into a large finite
+		// stretch (go-typeset/linebreak#12 item 1). Since its v1.5.0 the order is
+		// carried and \leftskip/\rightskip are the background, so `q.Tolerance` is
+		// \pretolerance and nothing else, and `hasBadLine` is the only test needed.
+		//
+		// ⚠ THIS IS STILL NOT "DO NOT HYPHENATE WHEN RAGGED". TeX hyphenates under
+		// \raggedright when a word would otherwise overfull the line; what changes is
+		// that it has no reason to otherwise, and an overfull line still has
+		// b = awful_bad and sends the paragraph to the next pass.
 		plain := e.withParFill(hlist)
-		if lines, ok := KnuthPlassWith(toItems(plain), lineWidth, q); ok && !hasBadLine(lines) {
+		if lines, ok := KnuthPlassShaped(toItems(plain), shape, q); ok && !hasBadLine(lines) {
 			return plain, lines, true
 		}
 	}
 	list := e.withParFill(e.hyphenateList(hlist)) // insert discretionary hyphens (if patterns loaded)
 	items := toItems(list)
-	lines, ok := KnuthPlassWith(items, lineWidth, p)
-	// The second pass can "succeed" with a single over/underfull line via the forced
-	// final break. Two more passes follow, in this order, and each is adopted only if
-	// it removes the bad line.
+	// ⛔⛔ THE SECOND PASS IS THE FINAL PASS HERE, AND tex.web §863 SAYS SO IN ONE LINE:
 	//
-	// ⛔⛔ FIRST THE REAL FINAL PASS: \tolerance unchanged, artificial_demerits armed
-	// (go-typeset/linebreak v1.2.2, Params.FinalPass; tex.web §16769-16771). At a
-	// breakpoint where NOTHING is feasible and only one node is active, the break is
-	// recorded at ZERO cost rather than the node being deactivated.
+	//	second_pass:=true; final_pass:=(emergency_stretch<=0);
 	//
-	// Zero is what decides it. A line past inf_bad costs 1e8, so two hopeless lines
-	// (2e8) otherwise lose to ONE overfull line (1e8) — and the breaker returned the
-	// overfull one. Measured with spMock: two unbreakable 35pt words and a 3pt rigid
-	// space on a 40pt measure came back as one line 33pt over the margin
-	// (TestActiveTieDoesNotBreakLine), where the reference sets two.
+	// set on ENTERING the second pass. So the second pass is the final one ONLY
+	// when \emergencystretch is zero; with a positive one there is a THIRD pass,
+	// and it is that pass which carries the stretch.
 	//
-	// ⛔ AND IT MUST COME BEFORE THE WIDE-OPEN PASS, not with it. Raising the tolerance
-	// to maxBadRatio makes a hopeless line FEASIBLE at its full 1e8, which DEFEATS the
-	// clause: artificial demerits only fire when nothing feasible was recorded there.
-	// Setting both at once left the test failing exactly as before.
+	// ⚠ THE FLAG USED TO BE LEFT OFF, with a measured reason that has since been FIXED
+	// AT ITS SOURCE. Arming it hyphenated titles — "THETI-TLE" across eleven class
+	// tests — because the library's artificial_demerits clause sat OUTSIDE §16769's
+	// branch and fired at ordinary breakpoints merely past the threshold, at zero cost,
+	// where tex.web says `goto continue`. That, and the forced break recorded whatever
+	// its badness, are go-typeset/linebreak#12 item (5) and its neighbour, both fixed
+	// in v1.4.0 — which is why this line can now say what TeX says.
 	//
-	// None of this showed while every forced-break fragment got its own \parfillskip:
-	// that spurious glue was a legal breakpoint at the end of each fragment, and the
-	// overfull single-line node was deactivated there BY ACCIDENT. Removing the glue
-	// removed the accident, and the missing clause surfaced.
-	// ⛔⛔ FinalPass IS NOT ARMED HERE YET, AND THAT IS A MEASURED DECISION.
+	// ⛔ AND IT USED TO SAY \emergencystretch IS ALWAYS ZERO HERE, which was true of
+	// this engine and not of the documents: \emergencystretch was accept-and-ignore
+	// (go-typeset/linebreak#12 item 6), so `final_pass` was hard-coded true and the
+	// third pass could not exist. The library grew the knob in v1.9.0 and this reads
+	// the dimen instead.
 	//
-	// Arming it hyphenated titles — "THETI-TLE" across eleven class tests — because
-	// TeX reaches its final pass only when pass 2 failed OUTRIGHT, and pass 2 does not
-	// fail here for a reason the library does not yet reproduce: TeX refuses to record
-	// a forced break whose line is past the threshold (tex.web §16769 → §16824-16831,
-	// "else if b>threshold then goto deactivate"), while the library records every
-	// forced break unconditionally. Until that is faithful the clause fires at
-	// breakpoints TeX never reaches, and at ZERO cost, so it wins everywhere.
+	// ⭐ IT IS NOT A RARE PARAMETER, WHICH IS WHY THIS MATTERS. latex.go:1376 is
+	// LaTeX's own \sloppy:
 	//
-	// Arming it TOGETHER with the wide-open tolerance below is worse still: raising the
-	// tolerance makes a hopeless line feasible at its full 1e8, which defeats the
-	// clause — artificial demerits only fire when nothing feasible was recorded there.
+	//	\def\sloppy{\tolerance 9999\emergencystretch 3em\hfuzz .5pt\vfuzz\hfuzz}
 	//
-	// So the wide-open pass stays as it was, alone, and #666 carries the rest.
-	if !ok || hasBadLine(lines) {
+	// so every \sloppy paragraph asks for 3em of emergency stretch. Measured with
+	// gotex-paramcensus over the 154-paper list: 4 papers set \emergencystretch
+	// directly and 8 more use \sloppy, disjointly — 12 of 154, where counting only
+	// the literal name said 4.
+	emergency := 0.0
+	if sp, ok := e.namedDimen("emergencystretch"); ok && sp > 0 {
+		emergency = spToPt(sp)
+	}
+	p.FinalPass = emergency <= 0
+	lines, ok := KnuthPlassShaped(items, shape, p)
+	// THE THIRD PASS, §863: re-break with \emergencystretch in the background. TeX
+	// runs it only when the second pass left something unset, and only when there
+	// is stretch to add — with none, the second pass above was already final and
+	// this is unreachable, so a document that does not set the parameter reaches
+	// identical code.
+	if emergency > 0 && (!ok || hasBadLine(lines)) {
 		q := p
-		q.Tolerance = maxBadRatio
-		if l2, ok2 := KnuthPlassWith(items, lineWidth, q); ok2 {
-			if !ok || len(l2) > len(lines) || !hasBadLine(l2) {
-				lines, ok = l2, true
-			}
+		q.FinalPass = true
+		q.EmergencyStretch = emergency
+		if l3, ok3 := KnuthPlassShaped(items, shape, q); ok3 {
+			lines, ok = l3, ok3
 		}
 	}
+	// ⛔⛔ THERE IS NO THIRD, WIDE-OPEN PASS HERE ANY MORE, and this note exists
+	// because for a while the comment in its place said so three times over, in
+	// three tenses — "the wide-open pass STAYS", "AND IT IS GONE", "SO WHY IS IT
+	// STILL HERE" — each generation appended above or below the last.
+	//
+	// ⛔ A reader cannot tell which tense is current, and one did not: go-tex/engine#754's
+	// audit of the delegated layers reports that this function "raises the tolerance
+	// to 1e4 instead (paragraph.go:251-258)", citing line numbers that by then
+	// pointed INTO the comment rather than at code. The pass was already gone. A
+	// stale comment cost a published audit one of its six findings, which is what a
+	// dated claim does when it is left beside a newer one.
+	//
+	// What follows is the whole story once, in order.
+	//
+	// WHAT IT WAS. If the pass above returned a bad line, run the paragraph again at
+	// \tolerance=maxBadRatio and adopt that. Nothing in tex.web does this: §863 has
+	// exactly three passes — \pretolerance without hyphens, \tolerance with them, and
+	// a third that adds \emergencystretch to the BACKGROUND — and none raises the
+	// tolerance. Raising it says "every line is acceptable however badly it fits",
+	// which is a different algorithm with a different answer, and its answer was:
+	// never leave a line overfull, take more hyphens instead.
+	//
+	// WHAT IT COST, measured on #768's witness (\hsize=45pt, \fussy, `Typographical
+	// incomprehensibilities overwhelm every paragraph.`) against tectonic 0.17.0,
+	// with the face, the interword space and \tolerance verified identical:
+	//
+	//	reference      5 lines, FOUR overfull boxes (18.1, 13.92, 14.3, 18.16pt)
+	//	with this pass 7 lines, every one of them fitting
+	//	without it     5 lines, and lines 1-3 the reference's to 0.02pt
+	//	               (`Typographical`, `incomprehen-`, `sibilities over-`)
+	//
+	// Pass 2 had ALREADY FOUND the reference's answer and this one threw it away,
+	// because `hasBadLine` is true of a solution TeX deliberately chose: at
+	// \tolerance=200 a short line with no stretch has badness 10000 and is not
+	// feasible, so TeX overhangs the margin rather than take the hyphens.
+	//
+	// WHY IT COULD NOT SIMPLY GO. One removal attempt (#778) turned six tests red,
+	// four of them saying the same thing — a word that MUST be hyphenated stopped
+	// being hyphenated (TestRaggedTextStillHyphenatesAWordThatCannotFit,
+	// TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse,
+	// TestHyphenationInsertsHyphen, TestPageIsOneTextElement). That was
+	// go-typeset/linebreak#12 item (1) seen from the consumer: the library carried ONE
+	// float of stretch and flattened `0pt plus 1fil` into a large finite number, so
+	// under \raggedright a line TeX scores at badness 0 was scored 10000 here and was
+	// INFEASIBLE. TeX's pass 2 had a solution and hyphenated inside it; ours had none,
+	// fell to artificial demerits, and took the single overfull line. The wide-open
+	// tolerance hid that by making everything feasible — it was treating the symptom.
+	//
+	// AND WHY IT IS GONE. The library's v1.5.0 carries the glue orders and makes
+	// \leftskip/\rightskip the background, which removes the cause; #780 consumed
+	// that here, and the pass went with it. #768's finding (2) was this pass.
+	//
+	// ⚠ The two KnuthPlassShaped calls above are therefore the whole of it:
+	// \pretolerance, then \tolerance with FinalPass set when \emergencystretch is
+	// zero, plus §863's genuine third pass when it is not.
 	return list, lines, ok
 }
 
@@ -309,11 +513,100 @@ func (e *Engine) withParFill(list []node) []node {
 	return append(out, glueNode{spec: fill}, penaltyNode{penalty: -int(InfPenalty)})
 }
 
+// skipBackground is tex.web §16307-16315: \leftskip and \rightskip are not items
+// in the list, they are the BACKGROUND every line's totals start from.
+//
+//	q:=left_skip; r:=right_skip; background[1]:=width(q)+width(r);
+//	background[2+stretch_order(q)]:=stretch(q);
+//	background[2+stretch_order(r)]:=background[2+stretch_order(r)]+stretch(r);
+//	background[6]:=shrink(q)+shrink(r);
+//
+// ⛔⛔ THIS IS WHERE \raggedright BELONGS, AND IT USED TO BE TWO WORKAROUNDS.
+// The skips were added to each line AFTER breaking (applyLineSkips), so the
+// breaker never saw them: it broke the paragraph justified and the ragged glue
+// was painted on afterwards. Two patches stood in for this — the measure was
+// never narrowed by \leftskip (#583), and the first pass had its TOLERANCE
+// opened when the background happened to be infinite, to imitate the badness 0
+// that §16790-16793 gives such a line outright.
+//
+// With the background where TeX puts it, both become unnecessary: a fil in the
+// background makes every line perfect by the rule rather than by a special case,
+// and the width narrows the measure because that is what `background[1]` is.
+//
+// ⚠ Shrink is summed without order: §16806, "Shrinkability is never infinite in
+// a paragraph".
+// ⛔⛔ AND THE WIDTH IS DELIBERATELY NOT CARRIED, BECAUSE THE CALLER ALREADY
+// TOOK IT OFF THE MEASURE. #780 added this background and set Width here too,
+// which counted \leftskip and \rightskip TWICE: breakSegment is handed
+//
+//	lineWidth := spToPt(e.hsize - e.leftskip.width - e.rightskip.width)
+//
+// at paragraph.go:81, and the background was then added to every line's natural
+// width on top of that.
+//
+// tex.web keeps line_width at \hsize and puts the widths in background[1]
+// (§16307-16315); this engine subtracts them from the measure instead. The two
+// are the same arithmetic and either is faithful — doing BOTH is not.
+//
+// Measured on #583's own witness (`\rightskip=100pt` on a 343.7pt measure, the
+// right margin at 477.50):
+//
+//	reference      3 lines, `A fairly long subsection title that has to wrap onto a`, x1 377.85
+//	before #780    3 lines, the same split, x1 377.87  — matched
+//	#780           5 lines, `A fairly long subsection title that`, stretched to 377.87
+//	this           3 lines, the reference's split again
+//
+// The margin was right in all of them; what the double count moved was how much
+// text the breaker thought would fit, and five stretched lines where the
+// reference sets three is the visible cost. #583's first defect was already
+// fixed before #780 and #780 reopened it.
+func (e *Engine) skipBackground() LineBackground {
+	var bg LineBackground
+	for _, s := range []glueSpec{e.leftskip, e.rightskip} {
+		bg.Stretch[glueOrder(s.stretchOrder)] += spToPt(s.stretch)
+		bg.Shrink += spToPt(s.shrink)
+	}
+	return bg
+}
+
+// raggedBackground reports whether the glue that will be added to every line
+// carries INFINITE stretch — \raggedright's `0pt plus 1fil`, and \centering's
+// pair of them.
+//
+// ⚠ IT IS THE ORDER, NOT THE AMOUNT. A \rightskip of `0pt plus 100pt` is a very
+// stretchy margin and still a finite one: TeX balances looseness against it as
+// usual. Only an infinite order collapses badness to 0 (§852), and that is the
+// distinction \raggedright turns on.
+func (e *Engine) raggedBackground() bool {
+	return e.rightskip.stretchOrder > 0 || e.leftskip.stretchOrder > 0
+}
+
 // hasBadLine reports whether any line is overfull or badly underfull (a ratio
 // well outside the normal [-1, small] range — the capped/infinite bad values).
+//
+// ⛔⛔ AND A RATIO IS NOTHING WITHOUT ITS ORDER. This read `ln.Ratio > 100`
+// alone, which was harmless only while a fil was flattened into the finite
+// stretch column: the \parfillskip's 1e6 made the last line's ratio come out
+// near zero, by accident.
+//
+// With the orders real (go-typeset/linebreak v1.5.0), Ratio on such a line is
+// measured against its ONE unit of fil, so an ordinary last line taking up 300pt
+// of slack reports 300 — and this said "bad line" about EVERY paragraph. The
+// first pass therefore failed on all of them and every document went to the
+// hyphenating pass, which is a far larger change than the one being made: the
+// symptom that found it was a space vanishing between a formula and the next
+// word, three breaks away.
+//
+// tex.web has no such ambiguity because it never divides: §16790-16793 gives a
+// line with any infinite stretch b = 0 and asks no further question. So the
+// test applies to the finite order only — and overfull stays unconditional,
+// because shrinking has no orders at all (§16806).
 func hasBadLine(lines []Line) bool {
 	for _, ln := range lines {
-		if ln.Ratio < -1 || ln.Ratio > 100 {
+		if ln.Ratio < -1 {
+			return true // overfull past its shrink, at any order
+		}
+		if ln.StretchOrder == 0 && ln.Ratio > 100 {
 			return true
 		}
 	}
@@ -395,15 +688,29 @@ func toItems(list []node) []Item {
 		case kernNode:
 			items[i] = Box(spToPt(c.width))
 		case glueNode:
-			st := spToPt(c.spec.stretch)
-			if c.spec.stretchOrder > 0 {
-				st = 1e6
-			}
+			// ⛔⛔ THE ORDER IS CARRIED, NOT FLATTENED. This read
+			//
+			//	if c.spec.stretchOrder > 0 { st = 1e6 }
+			//
+			// which turned `plus 1fil` into a large FINITE stretch. tex.web
+			// §16790-16793 gives any line carrying fil/fill/filll badness 0 and
+			// fitness `decent` — it is perfect, not merely very good — so a flattened
+			// fil came out with a large but finite badness and a \raggedright
+			// paragraph failed the first pass and took the hyphens of a justified one.
+			// go-typeset/linebreak carries the four columns since v1.5.0 (its #12
+			// item 1), so the order can simply be passed through.
+			//
+			// ⚠ SHRINK STILL HAS NO ORDERS, and that is tex.web's own sentence
+			// (§16806): "Shrinkability is never infinite in a paragraph". A
+			// `minus 1fil` is still flattened, because the breaker has nowhere to put
+			// it; it can only ever make a line narrower, and a line being shrunk has
+			// no infinite case at all.
 			sh := spToPt(c.spec.shrink)
 			if c.spec.shrinkOrder > 0 {
 				sh = 1e6
 			}
-			items[i] = Glue(spToPt(c.spec.width), st, sh)
+			items[i] = GlueOrder(spToPt(c.spec.width), spToPt(c.spec.stretch),
+				glueOrder(c.spec.stretchOrder), sh)
 		case penaltyNode:
 			items[i] = Penalty(0, float64(c.penalty), false)
 		case discNode:

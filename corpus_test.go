@@ -139,7 +139,11 @@ var glyphFloor = map[string]int{
 	//
 	// A floor is a measurement, so two branches that both move one are two branches
 	// that must be re-measured against each other's merge base, not just rebased.
-	"24-sommaire": 164, // lowered from 165 (#710), 173 (#708), 301: the contents leader now tiles LaTeX's
+	// ⛔ 164 → 162 WITH THE DEFAULT FACE CHANGED TO LATIN MODERN (#370): this document
+	// draws two glyphs fewer. The only change on the branch is the face (and the width
+	// and ligature repertoire that come with it); the two glyphs were not traced to a
+	// single character, so this records a measurement, not a diagnosis.
+	"24-sommaire": 162, // lowered from 164, 165 (#710), 173 (#708), 301: the contents leader now tiles LaTeX's
 	// \@dotsep box instead of \dotfill's, and \l@section carries no leader at all,
 	// so 108 of the glyphs this document used to draw were dots. Control: the text
 	// of the PDF is byte-identical with '.' and spaces removed, before and after.

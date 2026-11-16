@@ -4,14 +4,14 @@ go 1.27.2
 
 require (
 	github.com/go-gfx/gfx v0.37.0
-	github.com/go-opentype/opentype v0.18.0
+	github.com/go-opentype/opentype v0.21.1
 	github.com/go-pdfkit/pdfkit v0.20.0
 	github.com/go-pdfkit/reader v0.9.0
 	github.com/go-tex/math v0.50.0
 	github.com/go-tex/pdfrender v0.3.2
 	github.com/go-tex/texmf v0.7.0
-	github.com/go-typeset/hyphenation v1.0.0
-	github.com/go-typeset/linebreak v1.3.0
+	github.com/go-typeset/hyphenation v1.0.1
+	github.com/go-typeset/linebreak v1.10.0
 	golang.org/x/text v0.43.0
 )
 

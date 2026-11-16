@@ -1,0 +1,11 @@
+\documentclass{article}
+\newcommand\m[2]{\setbox0\hbox{$#2$}#1 \the\wd0 / \the\ht0 / \the\dp0\par}
+\begin{document}
+\noindent
+\m{abc}{a+b=c}
+\m{pow}{x^2_i}
+\m{frac}{\frac{a}{b}}
+\m{sum}{\sum_{k=1}^{n} y_k}
+\m{sqrt}{\sqrt{x+1}}
+\m{int}{\int_0^1 f(x)\,dx}
+\end{document}

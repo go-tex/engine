@@ -58,8 +58,10 @@ func TestStrutSetsTheLineHeight(t *testing.T) {
 	// nothing here, not that the number matches the reference.
 	if v, ok := got["WH"]; !ok {
 		t.Error(`WH= was not printed`)
-	} else if d := v - 4.73; d > 0.01 || d < -0.01 {
-		t.Errorf("the control WITHOUT a strut moved: %.2fpt instead of 4.73pt", v)
+	} else if d := v - 4.31; d > 0.01 || d < -0.01 {
+		// 4.31pt, which IS the reference's: the built-in face is Latin Modern now, and
+		// the 4.73pt this pinned was STIX Two Math's x-height (go-tex/engine#370).
+		t.Errorf("the control WITHOUT a strut moved: %.2fpt instead of 4.31pt", v)
 	}
 }
 

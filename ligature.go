@@ -32,8 +32,14 @@ const (
 )
 
 // fontHas reports whether the current font can draw a glyph for r.
+//
+// ⛔ It asks hasGlyphFor and not glyphPathAt: the question is "can this face set
+// r as one glyph", and for a ligature whose font files it in GSUB alone the cmap
+// path answers no about a glyph the font has. That cost up to 1.09pt per pair on
+// LibertinusSerif, on pairs as common as "fi" (#723, and see glyphFor for the
+// measurement).
 func (e *Engine) fontHas(r rune) bool {
-	return e.curFont != nil && e.curFont.glyphPathAt(r) != ""
+	return e.curFont != nil && e.curFont.hasGlyphFor(r)
 }
 
 // ligature folds a trailing character prev and the newcomer cur into a single

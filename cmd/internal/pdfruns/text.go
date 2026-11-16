@@ -1,7 +1,7 @@
 // Copyright (c) the go-tex/engine authors.
 // SPDX-License-Identifier: BSD-3-Clause
 
-package main
+package pdfruns
 
 import (
 	"math"

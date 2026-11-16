@@ -85,6 +85,9 @@ var texGlueParams = []string{
 // layer has claimed) is left alone.
 func (e *Engine) loadTeXParams() {
 	e.endlineReg = -1
+	// -1, not 0: register 0 belongs to somebody, and a zero default would make
+	// every assignment to it look like a dropped hanging indent.
+	e.hangIndentReg = -1
 	for name, def := range texIntParams {
 		if e.eq[name] != nil || e.allocCnt >= 256 {
 			continue
@@ -103,6 +106,19 @@ func (e *Engine) loadTeXParams() {
 	if m := e.eq["escapechar"]; m != nil && m.kind == mCountRef {
 		e.escapeReg = m.code
 	}
+	// ⛔ \hangindent'S REGISTER IS NOT CACHED HERE, AND THAT IS THE WHOLE POINT.
+	// classkernel.go runs AFTER this and declares \newdimen\hangindent, which
+	// rebinds the name to a different register — so a value cached at the end of
+	// this function would name a register nothing writes to, and the drop census
+	// would report nothing for ever while looking perfectly alive. That is the
+	// load-order trap this file already records twice (\prevdepth, \hangafter).
+	// The cache is maintained by define instead, which sees every binding
+	// including the ones that come later. See Engine.define.
+	//
+	// ⚠ MEASURED, NOT ARGUED. Caching here instead makes the engine watch dimen
+	// register 21 while \hangindent resolves to 59 after the kernel loads — and
+	// to 104 once a document declares its own. The census then reports nothing
+	// for every document for ever.
 	for _, name := range texDimenParams {
 		if e.eq[name] != nil || e.allocDim >= 256 {
 			continue

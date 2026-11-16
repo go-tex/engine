@@ -132,6 +132,34 @@ engine. The LaTeX2e option mechanism runs too: `\DeclareOption`,
 skipped, so a real class contributes what it can — and a **runaway-expansion
 guard** bounds macro expansion so a pathological or partially-supported file can
 never hang (it stops with partial output in lenient mode, an error in strict).
+
+⛔ That guard has **two** ceilings, and which one stops a document says something
+different about it. The **no-progress** ceiling measures TeX-style forward
+progress — expansion steps taken while the mouth reads no new input — and a
+self-referential macro crosses it in under half a second. The **absolute** one is
+a coarse backstop on total steps, and its old comment, *"a large real document
+stays well under it"*, is false for a figure-heavy paper: one tikzDevice picture
+(R's output — 489 KB, thousands of coordinates, each through `pgfmath`) spends
+tens of millions of steps inside a single `\path`, with the input advancing the
+whole way. Measured on arXiv `2405.11065` with the real pgf sources: it takes
+**106 315 622** expansion steps — against a 60M ceiling, so **7 pages of 18** and
+a report of a possible loop; with `Options.StepLimit: engine.StepLimitHeavy`
+(600M), which `gotex` now passes beside `NoProgressLimitHeavy`, **all 18 and no
+trip**. Its longest run reading no new input is **3 117 166**, six times *under*
+the no-progress ceiling, which it never approached — the document advanced the
+whole way and simply needed more budget. Raising the *no-progress* ceiling twentyfold changes
+nothing on that paper — it stops at the same byte with the same seven pages,
+which is the wrong turn #360 recorded for seven weeks.
+
+So the report carries its evidence instead of a verdict: both counters, the
+ceiling reached, and the two readings of it, because the engine cannot tell them
+apart — a legitimate `\path` and a loop both spend millions of steps reading no
+input. What *does* tell them apart is raising the ceilings: a loop stops at the
+same place however high they go. `GOTEX_TRACE=1` prints the margin to each
+ceiling on **every** compile, including one that succeeds, since a margin is only
+useful before it is crossed. Raising the absolute ceiling does not slow a loop
+down: the no-progress ceiling still catches one first, which
+`TestALoopIsStillCaughtByTheNoProgressCeilingAtShippedLimits` holds.
 Distribution-heavy packages the engine emulates natively or better as stubs
 (`geometry`, `tikz`, `hyperref`, `graphicx`, encodings, …) are not loaded from
 disk.
@@ -182,7 +210,12 @@ format and image type, with its status, plus every remaining gap — lives at
   `geometry`, `fancyhdr` (and the class page styles beside it: a
   `\thispagestyle{plain}` page — every chapter opening in a book or report, and
   the first page of its contents list — keeps its folio centred at the foot even
-  though the class declared a running head for the whole document),
+  though the class declared a running head for the whole document; and the
+  running head itself now carries **its own page's** mark, because `\mark`
+  travels with page breaking and `\topmark`/`\firstmark`/`\botmark` are
+  maintained per page as `tex.web` §1012 maintains them, so a head that tracks
+  sections names the section the reader is in rather than the document's last
+  one),
   `setspace`, `enumitem`, `multicols`, `booktabs`/`multirow`/`tabularx`,
   `subcaption`, `algorithm`/`algorithmic`, `listings` (`caption=`, `label=` and
   `captionpos=`, so a listing is numbered, captioned and referable; and
@@ -416,7 +449,30 @@ Each stage is gated by an objective oracle:
    nothing: `\vspace{\fill}` under that style put its word at **143.91** where
    `tectonic` puts it at **664.72**. §19811-19814 sets `vbadness:=inf_bad` and
    `vfuzz:=max_dimen` around that call *"to inhibit error messages"*, so a page that
-   cannot fill itself is packed short in **silence** — it is not a warning. `\\` is a **Go primitive** that scans its own
+   cannot fill itself is packed short in **silence** — it is not a warning.
+   **A running head was four mechanisms, and three correct fixes left it empty.**
+   The band and the folio were right ([#726](https://github.com/go-tex/engine/pull/726)),
+   the page-style dispatch was right, the mark pair moved to `\@themark` — the name
+   the kernel and every class use ([#728](https://github.com/go-tex/engine/pull/728)) —
+   and the head stayed blank, because `amssubstrate.go` carried `\def\mark#1{}`: a
+   stub that **discarded its argument**, one layer below all three. A stub like that
+   is the one shape no channel sees — the document asks, the engine says nothing, the
+   suite stays green, and the loss exists only as ink that is not on the page. It
+   cost 27 of the 128 corpus papers with a reference their head. What found it was a
+   test asking not *is this layer right* but **does the node arrive**
+   ([#729](https://github.com/go-tex/engine/pull/729)). Marks now travel as nodes on
+   the vertical list, their argument expanded at mark time (`scan_toks(false,true)`,
+   so amsart's `\mark{\the\@temptokena}` stores the pair and not the three tokens
+   that would fetch it), and `\topmark`/`\firstmark`/`\botmark` follow §1012's
+   arithmetic (`:19718-19729`, `:19782-19789`) — including the two consequences a
+   plainer reading misses and a head depends on: `\botmark` is **not** cleared on a
+   page with no marks, so a head set once at `\maketitle` stays; and `\firstmark`
+   falls back to `\topmark`, so a page broken mid-section reports the mark in force
+   at its own top. Measured: 6 corpus papers gain ink at **identical page counts**,
+   invisible to Σ and visible only to `hashdiff`, and Σ/bias/exact do not move.
+   A `\mark` in a class **preamble** is read and dropped: `ws-fnl.cls` carries one,
+   and contributing it to a page that does not exist yet turned 9 pages into 10 with
+   the ink identical. `\\` is a **Go primitive** that scans its own
    star and optional length: as a macro built on `\@ifstar` it put `\@ifstar` into the
    maths source and every formula holding a matrix row separator was refused, because
    the maths capture writes a control sequence **verbatim** and never consults its
@@ -445,6 +501,89 @@ Each stage is gated by an objective oracle:
    (#665), and a line ended by a forced break is **not justified** here — `\parfillskip`
    is appended to every forced-break fragment instead of once per paragraph, so the
    slack it should give the interword glue is absorbed (#666).
+   **The second pass is the final pass**, as `tex.web` §863 says in one line:
+   `final_pass:=(emergency_stretch<=0)`, set on *entering* it. `\emergencystretch`
+   is accept-and-ignore here, so there is no third pass and TeX's
+   `artificial_demerits` — a break taken at zero cost where the line is hopeless,
+   nothing feasible was recorded and one node is active — belongs to the second.
+   It could not be armed while `go-typeset/linebreak` recorded every forced break
+   whatever its badness and ran that clause outside §16769's branch; both are
+   fixed in its v1.4.0.
+   ⭐ **And the passes are now only TeX's**, which closed
+   [#768](https://github.com/go-tex/engine/issues/768)'s second finding. A fourth
+   pass used to run at an effectively infinite tolerance whenever the others left
+   a bad line; `tex.web` has no such pass — §863 has three and none of them
+   raises the tolerance — and it would rather leave a line overfull than take
+   more hyphens. On #768's witness (`\hsize=45pt`, `\fussy`) the reference sets
+   **5 lines with four overfull boxes**; with that pass we set 7 that all fit,
+   and we now set the reference's **5**, its first three lines matching to
+   **0.02pt**.
+   It could not go until `\leftskip`/`\rightskip` became the **background** of
+   every line and a `fil` stopped being flattened into the finite stretch column
+   (`go-typeset/linebreak` v1.5.0, its
+   [#12](https://github.com/go-typeset/linebreak/issues/12) item 1): §16790-16793
+   gives a line carrying any `fil` badness 0, so under `\raggedright` the first
+   pass — which has no hyphens — succeeds outright, where before every such line
+   was merely *loose* and four tests stopped hyphenating when the fourth pass was
+   taken away.
+   ⚠ **The corpus says faithful, not better.** Over 40 papers scored both sides:
+   line agreement 91.23 → **91.34%**, papers whose page count is exactly the
+   reference's 12 → **13/40**, one paper that did not render now rendering and
+   landing exactly right — against Σ|page error| 123 → **125** and mean
+   divergence 3.884 → **3.935**. Three papers moved one page, two of them
+   *missing* pages, which is [#381](https://github.com/go-tex/engine/issues/381)
+   (our lines hold more than the reference's) exposed a little further now that
+   lines are no longer padded out with extra hyphens.
+   **A paragraph is broken on its own SHAPE, not only on `\hsize`.** TeX's shape
+   parameters reach the line **breaker** rather than being accepted and ignored:
+   `\hangindent`/`\hangafter` (`tex.web` §847-850, `:16676-16748`) and
+   `\parshape` (`:23275-23286`, whose last pair repeats for every later line,
+   `:16680-16681`). `\parshape` **wins** over `\hangindent`, which is not obvious
+   and is settled at `:16706` — it tests `par_shape_ptr` first and consults
+   `hang_indent` only in the `else` branch. All of them last **one paragraph**:
+   `normal_paragraph` clears them at every `\par` (`:20756-20761`), which became
+   a defect here only once `\hangindent` started working at all.
+   ⚠ **A no-regression check, not a win, and the census says why.** `\parshape`
+   is set by **0** of the 154 measured papers and `\hangindent` by **3**, so the
+   corpus A/B moves Σ\|page deviation\| `306 → 306` with **0** papers moved —
+   the *predicted* result, where anything else would have meant a bug. The
+   witnesses are unit-level, and each was confirmed by removing the line it
+   tests: reading `\hangindent` first makes the precedence test, and only that
+   test, fail.
+   **Hyphenation is Liang's algorithm on the embedded US-English patterns**
+   (`go-typeset/hyphenation`), with `\lefthyphenmin`/`\righthyphenmin`,
+   `\hyphenchar` — a face that files it negative is never broken, which is how
+   `\texttt` keeps code whole (`tex.web` §896) — and the document's own
+   `\hyphenation{…}` exception list. Two defects there were invisible to every
+   test:
+   **an accented word broke at an offset**, because the library built its value
+   array over the word by BYTE index and read it back by RUNE index — the two
+   agree for exactly as long as every letter is one byte, which is every
+   English word and no French one. `élémentaires` broke as `éléme-ntaires`,
+   between the m and the n of a syllable, where no pattern can put a break;
+   with the fix it is whole and `présentation` breaks `présenta-tion`, which is
+   where tectonic breaks it
+   ([go-typeset/hyphenation#8](https://github.com/go-typeset/hyphenation/pull/8),
+   [#774](https://github.com/go-tex/engine/pull/774)).
+   **And `\hyphenation{…}` was a stub that discarded its argument** — a document
+   writes it for the words the patterns get *wrong*, so the silence fell exactly
+   on the words it was asked about. An entry now replaces the patterns for its
+   word (`tex.web` §937), including an entry with no hyphen at all, which says
+   the word may never be broken
+   ([#775](https://github.com/go-tex/engine/pull/775)).
+   **And the engine loaded MORE patterns than the reference has.** The embedded
+   file is `ushyphmax.tex`: `hyphen.tex`'s patterns, a marker line, then 492
+   additions. LaTeX's `language.dat` loads `hyph-en-us.tex`, which is the first
+   half only, so every addition that applied changed a word's break points —
+   including when it *forbade* a break, since Liang takes the highest value and
+   an even one is a refusal. `.ev2` is one, and it outranks `hyphen.tex`'s
+   `ev1er`: `every` could not be broken at all. tectonic 0.17.0 at `\hsize=18pt`
+   sets `ev-`/`ery`. Loading stops at the marker now, and `incomprehensibilities`,
+   `overwhelm`, `paragraph`, `photography` and `typographical` break exactly where
+   they did — which is why nothing noticed for as long as the whole file was read.
+   ⚠ **Only English patterns are embedded.** A paper in another language is set
+   unhyphenated where a real TeX hyphenates it; that gap is tracked in
+   [#754](https://github.com/go-tex/engine/issues/754).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
@@ -499,9 +638,11 @@ question the others cannot. They are ordinary `go run ./cmd/…` programs.
 
 | | |
 |---|---|
-| `gotex-abdiff` | compiles a corpus of real papers at two revisions and reports Σ\|page deviation\| against the reference counts, naming every paper that moved. It builds each side in its own `git worktree`, checks that the head really descends from the base, and prints whether `GOTEX_PDFRENDER` was set — three measurements had been read the wrong way before it did. |
-| `gotex-refdiff` | compiles a sample of papers with `tectonic` and with the engine and scores each one: word recall (`what` text came out) or, with `-layout`, word displacement (`where` it landed). `-gotex` names the binary to measure, so two revisions can be put side by side over the **same** sample; `-list` draws that sample from a named corpus list instead of walking a raw arXiv directory, where the papers the REFERENCE cannot compile score "ref-unavailable" — a 30-paper run came back 30 of 30 unavailable on both sides of a change, which reads exactly like "no difference". |
-| `gotex-linediff` | puts one page of two PDFs side by side **line by line** — where each line starts and ends, its baseline, face and size, and, when it holds a dot leader, how many tiles it draws and how far apart. This is the rung below a per-paper score: the sentence a defect is fixed from reads "our entry starts 1.58pt right of the reference's and its dots are twice as dense". It reads the PDFs with `go-pdfkit/reader` — no `qpdf`, no poppler, no MuPDF. |
+| `gotex-abdiff` | compiles a corpus of real papers at two revisions and reports Σ\|page deviation\| against the reference counts, naming every paper that moved. It builds each side in its own `git worktree`, checks that the head really descends from the base, and prints whether `GOTEX_PDFRENDER` was set — three measurements had been read the wrong way before it did. It also reports **Σ glyphs** per side, because a page count cannot tell "the same text, broken differently" from "text that appeared or vanished": pages moving while the ink holds still is a **breaking** change, ink moving is a **content** change, and the `xkeyval` precedent — a package that stopped erroring, same page count, text on the page that had not been there before — was called "nothing moved" by a page-only A/B. ⛔ The ink is a **witness, not a score**, and the line says so: the reference file carries page counts only, so there is no reference ink to be near or far from. Pages that parse but whose text does not decode are counted in their own field and make the report disown its own glyph delta, because two incomplete sums differ by an amount that looks exactly like ink that moved. Both tools refuse to measure above a 1-minute **or** 5-minute load average of 8 (`cmd/internal/loadguard`, shared with `gotex-refdiff`), and refuse when they cannot *read* the load at all — an unreadable machine is not an idle one; `-under-load '<why>'` measures anyway and **stamps the reason into the report**. |
+| `gotex-refdiff` | compiles a sample of papers with `tectonic` and with the engine and scores each one: word recall (`what` text came out) or, with `-layout`, word displacement (`where` it landed). `-gotex` names the binary to measure, so two revisions can be put side by side over the **same** sample; `-list` draws that sample from a named corpus list instead of walking a raw arXiv directory, where the papers the REFERENCE cannot compile score "ref-unavailable" — a 30-paper run came back 30 of 30 unavailable on both sides of a change, which reads exactly like "no difference". A compile that merely exhausts `-timeout` is `timed-out` and leaves the score on **either** side, with a banner on stderr: it used to be scored 0 on ours and merely dropped on the reference's, so a slow paper — or a loaded machine — moved the mean one way only. |
+| `gotex-linediff` | puts one page of two PDFs side by side **line by line** — where each line starts and ends, its baseline, face and size, and, when it holds a dot leader, how many tiles it draws and how far apart. This is the rung below a per-paper score: the sentence a defect is fixed from reads "our entry starts 1.58pt right of the reference's and its dots are twice as dense". It reads the PDFs with `go-pdfkit/reader` — no `qpdf`, no poppler, no MuPDF. That extractor now lives in `cmd/internal/pdfruns` rather than inside this command, so `gotex-abdiff` can count ink with it instead of a second protocol being written to answer the same question. |
+| `gotex-worddiff` | which **words** one PDF holds that the other does not, as a multiset, for two builds of this engine and no reference. It answers the question a moved score leaves open — `gotex-refdiff` says a paper fell 0.1 points, this says which words that was. It reads both files through `internal/pdftext`, the extractor the score itself uses: a word-diff on a different extractor reports the two extractors' disagreement in the engine's units, which is how a fused `CenterforTheoretical` got published twice as an engine defect before the line dump showed the spaces were in both files. `-layout` keeps **columns** apart — without it a two-column page is read as one stream and the end of one column's line fuses onto the start of another's (`disFigure`, `participaentire`), and which boundaries fuse moves when the lines do. On #772's two papers, scoring with `-layout` extraction made one of two apparent regressions vanish outright and reduced the other to a single word. |
+| `gotex-paramcensus` | which **measured** papers set a given TeX parameter, which is how a divergence is sized before anyone spends a corpus run on it: `\looseness` turned out to be set by **0** of the 154 (so implementing it is bit-identical and owes no A/B), `\emergencystretch` by 4, and only 1 paper has a non-English main language — deflating "English-only hyphenation explains the page-count gap". The obvious `grep -rl` is wrong **five** ways, each of which reads as a clean answer: it counts the whole paper tree instead of the measured list; the list names each paper's `main.tex`, **not its directory**, so walking its entries reads 154 files where the papers hold **679** and every `\input`ed chapter is skipped; a commented-out setting is not a setting; a bare substring matches prose; and ⛔ **a control word is a prefix of longer control words** — asked for `\font`, a substring scan answered **14 of 154**, every hit being `\fontsize{13}{16}` or `\Affilfont` and not one a use of the primitive. TeX ends a control word at the first non-letter, so a term that is one is matched to that boundary and `\font` now answers **2**, both of them the current-font token in `\fontdimen2\font` and `\hyphenchar\font`. The fix moved only `\font`: `\looseness` 0, `\emergencystretch` 4 and `\hangindent` 3 are unchanged, so no figure published here had to be revisited. It **refuses** rather than printing a zero it cannot stand behind — every run must find its `-control` term (default `\documentclass`) and must have read a file, because a scan that could not read reports zero exactly like a corpus that holds nothing. |
 | `gotex-coverage` | the coverage floor CI enforces. |
 
 A dot leader is the case that makes the last one worth having: `Title. . . . 7`

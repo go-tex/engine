@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-
-	texmath "github.com/go-tex/math"
 )
 
 // This file is the high-level compile API: one call turns TeX source into a PDF
@@ -50,6 +48,26 @@ type Options struct {
 	// default because a genuine loop then takes ten times as long to abort, and a
 	// caller exercising the guard wants it tight.
 	NoProgressLimit int
+
+	// StepLimit raises the ABSOLUTE ceiling on expansion steps — the coarse
+	// backstop that stops a compile however well the input is advancing. Zero
+	// keeps the engine's own.
+	//
+	// ⛔ A program that renders whole documents should ask for StepLimitHeavy.
+	// The engine's own ceiling carries the comment "a large real document stays
+	// well under it", and that is false for a figure-heavy paper: one tikzDevice
+	// picture of 489 KB — R's output, thousands of coordinates, every one of them
+	// through pgfmath — spends tens of millions of steps inside a single \path.
+	// Measured on arXiv 2405.11065 with the real pgf sources: at the engine's own
+	// ceiling it renders 7 pages of 18 and reports a runaway; with this raised it
+	// renders all 18 and reports none. The no-progress ceiling is NOT what was
+	// stopping it — raised twentyfold it changes nothing, which is the mistake
+	// go-tex/engine#360 recorded for seven weeks.
+	//
+	// It is not the default for the same reason NoProgressLimit is not: a caller
+	// exercising the guard wants it tight, and a genuine loop that also fails to
+	// trip the no-progress guard would run far longer before this one caught it.
+	StepLimit int
 
 	// Resolve supplies class, package and \input files that the process cannot
 	// read from disk, so a host can hand the engine a texmf tree it holds in
@@ -109,6 +127,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if opt.NoProgressLimit > 0 {
 		e.tightLimit = opt.NoProgressLimit
 	}
+	if opt.StepLimit > 0 {
+		e.stepLimit = opt.StepLimit
+	}
 	if !opt.NoPlain {
 		if err := e.LoadPlain(); err != nil {
 			return nil, fmt.Errorf("texengine: loading macros: %w", err)
@@ -128,7 +149,18 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	}
 	fontBytes := opt.Font
 	if fontBytes == nil {
-		fontBytes = texmath.DefaultFont()
+		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
+		// caller that names only some faces keeps exactly what it named.
+		fontBytes = lmRomanRegular
+		if opt.BoldFont == nil {
+			opt.BoldFont = lmRomanBold
+		}
+		if opt.ItalicFont == nil {
+			opt.ItalicFont = lmRomanItalic
+		}
+		if opt.MonoFont == nil {
+			opt.MonoFont = lmMonoRegular
+		}
 	}
 	reg, err := NewOpenTypeFont(fontBytes, float64(opt.size()))
 	if err != nil {
@@ -194,6 +226,19 @@ func (e *Engine) bindOptionalFont(name string, data []byte, size int) error {
 		return fmt.Errorf("texengine: %s font: %w", name, err)
 	}
 	e.bindFont(name, f)
+	// ⛔ THE TYPEWRITER FACE IS NOT HYPHENATED, and the reference says so in its
+	// font-shape declaration rather than anywhere a document can see:
+	// tulmtt.fd:51 is `\hyphenchar \font\m@ne`. tex.web §896 then refuses to
+	// hyphenate any word set in it — which is how code, identifiers and file
+	// names survive a narrow measure intact.
+	//
+	// This engine reads no .fd files, so this binding is the equivalent place.
+	// It applies to whatever face the host supplied for "tt": a host that passes
+	// its own monospace font gets the same rule, because the rule is about what
+	// the face is FOR and not about which file it is.
+	if name == "tt" {
+		e.setHyphenChar(f, -1)
+	}
 	return nil
 }
 
@@ -350,3 +395,8 @@ func isLaTeX(src []byte) bool {
 // should put in Options.NoProgressLimit. See tightLoopStepsHeavy for what it
 // costs and what it buys.
 const NoProgressLimitHeavy = tightLoopStepsHeavy
+
+// StepLimitHeavy is the absolute ceiling a program that renders whole documents
+// should put in Options.StepLimit. See maxExpandStepsHeavy for the measurement
+// that sets it.
+const StepLimitHeavy = maxExpandStepsHeavy

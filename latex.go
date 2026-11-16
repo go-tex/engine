@@ -732,7 +732,14 @@ const MiniLaTeXKernel = `
 \def\ldots{...}
 \def\dots{...}
 \def\newpage{\par\penalty-10000 }
-\def\clearpage{\par\penalty-10000 }
+% \clearpage opens with LaTeX's empty \hbox (latex.ltx:15065), contributed only
+% while the main vertical list is still empty. That box is why \prevdepth is
+% 0.0pt rather than -1000pt at a document body's start in the reference (#699):
+% nothing assigns \prevdepth, appending a BOX sets it. article.cls:640 runs
+% \onecolumn at class load, \onecolumn runs \clearpage, and that is the whole
+% chain. See clearpagestrut.go for why the reference's \pagetotal guard is not
+% ported as written.
+\def\clearpage{\gotex@clearpagestrut\par\penalty-10000 }
 % \cleardoublepage starts a page, and in TWOSIDE also leaves a blank one when the
 % next page would be even (LaTeX: \clearpage\if@twoside\ifodd\c@page\else
 % \hbox{}\newpage\fi\fi). The engine decides page numbers in the page builder and
@@ -1343,8 +1350,31 @@ const MiniLaTeXKernel = `
 \def\normalem{}
 \def\ULforem{}
 \def\useunder{}
-\def\sloppy{}
-\def\fussy{}
+% \sloppy and \fussy, verbatim from latex.ltx:13367-13378.
+%
+% ⛔ BOTH WERE EMPTY, AND \sloppy IS IN 775 OF THE 2935 CORPUS PAPERS — 26.4%,
+% measured with TeX comments stripped. A quarter of the corpus asked the line
+% breaker to loosen and this engine answered by doing nothing.
+%
+% \tolerance is live here (paragraph.go:195 reads it through namedInt), so this
+% takes effect rather than being decoration. \emergencystretch, \hfuzz and
+% \vfuzz are accept-and-ignore parameters, which is exactly what they already
+% are when a document assigns them directly — writing them here changes nothing
+% about how they behave and keeps the commands' definitions honest for a
+% document that reads them back.
+%
+% ⚠ \sloppy's effect is CONDITIONAL, which is worth knowing before expecting
+% much from it: measured against tectonic, the same paragraph at \hsize=100pt
+% comes out IDENTICAL under \fussy and \sloppy, because it already fits within
+% \tolerance=200. It takes a paragraph that genuinely fails at 200 — \hsize=45pt
+% on a witness here — before the two part, and there the reference goes from 5
+% lines to 8.
+%
+% ⚠ And a larger divergence sits beside this one: our DEFAULT breaking is
+% already about as loose as the reference's \sloppy (5 lines against our 8 on
+% that witness). That is #768 and is not addressed here.
+\def\sloppy{\tolerance 9999\emergencystretch 3em\hfuzz .5pt\vfuzz\hfuzz}
+\def\fussy{\emergencystretch 0pt\tolerance 200\hfuzz .1pt\vfuzz\hfuzz}
 \def\raggedbottom{}
 \def\flushbottom{}
 \def\MFUhyphentrue{}
@@ -1720,6 +1750,9 @@ const MiniLaTeXKernel = `
 \def\nopagebreak{\@testopt\@no@pgbk4}
 \def\linebreak{\@testopt{\@no@lnbk-}4}
 \def\nolinebreak{\@testopt\@no@lnbk4}
+% \allowbreak, latex.ltx:600 verbatim — a break opportunity of penalty 0 and nothing
+% else. It was undefined in text: strict mode aborted on \texttt{a\_\allowbreak b}.
+\def\allowbreak{\penalty \z@}
 % \@getpen, ltspace.dtx:529-531 verbatim. The optional argument is a DEGREE, not a
 % penalty: 0 means "no opinion" and 4 means "absolutely".
 \def\@getpen#1{\ifcase #1 \z@ \or \@lowpenalty\or

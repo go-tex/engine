@@ -5,6 +5,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -85,7 +86,7 @@ func renderBoxSVG(b *boxNode, margin, vmargin, paperW, paperH float64, font font
 	// very words it highlights. Underneath, the highlight sits behind the glyphs
 	// with no CSS required of the page showing it.
 	var glyphs strings.Builder
-	layer := newTextLayer()
+	layer := newTextLayerFor(font)
 	paintBoxSP(&glyphs, b, margin, vmargin+spToPt(b.height), font, layer)
 	sb.WriteString(layer.String())
 	sb.WriteString(`<g fill="black">`)
@@ -127,7 +128,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 				// A space the author typed, held as a kern so it cannot stretch
 				// (verbatim). The text layer is told, exactly as it is for glue —
 				// the geometric guess below cannot see a space this narrow.
-				lg.text.addSpace()
+				lg.space()
 			}
 			cx += spToPt(c.width)
 		case glueNode:
@@ -135,10 +136,10 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			if c.leader != leaderNone {
 				lg.close()
 			}
-			paintLeader(sb, c.leader, cx, baseline, w, spToPt(c.cell), font)
+			paintLeader(sb, c.leader, x, cx, baseline, w, spToPt(c.cell), font)
 			if c.leader == leaderNone {
 				// Ordinary inter-word glue: the space a reader would type.
-				lg.text.addSpace()
+				lg.space()
 			}
 			cx += w
 		case charNode:
@@ -169,8 +170,29 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += spToPt(c.width)
 		case mathNode:
 			lg.close()
-			// embed the math SVG with its top at (cx, baseline-height): centred
-			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(cx), f(baseline-spToPt(c.height)), c.svg)
+			// ⛔ The formula's group carries its SOURCE LINE, like the prose
+			// around it. It used to carry none: lg.close() ends the open
+			// <g data-l="N"> and the formula went into a bare group, so every
+			// consumer that reads those groups — the playground measures each
+			// one's box in the DOM to build its click-to-source bands — saw a
+			// page where the equations did not exist. Measured: five line
+			// groups on a page, two formulas, both outside all of them.
+			//
+			// It is a group of its own rather than material inside the
+			// surrounding line's, because a display formula is not on that line
+			// and an inline one still wants its own box rather than its
+			// neighbours'.
+			// ⛔ AND ITS RANGE, because a LINE cannot be edited. data-l answers
+			// "scroll the source here"; it cannot say which characters are the
+			// formula, and two formulas on one line share it exactly. data-m
+			// carries the range the way the editor counts — 1-based line,
+			// 0-based RUNE column, both ends being the delimiters' own
+			// positions — so a tap can select the equation rather than its
+			// neighbourhood. Omitted entirely when the formula carries no
+			// stamp: an attribute reading "0:0-0:0" is a position, and a
+			// consumer would act on it.
+			fmt.Fprintf(sb, `<g data-l="%d"%s transform="translate(%s,%s)">%s</g>`,
+				c.srcLine, mathRangeAttr(c), f(cx), f(baseline-spToPt(c.height)), c.svg)
 			// What the formula SAYS, over the formula: its own outlines carry no
 			// characters either, and without this the sentence around it reads with
 			// a silent hole where the equation was.
@@ -264,6 +286,21 @@ func paintFrameSP(sb *strings.Builder, fr frameNode, x, baseline float64, font f
 	paintBoxSP(sb, fr.inner, x+spToPt(fr.rule+fr.sep), baseline, font, tl)
 }
 
+// mathRangeAttr renders a formula's source range as a data-m attribute, or
+// nothing at all when the formula carries no stamp.
+//
+// ⛔ NOTHING, rather than zeros. "0:0-0:0" is a well-formed position and a
+// consumer would act on it — scrolling to the top of the file and selecting
+// nothing, which looks like a bug in the consumer rather than a missing stamp
+// in the producer. An absent attribute is a question the consumer can ask;
+// a zero is an answer it cannot doubt.
+func mathRangeAttr(c mathNode) string {
+	if c.srcLine <= 0 || c.srcEndLine <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(` data-m="%d:%d-%d:%d"`, c.srcLine, c.srcCol, c.srcEndLine, c.srcEndCol)
+}
+
 // mathLayerSize is the font size the text layer gives a formula's source: the
 // formula's own height, so a selection over a big display equation is the size
 // of what it covers rather than of the body text.
@@ -292,6 +329,36 @@ type lineGrouper struct {
 	tl   *textLayer // the page-wide searchable text layer
 	line int        // current open group's line; -1 = none open
 	text textRun    // the characters painted since the group opened
+}
+
+// space records an inter-word space for the text layer, wherever it falls.
+//
+// ⛔⛔ GLUE ARRIVING WHILE THE RUN IS EMPTY USED TO BE DISCARDED, and that threw
+// away the only EXACT information about a word boundary.
+//
+// textRun.addSpace ignores glue before the run's first word, on the grounds that
+// "the boundary in front of a run is the cursor's decision" — but the cursor was
+// never told, so it had nothing to decide with and fell back to the geometric
+// guess. That is the case after a formula: the math closes the run, THEN the
+// inter-word glue arrives, and `$E = mc^2$ exactly` came out as `mc^2exactly`
+// whenever the line's spaces were narrow enough for the gap to read as a kern.
+//
+// ⚠ IT WAS THE SPACING THAT CHANGED, NOT THE LAYER. The gap only fell below the
+// bar once the line was set at the width the reference sets it — on this witness
+// tectonic ends that line at x1=408.21 and the engine now ends it at 406.91,
+// where it used to end at 477.50, almost 70pt wide. A threshold tuned against
+// our own loose spacing passed for years; the exact signal has to be used
+// instead of widened.
+func (g *lineGrouper) space() {
+	if len(g.text.words) > 0 {
+		g.text.addSpace()
+		return
+	}
+	// The run is empty: tell the cursor, which is what decides the boundary in
+	// front of the next run. wantsSpace reads `owed` before any gap test.
+	if g.tl != nil {
+		g.tl.cur.owed = true
+	}
 }
 
 func (g *lineGrouper) set(line int) {
@@ -349,6 +416,20 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 			paintInternalLinkSP(sb, c, x, cy+spToPt(c.height()), font, tl)
 			cy += spToPt(c.height() + c.depth())
 		case mathNode: // display math on its own line
+			// ⚠ THIS PAINTER APPEARS TO BE UNREACHABLE, and it is left alone
+			// deliberately rather than "fixed" to match its horizontal twin.
+			//
+			// Probed by panicking here and running the engine's own maths
+			// corpus: 131 tests matching Math/Display/Align/Equation, and the
+			// panic never fired. Every formula measured — inline, `\[…\]`, and
+			// an `align` environment — reaches the page through the HORIZONTAL
+			// painter instead, which is the one that now stamps data-l.
+			//
+			// Stamping a line here too would have been one line and would have
+			// looked like thoroughness. It would have been unexercised code
+			// carrying a confident comment, which is worse than an honest gap:
+			// whether this branch is dead or merely untested is its own
+			// question, and answering it by editing it would have hidden it.
 			fmt.Fprintf(sb, `<g transform="translate(%s,%s)">%s</g>`, f(x), f(cy), c.svg)
 			tl.addPhrase(c.src, x, spToPt(c.width), cy+spToPt(c.height), mathLayerSize(c))
 			cy += spToPt(c.height + c.depth)
@@ -363,7 +444,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 // paintLeader draws a glue node's set width as a leader: leaderRule fills the
 // span with a thin baseline rule (\hrulefill), leaderDots tiles a row of dots
 // (\dotfill). leaderNone (ordinary glue) paints nothing. w is the set width (pt).
-func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w, cell float64, font fontFace) {
+func paintLeader(sb *strings.Builder, kind glueLeader, edge, x, baseline, w, cell float64, font fontFace) {
 	if w <= 0 {
 		return
 	}
@@ -372,8 +453,26 @@ func paintLeader(sb *strings.Builder, kind glueLeader, x, baseline, w, cell floa
 		th := spToPt(defaultRule)
 		rect(sb, x, baseline-th, w, th)
 	case leaderDots:
-		paintDotLeader(sb, x, baseline, w, cell, font)
+		paintDotLeader(sb, edge, x, baseline, w, cell, font)
 	}
+}
+
+// dotLeaderOrigins is where the tiles of an ALIGNED leader start. \leaders (not
+// \cleaders or \xleaders) lays its boxes on a grid anchored to the left edge of the
+// enclosing box, not to the glue (tex.web §626: cur_h = left_edge + leader_wd *
+// ((cur_h - left_edge) div leader_wd), and a tile is set only if it fits whole). So
+// the dots of a contents line line up from one entry to the next, and the first one
+// is NOT at the end of the title: tectonic sets "Un détail . . ." where the engine,
+// tiling from the glue's own start, set "Un détail. . .".
+func dotLeaderOrigins(edge, x, w, cell float64) []float64 {
+	if cell <= 0 || w <= 0 {
+		return nil
+	}
+	var out []float64
+	for o := edge + math.Ceil((x-edge)/cell-1e-9)*cell; o+cell <= x+w+1e-9; o += cell {
+		out = append(out, o)
+	}
+	return out
 }
 
 // dotLeaderGeom returns how many dot cells fit across width w (pt) and the cell
@@ -393,7 +492,7 @@ func dotLeaderGeom(w, emPt, cell float64) (int, float64) {
 
 // paintDotLeader tiles '.' glyphs centred in successive .44em cells across
 // [x, x+w], approximating TeX's \dotfill (\leaders\hbox to .44em{\hss.\hss}).
-func paintDotLeader(sb *strings.Builder, x, baseline, w, cell float64, font fontFace) {
+func paintDotLeader(sb *strings.Builder, edge, x, baseline, w, cell float64, font fontFace) {
 	if font == nil {
 		return
 	}
@@ -401,11 +500,10 @@ func paintDotLeader(sb *strings.Builder, x, baseline, w, cell float64, font font
 	if d == "" {
 		return
 	}
-	n, cell := dotLeaderGeom(w, float64(font.sizePt()), cell)
+	_, cell = dotLeaderGeom(w, float64(font.sizePt()), cell)
 	dotW := spToPt(func() int { w, _, _ := font.charDimsSP('.'); return w }())
-	for i := 0; i < n; i++ {
-		cx := x + float64(i)*cell + (cell-dotW)/2
-		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(cx), f(baseline), d)
+	for _, o := range dotLeaderOrigins(edge, x, w, cell) {
+		fmt.Fprintf(sb, `<path transform="translate(%s,%s)" d="%s"/>`, f(o+(cell-dotW)/2), f(baseline), d)
 	}
 }
 

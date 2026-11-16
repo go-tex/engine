@@ -23,14 +23,49 @@ import (
 //go:embed hyph_en_us_patterns.txt
 var enUSPatterns []byte
 
+// extraPatternsMarker is the line ushyphmax.tex puts between the two halves of
+// this file. Everything before it is hyphen.tex — Knuth's patterns, which
+// hyph-en-us.tex ships and which LaTeX loads for \language0. Everything after it
+// is ushyphmax's own additions, which a LaTeX document does NOT get.
+const extraPatternsMarker = "% hyphen.tex patterns end here"
+
 // newEnglishHyphenator builds a Hyphenator preloaded with the embedded US-English
 // patterns. Comment lines (a leading %) and blanks are skipped; every other token
 // is one Liang pattern.
+//
+// ⛔⛔ AND IT STOPS AT THE MARKER, BECAUSE THE REFERENCE'S SET STOPS THERE.
+//
+// The file is ushyphmax.tex: hyphen.tex's 4447 patterns, then 492 more from the
+// US word list. LaTeX's language.dat loads hyph-en-us.tex, which is the FIRST
+// half only, so loading all of it hyphenated differently from the reference
+// wherever one of the extra patterns applies — and an extra pattern wins by
+// Liang's rule whenever its value is higher, including when it is EVEN and
+// therefore FORBIDS a break the first half allows.
+//
+// Measured, not reasoned. `every` on tectonic 0.17.0 at \hsize=18pt:
+//
+//	reference   ev-/ery
+//	here        every, overhanging the margin by 5pt
+//
+// because `.ev2` (an addition) outranks `ev1er` (hyphen.tex) at the same
+// position and 2 is even. Loading only the first half gives `ev-ery` and leaves
+// `incomprehensibilities`, `overwhelm`, `paragraph`, `photography`,
+// `typographical` and `democracy` at exactly the points they already had.
+//
+// It was the last divergence on #768's witness: with it, our five lines are the
+// reference's five.
+//
+// ⚠ The extra patterns are KEPT IN THE FILE, after the marker, rather than
+// deleted: the file is a verbatim extract and its provenance is the licence
+// header. What changes is which half is loaded.
 func newEnglishHyphenator() *hyphenator {
 	h := newHyphenator()
 	sc := bufio.NewScanner(bytes.NewReader(enUSPatterns))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, extraPatternsMarker) {
+			break
+		}
 		if line == "" || strings.HasPrefix(line, "%") {
 			continue
 		}
@@ -51,16 +86,38 @@ func (e *Engine) namedInt(name string) int {
 	return texIntParams[name]
 }
 
+// curLang maps \language to TeX's internal cur_lang, which is NOT the same
+// number. tex.web:18261-18263 sends every value outside 0..255 to language
+// ZERO rather than treating it as a language of its own:
+//
+//	@d set_cur_lang==if language<=0 then cur_lang:=0
+//	  else if language>255 then cur_lang:=0
+//	  else cur_lang:=language
+//
+// So \language=-1 and \language=300 select English here and ARE hyphenated,
+// where reading the register directly hyphenated neither.
+//
+// ⚠ An in-range \language is a different question and deliberately unchanged:
+// \language=5 names patterns this engine embeds none of, and returning nil
+// there is a choice — hyphenating one language with another's patterns breaks
+// words where no reader would accept it — not this defect.
+func (e *Engine) curLang() int {
+	if lang := e.namedInt("language"); lang > 0 && lang <= 255 {
+		return lang
+	}
+	return 0
+}
+
 // activeHyphenator returns the Hyphenator to use for the current paragraph, or nil
 // when the text must not be hyphenated. A document's own \patterns always win. With
-// no document patterns, English (\language 0) gets the embedded default set, built
-// once and cached; any other \language gets nothing, since no patterns are embedded
+// no document patterns, English (cur_lang 0) gets the embedded default set, built
+// once and cached; any other language gets nothing, since no patterns are embedded
 // for it and guessing would break at the wrong places. Either way the live
 // \lefthyphenmin / \righthyphenmin decide the affix limits, as in real TeX.
 func (e *Engine) activeHyphenator() *hyphenator {
 	h := e.hyph
 	if h == nil {
-		if e.namedInt("language") != 0 {
+		if e.curLang() != 0 {
 			return nil
 		}
 		if e.enHyph == nil {
@@ -122,9 +179,33 @@ func (e *Engine) hyphenPenalty() int {
 // hyphenateList returns a copy of a paragraph's horizontal list with discretionary
 // hyphen nodes inserted at every legal break inside each word. A word is a maximal
 // run of characters (font kerns between them are kept as interior material).
-// maxHyphenatableLength is TeX's own ceiling on the length of a word it will
-// try to hyphenate (tex.web §891). Longer words are set unhyphenated.
+// maxHyphenatableLength is the capacity of TeX's own hu/hc buffers, which hold
+// the word being hyphenated (tex.web:17602). A longer word is hyphenated in its
+// first 63 letters, not left unhyphenated: see the citation at the use site.
 const maxHyphenatableLength = 63
+
+// precededByGlue reports whether the character at i begins a word TeX would
+// consider for hyphenation: one reached from a glue node.
+//
+// ⚠ IT STEPS OVER KERNS AND WHATSITS, which is what §896-§899 do on the way
+// from the glue to the first letter — a font kern or a \write between the space
+// and the word does not make the word unhyphenatable. It does NOT step over a
+// box, maths or a discretionary: those are exactly the cases §891:17476 names
+// as ending the scan, and stepping over them would reintroduce the defect this
+// exists to remove.
+func precededByGlue(list []node, i int) bool {
+	for k := i - 1; k >= 0; k-- {
+		switch list[k].(type) {
+		case glueNode:
+			return true
+		case kernNode, specialNode:
+			continue // transparent on the way from the glue to the letter
+		default:
+			return false
+		}
+	}
+	return false // nothing precedes it: the start of the list is not a glue
+}
 
 func (e *Engine) hyphenateList(list []node) []node {
 	h := e.activeHyphenator()
@@ -135,6 +216,27 @@ func (e *Engine) hyphenateList(list []node) []node {
 	i := 0
 	for i < len(list) {
 		if _, ok := list[i].(charNode); !ok {
+			out = append(out, list[i])
+			i++
+			continue
+		}
+		// ⛔ A WORD IS HYPHENATED ONLY WHERE A GLUE PRECEDES IT. tex.web §894 and
+		// §896 start the hyphenation scan at a glue node: "cur_p points to a glue
+		// node" is the precondition, not a detail of how the loop is written.
+		//
+		// This engine hyphenated every maximal run of characters whatever sat on
+		// either side, which differs from the reference in two ways that both move
+		// line counts:
+		//
+		//   * A PARAGRAPH'S FIRST WORD IS NEVER HYPHENATED BY TeX, because what
+		//     precedes it is the \parindent box. We hyphenated it, on every
+		//     paragraph of every document.
+		//   * Nor is a word after a box, after maths, or after a user's own
+		//     discretionary (§891:17476). We hyphenated those too.
+		//
+		// The list's very start is the same case: nothing precedes it, so nothing
+		// is glue, so TeX would not hyphenate there either.
+		if !precededByGlue(list, i) {
 			out = append(out, list[i])
 			i++
 			continue
@@ -160,19 +262,69 @@ func (e *Engine) hyphenateList(list []node) []node {
 			break
 		}
 		breakAfter := map[int]bool{}
-		// ⛔ TeX DOES NOT HYPHENATE A WORD LONGER THAN max_hyphenatable_length
-		// (tex.web §891: "if l > max_hyphenatable_length then goto done1"), and
-		// neither does this — which is faithfulness and, here, also a bound.
+		// ⛔ A FONT WHOSE \hyphenchar IS NEGATIVE IS NEVER HYPHENATED (tex.web
+		// §896: `if hyf_char<0 then goto done1`). tulmtt.fd:51 sets exactly that
+		// for the typewriter family, which is how the reference stops code and
+		// identifiers being broken across lines — measured: the same word at a
+		// 72pt measure breaks in the roman face and does not in \texttt.
 		//
-		// Liang's algorithm looks up every substring of the word, so its cost is
+		// The word is still EMITTED below; only its break points are withheld.
+		if !e.wordIsHyphenatable(wordNodes) {
+			out = append(out, wordNodes...)
+			i = j
+			continue
+		}
+		// ⛔ THIS USED TO CITE A LINE tex.web DOES NOT CONTAIN. It read: «TeX does
+		// not hyphenate a word longer than max_hyphenatable_length (tex.web §891:
+		// "if l > max_hyphenatable_length then goto done1")». The identifier
+		// `max_hyphenatable_length` does not occur ANYWHERE in tex.web — grepped
+		// over all 25010 lines, with `hn=63` at :17602 and 44 hits for
+		// "hyphenate" as positive controls — so that quote came from some other
+		// engine and was attributed to Knuth. It is also the opposite of what
+		// :17602 does; see the citation at the use site below.
+		//
+		// What remains true, and is the REASON for the ceiling rather than its
+		// authority: Liang's algorithm looks up every substring of the word, so
+		// its cost is
 		// QUADRATIC in the word's length. A document with no space in it hands this
 		// one enormous "word": profiled on a macro that expands exponentially,
 		// 98.6% of the engine's time was inside Hyphenator.Points, hashing pattern
 		// lookups, and the run never ended. A real word is tens of letters; the
 		// longest paragraph in the whole fidelity corpus is 8_881 nodes and no word
 		// in it comes near this limit.
-		if len(letters) <= maxHyphenatableLength {
-			for _, t := range h.Points(string(letters)) {
+		// ⛔ AN EXCEPTION REPLACES THE PATTERNS, IT DOES NOT ADD TO THEM
+		// (tex.web §937). A word in \hyphenation{…} breaks only where its entry
+		// says — including nowhere, for an entry written with no hyphen at all
+		// — and the patterns are never consulted for it. Consulting both would
+		// hand a document that spelled a word out the very breaks it wrote the
+		// entry to prevent.
+		if pts, isException := e.hyphExcept.lookup(string(letters)); isException {
+			for _, t := range pts {
+				breakAfter[t] = true
+			}
+		} else {
+			// ⛔ TeX TRUNCATES, it does not refuse. tex.web:17602's
+			// `if hn=63 then goto done3` stops COLLECTING letters at 63;
+			// done3 (:17615) is that loop's normal exit — the same label a
+			// font change or a non-letter reaches — and `hyphenate` runs
+			// right after it (:17550-17552). The only length refusal is
+			// :17637, `if hn<l_hyf+r_hyf then goto done1`, for a word too
+			// SHORT. :17548 settles it: `if l_hyf+r_hyf>63 then goto done1`
+			// refuses only when the MINIMUMS alone exceed 63, which makes 63
+			// a buffer capacity and not a policy against long words.
+			//
+			// So a 110-letter word is hyphenated in its first 63 letters, and
+			// \righthyphenmin counts back from the PREFIX rather than from the
+			// real end of the word — TeX will break inside a long word.
+			//
+			// ⭐ The DoS bound this ceiling was added for is untouched: Points
+			// still sees at most 63 runes, so Liang's quadratic cost stays
+			// O(63²) per word however long the word is.
+			word := letters
+			if len(word) > maxHyphenatableLength {
+				word = word[:maxHyphenatableLength]
+			}
+			for _, t := range h.Points(string(word)) {
 				breakAfter[t] = true
 			}
 		}

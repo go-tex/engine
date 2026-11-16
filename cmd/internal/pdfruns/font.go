@@ -1,10 +1,9 @@
 // Copyright (c) the go-tex/engine authors.
 // SPDX-License-Identifier: BSD-3-Clause
 
-package main
+package pdfruns
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/go-pdfkit/reader"
@@ -323,4 +322,6 @@ func utf16BEOffset(base []byte, n int) string {
 }
 
 // ftoa prints a length the way a layout report reads best: two decimals.
-func ftoa(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }
+// ⚠ ftoa went back to gotex-linediff with this move: it formats that tool's
+// REPORT and no caller here used it, so exporting it would have published a
+// decimal convention as part of a PDF-reading API.

@@ -248,15 +248,22 @@ func (d *pdfDraw) box(b *boxNode, x, baseline float64) {
 // hlist lays an hbox's material along the baseline.
 func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 	cx := x
+	var lastFace fontFace // the face the leader's dot is set in: the text's, as \leaders sees it
 	for _, n := range b.list {
 		switch c := n.(type) {
 		case kernNode:
 			cx += spToPt(c.width)
 		case glueNode:
 			w := spToPt(b.setWidth(c.spec))
-			d.leader(c.leader, cx, baseline, w, spToPt(c.cell))
+			dotW := 0.0
+			if lastFace != nil {
+				dw, _, _ := lastFace.charDimsSP('.')
+				dotW = spToPt(dw)
+			}
+			d.leader(c.leader, x, cx, baseline, w, spToPt(c.cell), dotW)
 			cx += w
 		case charNode:
+			lastFace = c.face
 			if !c.covered { // covered: it holds its place and draws nothing
 				d.setGlyphFont(c)
 				d.setColor(c.color)
@@ -538,16 +545,18 @@ func (d *pdfDraw) mathText(c mathNode, x, baseline float64) {
 
 // leader paints a glue node's set width as a \leaders-like fill: leaderRule draws
 // a thin baseline rule (\hrulefill), leaderDots tiles '.' glyphs (\dotfill).
-func (d *pdfDraw) leader(kind glueLeader, x, baseline, w, cell float64) {
+func (d *pdfDraw) leader(kind glueLeader, edge, x, baseline, w, cell, dotW float64) {
 	switch kind {
 	case leaderRule:
 		d.setColor(0)
 		th := spToPt(defaultRule)
 		d.rect(x, baseline-th, w, th)
 	case leaderDots:
-		n, cell := dotLeaderGeom(w, d.size, cell)
-		for i := 0; i < n; i++ {
-			d.p.Text(x+float64(i)*cell, d.y(baseline), ".")
+		_, cell = dotLeaderGeom(w, d.size, cell)
+		// The dot is centred in its tile, as the tile is built (kern, dot, kern), and
+		// the tiles sit on the enclosing box's grid: see dotLeaderOrigins.
+		for _, o := range dotLeaderOrigins(edge, x, w, cell) {
+			d.p.Text(o+(cell-dotW)/2, d.y(baseline), ".")
 		}
 	}
 }

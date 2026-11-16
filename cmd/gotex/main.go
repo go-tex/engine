@@ -107,6 +107,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		// expands for millions of steps without reading further — pgfplots does
 		// — must not be mistaken for a loop.
 		NoProgressLimit: engine.NoProgressLimitHeavy,
+		// And the ABSOLUTE ceiling for the same reason, which is a different one:
+		// a figure-heavy paper spends tens of millions of steps inside a single
+		// \path while the input advances perfectly well. Without this a real
+		// tikzDevice figure is cut off mid-document and reported as a loop.
+		StepLimit: engine.StepLimitHeavy,
 		// \jobname is the input file's own name: a document reads back what it (or
 		// BibTeX) wrote beside it — \jobname.bbl above all.
 		JobName: strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))}
@@ -137,6 +142,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if *showMessages && diag.Messages != "" {
 		fmt.Fprintf(stderr, "gotex: the document said:\n%s\n", diag.Messages)
 	}
+	if os.Getenv("GOTEX_TRACE") != "" {
+		// ⛔ NOT behind -report-skipped: that flag is about what a LENIENT render
+		// dropped, and this is about the two expansion ceilings, which stop a
+		// strict render just as dead. It is also the margin to them, and the
+		// margin is only useful BEFORE a document crosses it — gating it on the
+		// flag that reports losses would print it only once the loss happened.
+		// GOTEX_TRACE is the switch that already means "explain the guard".
+		fmt.Fprintf(stderr, "gotex: %d expansion step(s), longest run reading no new input: %d\n",
+			diag.ExpansionSteps, diag.NoProgressPeak)
+	}
 	if *reportSkipped {
 		reportDiagnostics(stderr, diag)
 	}
@@ -158,6 +173,23 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 	}
 	if d.PageCapHit {
 		fmt.Fprintln(w, "gotex: WARNING pagination hit the page cap — a page-count explosion")
+	}
+	// ⛔ OVERFULL AND UNDERFULL LINES, which this engine has always detected and
+	// never mentioned. It is the single most common thing a real TeX complains
+	// about, and the reason a reader opens the log at all: a line past the
+	// margin is visible on the page and nowhere else.
+	if d.OverfullLines > 0 {
+		// ⚠ POINTS PAST THE MARGIN, which is the number a real TeX prints
+		// ("Overfull \hbox (133.25pt too wide)"). The first version of this said
+		// "overruns its shrink by 133.2x" — wording left over from a draft that
+		// measured the glue ratio, which cannot see a line with no shrinkable
+		// glue at all. The unit changed and the sentence did not.
+		fmt.Fprintf(w, "gotex: WARNING %d overfull line(s) — text runs past the margin; "+
+			"the worst by %.2fpt\n", d.OverfullLines, d.WorstOverfull)
+	}
+	if d.UnderfullLines > 0 {
+		fmt.Fprintf(w, "gotex: WARNING %d underfull line(s) — stretched far past comfort "+
+			"(a narrow measure, or a word that could not be broken)\n", d.UnderfullLines)
 	}
 	if d.RunawayArgs > 0 {
 		fmt.Fprintf(w, "gotex: WARNING %d macro call(s) abandoned — a \\par ended an argument "+

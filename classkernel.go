@@ -237,7 +237,11 @@ const LaTeX2eClassKernel = `
 \newcount\@beginparpenalty
 \newcount\@endparpenalty
 \newcount\@itempenalty
-\newcount\@secpenalty
+% \@secpenalty = -300 (ltsect.dtx:229-230). It was DECLARED and never assigned,
+% so it held 0 — and a \penalty 0 before a heading is not a weaker version of
+% the reference's, it is the absence of one: 0 is exactly "no preference", which
+% is what the list already said by having no penalty node at all.
+\newcount\@secpenalty \@secpenalty=-300
 \newcount\@clubpenalty
 \newcount\@topnum
 \newcount\c@secnumdepth \c@secnumdepth=3
@@ -714,8 +718,72 @@ const LaTeX2eClassKernel = `
 % number lands in its own box instead of running into the title.
 \def\numberline#1{#1\gotex@numberlineend}
 \long\def\addtocontents#1#2{}
-\def\addvspace#1{\vskip#1}
-\def\addpenalty#1{}
+% \addvspace was a plain \vskip, so two in a row ADDED where LaTeX takes the LARGER.
+% latex.ltx:6527-6539 with \@xaddvskip at :6513-6526; the body is in Go (addvspace.go)
+% because the rule needs the skip already on the list, which TeX reaches through
+% \lastskip and a pair of cancelling \vskip's.
+\def\addvspace#1{\ifvmode\if@minipage\else\gotex@addvspace#1\relax\fi\fi}
+% \addpenalty was an empty no-op, so a heading contributed NO PENALTY at all:
+% \@startsection is \addpenalty\@secpenalty\addvspace\@tempskipa
+% (ltsect.dtx:331) with \@secpenalty = -300 (:229-230), and nothing of it reached
+% the page. Measured with \showlists on Avant.\section{Titre}Texte., the
+% reference opens with \penalty -300 and we opened with the beforeskip glue
+% (go-tex/engine#691).
+%
+% ltspace.dtx:992-1051, ported whole rather than reduced to its common branch:
+%
+%	\protected\def\addpenalty#1{%
+%	  \ifhmode \ifinner \@LRmoderr \else \par \fi \fi
+%	  \if@minipage\else \if@nobreak\else
+%	    \ifdim\lastskip=\z@ \penalty#1\relax
+%	    \else \@tempskipb\lastskip
+%	      \begingroup \@tempskipa\@tempskipb
+%	        \advance \@tempskipb
+%	          \ifdim\prevdepth>\maxdepth\maxdepth\else
+%	             \ifdim \prevdepth = -\@m\p@ \z@ \else \prevdepth \fi\fi
+%	        \vskip -\@tempskipb \penalty#1%
+%	        \ifdim\@tempskipa=\@tempskipb\else
+%	          \advance\@tempskipb -\@tempskipa \vskip \@tempskipb \fi
+%	        \vskip \@tempskipa
+%	      \endgroup \fi\fi\fi}
+%
+% ⭐ THE SECOND BRANCH IS NOT THE ONE A \section TAKES, and knowing that is what
+% made this worth porting now: \addpenalty runs BEFORE \addvspace, so the list
+% carries no skip yet, \lastskip is 0, and the plain \penalty#1\relax is what
+% the reference's own list shows. The glue-reinsertion branch is for a penalty
+% added AFTER a skip (two headings in a row, \addvspace then \addpenalty), where
+% TeX must place the penalty before the glue without the \prevdepth correction
+% leaking into the skip the list keeps.
+%
+% ⚠ One deliberate difference, stated rather than hidden: \@LRmoderr does not
+% exist here, so restricted horizontal mode gets the same \par as outer
+% horizontal mode instead of an error. That makes this more permissive than the
+% reference, never less.
+\def\addpenalty#1{%
+  \ifhmode\ifinner\else\par\fi\fi
+  \if@minipage\else
+    \if@nobreak\else
+      \ifdim\lastskip=\z@
+        \penalty#1\relax
+      \else
+        \@tempskipb\lastskip
+        \begingroup
+          \@tempskipa\@tempskipb
+          \advance\@tempskipb
+            \ifdim\prevdepth>\maxdepth\maxdepth\else
+              \ifdim\prevdepth=-1000pt \z@ \else \prevdepth \fi
+            \fi
+          \vskip -\@tempskipb
+          \penalty#1%
+          \ifdim\@tempskipa=\@tempskipb\else
+            \advance\@tempskipb -\@tempskipa
+            \vskip \@tempskipb
+          \fi
+          \vskip \@tempskipa
+        \endgroup
+      \fi
+    \fi
+  \fi}
 \def\nobreakspace{\space}
 % ── diagnostics not already routed by the kernel-helper layer ────────────────
 \def\@font@warning#1{\message{Font Warning: #1}}

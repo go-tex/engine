@@ -11,6 +11,7 @@ func (sizedMock) spaceSP() glueSpec                 { return glueSpec{width: 3 *
 func (sizedMock) glyphPathAt(rune) string           { return "" }
 func (sizedMock) kernSP(_, _ rune) int              { return 0 }
 func (m sizedMock) sizePt() float64                 { return float64(m.s) }
+func (sizedMock) hasGlyphFor(rune) bool             { return false } // as glyphPathAt "" did
 
 // A font selected inside { … } is restored at the group's end.
 func TestFontGroupScoped(t *testing.T) {

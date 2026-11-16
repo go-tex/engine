@@ -1,0 +1,10 @@
+\documentclass{article}
+\newcommand\try[3]{\setbox0\vbox{\vskip #1\relax \addvspace{#2}\xdef\r{\the\lastskip}}#3: \r\par}
+\begin{document}
+\noindent
+\try{8pt}{12pt plus 1pt}{larger}
+\try{12pt}{8pt}{smaller}
+\try{0pt}{9pt}{none}
+\try{8pt plus 2pt}{-3pt}{negative}
+\try{-4pt}{-2pt}{both negative}
+\end{document}

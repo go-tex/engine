@@ -495,8 +495,26 @@ const LaTeX2eKernelHelpers = `
 \def\bibdata#1{}
 \def\bibstyle#1{}
 \def\@writefile#1#2{}
-\def\document{\if1\gotexatasked\else\catcode64=12 \fi\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
-  \@input{\jobname.aux}\immediate\openout\@auxout=\jobname.aux
+% ⛔⛔ AND @ IS STILL A LETTER WHILE THE .aux IS READ. The catcode change used to
+% come FIRST on this line, so the replay tokenised \NAT@force@numbers as \NAT
+% (undefined, skipped) followed by the CHARACTERS @force@numbers, which reached
+% the page as ordinary text — twice, on corpus paper 2201.04865, the moment the
+% real natbib.sty was embedded. natbib writes it to \@auxout from \AtEndDocument
+% (natbib.sty:966-973, \string\providecommand\string\NAT@force@numbers{} then
+% \string\NAT@force@numbers), and real LaTeX reads the file inside \document
+% while @ is still of category letter, switching it only afterwards.
+%
+% ⭐ The defect belongs to the KERNEL, not to natbib: EVERY package that
+% round-trips a @-bearing control sequence through the .aux hits it, and natbib
+% is merely the first one embedded here that does. It was invisible for as long
+% as nothing wrote such a name — #712 made \@auxout a real stream, which is what
+% made the file carry anything at all.
+%
+% ⚠ Not the same thing as #500, which is about a DOCUMENT's own \makeatletter
+% surviving \begin{document} and is what \gotexatasked below records. This is the
+% kernel's own read, which needs @ to be a letter whatever the document asked.
+\def\document{\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
+  \catcode64=11 \@input{\jobname.aux}\if1\gotexatasked\else\catcode64=12 \fi\immediate\openout\@auxout=\jobname.aux
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 % \enddocument also plants the LastPage label the lastpage package is loaded for,

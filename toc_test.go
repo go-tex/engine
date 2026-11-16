@@ -612,16 +612,19 @@ func TestChapterEntriesReachTheContentsList(t *testing.T) {
 	}
 }
 
-// A class calls \addcontentsline for its sections and its captions too, and both
-// of those already reach the table by their own route (\@gxnum, and the
-// redefined \caption). Recording them here as well would put every section in
-// the contents list TWICE — which is the failure a bridge like this invites.
+// A class calls \addcontentsline for its sections and its captions too, and a
+// numbered section already reaches the table by its own route (\@gxnum), as a
+// caption does through the redefined \caption. Recording a repeat would put the
+// section in the contents list TWICE — the failure a bridge like this invites — so
+// an entry identical to the previous one at the same place is dropped, a caption
+// is not recorded, and a section written by hand (the first line) is.
 func TestAddContentsLineRecordsOnlyWhatNothingElseDoes(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
 	src := `\hsize=300pt
-\@tocadd{toc}{section}{\numberline{9}Not me}
+\@tocadd{toc}{section}{\numberline{9}Me too}
+\@tocadd{toc}{section}{\numberline{9}Me too}
 \@tocadd{lof}{figure}{\numberline{9}Nor me}
 \@tocadd{lot}{table}{Nor me either}
 \@tocadd{toc}{chapter}{\numberline{7}But me}
@@ -629,10 +632,11 @@ func TestAddContentsLineRecordsOnlyWhatNothingElseDoes(t *testing.T) {
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.tocEntries) != 2 {
-		t.Fatalf("recorded %d entries, want 2: %+v", len(e.tocEntries), e.tocEntries)
+	if len(e.tocEntries) != 3 {
+		t.Fatalf("recorded %d entries, want 3: %+v", len(e.tocEntries), e.tocEntries)
 	}
 	for i, w := range []tocEntry{
+		{level: 1, number: "9", title: "Me too"},
 		{level: 0, number: "7", title: "But me"},
 		{level: -1, number: "III", title: "And me"},
 	} {

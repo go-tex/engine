@@ -1,0 +1,11 @@
+larger: 12.0pt plus 1.0pt
+    smaller: 12.0pt
+    none: 9.0pt
+    negative: 5.0pt plus 2.0pt
+    both negative: -2.0pt
+
+
+
+
+                                 1
+

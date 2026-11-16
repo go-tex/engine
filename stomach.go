@@ -616,8 +616,22 @@ func (e *Engine) buildBoxList() []node {
 					list = append(list, glueNode{spec: e.spaceGlueForFactor(e.curFont)})
 				}
 			case catMath:
+				// The line the `$` opened on, read BEFORE scanning past the
+				// formula: a display spanning several lines belongs to the one
+				// the author would go looking for it at, not to its last.
+				// ⚠ A PROBE NEVER FIRED HERE. Both `$…$` and `\[…\]` reach the
+				// maths layer through doMath / doDelimitedMath, which the
+				// primitive dispatch calls; this branch was not on either path
+				// in any document measured. It is stamped through the same
+				// helper as those two rather than with its own copy, so if some
+				// input does reach it the formula is stamped the same way — but
+				// nothing here is exercised, and a second implementation of the
+				// contract would be a second thing to get wrong. See
+				// stampSrcRange in math.go for what #750 got wrong by stamping
+				// only this one.
+				open := e.srcMark()
 				src, display := e.scanMathSource()
-				list = append(list, e.makeMath(src, display))
+				list = append(list, e.stampSrcRange(e.makeMath(src, display), open))
 			}
 			continue
 		}

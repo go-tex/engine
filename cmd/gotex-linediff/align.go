@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"unicode"
+
+	"github.com/go-tex/engine/cmd/internal/pdfruns"
 )
 
 // -align answers a question a page count cannot: WHERE the two documents fall out
@@ -256,7 +258,7 @@ func pagesOf(path string) ([]page, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc, err := openPDF(b)
+	doc, err := pdfruns.Open(b)
 	if err != nil {
 		return nil, err
 	}
@@ -269,12 +271,12 @@ func pagesOf(path string) ([]page, error) {
 	}
 	out := make([]page, 0, count)
 	for n := 1; n <= count; n++ {
-		runs, err := PageRuns(doc, n)
+		runs, err := pdfruns.PageRuns(doc, n)
 		if err != nil {
 			out = append(out, page{}) // unreadable: empty, and it will not match a key
 			continue
 		}
-		lines := groupLines(runs, pageHeight(doc, n), reportOptions{})
+		lines := groupLines(runs, pdfruns.PageHeight(doc, n), reportOptions{})
 		var words []string
 		for _, l := range lines {
 			for _, w := range strings.Fields(normaliseText(l.Text)) {

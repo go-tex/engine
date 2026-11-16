@@ -43,7 +43,21 @@ func TestHyphenationInsertsHyphen(t *testing.T) {
 	e.hyph.AddPattern("a1a") // breaks allowed between a's
 	e.hsize = 32 * unity
 	e.parindent = 0
-	if _, err := e.Run(`aa aaaaaa\par`); err != nil {
+	// ⛔⛔ THE TOLERANCE IS PART OF THE FIXTURE, and leaving it at 200 made this
+	// test assert something its own arithmetic does not support.
+	//
+	// spMock sets letters at 5pt and the interword space at 3pt (+1.5/−1), so on a
+	// 32pt measure the best hyphenated first line is `aa aa-` = 10+3+10+5 = 28pt:
+	// 4pt short with 1.5pt of stretch, a ratio of 2.67, a badness near 1900. At
+	// \tolerance=200 that line is INFEASIBLE, so there is no feasible hyphenated
+	// solution at all and the breaker is right to prefer one overfull line —
+	// exactly what tex.web does once the final pass is reachable.
+	//
+	// It passed only because an emergency pass at an effectively infinite
+	// tolerance used to run and make everything feasible (#768 finding (2), gone
+	// now). The subject of this test is that a hyphenation point is USED, so the
+	// fixture is given a tolerance in which a hyphenated line can be chosen.
+	if _, err := e.Run(`\tolerance=10000 aa aaaaaa\par`); err != nil {
 		t.Fatal(err)
 	}
 	var lines []*boxNode
@@ -90,6 +104,61 @@ func TestNoHyphenationForNonEnglishLanguage(t *testing.T) {
 	}
 }
 
+// ⛔ tex.web:18261-18263's set_cur_lang MAPS \language to cur_lang rather than
+// using it directly, and everything outside 0..255 maps to language ZERO:
+//
+//	@d set_cur_lang==if language<=0 then cur_lang:=0
+//	  else if language>255 then cur_lang:=0
+//	  else cur_lang:=language
+//
+// So \language=-1 and \language=300 are ENGLISH to TeX and get hyphenated.
+// Reading the register directly made them "not language 0" and hyphenated
+// neither, which is engine#765 item (8).
+//
+// ⭐ The 255/256 pair is the point of this table: it pins the cutoff itself, so
+// an off-by-one in the comparison fails here rather than passing on the easy
+// values. 255 is in range and has no embedded patterns; 256 is out of range and
+// is English.
+func TestOutOfRangeLanguageIsEnglishAsSetCurLangSays(t *testing.T) {
+	for _, tc := range []struct {
+		lang    string
+		hyphens bool
+		why     string
+	}{
+		{"-1", true, "language<=0 maps to cur_lang 0"},
+		{"0", true, "language 0 is English directly"},
+		{"1", false, "in range, and no patterns are embedded for it"},
+		{"255", false, "the last in-range value: still not English"},
+		{"256", true, "the first out-of-range value: language>255 maps to 0"},
+		{"300", true, "language>255 maps to cur_lang 0"},
+	} {
+		t.Run("language="+tc.lang, func(t *testing.T) {
+			e := New()
+			e.SetFont(spMock{}) // 5pt letters, 3pt space
+			e.hsize = 60 * unity
+			e.parindent = 0
+			src := `\language=` + tc.lang + ` the internationalization of hyphenation patterns\par`
+			if _, err := e.Run(src); err != nil {
+				t.Fatal(err)
+			}
+			hyphenSeen := false
+			for _, n := range e.mvl {
+				if b, ok := n.(*boxNode); ok {
+					for _, c := range b.list {
+						if ch, ok := c.(charNode); ok && ch.ch == '-' {
+							hyphenSeen = true
+						}
+					}
+				}
+			}
+			if hyphenSeen != tc.hyphens {
+				t.Errorf("\\language=%s: hyphenated=%v, want %v (%s)",
+					tc.lang, hyphenSeen, tc.hyphens, tc.why)
+			}
+		})
+	}
+}
+
 // Out of the box (\language 0, no \patterns), English prose is hyphenated using
 // the embedded US-English pattern set: a long word amid glue is broken with a
 // discretionary so the narrow measure does not overfull.
@@ -127,6 +196,20 @@ func TestEmbeddedPatternsBreakPoints(t *testing.T) {
 		"incomprehensibility": {2, 5, 8, 11, 13, 16}, // in-com-pre-hen-si-bil-ity (rmin=3 blocks i-ty)
 		"considers":           {3, 6},                // con-sid-ers
 		"results":             {2},                   // re-sults
+		// ⛔⛔ `every` IS THE ONE THAT SAYS WHICH HALF OF THE FILE IS LOADED, and
+		// it is the only word here whose answer CHANGES with that choice.
+		//
+		// The embedded file is ushyphmax.tex: hyphen.tex's patterns, a marker line,
+		// then 492 additions. LaTeX loads hyph-en-us.tex — the first half only.
+		// `.ev2` is an addition and outranks hyphen.tex's `ev1er` at the same
+		// position; 2 is even, so it FORBIDS the break. Loading the whole file left
+		// `every` unbreakable, and tectonic 0.17.0 at \hsize=18pt sets `ev-/ery`.
+		//
+		// The other words in this table are identical under either half, which is
+		// why none of them caught it for as long as the whole file was loaded.
+		"every":       {2},       // ev-ery
+		"democracy":   {5},       // democ-racy
+		"photography": {3, 6, 8}, // pho-tog-ra-phy
 	}
 	for w, want := range cases {
 		pts := h.Points(w)

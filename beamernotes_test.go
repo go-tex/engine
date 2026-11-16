@@ -4,8 +4,9 @@
 package engine
 
 import (
-	"os"
 	"testing"
+
+	"github.com/go-tex/texmf"
 )
 
 // This engine renders no speaker notes, and beamer's note machinery emits PAGES.
@@ -17,9 +18,7 @@ import (
 // The switch is turned off at \begin{document}, after the preamble's \setbeameroption
 // has had its say.
 func TestNotesOnASecondScreenDoNotMultiplyPages(t *testing.T) {
-	if os.Getenv("GOTEX_TEXMF") == "" {
-		t.Skip("needs a texmf tree with the real beamer.cls")
-	}
+	withTeXMF(t, texmf.Beamer)
 	for _, c := range []struct {
 		name, option string
 		want         int

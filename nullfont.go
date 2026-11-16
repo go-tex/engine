@@ -14,3 +14,8 @@ func (nullFont) spaceSP() glueSpec               { return glueSpec{} }
 func (nullFont) glyphPathAt(rune) string         { return "" }
 func (nullFont) kernSP(rune, rune) int           { return 0 }
 func (nullFont) sizePt() float64                 { return 0 }
+
+// \nullfont has no glyph for anything, so it can set nothing as one glyph — and
+// the ligature program must therefore leave the letters alone rather than fold
+// them into a form this font cannot draw either.
+func (nullFont) hasGlyphFor(rune) bool { return false }

@@ -466,3 +466,53 @@ func TestMathLayerSize(t *testing.T) {
 		t.Errorf("a zero-height formula must fall back to a readable size, got %v", got)
 	}
 }
+
+// ⛔⛔ THE WORD-BOUNDARY THRESHOLD COMES FROM THE FONT, and the reason is a pair
+// of defects that cancelled.
+//
+// The quarter-em rule was stated as "narrower than any inter-word space", and the
+// engine's own default font breaks it: stixtwomath's space is 235 units, 0.235
+// em. The rule only looked sound while Space() read the advance ROUNDED to a
+// whole pixel, which turned 2.585pt into 3pt at 11pt and pushed the gap over the
+// bar. With the rounding gone the page came back reading "E = mc^2exactly" — a
+// formula fused to the next word — so neither defect was visible while both were
+// present.
+func TestGapThresholdComesFromTheFontsOwnSpace(t *testing.T) {
+	// A narrow space (stixtwomath): the bar drops below it, so the space is still
+	// read as a boundary.
+	narrow := textCursor{spaceEm: 0.235}
+	if got, want := narrow.gapThreshold(11), 0.9*0.235*11; got != want {
+		t.Errorf("narrow font: threshold = %v, want %v (nine tenths of its own space)", got, want)
+	}
+	if gap := 0.235 * 11; gap <= narrow.gapThreshold(11) {
+		t.Errorf("a full interword space (%v) does not clear the bar (%v)", gap, narrow.gapThreshold(11))
+	}
+
+	// ⛔ The change is MONOTONE: for a font whose space is wide the quarter-em
+	// still applies and the bar does NOT rise. A threshold that rose would lose
+	// boundaries that are found today, which is a silent regression in the one
+	// thing this layer exists for.
+	wide := textCursor{spaceEm: 0.40}
+	if got, want := wide.gapThreshold(10), 0.25*10.0; got != want {
+		t.Errorf("wide font: threshold = %v, want the quarter-em %v — it must not rise", got, want)
+	}
+
+	// No font to ask: the old rule, unchanged.
+	none := textCursor{}
+	if got, want := none.gapThreshold(10), 2.5; got != want {
+		t.Errorf("no font: threshold = %v, want %v", got, want)
+	}
+}
+
+// newTextLayerFor reads the space off the face as a FRACTION of its size, so a
+// run at any size is measured against the same proportion.
+func TestNewTextLayerForReadsTheFace(t *testing.T) {
+	l := newTextLayerFor(spMock{})
+	if l.cur.spaceEm <= 0 {
+		t.Fatalf("spaceEm = %v, want the mock's space as a fraction of its size", l.cur.spaceEm)
+	}
+	// A nil face must not panic and must leave the fallback in force.
+	if got := newTextLayerFor(nil).cur.spaceEm; got != 0 {
+		t.Errorf("nil face: spaceEm = %v, want 0 so gapThreshold falls back", got)
+	}
+}

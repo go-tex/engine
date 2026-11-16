@@ -273,7 +273,27 @@ const AMSClassSubstrate = `
 % or "this document wants none".
 \newdimen\jot
 \jot=3pt
-\newdimen\hangafter
+% ⛔ \hangafter IS NOT A DIMENSION, AND DECLARING IT AS ONE DELETED TEXT.
+% tex.web §236 makes it an INTEGER parameter, and texparams.go already lists it
+% among texIntParams with TeX's initial value 1. A \newdimen\hangafter here ran
+% afterwards and rebound the name to a dimension register, which is not an
+% equivalent spelling: the two SCAN DIFFERENTLY. \hangafter=1 against an
+% integer reads the 1 and stops; against a dimension it scans a <dimen>, which
+% REQUIRES a unit, so it reads past the 1 into the following text looking for
+% one. TeX's units are ordinary letter pairs (in, pt, pc, bp, cm, mm, dd, cc,
+% sp, ex, em), so "\hangafter=1 integers follow" came out as
+%
+%	BEFOREtegersfollow
+%
+% — the "in" taken out of the middle of a word and never seen again.
+%
+% ⚠ MEASURED INCIDENCE, AND IT IS NOT WHAT I FIRST WROTE HERE. I claimed every
+% \bibitem sets \hangafter=1; nothing in this repository sets \hangafter at all,
+% and LaTeX's bibliography takes its hanging indent from \list, not from this
+% parameter. A census over the 2935-paper corpus (comments stripped) finds 109
+% papers that WRITE \hangafter and ZERO where the scan eats a word. So this is a
+% latent trap removed and a type made right, not a corpus defect closed — the
+% witness is exact and its reach is small. See hangafter_probe_test.go.
 \newskip\tabskip
 \newskip\spaceskip
 \newskip\xspaceskip
@@ -502,8 +522,24 @@ const AMSClassSubstrate = `
 % threw the mark away.
 % \/ : italic correction — a zero-width adjustment the engine does not need.
 \def\/{}
-% \hyphenation{…}: exception list — nothing to record here.
-\def\hyphenation#1{}
+% \hyphenation{…} is NOT stubbed here any more: there is now somewhere to record
+% it (hyphexception.go), and the primitive must be the one that runs.
+%
+% ⛔ THE STUB THAT WAS HERE IS THE SHAPE THE PARAGRAPH ABOVE WARNS ABOUT, six
+% lines further up, written about \mark: "DISCARDS its argument is the one shape
+% no channel can see — the document says what it wants, the engine says nothing,
+% every test stays green, and the loss shows up only as ink that is not on the
+% page." The stub was exactly that, and its own comment said so in the words
+% "nothing to record here" — true when it was written, and silently false
+% afterwards.
+%
+% ⚠ The backticks that first wrapped that stub's name in THIS comment ended the
+% Go raw string holding the substrate, which the compiler caught at once. A
+% LaTeX source embedded in Go cannot quote Go.
+%
+% A document writes \hyphenation for the words the patterns get WRONG. So the
+% silence fell precisely on the cases it was asked about: 170 of the 2935 corpus
+% papers (5.8%).
 % Sectioning support for classes that define their OWN \@startsection→\@sect (amsart)
 % rather than using the engine's built-in \@startsection (article/report/book). Real
 % LaTeX's \@hangfrom sets a hanging indent with the label #1 followed by body #2; the
@@ -534,7 +570,8 @@ const AMSClassSubstrate = `
 % this one macro is 179 of the corpus's 199 abandoned calls, 44 on a single paper.
 \long\def\@hangfrom#1#2{\global\let\@svsechd\relax\par\noindent#1#2}
 \def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
-\def\@afterheading{}
+% (\@afterheading is classprims.go's: it used to be stubbed empty HERE, which loads
+% later and silently undid it — the first paragraph after a heading kept its indent.)
 % \@ifclasswith{class}{opt}{then}{else}: the class-file analogue of
 % \@ifpackagewith, consulting the option list the loader recorded in opt@class.cls.
 \def\@ifclasswith#1#2{\@ifundefined{opt@#1.cls}{\@secondoftwo}{\@ifinlist{#2}{\@nameuse{opt@#1.cls}}\ifin@\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}}

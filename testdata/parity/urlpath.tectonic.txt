@@ -1,0 +1,11 @@
+Setting max_parallel_requests caps the queue.
+The settings live in %USERPROFILE%\.continue\config.yaml on Windows.
+
+
+         Done.
+
+
+
+
+                                  1
+

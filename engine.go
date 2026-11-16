@@ -160,22 +160,24 @@ type Engine struct {
 	lineskiplimit   int
 	parindent       int  // width of the indentation box at a paragraph's start (sp)
 	prevDepth       int  // \prevdepth for interline glue (ignoreDepth = suppress)
+	noIndentNext    bool // the next paragraph starts unindented, once (\@afterheading under \@afterindentfalse)
 	suppressParskip bool // skip the next paragraph's \parskip: set after a display (text resumes the SAME paragraph in TeX), cleared by an explicit \par
 
-	hyph           *hyphenator // a document's own \patterns, if any (nil = none loaded)
-	enHyph         *hyphenator // lazily built cache of the embedded US-English patterns
-	hyphenpenalty  int         // penalty at a discretionary hyphen
-	leftskip       glueSpec    // glue at the left of every line
-	rightskip      glueSpec    // glue at the right of every line (fil ⇒ ragged right)
-	columnsep      int         // \columnsep: gap between multicols columns AND two-column page columns (sp)
-	columnseprule  int         // \columnseprule: rule thickness between columns (sp, 0 = none)
-	twoColumn      bool        // class/\twocolumn two-column page layout (see twocolumn.go)
-	twoColLive     bool        // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
-	revtexReprint  bool        // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
-	twoColApplied  bool        // guard: the column measure has been applied to e.hsize once
-	oneColHsize    int         // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
-	colRegions     []colRegion // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
-	classPaperSize string      // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
+	hyphExcept     hyphExceptions // \hyphenation{…}: the words a document spells out itself
+	hyph           *hyphenator    // a document's own \patterns, if any (nil = none loaded)
+	enHyph         *hyphenator    // lazily built cache of the embedded US-English patterns
+	hyphenpenalty  int            // penalty at a discretionary hyphen
+	leftskip       glueSpec       // glue at the left of every line
+	rightskip      glueSpec       // glue at the right of every line (fil ⇒ ragged right)
+	columnsep      int            // \columnsep: gap between multicols columns AND two-column page columns (sp)
+	columnseprule  int            // \columnseprule: rule thickness between columns (sp, 0 = none)
+	twoColumn      bool           // class/\twocolumn two-column page layout (see twocolumn.go)
+	twoColLive     bool           // the class genuinely wants two-column, so \twocolumn/\onecolumn fire without GOTEX_TWOCOLUMN
+	revtexReprint  bool           // revtex emulation in reprint/journal (two-column) mode: \maketitle switches the body to two columns
+	twoColApplied  bool           // guard: the column measure has been applied to e.hsize once
+	oneColHsize    int            // full-width (one-column) measure, saved when two-column halves e.hsize (sp)
+	colRegions     []colRegion    // ordered \onecolumn/\twocolumn regions over the main vertical list (twocolumn.go)
+	classPaperSize string         // paper-size option from \documentclass (a4paper/…); geometry's default when it names none
 	// hasClass records that the document declared a \documentclass at all. A
 	// document has a PAPER — US letter unless something says otherwise — while a
 	// bare snippet run through the engine has none and is sized to its own content
@@ -330,12 +332,28 @@ type Engine struct {
 	// lenient mode (see Options.Lenient): when set, an undefined control sequence
 	// is skipped (with its likely argument block) instead of aborting, and its
 	// name is tallied here for reporting. nil until the first skip.
-	lenient   bool
+	lenient bool
+	// badBox tallies the overfull and underfull lines of the paragraphs the
+	// document actually got. The breaker has always judged them — hasBadLine
+	// decides which pass to run — and nothing ever reported it. See badbox.go.
+	badBox badBoxes
+
+	// hyphenChars is \hyphenchar, keyed on the font PROGRAM rather than on a
+	// face at a size (see hyphenCharKey): a size switch re-makes the face and
+	// would otherwise lose the setting. A program that is absent permits
+	// hyphenation; a negative value forbids it outright (tex.web §896). See
+	// hyphenchar.go for why this does NOT fall back to \defaulthyphenchar.
+	hyphenChars map[any]int
+
 	skippedCS map[string]int
 
 	// urlPathBound says \path carries url.sty's meaning — set when url or hyperref
 	// is loaded and no pgf-family package owns the name already. See bindURLPath.
 	urlPathBound bool
+
+	// frenchPunct says babel's french is the language in force: a thin space goes
+	// before ; ! ? and a full one before :. See babel.go.
+	frenchPunct bool
 	// fontSubst records the text-font packages the document asked for, by package
 	// name -> the face it wanted. The engine sets one built-in face, so each of
 	// these is a silent substitution of a DIFFERENT WIDTH — see fontsubst.go.
@@ -406,6 +424,20 @@ type Engine struct {
 	// endlineReg is the \count register \endlinechar is bound to (see
 	// loadTeXParams), cached because the mouth reads it at every line end.
 	endlineReg int
+	// hangIndentReg is the \dimen register \hangindent landed on, cached the same
+	// way endlineReg is, so the write path can recognise an assignment to it
+	// without a map lookup per dimension set. -1 when the parameter is not
+	// bound — and -1 rather than 0 ON PURPOSE: register 0 is a real register
+	// somebody else holds, so a zero default would report every assignment to it
+	// as a dropped hanging indent. See noteDroppedShape.
+	hangIndentReg int
+	// parShape is \parshape's (indent, width) list, in POINTS, empty when no
+	// shape is set. It is not a register: tex.web keeps it in par_shape_loc as a
+	// shape_ref (:4732), outside the dimension registers, and so does this.
+	//
+	// ⭐ It TAKES PRECEDENCE over \hangindent (:16706), and normalParagraph
+	// clears it at every \par (:20760) like the other three shape parameters.
+	parShape []Shape
 	// escapeReg is the \count register \escapechar is bound to; read every time a
 	// control-sequence name is printed (see escapeStr).
 	escapeReg int
@@ -459,16 +491,41 @@ type Engine struct {
 	outStream       map[int]*strings.Builder
 	outName         map[int]string
 	writtenFile     map[string]string
-	pendingLong     bool // a \long prefix is waiting for the \def it applies to
-	scanningNonLong bool // arguments being read for a macro that is NOT \long (§392)
-	progBpos        int  // e.bpos at the last observed forward progress
-	noProgSteps     int  // expansion steps since e.bpos last advanced
-	tightLimit      int  // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
+	pendingLong     bool   // a \long prefix is waiting for the \def it applies to
+	scanningNonLong bool   // arguments being read for a macro that is NOT \long (§392)
+	progBpos        int    // e.bpos at the last observed forward progress
+	noProgSteps     int    // expansion steps since e.bpos last advanced
+	noProgPeak      int    // the longest such run this compile, for Diagnostics
+	tripCeiling     string // which ceiling stopped the compile: "" until one does
+	tightLimit      int    // no-progress ceiling (New sets tightLoopSteps; tests may adjust)
 }
 
 const (
 	maxExpandSteps = 60_000_000 // absolute expansion ceiling; a large real document stays well under it
-	maxInputDepth  = 200_000    // input-stack depth ceiling (catches immediate left-recursion)
+	// maxExpandStepsHeavy is that ceiling for a program that RENDERS documents,
+	// where the sentence above is not true.
+	//
+	// ⛔ MEASURED, on arXiv 2405.11065 with the real pgf sources (two tikzDevice
+	// figures of ~489 KB each, R's output): the paper takes 106_315_622 expansion
+	// steps. Against the 60M ceiling above it was cut off at 7 pages of 18 and
+	// reported as a possible loop. Its longest run reading NO new input is
+	// 3_117_166 — six times under the no-progress ceiling of 20M, which it
+	// therefore never approached. That is why raising THAT ceiling twentyfold
+	// changed nothing (go-tex/engine#360), and it is the evidence that the
+	// document never looped: it advanced the whole way, it is simply enormous.
+	//
+	// 600M leaves this paper a factor of 5.6, which the corpus needs: #410 lists
+	// a 333-page paper losing 232 pages on this same path, and it will want more
+	// than 106M. Measuring that one is the next step, named in the pull request
+	// rather than guessed at here.
+	//
+	// ⚠ THE COST IS REAL AND IT IS NOT A HANG. A document whose input keeps
+	// advancing may now spend 600M steps before it aborts — minutes, where 60M
+	// was tens of seconds. What it is NOT is slower loop detection: a loop stops
+	// at the no-progress ceiling in under half a second whatever this is set to,
+	// which TestALoopIsStillCaughtByTheNoProgressCeilingAtShippedLimits holds.
+	maxExpandStepsHeavy = 600_000_000
+	maxInputDepth       = 200_000 // input-stack depth ceiling (catches immediate left-recursion)
 	// maxParNodes bounds the material ONE paragraph may hold. The step and depth
 	// ceilings above count expansion; they do not count what the expansion
 	// PRODUCES, so a document whose macros nest ten deep and ten wide — the
@@ -1143,6 +1200,18 @@ func (e *Engine) define(name string, m *meaning, global bool) {
 		e.save = append(e.save, saveItem{kind: 0, name: name, old: e.eq[name]})
 	}
 	e.eq[name] = m
+	// ⛔ THE \hangindent CACHE IS MAINTAINED HERE, WHERE EVERY BINDING PASSES,
+	// and not at the end of loadTeXParams where it would have been natural.
+	// classkernel.go runs afterwards and declares \newdimen\hangindent, rebinding
+	// the name to a DIFFERENT register: a value cached earlier would name a
+	// register nothing writes to, so noteDroppedShape would report nothing for
+	// ever while looking perfectly alive. The same load-order trap took
+	// \prevdepth (#438) and \hangafter (#759), and in both cases the wrong
+	// binding won silently. One string comparison per define is the price of not
+	// depending on the order of two files.
+	if name == "hangindent" && m != nil && m.kind == mDimenRef {
+		e.hangIndentReg = m.code
+	}
 }
 
 // forgetSaved drops the pending restores for one quantity, which is what makes an
@@ -1203,6 +1272,25 @@ func (e *Engine) setDimen(i, v int, global bool) {
 	}
 	e.dimen[i] = v
 }
+
+// ⭐ THE DROPPED-SHAPE CENSUS IS GONE, BECAUSE THE SHAPE IS NO LONGER DROPPED.
+//
+// What stood here reported every non-zero \hangindent a document set, under the
+// rule that "a feature silently dropped is worse than one refused": the
+// parameter was declared (classkernel.go), listed among the dimensions a
+// document may set (texparams.go), assignable and readable back — and consulted
+// by nothing. Measured against tectonic on #757's witness, a paragraph asking
+// for \hangindent=4em came out flush left AND re-broken.
+//
+// paragraphShape now builds a per-line Measure from it (tex.web §847-850,
+// go-typeset/linebreak v1.10.0), so the paragraph is broken on the shape it asks
+// for. Keeping the census would have it report a drop that no longer happens,
+// which is a false statement about our own behaviour — worse than either the
+// drop or the silence it replaced.
+//
+// hangIndentReg stays, and matters MORE: it fed a report, and now it feeds the
+// feature. A stale value used to mean a census that never fired; it now means
+// every hanging indent is ignored again. droppedshape_test.go guards it.
 
 func (e *Engine) setSkip(i int, v glueSpec, global bool) {
 	if i < 0 || i >= 256 {
@@ -2062,6 +2150,9 @@ func (e *Engine) stepToken(t tok) bool {
 		case catLetter, catOther, catParam:
 			// catParam here is a stray literal '#' (a ## reduced by scanBody that was
 			// not consumed as a parameter char by a nested \def); typeset it as text.
+			if t.cat == catOther {
+				e.frenchHighPunct(t.ch)
+			}
 			e.startChar(t.ch) // begin/continue a paragraph in horizontal mode
 		case catSpace:
 			if e.inPar && e.curFont != nil {
@@ -2142,6 +2233,13 @@ func lastChar(list []node) (rune, bool) {
 // (an empty hbox of that width) as TeX does for an indented paragraph.
 func (e *Engine) beginParagraph(indent bool) {
 	e.inPar = true
+	// \@afterheading with \@afterindentfalse (a heading whose beforeskip was negative,
+	// which is every \section of the standard classes): the paragraph that follows is
+	// not indented, once. See \gotexnoindentnext in classprims.go.
+	if e.noIndentNext {
+		indent = false
+		e.noIndentNext = false
+	}
 	// TeX puts \parskip glue on the vertical list before a paragraph that begins
 	// in vertical mode (it is discarded at a page top). \parskip is ~0 in the
 	// standard classes, so this is a no-op for a plain article; but parskip.sty and
@@ -2375,6 +2473,18 @@ type Diagnostics struct {
 	Runaway    bool           // the expansion/argument runaway guard tripped
 	OpenGroups int            // groups still open at end of the document (a likely swallow)
 	PageCapHit bool           // pagination hit the maxPages backstop (a page-count explosion)
+	// OverfullLines and UnderfullLines count the lines the breaker itself judged
+	// bad in the paragraphs the document ACTUALLY GOT, and WorstOverfull is the
+	// largest overflow among them, as a fraction of the line's shrink.
+	//
+	// ⛔ THE ENGINE KNEW THIS ALL ALONG AND SAID NOTHING. hasBadLine decides
+	// which line-breaking pass to run and reached no caller — the same shape as
+	// the \hangindent defect of #760, and worse, because an overfull line is the
+	// single most common thing a real TeX complains about. See badbox.go for why
+	// the thresholds are the breaker's own and not \hbadness/\hfuzz.
+	OverfullLines  int
+	UnderfullLines int
+	WorstOverfull  float64
 	// Messages is what the document itself said: the text of every \message and
 	// \typeout, in order. A real TeX prints this to the terminal and the log, and
 	// it is how a document (or a package) reports what it decided — which branch of
@@ -2465,6 +2575,16 @@ type Diagnostics struct {
 	// block — put a stray "#" on a real paper's title page and made \noalign and
 	// \everycr look undefined (#602). nil/empty when every alignment was entered.
 	AlignmentsAbandoned map[string]int
+	// ExpansionSteps is how many expansion steps the compile took, and
+	// NoProgressPeak the longest run of them that read no new base input. The
+	// guard that stops a runaway has TWO ceilings, and without these a reader
+	// cannot tell which one a document is near — nor that it is near one at all
+	// until it is over. A loop pins NoProgressPeak to the tight ceiling while
+	// ExpansionSteps stays small; a document that is merely enormous does the
+	// opposite. Reported for every compile, so the margin is visible BEFORE a
+	// document crosses it.
+	ExpansionSteps int
+	NoProgressPeak int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2533,6 +2653,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		Runaway:          e.runaway,
 		OpenGroups:       len(e.groups),
 		PageCapHit:       e.skippedCS["gotex@pagelimit"] > 0,
+		OverfullLines:    e.badBox.overfull,
+		UnderfullLines:   e.badBox.underfull,
+		WorstOverfull:    e.badBox.worst,
 		Messages:         e.out.String(),
 		Shows:            e.shows.String(),
 		RunawayArgs:      e.runawayArgs,
@@ -2545,6 +2668,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		ReadsOutsideTree: e.readsOutside,
 
 		AlignmentsAbandoned: alignAbandoned,
+
+		ExpansionSteps: e.steps,
+		NoProgressPeak: max(e.noProgPeak, e.noProgSteps),
 	}
 }
 
@@ -2561,12 +2687,36 @@ func (e *Engine) stepOverrun() bool {
 	e.steps++
 	if e.bpos > e.progBpos { // the mouth consumed new base input: real forward progress
 		e.progBpos = e.bpos
+		if e.noProgSteps > e.noProgPeak {
+			e.noProgPeak = e.noProgSteps
+		}
 		e.noProgSteps = 0
 		e.traceHead = e.traceHead[:0] // the loop, if one starts, starts after here
 	} else {
 		e.noProgSteps++
 	}
-	return e.steps > e.stepLimit || e.noProgSteps > e.tightLimit
+	// ⛔ WHICH ceiling fired is the whole diagnosis, and reporting both the same
+	// way cost seven weeks once: go-tex/engine#360 read "possible infinite loop"
+	// on a document that had no loop at all, concluded the pgf path layer failed
+	// to advance, and raised the no-progress ceiling tenfold — the ceiling that
+	// was never the binding one. Measured on 2405.11065: at twenty times the
+	// no-progress ceiling the compile stops at the SAME byte with the same seven
+	// pages; raising the ABSOLUTE one instead renders all eighteen with no trip.
+	//
+	// The no-progress test comes first because it is the specific one: it means
+	// the input stopped moving, which is what a loop looks like. Exhausting the
+	// absolute ceiling while the input kept advancing is a document that needs
+	// more budget than it was given, which is not the same failure and must not
+	// be reported as one.
+	switch {
+	case e.noProgSteps > e.tightLimit:
+		e.tripCeiling = "no-progress"
+		return true
+	case e.steps > e.stepLimit:
+		e.tripCeiling = "absolute"
+		return true
+	}
+	return false
 }
 
 // printTrace prints a trace with runs collapsed: a loop repeats one macro
@@ -2615,8 +2765,36 @@ func (e *Engine) tripRunaway() {
 	e.lists = nil
 	e.noBase = true
 	if !e.tolerant() {
-		e.fail("runaway expansion: aborted after too many macro expansions (possible infinite loop)")
+		e.fail(e.runawayReason())
 	}
+}
+
+// runawayReason reports the EVIDENCE and names both readings of it, rather than
+// choosing between them.
+//
+// ⛔ TWO THINGS THIS MUST NOT DO, each learned from a measurement.
+//
+// It must not report only "possible infinite loop". That message sent
+// go-tex/engine#360 after the pgf path layer for seven weeks on arXiv 2405.11065,
+// which has no loop: raising the no-progress ceiling twentyfold stops the compile
+// at the same byte with the same 7 pages of 18, while raising the ABSOLUTE
+// ceiling renders all 18 and trips nothing. The counters are in the message
+// because without them there is nothing to reason from.
+//
+// And it must not announce WHICH failure it is from which ceiling fired. A real
+// loop trips the absolute ceiling first whenever that ceiling is set lower than
+// the no-progress one — which is what every test that lowers stepLimit does, and
+// TestRunawayGuardStrict (a genuine \def\lx{\lx}\lx) caught exactly that claim
+// being false. Nor do the counters settle it: a single tikzDevice \path of
+// thousands of coordinates spends tens of millions of steps reading no new input,
+// which is also what a loop looks like. The engine cannot tell them apart, so it
+// says what it saw and names the knob that does tell them apart.
+func (e *Engine) runawayReason() string {
+	return fmt.Sprintf("runaway expansion: stopped after %d expansion steps, %d of them since the input last advanced "+
+		"(ceiling reached: %s). Either a non-terminating expansion, or a document that needs more than the budget it was "+
+		"given — one large tikzDevice picture does this. Raising Options.StepLimit and Options.NoProgressLimit "+
+		"(StepLimitHeavy, NoProgressLimitHeavy) tells the two apart: a loop stops at the same place however high they go",
+		e.steps, e.noProgSteps, e.tripCeiling)
 }
 
 // tripCapacity ends the run because one paragraph grew past maxParNodes.

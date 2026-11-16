@@ -20,6 +20,7 @@ func (xhMock) spaceSP() glueSpec       { return glueSpec{width: 3 * unity} }
 func (xhMock) glyphPathAt(rune) string { return "" }
 func (xhMock) kernSP(rune, rune) int   { return 0 }
 func (m xhMock) sizePt() float64       { return float64(m.size) }
+func (xhMock) hasGlyphFor(rune) bool   { return false } // as glyphPathAt "" did
 
 // ⛔⛔ 1ex is the font's X-HEIGHT (tex.web §455 "The x-height for cur_font",
 // §10675 "param[5]=x_height is the size of one ex in the font"), not half its
@@ -78,6 +79,7 @@ func (noXMock) spaceSP() glueSpec               { return glueSpec{width: 3 * uni
 func (noXMock) glyphPathAt(rune) string         { return "" }
 func (noXMock) kernSP(rune, rune) int           { return 0 }
 func (m noXMock) sizePt() float64               { return float64(m.size) }
+func (noXMock) hasGlyphFor(rune) bool           { return false } // as glyphPathAt "" did
 
 // With no current font there is nothing to measure, and the old approximation is
 // right for exactly that case.
@@ -132,9 +134,16 @@ func TestAParInsideAGroupTakesThatGroupsBaselineskip(t *testing.T) {
 // repository. A shape assertion that catches the regression beats no assertion.
 //
 // LaTeX's own \@sect is the authority: \begingroup #6\relax … #8\@@par \endgroup.
+// ⚠ L'invariant est la PLACE DE L'ACCOLADE, pas le reste de la ligne. La version
+// d'origine comparait la ligne entière (`\noindent{#1 #2\par}\vskip\@tempskipa`)
+// et elle est tombée en ROUGE quand `\nobreak` a été inséré entre le groupe et le
+// `\vskip` — un changement qui respecte pourtant exactement ce qu'elle protège
+// (ltsect.dtx:491 met ce `\nobreak` là). Les deux motifs ci-dessous ne portent
+// donc plus que sur le groupe et son `\par`, ce qui laisse passer ce qui suit et
+// continue d'attraper le déplacement de l'accolade, qui est le défaut de 5,978pt.
 func TestGxheadEndsTheHeadingParagraphInsideTheGroup(t *testing.T) {
-	const inside = `\noindent{#1 #2\par}\vskip\@tempskipa`
-	const outside = `\noindent{#1 #2}\par\vskip\@tempskipa`
+	const inside = `\noindent{#1 #2\par}`
+	const outside = `\noindent{#1 #2}\par`
 	if !strings.Contains(LaTeX2eClassLead, inside) {
 		t.Errorf("\\@gxhead ne termine pas le paragraphe du titre DANS le groupe de style")
 	}

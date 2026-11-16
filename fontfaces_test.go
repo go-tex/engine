@@ -50,14 +50,73 @@ func TestAGlyphCarriesTheFaceItWasMeasuredWith(t *testing.T) {
 	}
 }
 
-// And end to end: a document that switches face must EMBED that face and SELECT
-// it in the content stream. Two assertions, because either alone passes for the
-// wrong reason — embedding every bound face eagerly would satisfy the first, and
-// selecting a resource that is the same font twice would satisfy the second.
+// And end to end, on the family this package EMBEDS, so it runs everywhere —
+// including on CI, where the system-font version below skips and has therefore
+// never once asserted anything (#590).
 //
-// The faces are three different FAMILIES, so a substitution is unmistakable in the
-// output. They are system fonts, so this one skips where they are absent; the test
-// above is the one that runs everywhere.
+// A document that switches face must embed that face and select it in the
+// content stream. Both are asserted, because either alone passes for the wrong
+// reason: embedding every bound face eagerly satisfies the first, and selecting
+// one resource that is the same font twice satisfies the second.
+//
+// ⛔ THE SUBSET TAG IS THE ONLY FIELD THAT TELLS TWO FACES OF ONE FAMILY APART,
+// and this test keeps it. A reading that drops it — the ordinary way to name a
+// font from a PDF, because the tag is noise when families differ — collapses a
+// correct two-face document to one entry. That reading is what reported \textbf
+// as never reaching the page on #590, against output that was already right:
+// the Lora in use there ships a bold whose own name table says "Lora-Regular"
+// (go-opentype/opentype#72, go-opentype/fonts#38), so both subsets came back
+// under one name. Latin Modern names its four faces apart, which is why this
+// test can assert on names at all — and it asserts on the full entry, tag
+// included, so a future family that does not cannot make it pass by accident.
+func TestEveryFaceOfTheDefaultFamilyReachesThePDF(t *testing.T) {
+	var buf bytes.Buffer
+	src := `\documentclass{article}
+\begin{document}
+\noindent romanroman \textbf{boldbold} \emph{italicital} \texttt{monomono}
+\end{document}
+`
+	if _, err := CompileToPDF([]byte(src), Options{Lenient: true}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	pdf := buf.Bytes()
+
+	embedded := distinct(regexp.MustCompile(`/BaseFont\s*/([A-Za-z0-9+,.-]+)`), pdf)
+	if len(embedded) != 4 {
+		t.Errorf("%d font(s) embedded, 4 expected (roman, bold, italic, mono): %v", len(embedded), embedded)
+	}
+	for _, want := range []string{
+		"LMRoman10-Regular", "LMRoman10-Bold", "LMRoman10-Italic", "LMMono10-Regular",
+	} {
+		if !containsSuffix(embedded, want) {
+			t.Errorf("%s is not embedded: %v", want, embedded)
+		}
+	}
+	// Each entry carries its own six-letter subset tag, so four entries are four
+	// distinct font programs and not one name counted four times.
+	tags := map[string]bool{}
+	for _, name := range embedded {
+		if i := strings.IndexByte(name, '+'); i == 6 {
+			tags[name[:i]] = true
+		} else {
+			t.Errorf("%q carries no six-letter subset tag", name)
+		}
+	}
+	if len(tags) != 4 {
+		t.Errorf("%d distinct subset tag(s) over 4 embedded faces: %v — two faces sharing a "+
+			"subset are one font program embedded twice", len(tags), embedded)
+	}
+	selected := distinct(regexp.MustCompile(`(/F[0-9]+)\s+[0-9.]+\s+Tf`), pdf)
+	if len(selected) != 4 {
+		t.Errorf("%d font resource(s) selected with Tf, 4 expected: %v — a face that is embedded "+
+			"and never selected puts nothing on the page", len(selected), selected)
+	}
+}
+
+// The same assertion over faces the CALLER supplies, in three different
+// FAMILIES, so a substitution is unmistakable. They are system fonts, so this
+// one skips where they are absent — which is every CI runner this repository
+// has; the test above is the one that runs everywhere.
 func TestEveryFaceAFileNamesReachesThePDF(t *testing.T) {
 	paths := map[string]string{
 		"roman": "/System/Library/Fonts/Supplemental/Georgia.ttf",

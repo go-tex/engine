@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/go-tex/engine/cmd/internal/pdfruns"
 )
 
 // ⛔ An interword space in a JUSTIFIED line is routinely narrower than a sixth of
@@ -34,7 +36,7 @@ func TestWordBreaksSurviveAShrunkenLine(t *testing.T) {
 	const size = 8.97
 	// 1.2pt between runs: 13% of the size — under the old sixth (1.495pt) and over
 	// a twentieth (0.449pt). This is the band a justified line lives in.
-	runs := []Run{
+	runs := []pdfruns.Run{
 		{X: 51.81, Y: 186, W: 28, Size: size, Text: "guage,"},
 		{X: 81.01, Y: 186, W: 10, Size: size, Text: "we"},
 		{X: 92.21, Y: 186, W: 40, Size: size, Text: "introduce"},
@@ -80,7 +82,7 @@ func TestTheReportPutsTheSpacesBack(t *testing.T) {
 // space. A threshold low enough to catch a shrunk space has to stay above these.
 func TestAKernDoesNotBecomeASpace(t *testing.T) {
 	// Two runs 0.3pt apart at 10pt: 3% of the size, the scale of a kerning pair.
-	runs := []Run{
+	runs := []pdfruns.Run{
 		{X: 0, Y: 700, W: 20, Size: 10, Text: "Wa"},
 		{X: 20.3, Y: 700, W: 20, Size: 10, Text: "ter"},
 	}

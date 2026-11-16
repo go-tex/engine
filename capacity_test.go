@@ -21,8 +21,9 @@ import (
 //     — tectonic fails the same file in 14.5 s at 4.3 GB with TeX's capacity error.
 //   - and 98.6% of that time was inside the HYPHENATOR, because a document with no
 //     space in it is one enormous word and Liang's algorithm is quadratic in a
-//     word's length. TeX does not hyphenate a word longer than 63 letters
-//     (tex.web §891); neither does this, now.
+//     word's length. TeX's hu/hc buffers hold 63 letters (tex.web:17602), so it
+//     hyphenates only a word's first 63 and the cost per word is bounded; this
+//     truncates at the same 63, which is what bounds it here too.
 //
 // Together the same file fails in under half a second at ~90 MB.
 func TestADocumentCannotExhaustMemoryByExpanding(t *testing.T) {
@@ -58,12 +59,53 @@ func TestADocumentCannotExhaustMemoryByExpanding(t *testing.T) {
 // ⛔ The hyphenation bound is TeX's rule, so it is asserted as a RULE and not as a
 // timing: a word of 63 letters may be hyphenated, a longer one may not. Without
 // it the guard above would be a stopwatch, which is not a test.
-func TestALongWordIsNotHyphenated(t *testing.T) {
+// ⛔ A LONG WORD IS TRUNCATED, NOT REFUSED, and this test used to assert the
+// opposite (want 0 points for 110 letters, citing §891). tex.web:17602's
+// `if hn=63 then goto done3` stops COLLECTING at 63 letters; done3 (:17615) is
+// the collection loop's normal exit and `hyphenate` runs after it
+// (:17550-17552). The only length refusal is :17637 for a word too SHORT, and
+// :17548 (`if l_hyf+r_hyf>63 then goto done1`) refuses only when the minimums
+// alone exceed 63 — so 63 is a buffer capacity, not a policy.
+//
+// ⭐ The DoS bound the ceiling was added for is what this still pins: the
+// hyphenator sees at most 63 letters per word, so Liang's quadratic cost is
+// O(63²) however long the word. That is why the assertion is "every break lies
+// within the first 63 letters" rather than "there are no breaks".
+func TestALongWordIsHyphenatedInItsFirstSixtyThreeLetters(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
+	// breakPositions returns the letter index each discretionary follows, so the
+	// test can say WHERE the breaks are and not merely how many there are.
+	breakPositions := func(word string) []int {
+		list := make([]node, 0, len(word)+1)
+		list = append(list, glueNode{spec: glueSpec{width: 3 * unity}})
+		for _, r := range word {
+			list = append(list, charNode{ch: r})
+		}
+		var at []int
+		seen := 0
+		for _, x := range e.hyphenateList(list) {
+			switch x.(type) {
+			case charNode:
+				seen++
+			case discNode:
+				at = append(at, seen)
+			}
+		}
+		return at
+	}
 	count := func(word string) int {
-		list := make([]node, 0, len(word))
+		// ⛔ THE LEADING GLUE IS NOT DECORATION. tex.web §894/§896 start the
+		// hyphenation scan at a glue node, so a word with nothing before it is not
+		// hyphenated at all — which is correct, and which made this test's own
+		// control fire ("a 55-letter word got no hyphenation points") the moment
+		// that rule was implemented. A bare list of characters is not a paragraph.
+		//
+		// What this test is about is the 63-letter ceiling, so the word is given
+		// the context a real one has rather than the rule being weakened for it.
+		list := make([]node, 0, len(word)+1)
+		list = append(list, glueNode{spec: glueSpec{width: 3 * unity}})
 		for _, r := range word {
 			list = append(list, charNode{ch: r})
 		}
@@ -77,11 +119,20 @@ func TestALongWordIsNotHyphenated(t *testing.T) {
 	}
 	short := strings.Repeat("hyphenation", 5) // 55 letters, under the ceiling
 	if count(short) == 0 {
-		t.Fatalf("a %d-letter word got no hyphenation points: the control is broken, so the check below means nothing", len(short))
+		t.Fatalf("a %d-letter word got no hyphenation points: the control is broken, so the checks below mean nothing", len(short))
 	}
 	long := strings.Repeat("hyphenation", 10) // 110 letters, over it
-	if got := count(long); got != 0 {
-		t.Errorf("a %d-letter word got %d hyphenation points, want 0 (tex.web §891)", len(long), got)
+	at := breakPositions(long)
+	if len(at) == 0 {
+		t.Errorf("a %d-letter word got no hyphenation points; TeX hyphenates its first %d letters (tex.web:17602, :17550-17552)",
+			len(long), maxHyphenatableLength)
+	}
+	for _, p := range at {
+		if p > maxHyphenatableLength {
+			t.Errorf("a break after letter %d is past the %d-letter buffer: the hyphenator saw more than TeX would, and the DoS bound is gone (breaks: %v)",
+				p, maxHyphenatableLength, at)
+			break
+		}
 	}
 }
 

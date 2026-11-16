@@ -81,6 +81,21 @@ func newTextLayer() *textLayer {
 	return l
 }
 
+// newTextLayerFor is newTextLayer with the render font's interword space, which
+// the word-boundary rule needs (see gapThreshold). A nil font gives the same
+// layer newTextLayer does.
+func newTextLayerFor(f fontFace) *textLayer {
+	l := newTextLayer()
+	if f == nil {
+		return l
+	}
+	if size := f.sizePt(); size > 0 {
+		sp := f.spaceSP()
+		l.cur.spaceEm = spToPt(sp.width) / size
+	}
+	return l
+}
+
 // open starts a new chunk under the given transform and makes it current.
 func (l *textLayer) open(transform string) {
 	l.chunks = append(l.chunks, &textChunk{transform: transform})
@@ -155,6 +170,11 @@ type textCursor struct {
 	// space. That is EXACT information and it outranks the geometric guess below,
 	// which cannot see a space narrow enough to be mistaken for a kern.
 	owed bool
+	// spaceEm is the render font's interword space as a fraction of its design
+	// size — 0.235 for stixtwomath, 0.25 for Libertinus and TeX Gyre Termes. It
+	// is a fraction and not a width so that it applies to a run at any size.
+	// Zero means no font was supplied, and gapThreshold falls back.
+	spaceEm float64
 }
 
 // wantsSpace reports whether a run starting at x on the given baseline needs a
@@ -182,9 +202,40 @@ func (c *textCursor) wantsSpace(x, baseline, size float64) bool {
 	if c.size > em {
 		em = c.size
 	}
-	// A quarter of an em: wider than any kern or italic correction, narrower
-	// than any inter-word space.
-	return x-c.endX > 0.25*em
+	return x-c.endX > c.gapThreshold(em)
+}
+
+// gapThreshold is how far apart two runs must be before the space between them
+// is read as a word boundary.
+//
+// ⛔⛔ A QUARTER OF AN EM WAS THE WHOLE RULE, on the stated grounds that it is
+// "narrower than any inter-word space". That is not true of every font, and the
+// engine's OWN DEFAULT FONT is one of the exceptions: stixtwomath's space is 235
+// units, 0.235 em, narrower than the threshold meant to sit below it.
+//
+// It only ever appeared to work because Space() read the ROUNDED advance, which
+// turned 2.585pt into 3pt at 11pt and pushed the gap over the bar. So the
+// rounding defect was load-bearing for a second, unrelated rule: fixing it took
+// the prop away and the page came back reading "E = mc^2exactly", a formula fused
+// to the next word. Two defects that cancelled, which is why neither showed.
+//
+// The bar now comes from the font's own interword space, at nine tenths of it —
+// below the space itself, and above any positive kern (the largest in these faces
+// is ~0.04 em) or italic correction.
+//
+// ⛔ It is a MINIMUM with the old quarter-em, which makes the change monotone:
+// the threshold can only FALL, so no boundary found today can be lost, and it
+// falls only for the fonts whose space is narrow enough to have been the broken
+// case.
+func (c *textCursor) gapThreshold(em float64) float64 {
+	quarter := 0.25 * em
+	if c.spaceEm <= 0 {
+		return quarter // no font to ask: the old rule is the only one available
+	}
+	if from := 0.9 * c.spaceEm * em; from < quarter {
+		return from
+	}
+	return quarter
 }
 
 // addChar extends the run with one character whose glyph origin is at x and

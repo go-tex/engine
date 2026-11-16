@@ -66,7 +66,9 @@ func TestApaciteStubsRecoverBibliographyContent(t *testing.T) {
 		"159",                      // volume
 		"104096",                   // pages
 	} {
-		if !strings.Contains(got, want) {
+		// A word may now be broken at a line end ("Ad-vances"): the hyphen is the line
+		// breaker's, not content.
+		if !strings.Contains(strings.ReplaceAll(got, "-", ""), want) {
 			t.Errorf("bibliography missing %q; apacite content not recovered.\ngot: %q", want, got)
 		}
 	}
