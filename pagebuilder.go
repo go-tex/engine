@@ -47,13 +47,20 @@ const (
 // ⛔⛔ AND THE PAGE'S GLUE, which this tracked none of. TeX keeps eight quantities in
 // page_so_far (tex.web:19226-19232): the goal, the total, THREE ORDERS OF INFINITE
 // STRETCH plus the finite one, the shrink, and the depth. This struct had two of
-// them, so pageBadness could only ever be a function of two heights — and TeX's
+// them, so the old badness could only ever be a function of two heights — and TeX's
 // badness is a function of the shortfall OVER THE GLUE AVAILABLE TO ABSORB IT
 // (:19593-19599). The two ask different questions: a page ending in \vfill is badness
 // 0 to TeX and was ~10000 here. Since the breakpoint cost is `badness + penalty` on
 // both sides, every penalty was being compared against numbers on the wrong scale —
 // which is why contributing faithful list penalties made the corpus measurably worse
 // (go-tex/engine#685, #687).
+//
+// ⛔ The two-heights function itself (`pageBadness`) survived that fix as DEAD CODE
+// for months: nothing called it, and Go does not report an unused function the way
+// it reports an unused local or import. It cost a later reader — me — a detour
+// through "the page badness is not TeX's" before `git grep` showed badnessOf is what
+// decides (the only callers are the champion test and the final-page check). Removed,
+// so the next reader of this file does not re-run that.
 type pageSoFar struct {
 	total   int    // page_total: charged against \vsize
 	depth   int    // page_depth: NOT charged, capped at \maxdepth
@@ -564,19 +571,6 @@ func precedesBreak(n node) bool {
 	}
 	_, _, kind := vHeightDepth(n)
 	return kind == vBoxLike
-}
-
-// pageBadness measures how far a page of height h falls short of \vsize: 0 when
-// exactly full, up to 10000 when empty, and +Inf when overfull.
-func pageBadness(h, vsize int) float64 {
-	if h > vsize {
-		return math.Inf(1)
-	}
-	if vsize <= 0 {
-		return 0
-	}
-	f := float64(vsize-h) / float64(vsize)
-	return 10000 * f * f * f
 }
 
 // skipDiscardable advances past glue/penalty/kern at a page break (discarded).
