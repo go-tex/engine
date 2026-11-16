@@ -295,7 +295,65 @@ const LaTeX2eClassLead = `
 % (\@afterindentfalse) the paragraph after it is not indented — \section in article
 % and report, where tectonic sets the first paragraph flush with the margin. The
 % engine indented it, 15pt of width on the first line of every section.
-\def\@afterheading{\if@afterindent\else\gotexnoindentnext\fi}
+% ⛔⛔ AND IT SETS \clubpenalty\@M FOR THE PARAGRAPH THAT FOLLOWS. ltsect.dtx:615-627,
+% verbatim:
+%
+%	\def\@afterheading{%
+%	  \@nobreaktrue
+%	  \everypar{%
+%	    \if@nobreak
+%	      \@nobreakfalse
+%	      \clubpenalty \@M
+%	      \if@afterindent \else
+%	        {\setbox\z@\lastbox}%
+%	      \fi
+%	    \else
+%	      \clubpenalty \@clubpenalty
+%	      \everypar{}%
+%	    \fi}}
+%
+% That \clubpenalty\@M is what forbids a page break after the FIRST line of the
+% paragraph under a heading — a heading plus one orphan line at the foot of a
+% page, which the reference cannot produce and this engine could. The penalty
+% itself now reaches the vertical list (paragraph.go, tex.web:17445-17455); until
+% it did, setting this changed nothing, which is why it was left out.
+%
+% ⚠ MEASURED REASON FOR DOING IT TOGETHER WITH THAT: with the penalties live but
+% this macro still silent, a heading's following paragraph was charged
+% \clubpenalty = 150 where the reference charges 10000 — a configuration the
+% reference never has. The corpus said so loudly: +4 on Σ and two papers losing
+% the exactness #802 had just given them.
+%
+% ⭐ \everypar IS live here, probed before relying on it: \everypar{\clubpenalty=9999}
+% reaches the penalty the paragraph contributes. The comment in amssubstrate.go
+% that says "the engine has no live everypar" predates that and is stale for this
+% purpose.
+%
+% ⛔⛔ AND THE INDENT SUPPRESSION STAYS OUTSIDE THE \everypar, which is where the
+% reference puts it and where this engine NEEDS it. The reference removes the
+% indent box from inside \everypar with {\setbox\z@\lastbox} — it is already in
+% the paragraph and takes the box back off its list. This engine has no such
+% surgery: \gotexnoindentnext means "the NEXT paragraph starts unindented"
+% (engine.go), so running it from inside \everypar marks the paragraph AFTER the
+% one being started.
+%
+% I moved it inside anyway, and TestParityParagraphAfterAHeadingIsNotIndented
+% caught it against a tectonic-derived golden within the minute: the two body
+% lines came out "14.94 0.00" where the reference has "0.00 14.94" — the
+% indentation exactly INVERTED, suppressed on the wrong paragraph. The comment I
+% had written said the engine suppresses it a step earlier while the code did it
+% a step later.
+\def\@afterheading{%
+  \@nobreaktrue
+  \if@afterindent\else\gotexnoindentnext\fi
+  \everypar{%
+    \if@nobreak
+      \@nobreakfalse
+      \clubpenalty\@M
+    \else
+      \clubpenalty\@clubpenalty
+      \everypar{}%
+    \fi}}
 % \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
 % optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title
 % as the optional one too — without this, \chapter{T} mis-parses (\@chapter would
