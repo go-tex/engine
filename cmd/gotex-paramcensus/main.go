@@ -5,7 +5,7 @@
 // WHICH MEASURED PAPERS SET A GIVEN TeX PARAMETER?
 //
 // It exists because the obvious way to ask — `grep -rl looseness <paper tree>`
-// — is wrong in four separate ways, and each of them reads as a clean answer:
+// — is wrong in five separate ways, and each of them reads as a clean answer:
 //
 //  1. ⛔ IT ANSWERS ABOUT THE WRONG POPULATION. The paper tree holds thousands
 //     of papers; the A/B samples the few hundred named in a list file. A count
@@ -20,6 +20,20 @@
 //     ends the line. (An escaped \% is a percent sign, not a comment.)
 //  4. ⛔ A BARE SUBSTRING MATCHES PROSE. A paper discussing "looseness" does
 //     not set \looseness, so terms are matched as written, backslash included.
+//  5. ⛔ AND A CONTROL WORD IS A PREFIX OF LONGER CONTROL WORDS. This one
+//     survived the backslash rule above and was found by disbelieving an
+//     answer: asked for `\font`, a substring scan reported 14 of 154 papers,
+//     and the matching lines were `\fontsize{13}{16}`, `\fontsize{\sf@size}`,
+//     `\Affilfont` — not one use of the primitive. TeX ends a control WORD at
+//     the first non-letter, so a term that is one is matched to that boundary:
+//     `\font` no longer answers for `\fontsize`, while `\par` still answers for
+//     `\par` at an end of line and never for `\paragraph`. A control SYMBOL
+//     (`\\`, `\'`, `\%`) is exactly one character and takes no boundary.
+//     ⚠ The boundary uses the DEFAULT catcodes, where only A-Za-z are letters.
+//     Inside a class or package under \makeatletter, `@` is a letter too, so
+//     `\font` would still answer for a `\font@foo` written there. That case is
+//     stated rather than guessed at, because the catcode regime of a line is
+//     not decidable by a scanner that does not expand the document.
 //
 // ⭐ AND IT REFUSES RATHER THAN REPORTING A ZERO IT CANNOT STAND BEHIND. Every
 // run must find its CONTROL term — by default \documentclass, which every LaTeX
@@ -181,7 +195,7 @@ func census(dirs, terms []string, show int) result {
 					ln = ln[:k]
 				}
 				for _, t := range terms {
-					if !strings.Contains(ln, t) {
+					if !containsTerm(ln, t) {
 						continue
 					}
 					r.hits[t][id] = true
@@ -199,6 +213,57 @@ func census(dirs, terms []string, show int) result {
 		}
 	}
 	return r
+}
+
+// containsTerm reports whether ln holds term t, ENDING IT AT TeX's OWN
+// CONTROL-WORD BOUNDARY when t is a control word.
+//
+// ⛔ Without this, a control word answers for every longer one that begins with
+// it, and the result reads as a measurement: `\font` reported 14 of 154 corpus
+// papers, every hit being `\fontsize` or `\Affilfont`. tex.web's scanner ends a
+// control word at the first character that is not of category letter (§354-356
+// in the mouth: it accumulates letters while cat=letter), which is what this
+// reproduces.
+//
+// A control SYMBOL — a backslash and ONE non-letter, like `\\` or `\%` — ends at
+// that character by definition, so it needs no boundary and gets none; neither
+// does a plain word, where the caller asked for a substring and prose is their
+// problem (trap 4).
+func containsTerm(ln, t string) bool {
+	if !isControlWord(t) {
+		return strings.Contains(ln, t)
+	}
+	for i := 0; i <= len(ln)-len(t); {
+		j := strings.Index(ln[i:], t)
+		if j < 0 {
+			return false
+		}
+		if end := i + j + len(t); end == len(ln) || !isTeXLetter(ln[end]) {
+			return true
+		}
+		i += j + 1
+	}
+	return false
+}
+
+// isControlWord reports whether t is a backslash followed only by letters, which
+// is the only shape that TeX terminates at a non-letter.
+func isControlWord(t string) bool {
+	if len(t) < 2 || t[0] != '\\' {
+		return false
+	}
+	for i := 1; i < len(t); i++ {
+		if !isTeXLetter(t[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isTeXLetter is category code 11 under the DEFAULT regime: A-Za-z and nothing
+// else. See trap 5 for why `@` is deliberately not here.
+func isTeXLetter(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // commentAt returns the index of the character that starts a TeX comment, or
