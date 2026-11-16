@@ -176,10 +176,29 @@ const LaTeX2eClassLead = `
 % vertical space above the heading (its sign is LaTeX's indent flag, so the space
 % is its magnitude); afterskip is threaded through to \@gxhead, which puts it below
 % a display heading (positive) or runs the text in beside the heading (negative).
+% ⛔ AND IT CARRIES \@secpenalty, which it did not: ltsect.dtx:331 is
+% \addpenalty\@secpenalty\addvspace\@tempskipa, and \@secpenalty is -300
+% (:229-230). A heading contributed NO penalty node at all, so the page builder
+% had no reason to prefer the break a reader would choose — above the heading —
+% over one two lines into its text. Measured with \showlists against the
+% reference, go-tex/engine#691. The penalty goes BEFORE the space, which is also
+% the order the reference's own list shows.
+%
+% ⚠ The space stays a \vskip and is deliberately NOT changed to \addvspace,
+% although the reference uses it: \addvspace takes the MAXIMUM of adjacent skips
+% where \vskip adds them, that moves the corpus on its own, and it is
+% go-tex/engine#690 with its own pull request and its own measured regression.
+% One defect per change.
+%
+% ⚠ \@sect and \@ssect below get the same line. They are not reached THROUGH
+% this macro — this one goes via \@gxsec (see the note on them) — so a class
+% calling LaTeX's continuations directly would otherwise keep the old silence,
+% and adding it in both places cannot double the penalty.
 \def\@startsection#1#2#3#4#5#6{\par
   \@tempskipa#4\relax
   \@afterindenttrue
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
+  \addpenalty\@secpenalty
   \vskip\@tempskipa
   \@ifstar{\@gxsec{#1}{#2}{#6}{#5}\@gxstar}{\@gxsec{#1}{#2}{#6}{#5}\@gxnum}}
 \def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
@@ -244,12 +263,14 @@ const LaTeX2eClassLead = `
   \@tempskipa#4\relax
   \@afterindenttrue
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
+  \addpenalty\@secpenalty
   \vskip\@tempskipa
   \@gxnum{#1}{#2}{#6}{#5}{#8}}
 \def\@ssect#1#2#3#4#5{\par
   \@tempskipa#2\relax
   \@afterindenttrue
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
+  \addpenalty\@secpenalty
   \vskip\@tempskipa
   \@gxhead{#4}{#5}{#3}}
 % \@afterheading (latex.ltx \@xsect): when the heading's beforeskip was negative
