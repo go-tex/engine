@@ -241,7 +241,25 @@ const LaTeX2eClassLead = `
   \ifdim\@tempskipa<\z@
     \noindent{#1 #2}\hskip-\@tempskipa
   \else
-    \noindent{#1 #2\par}\vskip\@tempskipa
+% ⛔ \nobreak BETWEEN THE HEADING'S \par AND ITS AFTERSKIP. ltsect.dtx:483-493,
+% \@xsect's display-heading branch, verbatim:
+%
+%	\ifdim \@tempskipa>\z@
+%	    \par \nobreak
+%	    \vskip \@tempskipa
+%	    \@afterheading
+%
+% That \nobreak is a \penalty 10000 on the VERTICAL list, and it is what forbids
+% a page break between a heading and the first line of its text — a typographic
+% fault this engine could commit and the reference cannot. #691 measured the
+% reference's list as hbox(heading), \penalty 10000, \glue 9.913(afterskip); ours
+% had the box and the glue with nothing between them.
+%
+% ⚠ It belongs in the POSITIVE branch only. When the afterskip is negative the
+% heading runs in beside its text and the reference takes the else branch
+% instead, which sets \@nobreakfalse — there is no vertical break to forbid
+% because there is no vertical space.
+    \noindent{#1 #2\par}\nobreak\vskip\@tempskipa
     \@afterheading
   \fi}
 % \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection

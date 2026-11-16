@@ -69,4 +69,25 @@ func TestASectionContributesItsSecPenalty(t *testing.T) {
 			"\\@secpenalty, so a page may break two lines after a heading where the "+
 			"reference breaks before it (ltsect.dtx:331, :229-230). Penalties seen: %v", got)
 	}
+
+	// ⭐ AND THE OTHER HALF OF #691: \penalty 10000 between the heading and its
+	// afterskip, which forbids a page break between a heading and the first line
+	// of its text. ltsect.dtx:483-493 is \par \nobreak \vskip \@tempskipa in
+	// \@xsect's display-heading branch; the reference's measured list is
+	// hbox(heading), \penalty 10000, \glue 9.913.
+	//
+	// ⚠ 10000 is \@M, TeX's "never break here". A smaller positive number would
+	// merely discourage the break, which is not what the reference says, so the
+	// test asserts the VALUE and not just a positive penalty.
+	nobreak := false
+	for _, p := range got {
+		if p == 10000 {
+			nobreak = true
+		}
+	}
+	if !nobreak {
+		t.Errorf("no \\penalty 10000 after the heading: nothing forbids a page break "+
+			"between a heading and its first line of text (ltsect.dtx:491). "+
+			"Penalties seen: %v", got)
+	}
 }
