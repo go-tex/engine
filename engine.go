@@ -347,6 +347,12 @@ type Engine struct {
 
 	skippedCS map[string]int
 
+	// kerningIsAFloor is set when a face is used whose kerning this engine cannot
+	// fully read: the font puts part of its `kern` feature in GPOS contextual
+	// lookups, which the pair query kernSP uses cannot evaluate. Surfaced as
+	// Diagnostics.KerningIsAFloor — see noteKerningFloor and #716.
+	kerningIsAFloor bool
+
 	// urlPathBound says \path carries url.sty's meaning — set when url or hyperref
 	// is loaded and no pgf-family package owns the name already. See bindURLPath.
 	urlPathBound bool
@@ -1311,6 +1317,17 @@ func (e *Engine) selectFont(f fontFace) {
 		e.save = append(e.save, saveItem{kind: 5, oldf: e.curFont})
 	}
 	e.curFont = f
+	// ⛔ HERE TOO, AND THIS IS THE PATH THAT MATTERS. SetFont is how a host installs
+	// the base face once; \rmfamily, \ttfamily, a math font and every size change
+	// come through HERE, so a kerning-floor flag hooked only into SetFont would be
+	// blind to every switch a real document makes — and my own test would still
+	// have passed, because it switches faces the way a host does and not the way a
+	// document does. See noteKerningFloor and Diagnostics.KerningIsAFloor.
+	//
+	// ⚠ The flag is NOT restored when the group ends, unlike e.curFont above. It
+	// records that text was set in such a face, which the group's end does not
+	// undo.
+	e.noteKerningFloor(f)
 }
 
 func (e *Engine) setCat(r rune, c cat, global bool) {
@@ -2585,6 +2602,28 @@ type Diagnostics struct {
 	// document crosses it.
 	ExpansionSteps int
 	NoProgressPeak int
+	// KerningIsAFloor says a face was used whose kerning this engine CANNOT FULLY
+	// READ, so every kern figure in this compile is a floor and not a measurement.
+	//
+	// ⛔ IT BELONGS WITH THE SILENT-SWALLOW FLAGS ABOVE AND FOR THE SAME REASON.
+	// kernSP asks go-opentype for the kern between two glyphs, and that is a PAIR
+	// query: GPOS lookup types 7 (Contextual) and 8 (Chained Contextual) position
+	// pairs too, and a pair query cannot evaluate them, because such a rule is
+	// matched against the glyphs AROUND a position. The library skips those
+	// subtables and answers 0 — the same 0 it gives for a pair the font
+	// deliberately leaves alone. Nothing distinguished the two, which is #716: a
+	// kerning defect of 1.12pt per "AV" invisible to every number this engine's
+	// fidelity measurement steers by.
+	//
+	// ⚠ IT IS NOT A CLAIM THAT ANY KERN WAS WRONG. It says the figures are a
+	// floor. Measured over the 81 fonts go-opentype/fonts bundles, 8 carry such
+	// lookups — seven complex-script Noto faces and notosans.ttf, a general Latin
+	// sans — so it is neither rare nor exotic. Whether it fires on a given
+	// document's text, and by how much, this flag does not say.
+	//
+	// False for every font whose kerning is pair adjustment, which is the ordinary
+	// case, and false for a face that cannot be asked at all (a test mock).
+	KerningIsAFloor bool
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2669,8 +2708,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 
 		AlignmentsAbandoned: alignAbandoned,
 
-		ExpansionSteps: e.steps,
-		NoProgressPeak: max(e.noProgPeak, e.noProgSteps),
+		ExpansionSteps:  e.steps,
+		NoProgressPeak:  max(e.noProgPeak, e.noProgSteps),
+		KerningIsAFloor: e.kerningIsAFloor,
 	}
 }
 

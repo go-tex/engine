@@ -96,6 +96,18 @@ excluding the search directories the host itself configured. Reading a named fil
 what `\input` is for and it is not an error, but a service compiling a document it did
 not write is the one who can judge it, and nothing else in this package will tell it.
 
+`Diagnostics.KerningIsAFloor` says a face was used whose kerning this engine
+**cannot fully read**, so the compile's kern figures are a floor and not a
+measurement. The kern is asked for a *pair* of glyphs, and GPOS lookup types 7 and
+8 position pairs **contextually** — matched against the glyphs around a position,
+which a pair cannot carry — so those adjustments come back as `0`, the same `0` a
+font gives for a pair it deliberately leaves alone. Measured over the 81 fonts
+`go-opentype/fonts` bundles, **8** carry such lookups (seven complex-script Noto
+faces and `notosans.ttf`, a general Latin sans), so this is neither rare nor
+exotic. It does not claim any kern was wrong; it says the figure is a floor, which
+is the distinction a fidelity measurement needs and did not have
+([#716](https://github.com/go-tex/engine/issues/716)).
+
 On a **1000-source arXiv sweep** (`measure trunc`, re-measured **2026-10-19**), strict
 mode compiles almost none end-to-end — each hits a package command in the preamble —
 while lenient mode flags **64** sources, and the engine's two alarms do not say the
