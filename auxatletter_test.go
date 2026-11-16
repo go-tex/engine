@@ -10,11 +10,18 @@ import (
 
 // ⛔⛔ A @-BEARING CONTROL SEQUENCE WRITTEN TO THE .aux MUST NOT COME BACK AS TEXT.
 //
-// Real LaTeX reads the .aux from inside \document while @ is still of category
-// letter, and switches it only afterwards. This kernel switched it FIRST
-// (kernelhelpers.go's \document), so the replay tokenised \NAT@force@numbers as
-// \NAT — undefined, skipped — followed by the CHARACTERS @force@numbers, which
-// reached the page as ordinary text.
+// The .aux must be read with @ of category LETTER, whatever the preamble left
+// behind — \document forces it now (kernelhelpers.go). Without that, the replay
+// tokenised \NAT@force@numbers as \NAT — undefined, skipped — followed by the
+// CHARACTERS @force@numbers, which reached the page as ordinary text.
+//
+// ⛔ ORDERING THE SWITCH IS NOT ENOUGH, and that intermediate fix passed this
+// test while leaving the corpus paper broken: the kernel leaves @ at 12 for the
+// whole preamble (hooks.go), and a document that writes \makeatother — 2201.04865
+// does, main.tex:90/:93 — has @ already at 12 when \document runs, so moving the
+// switch after the read changes nothing for it. What settled the rule was the
+// ORACLE, not more reading: `tectonic` leaks in NEITHER case, so the category
+// has to be forced rather than merely sequenced.
 //
 // natbib writes exactly that from \AtEndDocument (natbib.sty:966-973):
 //

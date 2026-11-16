@@ -514,7 +514,7 @@ const LaTeX2eKernelHelpers = `
 % surviving \begin{document} and is what \gotexatasked below records. This is the
 % kernel's own read, which needs @ to be a letter whatever the document asked.
 \def\document{\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
-  \@input{\jobname.aux}\if1\gotexatasked\else\catcode64=12 \fi\immediate\openout\@auxout=\jobname.aux
+  \catcode64=11 \@input{\jobname.aux}\if1\gotexatasked\else\catcode64=12 \fi\immediate\openout\@auxout=\jobname.aux
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 % \enddocument also plants the LastPage label the lastpage package is loaded for,
