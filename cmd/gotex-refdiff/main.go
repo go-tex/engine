@@ -57,7 +57,52 @@ import (
 	"github.com/go-tex/engine/internal/pdftext"
 )
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+// ⛔⛔ THE LOAD GATE LIVES HERE, IN main, AND NOT IN run — and that placement is
+// a defect I shipped and had to take back within the hour.
+//
+// The gate (cmd/internal/loadguard, shared with gotex-abdiff) refuses a
+// measurement on a busy machine, because this tool's own doc says why it matters:
+// "a compile that merely exhausts -timeout is marked timed-out and excluded on
+// EITHER side … a slow paper, or a loaded machine, moved the mean one way only".
+//
+// Putting it inside run() made THREE TESTS DEPEND ON THE AMBIENT LOAD. They call
+// run directly, so at 1-min 4.6 they passed and at 1-min 14.44 they failed —
+// `absent corpus: code=2 want 1` — with no line of code changed between the two
+// runs. That is precisely the "green on one pass, red on the next" class this
+// fleet keeps paying for, introduced INTO a guard whose purpose is to protect
+// measurements. A gate belongs outside the testable entry point: main decides
+// whether to measure, run decides how.
+func main() {
+	underLoad := loadFlag(os.Args[1:])
+	load, err := loadguard.Check(underLoad)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gotex-refdiff:", err)
+		os.Exit(2)
+	}
+	fmt.Println(loadguard.Banner(load, underLoad))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// loadFlag reads -under-load out of the raw arguments, because main must decide
+// before run parses anything. ⚠ It is deliberately dumb: it recognises
+// `-under-load x`, `--under-load x` and the `=` forms and nothing else, since
+// run's own FlagSet is the authority on everything and will reject a malformed
+// argument a moment later.
+func loadFlag(args []string) string {
+	for i, a := range args {
+		switch {
+		case a == "-under-load" || a == "--under-load":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(a, "-under-load="):
+			return strings.TrimPrefix(a, "-under-load=")
+		case strings.HasPrefix(a, "--under-load="):
+			return strings.TrimPrefix(a, "--under-load=")
+		}
+	}
+	return ""
+}
 
 // run is the testable entry point; it returns the process exit code.
 func run(args []string, stdout, stderr io.Writer) int {
@@ -70,7 +115,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	layout := fs.Bool("layout", false, "geometric layout-diff mode: rank papers by how far matched words drift plus page-count and line-break divergence (needs pdftotext -bbox), instead of the default word-recall")
 	gotexPath := fs.String("gotex", "", "a gotex binary to measure instead of building this checkout's — run it twice, once per side of a change, with the same -seed and -n")
 	list := fs.String("list", "", "a file of paper paths, one per line, to sample from instead of walking -corpus (the same list gotex-abdiff takes)")
-	underLoad := fs.String("under-load", "", "measure even on a busy machine; the reason is STAMPED into the report")
+	// Declared so -under-load is a known flag and shows in -h; main is what ACTS
+	// on it, before run is reached (see the note on main).
+	_ = fs.String("under-load", "", "measure even on a busy machine; the reason is STAMPED into the report")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -79,19 +126,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 		return 2
 	}
-	// ⛔ THE LOAD GATE, shared with gotex-abdiff (cmd/internal/loadguard) rather
-	// than written twice. This tool is the one that documents why load matters at
-	// all: "a compile that merely exhausts -timeout is marked timed-out and
-	// excluded on EITHER side … a slow paper, or a loaded machine, moved the mean
-	// one way only". The check therefore belongs here, before any compiling, and
-	// it refuses when it cannot READ the load — an unreadable machine is not an
-	// idle one.
-	load, loadErr := loadguard.Check(*underLoad)
-	if loadErr != nil {
-		fmt.Fprintln(stderr, "gotex-refdiff:", loadErr)
-		return 2
-	}
-	fmt.Fprintln(stdout, loadguard.Banner(load, *underLoad))
 
 	papers, err := choosePapers(*corpus, *list)
 	if err != nil {
