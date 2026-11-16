@@ -38,10 +38,15 @@ func corpus(t *testing.T) (listPath string, root string) {
 	write("2001.00001/main.tex", "\\documentclass{article}\n"+
 		"% \\emergencystretch=3em   a commented-out setting is not a setting\n"+
 		"We discuss the looseness of the bound in prose.\n"+
+		// A LONGER control word that BEGINS with \font, and no use of \font
+		// itself. This is the real corpus line that exposed trap 5.
+		"\\renewcommand\\Authfont{\\fontsize{13}{16}\\selectfont}\n"+
 		"\\input{sections/one}\n")
 	write("2001.00001/sections/one.tex", "\\looseness=-1\nSome text.\n")
 	write("2002.00002/main.tex", "\\documentclass{article}\n"+
-		"A literal percent, 50\\% of cases, does not start a comment: \\hangindent=1em\n")
+		"A literal percent, 50\\% of cases, does not start a comment: \\hangindent=1em\n"+
+		// The ONLY real use of the \font primitive in this corpus.
+		"\\font\\tenrm=cmr10\n")
 	listPath = filepath.Join(root, "list.txt")
 	if err := os.WriteFile(listPath, []byte(
 		filepath.Join(root, "2001.00001", "main.tex")+"\n"+
@@ -75,6 +80,66 @@ func TestTheCensusWalksEachPaperNotItsEntryFile(t *testing.T) {
 	// An escaped \% does not start a comment, so what follows it is still code.
 	if !strings.Contains(got, `\hangindent: 1 of 2 paper(s)  2002.00002`) {
 		t.Errorf("an escaped percent was treated as a comment, hiding the rest of the line:\n%s", got)
+	}
+}
+
+// ⭐ A CONTROL WORD DOES NOT ANSWER FOR THE LONGER ONES THAT BEGIN WITH IT.
+//
+// This is trap 5, and it is here because it produced an answer I believed for a
+// minute: asked for `\font` over the real 154-paper list, a substring scan said
+// 14 papers, and every matching line was `\fontsize{13}{16}`, `\fontsize{\sf@size}`
+// or `\Affilfont` — not one use of the primitive. The corpus above carries both
+// shapes on purpose, in two different papers, so the two behaviours give
+// DIFFERENT counts: 1 with the boundary, 2 without it.
+func TestAControlWordDoesNotAnswerForALongerOne(t *testing.T) {
+	list, _ := corpus(t)
+	var out, errb bytes.Buffer
+	if code := run([]string{"-list", list, `\font`, `\fontsize`, `\selectfont`}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	got := out.String()
+
+	// \font is used in 2002.00002 ONLY. 2001.00001 holds \fontsize and
+	// \selectfont, neither of which is \font.
+	if !strings.Contains(got, `\font: 1 of 2 paper(s)  2002.00002`) {
+		t.Errorf("\\font answered for \\fontsize, so a control word still matches longer ones:\n%s", got)
+	}
+	// The control, without which the assertion above passes on a scan that
+	// found nothing at all: the longer words ARE present, in the other paper.
+	if !strings.Contains(got, `\fontsize: 1 of 2 paper(s)  2001.00001`) {
+		t.Errorf("\\fontsize was not found, so this test is not measuring a boundary:\n%s", got)
+	}
+	// \selectfont ENDS in the term, which no boundary rule should hide.
+	if !strings.Contains(got, `\selectfont: 1 of 2 paper(s)  2001.00001`) {
+		t.Errorf("\\selectfont was not found:\n%s", got)
+	}
+}
+
+// containsTerm's own table, including the shapes the corpus cannot carry.
+func TestContainsTerm(t *testing.T) {
+	for _, c := range []struct {
+		line, term string
+		want       bool
+	}{
+		{`\font\tenrm=cmr10`, `\font`, true},            // the primitive, followed by a backslash
+		{`\font=x`, `\font`, true},                      // followed by =
+		{`\font `, `\font`, true},                       // followed by a space
+		{`x\font`, `\font`, true},                       // at end of line
+		{`\fontsize{13}{16}`, `\font`, false},           // ⛔ the trap
+		{`\Authfont{}`, `\font`, false},                 // no backslash before font
+		{`\selectfont`, `\font`, false},                 // ends with it, is not it
+		{`\fontsize{\sf@size}`, `\fontsize`, true},      // the longer word asked for itself
+		{`\paragraph{Heading}`, `\par`, false},          // ⛔ \par must not answer for \paragraph
+		{`text\par`, `\par`, true},                      // and must answer for itself
+		{`a\\b`, `\\`, true},                            // a control SYMBOL takes no boundary
+		{`50\% of cases`, `\%`, true},                   // nor does \%
+		{`the looseness of it`, `looseness`, true},      // a plain word stays a substring
+		{`\looseness=-1`, `\looseness`, true},           //
+		{`\fontseries{b}\fontshape{n}`, `\font`, false}, // two longer words, still not \font
+	} {
+		if got := containsTerm(c.line, c.term); got != c.want {
+			t.Errorf("containsTerm(%q, %q) = %v, want %v", c.line, c.term, got, c.want)
+		}
 	}
 }
 
