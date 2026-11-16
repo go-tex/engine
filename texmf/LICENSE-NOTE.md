@@ -151,3 +151,55 @@ embedded**. That is fine and is asserted by a test: the loader skips a
 still run. If a missing `\RequirePackage` ever became fatal, this package would stop
 working and those 56 equations would come back — silently, because a dropped equation
 does not fail a build.
+
+## `natbib.sty`, the author's name (added 2026-11-16)
+
+A third-party CTAN package, © 1993-2010 Patrick W Daly, **LPPL** (its own notice
+states version 1 of the licence "or any later version"); verbatim, preamble intact.
+
+It is embedded because without it `\citet{k}` prints `[1]` where the reference
+prints the author's **name**. Measured from the page text of the test beside this
+change:
+
+| | `\citet{k}` | `\citep{k}` |
+|---|---|---|
+| without the file | `[1]` | `[1]` |
+| with it | `Nordbotten et al. (2021)` | `(Nordbotten et al., 2021)` |
+
+Those are `tectonic`'s own forms. **20 of the 154** measured papers
+`\usepackage{natbib}` and **none of them ships it**
+([go-tex/engine#703](https://github.com/go-tex/engine/issues/703) counts 68 of 154
+affected by the numeric fallback), and no document could reach a copy by any path:
+measured before this change, `natbib` appeared nowhere in this directory and
+nowhere in the bundle catalogue either (zero occurrences in
+`github.com/go-tex/texmf@v0.7.0`). It is not in `neverLoadReal`, so a resolvable
+copy is loaded and run as real TeX — which is the whole fix, since
+[#712](https://github.com/go-tex/engine/pull/712) already measured that the
+genuine file produces the reference's output word for word.
+
+| File | Provides | Version | Upstream source |
+|------|----------|---------|-----------------|
+| `natbib.sty` | `\ProvidesPackage{natbib}` | `2010/09/13 8.31b (PWD, AO)` | TeX Live tlnet `archive/natbib.tar.xz`, `tex/latex/natbib/natbib.sty`, sha256 `d9b0f6ed58f5c260d2df9435b97da23ca326e3596db8ef0681bbff7a14343603`, 45456 bytes |
+
+CTAN serves **no** pre-built copy (`macros/latex/contrib/natbib/natbib.sty` is a
+404) because the `.sty` is a docstrip product — the same reason `keyval.sty` above
+is taken from tlnet rather than CTAN. The CTAN source `natbib.dtx` (sha256
+`6120e8b4574221bb22243ee6a720204841ecccfb0210bed82833e1db12e8734c`) declares the
+same `2010/09/13 8.31b`, so the chain is consistent; docstrip was **not** re-run to
+prove byte-equality and no such claim is made here.
+
+⚠ **One condition new to this directory, left for review rather than decided.**
+`natbib.sty`'s notice adds: *"It may not be distributed without the original source
+file `natbib.dtx`."* None of the fifteen files above carries that sentence. Against
+a literal reading: TeX Live, the canonical distributor, ships exactly this generated
+file in its runtime package with no `.dtx` beside it, and this directory already
+embeds `keyval.sty` on that basis. The existing practice is followed here; the
+`.dtx` is 249436 bytes and can be added beside it if the literal reading is
+preferred.
+
+⛔ And three traps the test beside it records, because the first version of that
+test **passed while both citations rendered `?`**: the observable is "et al.", not
+the author's surname (which is also in the bibliography entry, needing no citation
+machinery); it must read the **two-pass** `compile()`, since `\bibcite` reaches the
+`.aux` only on the second pass; and the document needs a `\documentclass`, because
+natbib's `\citet` calls the kernel's `\@citex`, which only a loaded class defines.
