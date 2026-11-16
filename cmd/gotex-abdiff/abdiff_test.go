@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -252,10 +253,74 @@ func TestReportRefusesToScoreALostPaper(t *testing.T) {
 		{paper: Paper{ID: "ok", RefPage: 10}, base: measurement{Pages: 10}, head: measurement{Pages: 10}},
 		{paper: Paper{ID: "broken", RefPage: 10}, baseErr: os.ErrNotExist},
 	}
-	if err := report(rs, 5, false); err == nil {
+	if err := report(io.Discard, rs, 5, false); err == nil {
 		t.Error("report scored a population that lost a paper")
 	}
-	if err := report(rs, 5, true); err != nil {
+	if err := report(io.Discard, rs, 5, true); err != nil {
 		t.Errorf("report(-keep-going) refused anyway: %v", err)
+	}
+}
+
+// ⛔⛔ THE SEAM THE VERDICT TEST CANNOT REACH. TestTheInkVerdictNamesTheRightKind
+// OfChange hands reportInk an inkMoved of 3 and checks that it says "CONTENT".
+// Only report knows whether 3 is the right number, and it works it out from
+//
+//	r.base.Glyphs != r.head.Glyphs
+//
+// one word away from the r.base.Pages != r.head.Pages on the line above it.
+// Written against Pages by mistake, the ink column would report "ink held still"
+// on every content change there is — and the other test would still pass, because
+// it supplies the number it is checking.
+//
+// So this one goes in through report, with papers whose PAGES are identical and
+// whose INK is not, and reads the verdict out of the report's own text.
+func TestReportDerivesTheInkVerdictFromTheGlyphsAndNotThePages(t *testing.T) {
+	// Pages identical on both sides, ink different on two of the three papers.
+	rs := []result{
+		{paper: Paper{ID: "moved-a", RefPage: 10},
+			base: measurement{Pages: 10, Glyphs: 40_000},
+			head: measurement{Pages: 10, Glyphs: 40_900}},
+		{paper: Paper{ID: "still", RefPage: 10},
+			base: measurement{Pages: 10, Glyphs: 12_000},
+			head: measurement{Pages: 10, Glyphs: 12_000}},
+		{paper: Paper{ID: "moved-b", RefPage: 10},
+			base: measurement{Pages: 10, Glyphs: 8_000},
+			head: measurement{Pages: 10, Glyphs: 8_010}},
+	}
+	var buf bytes.Buffer
+	if err := report(&buf, rs, 5, false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "papers moved      0") {
+		t.Errorf("pagination was reported as moving although every page count is identical:\n%s", out)
+	}
+	if !strings.Contains(out, "CONTENT") {
+		t.Errorf("ink moved on 2 of 3 papers with no page moving, and the verdict does not say "+
+			"CONTENT — the comparison is almost certainly reading Pages:\n%s", out)
+	}
+	if !strings.Contains(out, "ink moved on 2 paper(s)") {
+		t.Errorf("the ink count is not 2:\n%s", out)
+	}
+	// The two that moved are listed, worst first, and the one that did not is not.
+	if i, j := strings.Index(out, "moved-a"), strings.Index(out, "moved-b"); i < 0 || j < 0 || i > j {
+		t.Errorf("the ink movers are missing or not worst-first (+900 before +10):\n%s", out)
+	}
+	if strings.Contains(out, "still ") {
+		t.Errorf("a paper whose ink did not move was listed as a mover:\n%s", out)
+	}
+	// ⛔ THE CONTROL, and it is the one that matters: the SAME papers with the ink
+	// equalised must flip the verdict. Without it this test would pass against a
+	// report that says "CONTENT" unconditionally.
+	for i := range rs {
+		rs[i].head.Glyphs = rs[i].base.Glyphs
+	}
+	buf.Reset()
+	if err := report(&buf, rs, 5, false); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); strings.Contains(out, "CONTENT") {
+		t.Errorf("with the ink equalised the verdict still says CONTENT, so it is not reading "+
+			"the glyphs at all:\n%s", out)
 	}
 }

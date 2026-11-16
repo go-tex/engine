@@ -139,7 +139,7 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 		progress(i+1, len(papers))
 	}
 	progressDone()
-	return report(results, top, keep)
+	return report(os.Stdout, results, top, keep)
 }
 
 // rank measures ONE revision and lists the papers worst-first by how far their
@@ -345,7 +345,15 @@ func compileAndMeasure(bin, dir, texmf, out string, timeout time.Duration) (meas
 
 // report prints the comparison, and REFUSES to score it when a paper failed on
 // one side: a population that shrank silently is how a regression hides.
-func report(rs []result, top int, keep bool) error {
+//
+// ⛔ IT TAKES A WRITER, and that is what makes the ink verdict testable WHERE IT
+// IS DECIDED. reportInk can be called with an inkMoved of 3 and asked whether it
+// says "CONTENT"; only this function knows whether 3 is the right number, and it
+// derives it from r.base.Glyphs != r.head.Glyphs. Written against Pages by
+// mistake — one word apart from the line above it — that comparison would report
+// "ink held still" on every content change there is, and a test that supplies
+// inkMoved itself could never see it.
+func report(w io.Writer, rs []result, top int, keep bool) error {
 	var errs int
 	for _, r := range rs {
 		if r.baseErr != nil || r.headErr != nil {
@@ -354,11 +362,11 @@ func report(rs []result, top int, keep bool) error {
 			if e == nil {
 				which, e = "head", r.headErr
 			}
-			fmt.Printf("  ERROR %-14s %s: %v\n", r.paper.ID, which, e)
+			fmt.Fprintf(w, "  ERROR %-14s %s: %v\n", r.paper.ID, which, e)
 		}
 	}
 	if errs > 0 {
-		fmt.Printf("\n%d paper(s) produced no readable PDF on one side.\n", errs)
+		fmt.Fprintf(w, "\n%d paper(s) produced no readable PDF on one side.\n", errs)
 		if !keep {
 			return fmt.Errorf("refusing to score a population that lost %d paper(s); pass -keep-going to score the rest anyway", errs)
 		}
@@ -408,31 +416,34 @@ func report(rs []result, top int, keep bool) error {
 			inkMovers = append(inkMovers, inkMover{r.paper.ID, r.base.Glyphs, r.head.Glyphs})
 		}
 	}
-	fmt.Printf("\nscored            %d paper(s)\n", scored)
-	fmt.Printf("Σ|page deviation| %d -> %d   (%+d)\n", sumBase, sumHead, sumHead-sumBase)
-	fmt.Printf("exact pagination  %d -> %d   (%+d)\n", exactBase, exactHead, exactHead-exactBase)
-	fmt.Printf("papers moved      %d   (%d toward the reference, %d away, %d sideways)\n",
+	fmt.Fprintf(w, "\nscored            %d paper(s)\n", scored)
+	fmt.Fprintf(w, "Σ|page deviation| %d -> %d   (%+d)\n", sumBase, sumHead, sumHead-sumBase)
+	fmt.Fprintf(w, "exact pagination  %d -> %d   (%+d)\n", exactBase, exactHead, exactHead-exactBase)
+	fmt.Fprintf(w, "papers moved      %d   (%d toward the reference, %d away, %d sideways)\n",
 		len(movers), toward, away, len(movers)-toward-away)
-	reportInk(os.Stdout, glyphBase, glyphHead, badBase, badHead, len(inkMovers), len(movers))
+	reportInk(w, glyphBase, glyphHead, badBase, badHead, len(inkMovers), len(movers))
 	sort.Slice(movers, func(i, j int) bool {
 		return abs(movers[i].h-movers[i].b) > abs(movers[j].h-movers[j].b)
 	})
 	for i, m := range movers {
 		if i >= top {
-			fmt.Printf("  … and %d more\n", len(movers)-top)
+			fmt.Fprintf(w, "  … and %d more\n", len(movers)-top)
 			break
 		}
-		fmt.Printf("  %-14s %3d -> %3d   (reference %3d)\n", m.id, m.b, m.h, m.ref)
+		fmt.Fprintf(w, "  %-14s %3d -> %3d   (reference %3d)\n", m.id, m.b, m.h, m.ref)
 	}
+	sort.Slice(inkMovers, func(i, j int) bool {
+		return abs(inkMovers[i].h-inkMovers[i].b) > abs(inkMovers[j].h-inkMovers[j].b)
+	})
 	for i, m := range inkMovers {
 		if i == 0 {
-			fmt.Printf("\nink moved on %d paper(s):\n", len(inkMovers))
+			fmt.Fprintf(w, "\nink moved on %d paper(s):\n", len(inkMovers))
 		}
 		if i >= top {
-			fmt.Printf("  … and %d more\n", len(inkMovers)-top)
+			fmt.Fprintf(w, "  … and %d more\n", len(inkMovers)-top)
 			break
 		}
-		fmt.Printf("  %-14s %7d -> %7d glyphs   (%+d)\n", m.id, m.b, m.h, m.h-m.b)
+		fmt.Fprintf(w, "  %-14s %7d -> %7d glyphs   (%+d)\n", m.id, m.b, m.h, m.h-m.b)
 	}
 	return nil
 }
