@@ -534,6 +534,22 @@ Each stage is gated by an objective oracle:
    *missing* pages, which is [#381](https://github.com/go-tex/engine/issues/381)
    (our lines hold more than the reference's) exposed a little further now that
    lines are no longer padded out with extra hyphens.
+   **A paragraph is broken on its own SHAPE, not only on `\hsize`.** TeX's shape
+   parameters reach the line **breaker** rather than being accepted and ignored:
+   `\hangindent`/`\hangafter` (`tex.web` §847-850, `:16676-16748`) and
+   `\parshape` (`:23275-23286`, whose last pair repeats for every later line,
+   `:16680-16681`). `\parshape` **wins** over `\hangindent`, which is not obvious
+   and is settled at `:16706` — it tests `par_shape_ptr` first and consults
+   `hang_indent` only in the `else` branch. All of them last **one paragraph**:
+   `normal_paragraph` clears them at every `\par` (`:20756-20761`), which became
+   a defect here only once `\hangindent` started working at all.
+   ⚠ **A no-regression check, not a win, and the census says why.** `\parshape`
+   is set by **0** of the 154 measured papers and `\hangindent` by **3**, so the
+   corpus A/B moves Σ\|page deviation\| `306 → 306` with **0** papers moved —
+   the *predicted* result, where anything else would have meant a bug. The
+   witnesses are unit-level, and each was confirmed by removing the line it
+   tests: reading `\hangindent` first makes the precedence test, and only that
+   test, fail.
    **Hyphenation is Liang's algorithm on the embedded US-English patterns**
    (`go-typeset/hyphenation`), with `\lefthyphenmin`/`\righthyphenmin`,
    `\hyphenchar` — a face that files it negative is never broken, which is how
