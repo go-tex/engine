@@ -33,6 +33,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,7 +45,7 @@ import (
 
 type result struct {
 	paper      Paper
-	base, head int
+	base, head measurement
 	baseErr    error
 	headErr    error
 }
@@ -132,8 +133,8 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 	results := make([]result, 0, len(papers))
 	for i, p := range papers {
 		r := result{paper: p}
-		r.base, r.baseErr = compileAndCount(baseBin, p.Dir, texmf, filepath.Join(work, "b.pdf"), timeout)
-		r.head, r.headErr = compileAndCount(headBin, p.Dir, texmf, filepath.Join(work, "h.pdf"), timeout)
+		r.base, r.baseErr = compileAndMeasure(baseBin, p.Dir, texmf, filepath.Join(work, "b.pdf"), timeout)
+		r.head, r.headErr = compileAndMeasure(headBin, p.Dir, texmf, filepath.Join(work, "h.pdf"), timeout)
 		results = append(results, r)
 		progress(i+1, len(papers))
 	}
@@ -171,14 +172,15 @@ func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int) 
 	fmt.Printf("%s  %s\n%d papers%s\n\n", head, shortCommit(commit), len(papers), renderNote())
 
 	type row struct {
-		id       string
-		got, ref int
-		err      error
+		id  string
+		got measurement
+		ref int
+		err error
 	}
 	rows := make([]row, 0, len(papers))
 	for i, p := range papers {
-		n, err := compileAndCount(bin, p.Dir, texmf, filepath.Join(work, "r.pdf"), timeout)
-		rows = append(rows, row{p.ID, n, p.RefPage, err})
+		m, err := compileAndMeasure(bin, p.Dir, texmf, filepath.Join(work, "r.pdf"), timeout)
+		rows = append(rows, row{p.ID, m, p.RefPage, err})
 		progress(i+1, len(papers))
 	}
 	progressDone()
@@ -190,31 +192,94 @@ func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int) 
 			fmt.Printf("  NO PDF  %-14s %v\n", r.id, r.err)
 		}
 	}
-	var sum, exact int
+	var sum, exact, glyphs, badPages int
 	scored := make([]row, 0, len(rows))
 	for _, r := range rows {
 		if r.err != nil {
 			continue
 		}
 		scored = append(scored, r)
-		sum += abs(r.got - r.ref)
-		if r.got == r.ref {
+		sum += abs(r.got.Pages - r.ref)
+		glyphs += r.got.Glyphs
+		badPages += r.got.BadPages
+		if r.got.Pages == r.ref {
 			exact++
 		}
 	}
 	fmt.Printf("\nscored            %d paper(s)%s\n", len(scored), plural(broken))
 	fmt.Printf("Σ|page deviation| %d\n", sum)
-	fmt.Printf("exact pagination  %d\n\n", exact)
+	fmt.Printf("exact pagination  %d\n", exact)
+	// ⚠ One side has nothing to be compared WITH, so the glyph total here is a
+	// BASELINE and not a finding: it is the number the next run's A/B subtracts
+	// from. Saying so is the point — a Σ printed without a delta still invites a
+	// reader to judge it, and there is no reference ink to judge it against.
+	fmt.Printf("Σ glyphs          %d   (a baseline for the next A/B; no reference ink exists)\n", glyphs)
+	if badPages > 0 {
+		fmt.Printf("⛔ %d page(s) parsed as pages but their text did not decode: Σ glyphs is short by\n"+
+			"   whatever those pages held\n", badPages)
+	}
+	fmt.Println()
 	sort.Slice(scored, func(i, j int) bool {
-		return abs(scored[i].got-scored[i].ref) > abs(scored[j].got-scored[j].ref)
+		return abs(scored[i].got.Pages-scored[i].ref) > abs(scored[j].got.Pages-scored[j].ref)
 	})
 	for i, r := range scored {
 		if i >= top {
 			break
 		}
-		fmt.Printf("  %-14s %3d  (reference %3d)  %+d\n", r.id, r.got, r.ref, r.got-r.ref)
+		fmt.Printf("  %-14s %3d  (reference %3d)  %+d\n", r.id, r.got.Pages, r.ref, r.got.Pages-r.ref)
 	}
 	return nil
+}
+
+// reportInk prints the glyph totals and SAYS WHAT THEY MEAN, because the two
+// numbers beside the page columns will otherwise be read like the page columns.
+//
+// ⛔ THERE IS NO REFERENCE GLYPH TOTAL. The corpus's reference file carries page
+// counts and nothing else, so "toward" and "away" are undefined for ink: this
+// cannot say whether the ink is RIGHT, only whether the change moved it. Printing
+// a Σ with a signed delta and no such sentence is exactly how a witness gets read
+// as a score.
+//
+// What the pair of deltas distinguishes, which neither number does alone:
+//
+//   - pages move, ink holds still → a BREAKING change. The same text was re-dealt
+//     across pages, which is what a penalty, a measure or a glue change does.
+//   - ink moves → a CONTENT change. A macro that now expands, or output that got
+//     dropped. The precedent is xkeyval: a package that stopped erroring produced
+//     the same page count with text on the page that had not been there before,
+//     and a page-only A/B called that "nothing moved".
+//   - neither moves → the change did not reach this corpus.
+//
+// ⚠ It takes a writer, unlike the rest of this report, for one reason: the
+// classification below is a three-way verdict that is easy to get backwards, and
+// a verdict needs a test. A function printing to os.Stdout does not have one.
+func reportInk(w io.Writer, base, head, badBase, badHead, inkMoved, pageMoved int) {
+	fmt.Fprintf(w, "Σ glyphs          %d -> %d   (%+d)   ⚠ WITNESS, NOT A SCORE: the reference\n"+
+		"                  file holds page counts only, so there is no ink to be near or far from\n",
+		base, head, head-base)
+	// ⛔ Pages whose text could not be decoded are named, and loudly, because the
+	// Σ above is SHORT by whatever they held. A glyph delta computed over two
+	// sides that lost different pages is a difference between two incomplete
+	// sums, and it would read as ink that moved.
+	if badBase > 0 || badHead > 0 {
+		fmt.Fprintf(w, "⛔ %d page(s) on the base and %d on the head parsed as pages but their text\n"+
+			"   did not decode: BOTH Σ glyphs above are short by whatever those pages held,\n"+
+			"   and their delta is a difference between two incomplete sums. Do not read it.\n",
+			badBase, badHead)
+	}
+	switch {
+	case pageMoved == 0 && inkMoved == 0:
+		fmt.Fprintln(w, "neither pagination nor ink moved on any paper: this change does not reach this corpus")
+	case inkMoved == 0 && pageMoved > 0:
+		fmt.Fprintf(w, "ink held still on all %d paper(s) whose pagination moved: a BREAKING change — the\n"+
+			"                  same text re-dealt across pages, not text that appeared or vanished\n", pageMoved)
+	case inkMoved > 0 && pageMoved == 0:
+		fmt.Fprintf(w, "ink moved on %d paper(s) with NO page moving at all: a CONTENT change a page count\n"+
+			"                  cannot see — this is the xkeyval shape, and it is why this column exists\n", inkMoved)
+	default:
+		fmt.Fprintf(w, "ink moved on %d paper(s) and pagination on %d: both a content and a breaking change,\n"+
+			"                  so read the two lists below separately\n", inkMoved, pageMoved)
+	}
 }
 
 func plural(broken int) string {
@@ -250,12 +315,12 @@ func contains(repo, anc, desc string) bool {
 	return cmd.Run() == nil
 }
 
-// compileAndCount runs one side on one paper and parses the PDF it wrote.
-func compileAndCount(bin, dir, texmf, out string, timeout time.Duration) (int, error) {
+// compileAndMeasure runs one side on one paper and parses the PDF it wrote.
+func compileAndMeasure(bin, dir, texmf, out string, timeout time.Duration) (measurement, error) {
 	_ = os.Remove(out) // never read the previous paper's PDF
 	abs, err := filepath.Abs(out)
 	if err != nil {
-		return 0, err
+		return measurement{}, err
 	}
 	cmd := exec.Command(bin, "-lenient", "-o", abs, "main.tex")
 	cmd.Dir = dir
@@ -265,7 +330,7 @@ func compileAndCount(bin, dir, texmf, out string, timeout time.Duration) (int, e
 	}
 	done := make(chan error, 1)
 	if err := cmd.Start(); err != nil {
-		return 0, err
+		return measurement{}, err
 	}
 	go func() { done <- cmd.Wait() }()
 	select {
@@ -273,9 +338,9 @@ func compileAndCount(bin, dir, texmf, out string, timeout time.Duration) (int, e
 	case <-time.After(timeout):
 		_ = cmd.Process.Kill()
 		<-done
-		return 0, fmt.Errorf("timed out after %s", timeout)
+		return measurement{}, fmt.Errorf("timed out after %s", timeout)
 	}
-	return pageCount(abs)
+	return measure(abs)
 }
 
 // report prints the comparison, and REFUSES to score it when a paper failed on
@@ -300,28 +365,38 @@ func report(rs []result, top int, keep bool) error {
 	}
 
 	var sumBase, sumHead, exactBase, exactHead, toward, away int
+	var glyphBase, glyphHead, badBase, badHead int
 	type mover struct {
 		id        string
 		b, h, ref int
 	}
 	var movers []mover
+	type inkMover struct {
+		id   string
+		b, h int
+	}
+	var inkMovers []inkMover
 	scored := 0
 	for _, r := range rs {
 		if r.baseErr != nil || r.headErr != nil {
 			continue
 		}
 		scored++
-		db, dh := abs(r.base-r.paper.RefPage), abs(r.head-r.paper.RefPage)
+		db, dh := abs(r.base.Pages-r.paper.RefPage), abs(r.head.Pages-r.paper.RefPage)
 		sumBase += db
 		sumHead += dh
+		glyphBase += r.base.Glyphs
+		glyphHead += r.head.Glyphs
+		badBase += r.base.BadPages
+		badHead += r.head.BadPages
 		if db == 0 {
 			exactBase++
 		}
 		if dh == 0 {
 			exactHead++
 		}
-		if r.base != r.head {
-			movers = append(movers, mover{r.paper.ID, r.base, r.head, r.paper.RefPage})
+		if r.base.Pages != r.head.Pages {
+			movers = append(movers, mover{r.paper.ID, r.base.Pages, r.head.Pages, r.paper.RefPage})
 			switch {
 			case dh < db:
 				toward++
@@ -329,12 +404,16 @@ func report(rs []result, top int, keep bool) error {
 				away++
 			}
 		}
+		if r.base.Glyphs != r.head.Glyphs {
+			inkMovers = append(inkMovers, inkMover{r.paper.ID, r.base.Glyphs, r.head.Glyphs})
+		}
 	}
 	fmt.Printf("\nscored            %d paper(s)\n", scored)
 	fmt.Printf("Σ|page deviation| %d -> %d   (%+d)\n", sumBase, sumHead, sumHead-sumBase)
 	fmt.Printf("exact pagination  %d -> %d   (%+d)\n", exactBase, exactHead, exactHead-exactBase)
 	fmt.Printf("papers moved      %d   (%d toward the reference, %d away, %d sideways)\n",
 		len(movers), toward, away, len(movers)-toward-away)
+	reportInk(os.Stdout, glyphBase, glyphHead, badBase, badHead, len(inkMovers), len(movers))
 	sort.Slice(movers, func(i, j int) bool {
 		return abs(movers[i].h-movers[i].b) > abs(movers[j].h-movers[j].b)
 	})
@@ -344,6 +423,16 @@ func report(rs []result, top int, keep bool) error {
 			break
 		}
 		fmt.Printf("  %-14s %3d -> %3d   (reference %3d)\n", m.id, m.b, m.h, m.ref)
+	}
+	for i, m := range inkMovers {
+		if i == 0 {
+			fmt.Printf("\nink moved on %d paper(s):\n", len(inkMovers))
+		}
+		if i >= top {
+			fmt.Printf("  … and %d more\n", len(inkMovers)-top)
+			break
+		}
+		fmt.Printf("  %-14s %7d -> %7d glyphs   (%+d)\n", m.id, m.b, m.h, m.h-m.b)
 	}
 	return nil
 }
