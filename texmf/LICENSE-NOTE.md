@@ -188,14 +188,21 @@ is taken from tlnet rather than CTAN. The CTAN source `natbib.dtx` (sha256
 same `2010/09/13 8.31b`, so the chain is consistent; docstrip was **not** re-run to
 prove byte-equality and no such claim is made here.
 
-⚠ **One condition new to this directory, left for review rather than decided.**
+⚠ **One condition new to this directory, reviewed and decided on 2026-11-16.**
 `natbib.sty`'s notice adds: *"It may not be distributed without the original source
-file `natbib.dtx`."* None of the fifteen files above carries that sentence. Against
-a literal reading: TeX Live, the canonical distributor, ships exactly this generated
-file in its runtime package with no `.dtx` beside it, and this directory already
-embeds `keyval.sty` on that basis. The existing practice is followed here; the
-`.dtx` is 249436 bytes and can be added beside it if the literal reading is
-preferred.
+file `natbib.dtx`."* None of the fifteen files above carries that sentence. The two
+readings and the decision:
+
+- **literal** — ship `natbib.dtx` (249436 bytes) beside the `.sty`;
+- **as practised** — ship the generated `.sty` alone, which is what TeX Live, the
+  canonical distributor, does: its runtime package carries exactly this file with
+  no `.dtx` beside it. This directory already embeds `keyval.sty` on that basis,
+  for the same reason — the `.sty` is a docstrip product CTAN does not serve.
+
+**TeX Live's practice is followed.** The condition is written down here rather than
+resolved away, so a later reader can reverse the call without rediscovering it: the
+`.dtx` can be added beside the `.sty` at any time, and its sha256 is recorded two
+paragraphs above.
 
 ⛔ And three traps the test beside it records, because the first version of that
 test **passed while both citations rendered `?`**: the observable is "et al.", not
