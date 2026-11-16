@@ -134,9 +134,16 @@ func TestAParInsideAGroupTakesThatGroupsBaselineskip(t *testing.T) {
 // repository. A shape assertion that catches the regression beats no assertion.
 //
 // LaTeX's own \@sect is the authority: \begingroup #6\relax … #8\@@par \endgroup.
+// ⚠ L'invariant est la PLACE DE L'ACCOLADE, pas le reste de la ligne. La version
+// d'origine comparait la ligne entière (`\noindent{#1 #2\par}\vskip\@tempskipa`)
+// et elle est tombée en ROUGE quand `\nobreak` a été inséré entre le groupe et le
+// `\vskip` — un changement qui respecte pourtant exactement ce qu'elle protège
+// (ltsect.dtx:491 met ce `\nobreak` là). Les deux motifs ci-dessous ne portent
+// donc plus que sur le groupe et son `\par`, ce qui laisse passer ce qui suit et
+// continue d'attraper le déplacement de l'accolade, qui est le défaut de 5,978pt.
 func TestGxheadEndsTheHeadingParagraphInsideTheGroup(t *testing.T) {
-	const inside = `\noindent{#1 #2\par}\vskip\@tempskipa`
-	const outside = `\noindent{#1 #2}\par\vskip\@tempskipa`
+	const inside = `\noindent{#1 #2\par}`
+	const outside = `\noindent{#1 #2}\par`
 	if !strings.Contains(LaTeX2eClassLead, inside) {
 		t.Errorf("\\@gxhead ne termine pas le paragraphe du titre DANS le groupe de style")
 	}
