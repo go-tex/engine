@@ -431,6 +431,13 @@ type Engine struct {
 	// somebody else holds, so a zero default would report every assignment to it
 	// as a dropped hanging indent. See noteDroppedShape.
 	hangIndentReg int
+	// parShape is \parshape's (indent, width) list, in POINTS, empty when no
+	// shape is set. It is not a register: tex.web keeps it in par_shape_loc as a
+	// shape_ref (:4732), outside the dimension registers, and so does this.
+	//
+	// ⭐ It TAKES PRECEDENCE over \hangindent (:16706), and normalParagraph
+	// clears it at every \par (:20760) like the other three shape parameters.
+	parShape []Shape
 	// escapeReg is the \count register \escapechar is bound to; read every time a
 	// control-sequence name is printed (see escapeStr).
 	escapeReg int

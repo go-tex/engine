@@ -196,9 +196,6 @@ func (e *Engine) layoutSegment(hlist []node) {
 // restored by the save stack and \@hangfrom and friends are grouped. The
 // top-level assignment is the one that leaked.
 //
-// ⚠ \parshape is not here because this engine has no such primitive yet; when it
-// grows one, its reset belongs on the line below.
-//
 // It writes through setCount/setDimen rather than the slices, so the assignment
 // takes part in grouping exactly as TeX's eq_word_define does — a reset that
 // escaped its group would be a second bug of the same family.
@@ -216,6 +213,15 @@ func (e *Engine) normalParagraph() {
 			e.setCount(m.code, 1, false)
 		}
 	}
+	// :20760, `if par_shape_ptr<>null then eq_define(par_shape_loc,shape_ref,null)`.
+	//
+	// ⚠ This one is NOT grouped the way the three above are: parShape is a plain
+	// field, not a register, so it is not on the save stack and a \parshape set
+	// inside a group is not restored when the group ends. TeX's eq_define does
+	// restore it. For a shape that lasts one paragraph the difference is only
+	// visible to a group that opens and closes WITHIN a paragraph without a \par,
+	// which is narrow — but it is a real divergence and better said than hidden.
+	e.parShape = nil
 }
 
 // extractAdjusts takes the \vadjust material out of a line and returns the line
@@ -282,6 +288,17 @@ func (e *Engine) applyLineSkips(seg []node) []node {
 // document writing it gets an undefined command rather than a silently dropped
 // shape. go-typeset/linebreak's ParShape is ready for it when it is added.
 func (e *Engine) paragraphShape(lineWidth float64) Measure {
+	// ⭐ \parshape WINS, and :16706 is where that is settled:
+	//
+	//	if par_shape_ptr=null then (the hang_indent branch)
+	//	else (the parshape branch)
+	//
+	// so a document setting both gets the shape and \hangindent is not consulted
+	// at all. Reading them in the other order would silently prefer the simpler
+	// parameter wherever a class set it for its own reasons.
+	if len(e.parShape) > 0 {
+		return ParShape(e.parShape)
+	}
 	if e.hangIndentReg < 0 || e.hangIndentReg >= len(e.dimen) {
 		return Uniform(lineWidth)
 	}
