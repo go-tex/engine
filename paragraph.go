@@ -389,74 +389,61 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 			lines, ok = l3, ok3
 		}
 	}
-	// ⛔⛔ THE WIDE-OPEN PASS STAYS, AND IT IS NOT TeX. IT IS A WORKAROUND FOR
-	// go-typeset/linebreak#12 ITEM (1), AND THAT IS NOW MEASURED RATHER THAN SUSPECTED.
+	// ⛔⛔ THERE IS NO THIRD, WIDE-OPEN PASS HERE ANY MORE, and this note exists
+	// because for a while the comment in its place said so three times over, in
+	// three tenses — "the wide-open pass STAYS", "AND IT IS GONE", "SO WHY IS IT
+	// STILL HERE" — each generation appended above or below the last.
 	//
-	// It reads: if the pass above returned a bad line, run it again at
-	// \tolerance=maxBadRatio and adopt that instead. Nothing in tex.web does this.
-	// §863 has exactly three passes — \pretolerance without hyphens, \tolerance with
-	// them, and a third that adds \emergencystretch to the BACKGROUND — and none of
-	// them raises the tolerance. Raising it says "every line is acceptable however
-	// badly it fits", which is a different algorithm with a different answer, and the
-	// answer it gave was: never leave a line overfull, take more hyphens instead.
+	// ⛔ A reader cannot tell which tense is current, and one did not: go-tex/engine#754's
+	// audit of the delegated layers reports that this function "raises the tolerance
+	// to 1e4 instead (paragraph.go:251-258)", citing line numbers that by then
+	// pointed INTO the comment rather than at code. The pass was already gone. A
+	// stale comment cost a published audit one of its six findings, which is what a
+	// dated claim does when it is left beside a newer one.
 	//
-	// Measured on #768's own witness (\hsize=45pt, \fussy, `Typographical
-	// incomprehensibilities overwhelm every paragraph.`), against tectonic 0.17.0 with
-	// the face, the space and \tolerance all verified identical:
+	// What follows is the whole story once, in order.
+	//
+	// WHAT IT WAS. If the pass above returned a bad line, run the paragraph again at
+	// \tolerance=maxBadRatio and adopt that. Nothing in tex.web does this: §863 has
+	// exactly three passes — \pretolerance without hyphens, \tolerance with them, and
+	// a third that adds \emergencystretch to the BACKGROUND — and none raises the
+	// tolerance. Raising it says "every line is acceptable however badly it fits",
+	// which is a different algorithm with a different answer, and its answer was:
+	// never leave a line overfull, take more hyphens instead.
+	//
+	// WHAT IT COST, measured on #768's witness (\hsize=45pt, \fussy, `Typographical
+	// incomprehensibilities overwhelm every paragraph.`) against tectonic 0.17.0,
+	// with the face, the interword space and \tolerance verified identical:
 	//
 	//	reference      5 lines, FOUR overfull boxes (18.1, 13.92, 14.3, 18.16pt)
 	//	with this pass 7 lines, every one of them fitting
 	//	without it     5 lines, and lines 1-3 the reference's to 0.02pt
 	//	               (`Typographical`, `incomprehen-`, `sibilities over-`)
 	//
-	// The pass above had ALREADY FOUND the reference's answer; this one then throws it
-	// away, because `hasBadLine` is true of a solution TeX deliberately chose. At
-	// \tolerance=200 a short line with no stretch has badness 10000 and is NOT
-	// feasible, so TeX would rather overhang the margin than take the hyphens — which
-	// is #768's corrected diagnosis ("we will not leave a line overfull, and TeX
-	// will") read back from the other side.
-	// ⛔⛔ AND IT IS GONE. #768's finding (2) was this pass, and the reason it had
-	// to stay was go-typeset/linebreak#12 item (1), which its v1.5.0 fixes.
-	//
-	// Measured on #768's witness (\hsize=45pt, \fussy), with the face, the
-	// interword space and \tolerance verified identical on both sides:
-	//
-	//	reference    5 lines, FOUR overfull boxes (18.1, 13.92, 14.3, 18.16pt)
-	//	with it      7 lines, every one of them fitting
-	//	without it   the reference's five
-	//
-	// The pass above had already found the reference's answer; this one threw it
-	// away, because `hasBadLine` is true of a solution TeX deliberately chose. At
+	// Pass 2 had ALREADY FOUND the reference's answer and this one threw it away,
+	// because `hasBadLine` is true of a solution TeX deliberately chose: at
 	// \tolerance=200 a short line with no stretch has badness 10000 and is not
-	// feasible, so TeX would rather overhang the margin than take more hyphens.
+	// feasible, so TeX overhangs the margin rather than take the hyphens.
 	//
-	// It survived one removal attempt (#778) because four tests then stopped
-	// hyphenating words that must be hyphenated — \raggedright lines that TeX
-	// scores at badness 0 were infeasible here, so our pass 2 had no solution where
-	// TeX's had one, and the wide-open tolerance was hiding it by making everything
-	// feasible. The background and the glue orders remove that cause rather than
-	// its symptom.
-	// ⛔ SO WHY IS IT STILL HERE. Removing it turns six tests red, and four of them
-	// say the same thing: a word that MUST be hyphenated stops being hyphenated.
+	// WHY IT COULD NOT SIMPLY GO. One removal attempt (#778) turned six tests red,
+	// four of them saying the same thing — a word that MUST be hyphenated stopped
+	// being hyphenated (TestRaggedTextStillHyphenatesAWordThatCannotFit,
+	// TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse,
+	// TestHyphenationInsertsHyphen, TestPageIsOneTextElement). That was
+	// go-typeset/linebreak#12 item (1) seen from the consumer: the library carried ONE
+	// float of stretch and flattened `0pt plus 1fil` into a large finite number, so
+	// under \raggedright a line TeX scores at badness 0 was scored 10000 here and was
+	// INFEASIBLE. TeX's pass 2 had a solution and hyphenated inside it; ours had none,
+	// fell to artificial demerits, and took the single overfull line. The wide-open
+	// tolerance hid that by making everything feasible — it was treating the symptom.
 	//
-	//	TestRaggedTextStillHyphenatesAWordThatCannotFit — the reference breaks
-	//	  `incomprehen-/sibilities`; without this pass we leave it whole
-	//	TestAnExceptionBreaksWhereTheDocumentSaysAndNowhereElse — a \hyphenation
-	//	  exception stops being used
-	//	TestHyphenationInsertsHyphen — one line where two are wanted
-	//	TestPageIsOneTextElement — a lost space at a break
+	// AND WHY IT IS GONE. The library's v1.5.0 carries the glue orders and makes
+	// \leftskip/\rightskip the background, which removes the cause; #780 consumed
+	// that here, and the pass went with it. #768's finding (2) was this pass.
 	//
-	// That is go-typeset/linebreak#12 item (1), seen from the consumer: the library
-	// carries ONE float of stretch and flattens `0pt plus 1fil` to a large finite
-	// number, so under \raggedright (and wherever the background is infinite) a line
-	// TeX scores at badness 0 is scored here at 10000 and is INFEASIBLE. TeX's pass 2
-	// has a feasible solution and hyphenates inside it; ours has none, falls to
-	// artificial demerits, and takes the single overfull line instead. The wide-open
-	// tolerance hides that by making everything feasible.
-	//
-	// ⚠ THE ORDER IS THEREFORE FIXED: item (1) in the library, then this pass goes,
-	// then #768's finding (2) is closed. Taking it out first trades a measured
-	// 7-lines-for-5 on one witness against hyphenation that stops working on four.
+	// ⚠ The two KnuthPlassShaped calls above are therefore the whole of it:
+	// \pretolerance, then \tolerance with FinalPass set when \emergencystretch is
+	// zero, plus §863's genuine third pass when it is not.
 	return list, lines, ok
 }
 
