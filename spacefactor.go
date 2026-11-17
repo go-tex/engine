@@ -94,6 +94,21 @@ func (e *Engine) adjustSpaceFactor(r rune) {
 	}
 }
 
+// nonZeroSkip reads a glue parameter and reports whether it is SET, which is
+// TeX's `<> zero_glue` test (tex.web:20328-20330): a parameter all of whose
+// three components are zero is unset, and the caller falls back.
+//
+// ⛔ It is not "width > 0". A \spaceskip of `0pt plus 2pt` IS set — it is a space
+// that can only grow — and a width test would throw it away. The float skips had
+// the same conflation in the other direction (#815).
+func (e *Engine) nonZeroSkip(name string) (glueSpec, bool) {
+	g := e.namedSkip(name)
+	if g.width == 0 && g.stretch == 0 && g.shrink == 0 {
+		return glueSpec{}, false
+	}
+	return g, true
+}
+
 // spaceGlueForFactor is tex.web's app_space (§1043): the interword glue once the
 // space factor is taken into account.
 //
@@ -101,15 +116,50 @@ func (e *Engine) adjustSpaceFactor(r rune) {
 //	stretch = stretch × space_factor / 1000
 //	shrink  = shrink  × 1000 / space_factor
 //
-// ⚠ Two parts of §1043 are NOT here, and saying which keeps the next reader from
-// assuming they are: the \xspaceskip branch (taken when the factor is ≥ 2000 and
-// that skip is non-zero) and \spaceskip as the base glue. Both are declared in
-// this engine as \newskip registers rather than real glue parameters, so there is
-// nothing to read; a document that sets them is unaffected today and would be
-// wrongly affected by half an implementation.
+// ⛔⛔ AND BOTH HALVES OF §1043 ARE HERE NOW, because half of it is worse than
+// none — which is what the note this replaces said, and it was right while only
+// half could be written. tex.web:20358-20370, verbatim:
+//
+//	if (space_factor>=2000)and(xspace_skip<>zero_glue) then
+//	  q:=new_param_glue(xspace_skip_code)
+//	else begin if space_skip<>zero_glue then main_p:=space_skip
+//	  else <Find the glue specification...>;
+//	  main_p:=new_spec(main_p);
+//	  <Modify the glue specification in main_p according to the space factor>;
+//
+// Two rules, and they are NOT the same rule:
+//
+//   - \xspaceskip is taken VERBATIM — whole, unscaled, and only when the factor
+//     is at least 2000. No \fontdimen7 is added to it and the factor does not
+//     touch its stretch or shrink.
+//   - \spaceskip replaces the FONT's space as the base, and is then scaled by
+//     the factor exactly as the font's would have been, extra_space included
+//     (§1044 adds extra_space(cur_font) whatever the base is).
+//
+// ⛔ ZERO IS "UNSET", NOT A WIDTH. :20328-20330 says TeX compares the glue
+// parameter against zero_glue by POINTER — "it is simple to test whether a glue
+// parameter is zero or not" — so a \spaceskip of 0pt plus 0pt minus 0pt means
+// "nobody set this" and the font's space is used. Reading a zero as a deliberate
+// zero-width space is the same conflation #815 found in the float skips, in the
+// other direction.
+//
+// ⚠ MEASURED COST OF THE SILENCE, before this existed: a line-breaking fixture
+// that set \spaceskip=4pt plus 8pt minus 2pt was handed the font's 3pt plus 1.5,
+// and eighteen configurations of it said \looseness had no effect. It has one.
+// See #826.
 func (e *Engine) spaceGlueForFactor(f fontFace) glueSpec {
-	g := e.spaceGlueOf(f)
 	sf := e.spaceFactor
+	// The \xspaceskip branch is tested FIRST and returns at once: it is not a
+	// base to be modified.
+	if sf >= 2000 {
+		if x, ok := e.nonZeroSkip("xspaceskip"); ok {
+			return x
+		}
+	}
+	g, ok := e.nonZeroSkip("spaceskip")
+	if !ok {
+		g = e.spaceGlueOf(f)
+	}
 	if sf <= 0 {
 		return g
 	}
