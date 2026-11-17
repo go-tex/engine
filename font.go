@@ -333,9 +333,35 @@ func (o *OpenTypeFont) glyphPathAt(r rune) string { return o.glyphPath(r) }
 // unrounded font-unit kern) scaled to points rather than Kern, which rounds to a
 // whole pixel first — at a 10pt design size that whole-pixel round drops sub-pixel
 // kerns to zero, widening kern-rich text and diverging from real LaTeX line-breaks.
+//
+// ⛔⛔ AND KernUnits IS A PAIR QUERY, WHICH CANNOT SPEAK FOR EVERY FONT. GPOS
+// lookup types 7 (Contextual) and 8 (Chained Contextual) position pairs too, and
+// a pair query cannot evaluate them: such a rule is matched against the glyphs
+// AROUND a position, which (prev, cur) does not carry. go-opentype's kernCovered
+// therefore skips those subtables and this returns 0 — the same 0 it returns for a
+// pair the font deliberately leaves alone.
+//
+// That silence is #716: a kerning defect of 1.12pt per "AV" invisible to every
+// number this engine's fidelity measurement steers by. The fix is not a better
+// pair answer, it is knowing when the answer is a floor, which is what
+// KerningIsContextual (go-opentype/opentype v0.22.0) reports per face.
+//
+// ⚠ This still returns the pair answer. Driving the shaping path instead is #792's
+// "the shaper we already depend on but never call" and is not this change; what
+// this change does is stop the floor from passing for a measurement.
 func (o *OpenTypeFont) kernSP(prev, cur rune) int {
 	return ptToSP(o.fc.KernUnits(prev, cur) * o.fc.Scale())
 }
+
+// KerningIsAFloor reports whether this face's kerning is one this engine cannot
+// fully read: the font puts part of its `kern` feature in GPOS lookups a pair
+// query cannot evaluate.
+//
+// ⛔ IT IS ASKED ONCE PER FACE AND NOT PER PAIR, because the condition is a
+// property of the font's lookup list. The library genuinely does not know whether
+// the contextual lookup it skipped would have matched at some position, so a
+// per-pair answer could only ever be "maybe".
+func (o *OpenTypeFont) KerningIsAFloor() bool { return o.fc.KerningIsContextual() }
 
 func (o *OpenTypeFont) sizePt() float64 { return o.pt }
 
@@ -347,6 +373,22 @@ func (e *Engine) SetFont(f fontFace) {
 	e.baseFont = f // the size set here is \normalsize — the 100% for \large/\small/…
 	if f != nil {
 		e.baseFontPt = f.sizePt()
+	}
+	e.noteKerningFloor(f)
+}
+
+// noteKerningFloor records that a face whose kerning this engine cannot fully
+// read has been used, so Diagnostics can say so.
+//
+// ⛔ IT IS A TYPE ASSERTION AND NOT A fontFace METHOD, deliberately. fontFace is
+// implemented by the test mocks as well, and widening the interface would make
+// every one of them answer a question about OpenType lookups that has no meaning
+// for a mock. A face that cannot be asked is not a face whose kerning is a floor,
+// so the assertion failing is the right answer and not a missing case.
+func (e *Engine) noteKerningFloor(f fontFace) {
+	type kernFloorer interface{ KerningIsAFloor() bool }
+	if kf, ok := f.(kernFloorer); ok && kf.KerningIsAFloor() {
+		e.kerningIsAFloor = true
 	}
 }
 
