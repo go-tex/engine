@@ -137,7 +137,11 @@ func TestLineSkipsNarrowTheMeasureBeforeBreaking(t *testing.T) {
 		}
 		var widest float64
 		for _, p := range e.Pages() {
-			for _, n := range p.list {
+			// The LINES, not the page: a page with a folio wraps its text block
+			// (pageTextList, pagestructure_test.go). Taking p.list here measured
+			// the block's own width and reported \rightskip=100pt as widening
+			// the text by 199.56pt.
+			for _, n := range pageTextList(p) {
 				b, ok := n.(*boxNode)
 				if !ok {
 					continue

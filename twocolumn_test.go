@@ -76,10 +76,21 @@ func TestTwoColumnPagination(t *testing.T) {
 	if len(twoPages) >= len(onePages) {
 		t.Errorf("two-column not denser: %d pages vs one-column %d", len(twoPages), len(onePages))
 	}
+	// ⛔ THE TEXT BLOCK IS BOUNDED BY \vsize, NOT THE SHIPPED PAGE. A page that
+	// carries a folio wraps its block and the running foot below it
+	// (\@outputpage), so the page is taller by the foot band by construction and
+	// comparing IT against \vsize fails on a correct page (#721).
 	vsize := two.effectiveVsize()
 	for i, p := range twoPages {
-		if p.height > vsize {
-			t.Errorf("two-column page %d height %d exceeds vsize %d", i, p.height, vsize)
+		block := p
+		for _, n := range p.list {
+			if b, ok := n.(*boxNode); ok && b.textBlock {
+				block = b
+			}
+		}
+		if block.height > vsize {
+			t.Errorf("two-column page %d: text block %d exceeds vsize %d",
+				i, block.height, vsize)
 		}
 	}
 	// The first page's content must be a wide hbox holding at least two column vboxes

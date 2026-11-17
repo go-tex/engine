@@ -121,15 +121,21 @@ Body.
 	if len(top) < 2 {
 		t.Fatalf("the page has %d items", len(top))
 	}
-	// The plain style ends the page with vertical fil and the folio box, so the
-	// folio is the LAST thing on the page. The running-head style would put it in
-	// a box at the very top instead.
+	// The plain style puts the folio UNDER the text block, so it is the LAST thing
+	// on the page. The running-head style would put it in a box at the very top
+	// instead.
 	last, ok := top[len(top)-1].(*boxNode)
 	if !ok || !boxDraws(last, '1') {
 		t.Errorf("the last item on the page is %T and does not hold the folio; a plain page ends with it", top[len(top)-1])
 	}
-	if first, ok := top[0].(*boxNode); ok && boxDraws(first, '1') {
-		t.Error("the folio is in a box at the TOP of the page: the running head won over \\thispagestyle{plain}")
+	// ⛔ THE FIRST ITEM IS THE TEXT BLOCK, and the assertion names it rather than
+	// asking whether it draws a '1'. Since the folio moved out of the block
+	// (#721), top[0] is \@outputbox — which contains every digit on the page, so
+	// "does the first box draw a 1" matched the body text and reported a running
+	// head that was not there. What this test is about is which box comes first.
+	if first, ok := top[0].(*boxNode); !ok || !first.textBlock {
+		t.Errorf("the page starts with %T, want the text block: a head box at the "+
+			"top is exactly what \\thispagestyle{plain} had to prevent", top[0])
 	}
 }
 
