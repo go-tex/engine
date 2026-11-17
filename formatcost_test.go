@@ -50,35 +50,45 @@ import "testing"
 // ⚠ -benchtime in ITERATIONS, not seconds: at this cost per operation a
 // duration-based default would spend minutes deciding how many to run.
 //
-// ⛔⛔ AND THE ANSWER IS NO: THE FORMAT IS NOT WHERE THE THIRTY MINUTES GO.
-// That was the standing belief — a recorded one, "a third raise is not the fix;
-// the per-test cost is", pointing at this very call — and measuring it refutes it.
+// ⛔⛔ THE FORMAT IS ABOUT 30% OF THE SUITE — NOT THE WHOLE THIRTY MINUTES, AND
+// NOT THE EIGHTH THIS COMMENT CLAIMED WHEN IT WAS MERGED.
 //
 // Measured on this file's own benchmarks, darwin/arm64, Apple M4 Max,
 // GOMAXPROCS=1 and -parallel 1 so that the suite and the benchmark count ALIKE
 // (a serial sum of per-test costs compared against a 16-way parallel wall clock
 // is not a share, it is two different quantities):
 //
-//	suite, 2012 tests, serial        58.04 s
-//	BenchmarkLoadLaTeX                3.658 ms/op
-//	BenchmarkNewWithoutTheFormat      0.105 ms/op
-//	format expansion                  3.553 ms/op
+//	suite, 2012 tests, serial        17.76 s
+//	BenchmarkLoadLaTeX                2.621 ms/op
+//	BenchmarkNewWithoutTheFormat      0.0758 ms/op
+//	format expansion                  2.545 ms/op
 //
-// 2012 × 3.658 ms = 7.36 s, which is 12.7% of the suite — and that is an UPPER
-// BOUND, since not every test calls LoadLaTeX. So a format built once per package
-// would buy about an eighth of the runtime. Worth having; nowhere near the 30
-// minutes, and 87% of the cost is somewhere this benchmark does not look.
+// 2012 × 2.621 ms = 5.27 s, which is 29.7% of the suite, and an UPPER BOUND since
+// not every test calls LoadLaTeX.
 //
-// ⚠ ONE CAVEAT ON THE 58 s, STATED BECAUSE IT CHANGES NOTHING AND MIGHT:
-// the machine's 1-minute load average was 4.95 before that run and 28.02 after,
-// so the figure may be inflated by whatever rose during it. The share argument
-// survives it — the suite would have to be about 8 s serial for the format to
-// dominate, and it is 20 s even with sixteen-way parallelism — but the 58 s
-// itself should be retaken on a quiet machine before it is quoted as a baseline.
+// ⛔⛔ THE FIRST VERSION OF THIS NOTE SAID 12.7%, AND BOTH ITS NUMBERS WERE TAKEN
+// ON A LOADED MACHINE. It even said so — "the 58 s wants retaking on a quiet
+// machine, the 1-minute load average was 4.95 before that run and 28.02 after" —
+// and then leaned on the figure anyway. Retaken with the machine quiet (1-minute
+// load 4.24 at the start, 4.82 at the end) the suite came back 17.76 s against
+// 58.04 s and the benchmark 2.621 ms against 3.658 ms.
 //
-// Where the other 87% goes is open, and it needs a per-test instrument rather
-// than a second guess (go-fleettools/fleettools#328 is the neighbouring gate, for
-// jobs with no -timeout at all).
+// ⚠ THE TWO ERRORS DID NOT CANCEL: the wall clock stretched 3.3× and the tight
+// in-process loop only 1.4×, so the ratio moved by more than either. A caveat
+// written and not acted on is a figure published wrong — the load rule exists
+// for the whole measurement, not for the half of it that looks fragile.
+//
+// AND IT CHANGED THE CONCLUSION, which is why the correction mattered. At 12.7% a
+// format built once per package was "worth having, not the fix". At 30% it is a
+// candidate fix for the windows lane, because that lane is not far over the line:
+// it fails at 1800.5 s against a 1800 s bound (#799). It does not need to be twice
+// as fast, it needs to fit.
+//
+// ⚠ Still not claimed: that 30% of the local suite is 30% of that lane. The
+// runner may stretch the format expansion and the rest of a test by different
+// factors — the same mistake one layer up. The remaining ~70% is unlocated and
+// needs per-test timing ON the lane (go-fleettools/fleettools#328 is the
+// neighbouring gate, for jobs with no -timeout at all).
 func BenchmarkLoadLaTeX(b *testing.B) {
 	for b.Loop() {
 		e := New()
