@@ -376,6 +376,43 @@ func (e *Engine) flushFootnotes() {
 // foot of the page. pageNum is this page's 1-based ordinal; when the page style is
 // not "empty" a centred page number is placed at the very foot (see pagenum.go).
 func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
+	return e.assemblePageTopskip(page, pageNum, true)
+}
+
+// assemblePageTopskip is assemblePage with one switch: whether THIS function is the
+// one that puts \topskip on.
+//
+// ⛔⛔ A PAGE THAT OPENS WITH A TOP-FLOAT BLOCK HAS ALREADY RECEIVED IT, under the
+// block, and must not receive it again above the float. The comment below used to
+// say that assembling in one place was enough — "both float placers assemble here,
+// so the glue is put on once" — and that is true of the CALL and false of the
+// ARITHMETIC: \topskip's width is reduced by the height of the page's first box
+// (tex.web:19513), and on a float page that box is the float. A 60pt float swallows
+// the whole 11pt, so the first line of text under it was placed by whatever glue the
+// main vertical list happened to carry.
+//
+// LaTeX cannot make this mistake, because it attaches the float block AFTER the page
+// box exists: \@cflt builds \vbox{<floats> \vskip-\floatsep \topfigrule
+// \vskip\textfloatsep \unvbox\@outputbox} (ltoutput.dtx:3597-3604), and \unvbox
+// SPLICES the page box in with the \topskip glue TeX already put at its head. So the
+// first text baseline under a top float is set by \topskip exactly as it is on a page
+// with no float at all.
+//
+// ⚠ MEASURED, at three values of \topskip, against tectonic, with a no-float control
+// that must move with the reference (article at 11pt, a [t] float, first text
+// baseline below it):
+//
+//	\topskip        0pt     11pt (defaut)   30pt
+//	reference    243.05        246.20     265.13     moves: -3.15, +18.93
+//	before       248.72        248.72     248.72     moves: 0.00 — \topskip is lost
+//	control (no float), both engines                 moves: -3.15, +18.93
+//
+// The head of the page's vertical list says the same thing without a PDF
+// (GOTEX_FLTRACE=1, floatplace.go's traceVlistHead): glue 20.00000pt for
+// \textfloatsep, then glue 5.75981pt where the reference has 3.15981pt. Those two
+// differ by 2.60000pt = \baselineskip - \topskip = 13.6 - 11.0, which is the whole
+// of the residual #356 calls "a float is ~2.4pt short".
+func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) *boxNode {
 	var content []node
 	var notes []*boxNode
 	for _, n := range page {
@@ -385,11 +422,17 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 		}
 		content = append(content, n)
 	}
-	// \topskip above the page's first box (tex.web §1001, see topskip.go). This is
-	// the one place every page passes through — the single-list pager, the
-	// two-column pager and both float placers all assemble here — so the glue is
-	// put on once, and findPageBreak charges its height through the same function.
-	vlist := e.withTopskip(content)
+	// \topskip above the page's first box (tex.web §1001, see topskip.go). Every page
+	// passes through here — the single-list pager, the two-column pager and both float
+	// placers — and findPageBreak charges its height through the same function.
+	//
+	// ⛔ But NOT every page's first box is the box \topskip is about: see
+	// assemblePageTopskip's header. A page whose text sits under a top-float block
+	// arrives with the glue already in place and addTopskip false.
+	vlist := content
+	if addTopskip {
+		vlist = e.withTopskip(content)
+	}
 	if len(notes) > 0 {
 		// \skip\footins above the rule, then \footnoterule — which costs NOTHING
 		// net: \kern-3pt, a .4pt rule, \kern2.6pt (latex.ltx:13162-13163). The
