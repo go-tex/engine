@@ -1402,8 +1402,30 @@ const MiniLaTeXKernel = `
 % that witness). That is #768 and is not addressed here.
 \def\sloppy{\tolerance 9999\emergencystretch 3em\hfuzz .5pt\vfuzz\hfuzz}
 \def\fussy{\emergencystretch 0pt\tolerance 200\hfuzz .1pt\vfuzz\hfuzz}
-\def\raggedbottom{}
-\def\flushbottom{}
+% ltpage.dtx:376-386, verbatim in effect. \raggedbottom gives the text block a
+% stretchable glue at its FOOT, so the block's own glue never has to stretch and
+% the page keeps its natural height; \flushbottom takes it away and the block
+% stretches to \textheight. They were both \def...{} here, which made the two
+% modes identical: measured against the reference, they differ by 36.9pt on the
+% last line of the same page and by 0 here (#721).
+%
+% ⛔ .0001fil AND NOT \vfil, for the reason ltpage.dtx:372-373 states: "to avoid
+% interfering with the 1fil space of \newpage". Two first-order fils share the
+% page's slack half and half, so a \vfil here would take half of what a \newpage
+% asked for.
+\def\raggedbottom{\def\@textbottom{\vskip 0pt plus 0.0001fil}\let\@texttop\relax}
+\def\flushbottom{\let\@textbottom\relax\let\@texttop\relax}
+% classes.dtx:4477-4480: a class that is not \@twoside is \raggedbottom.
+%
+%	\if@twoside \else \raggedbottom \fi
+%
+% \@twosidefalse is this engine's standing state (classkernel.go), so the rule
+% evaluates to \raggedbottom for every document it sets today — which is also
+% what article.cls gives a plain \documentclass{article}. ⚠ twocolumn is the other
+% half of that passage (classes.dtx:4486-4489 calls \flushbottom) and this engine
+% tracks two columns in Go, not through \if@twocolumn, so that half is not
+% expressed here.
+\raggedbottom
 \def\MFUhyphentrue{}
 \def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
 \def\@gobbleoptonly[#1]{}

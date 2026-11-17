@@ -1,0 +1,89 @@
+// Copyright (c) the go-tex/engine authors.
+// SPDX-License-Identifier: BSD-3-Clause
+
+package engine
+
+import "testing"
+
+// pageTextList is the content of a page's TEXT BLOCK.
+//
+// ⛔ WHY A HELPER AND NOT p.list. A page with a running foot ships
+// [text block][glue \footskip][foot] — \@outputpage's \vbox around \@outputbox
+// (latex.ltx) — so p.list's boxes are the block and the folio, not the lines. A
+// walker that takes p.list measures a container and a page number: that is how
+// \rightskip=100pt came out as "narrowed by -199.56pt", the width of the whole
+// block rather than of a line.
+//
+// It reads the mark the assembler sets rather than guessing from the page's
+// shape, because the shape differs by page style and a sniff would quietly pick
+// the wrong box on the style it was not written for.
+func pageTextList(p *boxNode) []node {
+	for _, n := range p.list {
+		if b, ok := n.(*boxNode); ok && b.textBlock {
+			return b.list
+		}
+	}
+	return p.list
+}
+
+// ⛔ THE TEXT BLOCK IS \vsize AND THE PAGE AROUND IT IS TALLER.
+//
+// This is the invariant the folio's move created, asserted on its own rather
+// than only as a side condition of the tests that walk pages. \@makecol packs
+// the block to \@colht (ltoutput.dtx:2128-2146) and \@outputpage puts the foot
+// UNDER it, so a page that carries a folio cannot be as short as its text.
+//
+// Both rows matter: "empty" has no foot and its page IS the block, which is the
+// control that stops this passing for an engine that simply made every page
+// taller.
+func TestAPageWithAFootIsTallerThanItsTextBlock(t *testing.T) {
+	const body = `\hbox{\vrule width5pt height10pt}`
+	for _, c := range []struct {
+		style    string
+		wantFoot bool
+	}{
+		{"empty", false},
+		{"plain", true},
+	} {
+		t.Run(c.style, func(t *testing.T) {
+			e := New()
+			e.vsize = 300 * unity
+			if _, err := e.Run(`\pagestyle{` + c.style + `}` + body); err != nil {
+				t.Fatal(err)
+			}
+			pages := e.Pages()
+			if len(pages) != 1 {
+				t.Fatalf("%d page(s), want 1", len(pages))
+			}
+			var block *boxNode
+			for _, n := range pages[0].list {
+				if b, ok := n.(*boxNode); ok && b.textBlock {
+					block = b
+				}
+			}
+			if !c.wantFoot {
+				if block != nil {
+					t.Errorf("\\pagestyle{empty} has no running foot, so there is no "+
+						"\\@outputbox to wrap: the page should BE the text block, "+
+						"found a marked block of %d", block.height)
+				}
+				if pages[0].height != e.vsize {
+					t.Errorf("page = %d, want \\vsize = %d", pages[0].height, e.vsize)
+				}
+				return
+			}
+			if block == nil {
+				t.Fatal("\\pagestyle{plain} ships a folio, so the page must wrap a " +
+					"marked text block; none found")
+			}
+			if block.height != e.vsize {
+				t.Errorf("text block = %d, want \\vsize = %d (tex.web §19813 packs "+
+					"box255 exactly)", block.height, e.vsize)
+			}
+			if pages[0].height <= block.height {
+				t.Errorf("page = %d, not taller than its text block %d — the foot is "+
+					"inside the block again (#721)", pages[0].height, block.height)
+			}
+		})
+	}
+}

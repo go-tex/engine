@@ -131,6 +131,13 @@ type boxNode struct {
 	glueOrder            int     // order (0..3) the set applies to
 	glueSign             int     // 0 normal, 1 stretching, 2 shrinking
 	srcLine              int     // 1-based source line (first stamped child; 0 = unknown)
+	// textBlock marks \@outputbox: the page's text block, packed to \@colht and
+	// shipped INSIDE a taller page box that also carries the running foot (see
+	// withFootAtFootskip, footnote.go). Anything that wants the page's text —
+	// a renderer, a measurement, a test walking the page — wants this box and
+	// not the page, and inferring it from the page's shape is how a walker ends
+	// up measuring the folio.
+	textBlock bool
 }
 
 type packMode uint8
