@@ -240,6 +240,45 @@ func (e *Engine) lcCodeOf(r rune) int {
 	return 0
 }
 
+// uchyphAllows is \uchyph, the one condition in the pre-hyphenation scan that
+// looks at a letter's CASE. tex.web:17584-17586, inside «Skip to node |ha|, or
+// |goto done1| if no hyphenation should be attempted»:
+//
+//	if lc_code(c)<>0 then
+//	  if (lc_code(c)=c)or(uc_hyph>0) then goto done2
+//	  else goto done1;
+//
+// and §891:17496 states it in prose: «|uc_hyph| must be positive, if $c_1$ is
+// uppercase.»
+//
+// ⛔ IT IS THE FIRST LETTER ONLY, and it refuses the WHOLE word. `c` here is the
+// character the scan stopped on — $c_1$, the first one with a non-zero \lccode —
+// and `done1` abandons the attempt rather than resuming further along, so
+// "Extraordinarily" under \uchyph=0 is not hyphenated anywhere, not merely
+// un-hyphenated at its capital. A later capital inside a word (McDonald) is never
+// consulted: by then the scan is past done2.
+//
+// ⛔ AND \lccode DECIDES WHICH LETTERS ARE UPPERCASE, not unicode.IsUpper: §891's
+// three classes are nonletter (\lccode 0), lowercase (\lccode = itself) and
+// uppercase (anything else). A document that sets \lccode`\X=`\X makes X
+// lowercase FOR THIS TEST, and one that maps a lowercase letter elsewhere makes
+// it uppercase. That is why this asks lcCodeOf rather than the unicode package —
+// see lcCodeOf for the one place the classification lives.
+//
+// The default is \uchyph=1 (texparams.go, and plain.tex sets it explicitly), so
+// this changes no ordinary document: what it fixes is that \uchyph=0 was settable
+// and read by nobody. go-tex/engine#765 item (5).
+func (e *Engine) uchyphAllows(letters []rune) bool {
+	if len(letters) == 0 {
+		return true
+	}
+	c := letters[0]
+	if e.lcCodeOf(c) == int(c) {
+		return true // $c_1$ is lowercase: \uchyph does not arise
+	}
+	return e.namedInt("uchyph") > 0
+}
+
 // gatherWord collects the word that starts at list[i]: its characters, plus the
 // interior kerns that sit between two of them, and returns the index one past it.
 //
@@ -321,6 +360,16 @@ func (e *Engine) hyphenateList(list []node) []node {
 			continue
 		}
 		breakAfter := map[int]bool{}
+		// ⛔ A WORD BEGINNING WITH A CAPITAL IS HYPHENATED ONLY IF \uchyph IS
+		// POSITIVE (tex.web:17584-17586). This sits before the \hyphenchar test
+		// because that is the order of the two `goto done1` exits in the same
+		// tex.web block (:17585 then :17590); either way the word is EMITTED and
+		// only its break points withheld. See uchyphAllows for the rule.
+		if !e.uchyphAllows(letters) {
+			out = append(out, wordNodes...)
+			i = j
+			continue
+		}
 		// ⛔ A FONT WHOSE \hyphenchar IS NEGATIVE IS NEVER HYPHENATED (tex.web
 		// §896: `if hyf_char<0 then goto done1`). tulmtt.fd:51 sets exactly that
 		// for the typewriter family, which is how the reference stops code and
