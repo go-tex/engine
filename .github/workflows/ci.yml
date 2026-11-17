@@ -5,7 +5,40 @@ jobs:
   test:
     name: test + conformance (${{ matrix.os }})
     strategy:
-      matrix: { os: [ubuntu-latest, macos-latest, windows-latest] }
+      # ⛔ THE RACE DETECTOR RUNS ON TWO PLATFORMS AND NOT ON THE THIRD, and the
+      # policy is declared here rather than branched on inside the step, so that
+      # reading the matrix tells you which lane guarantees what.
+      #
+      # MEASURED (go-tex/engine#799): -race costs 6.65x on this suite. Quiet
+      # machine, GOMAXPROCS=1 -parallel 1 -count=1, arms interleaved AND the order
+      # reversed so a drift during the pass shows as a disagreement between
+      # orders rather than as an effect:
+      #
+      #   plain  17.486 s / 18.175 s      -race  116.361 s / 121.046 s
+      #   A1->B1 6.65x                    B2->A2 6.66x      (agree to 0.2%)
+      #
+      # windows-latest was failing at 1800.5 s against its own 1800 s bound — one
+      # push run in four, which left `main` itself red a quarter of the time and
+      # made "is main green?" unanswerable. At 6.65x the lane was not 10% away
+      # from comfortable, it was most of an order of magnitude away, so raising
+      # the bound a third time (#156, #653 were the first two) would have bought
+      # another few months and the same recurrence.
+      #
+      # ⚠ WHAT IS GIVEN UP, NAMED: a data race reachable ONLY through
+      # Windows-specific code. A race is a property of the Go program and Go's
+      # memory model is platform-independent, so everything else is still caught
+      # on ubuntu and macos, on every push and every pull request. The conformance
+      # ratchet and the coverage floor still run on windows — platform BEHAVIOUR
+      # is still covered; only the detector is dropped.
+      #
+      # ⚠ The 30m bound stays for now although ~270 s is expected: the first green
+      # run on this lane is what measures the new time, and changing two things at
+      # once would leave nobody able to say which did it.
+      matrix:
+        include:
+          - { os: ubuntu-latest, race: '-race' }
+          - { os: macos-latest, race: '-race' }
+          - { os: windows-latest, race: '' }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -73,14 +106,19 @@ jobs:
       - name: test + conformance ratchet
         shell: bash
         run: |
-          # -timeout, because the default is 10 minutes and windows-latest needs more
-          # than that: the suite runs in ~40s locally with -race and over 600s on that
-          # runner, which failed PRs at random with "panic: test timed out after 10m0s"
-          # in whatever test happened to be running. No single test dominates (the
-          # slowest is 7s, an expansion-limit guard) — the lane is simply that slow, so
-          # the bound is raised rather than the suite trimmed. A real deadlock still
-          # fails, three times later.
-          go test -timeout 30m -race -coverprofile=cover.out ./...
+          # -timeout, because the default is 10 minutes and windows-latest needed
+          # more than that. It then needed more than 30 either, failing at 1800.5 s
+          # one run in four — see the matrix above for why the answer was to stop
+          # paying 6.65x for the race detector on that lane rather than to raise
+          # the bound a third time.
+          #
+          # ⚠ The test the panic names is INNOCENT. Go names whatever happened to
+          # be running when the alarm fired — "TestTransformErrorBranches (4s)",
+          # four seconds into its own run — and a reader who starts there audits
+          # the wrong thing. What it was DOING is in the goroutine dump.
+          #
+          # ${{ matrix.race }} is '-race' on ubuntu and macos, empty on windows.
+          go test -timeout 30m ${{ matrix.race }} -coverprofile=cover.out ./...
           pct=$(go tool cover -func=cover.out | tail -1 | grep -oE '[0-9.]+' | tail -1)
           echo "coverage ${pct}% (in-progress engine; primary gate is the conformance ratchet in TestConformance)"
           awk "BEGIN{exit !(${pct} >= 80.0)}" || { echo "coverage ${pct}% below 80% floor"; exit 1; }
