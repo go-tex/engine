@@ -188,7 +188,28 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				e.restoreInput(mark)
 				return nil
 			}
-			return body
+			// ⛔ AND ACROSS A FILE BOUNDARY, THE BODY IS NOT THE BODY. Returning it
+			// here handed the caller everything the scan had reached — which, when the
+			// environment was opened inside an \input'ed file whose \end never comes,
+			// is the rest of the DOCUMENT. Measured (go-tex/engine#786), a tikz node
+			// with `text width` in an \input'ed figure file opens a minipage that pgf
+			// never closes through this path, and this exit surrendered 134 tokens:
+			// the node's text, \end{tikzpicture}, the document's remaining text and
+			// \end{document} itself. doMinipage then typeset all of it into a 5cm vbox,
+			// so the page lost everything after the \input — and SILENTLY, because the
+			// \end{document} that would have ended the run went into the box too.
+			//
+			// restoreInput cannot be used (the mark is meaningless once a level has
+			// come or gone, which is what the branch above is about), but the gathered
+			// tokens can still go back the way the mid-scan guard sends them: they were
+			// GATHERED, never run, so nothing is executed twice. The minipage comes out
+			// empty — a locally wrong box, not a lost document, which is the rule the
+			// other two exits of this scan already follow.
+			if len(body) > 0 {
+				e.push(append([]tok(nil), body...))
+			}
+			e.endEnvGroup()
+			return nil
 		}
 		switch {
 		case e.runsCsname(t):
