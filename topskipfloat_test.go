@@ -61,7 +61,14 @@ func TestTopskipGoesUnderTheTopFloatBlockNotAboveIt(t *testing.T) {
 				t.Fatal(err)
 			}
 			e.SetFont(spMock{})
-			src := `\documentclass{article}` + c.assign + `\begin{document}` +
+			// ⛔ \pagestyle{empty} ON PURPOSE, and not to simplify: with a running
+			// foot the shipped box is [text block][glue \footskip][foot]
+			// (latex.ltx's \@outputpage, see withFootAtFootskip), so the float and
+			// the text would be one level down and this test would be reading the
+			// page's structure instead of its glue. \topskip has nothing to do with
+			// the page style, so the style that puts nothing between the walker and
+			// the subject is the right one.
+			src := `\documentclass{article}\pagestyle{empty}` + c.assign + `\begin{document}` +
 				strings.Repeat(`Opening paragraph. `, 6) + `\par` +
 				`\begin{figure}[t]\rule{1pt}{60pt}\end{figure}` +
 				strings.Repeat(`Middle paragraph. `, 6) + `\par`
