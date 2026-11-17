@@ -299,7 +299,28 @@ func (e *Engine) hyphenateList(list []node) []node {
 		// hand a document that spelled a word out the very breaks it wrote the
 		// entry to prevent.
 		if pts, isException := e.hyphExcept.lookup(string(letters)); isException {
-			for _, t := range pts {
+			// ⛔⛔ AND THE MINIMA APPLY TO AN EXCEPTION TOO. tex.web:18145-18160 is
+			// one block: the exception table is consulted first and a hit does
+			// `goto found` — to the SAME label the pattern scan falls through to,
+			// and `found` is where the limits are imposed:
+			//
+			//	found: for j:=0 to l_hyf-1 do hyf[j]:=0;
+			//	       for j:=0 to r_hyf-1 do hyf[hn-j]:=0
+			//
+			// So \hyphenation{} says where a break MAY go, not that one must, and
+			// \lefthyphenmin/\righthyphenmin still refuse the ones too close to
+			// either end. hyphexception.go's own header has said exactly this
+			// since it was written; the code below it did not do it, and the
+			// breaks went straight into breakAfter. The comment was right and the
+			// code was wrong, which is the harder way round to notice.
+			//
+			// ⛔ CLIPPED HERE AND NOT WHEN THE ENTRY IS RECORDED, because TeX
+			// imposes them when it HYPHENATES. A document may write
+			// \hyphenation{…} in a package and set \lefthyphenmin later, or change
+			// it per language mid-document; clipping at `add` time would freeze
+			// whichever value happened to be in force when the entry was read.
+			lmin, rmin := h.Mins()
+			for _, t := range clipToMins(pts, len(letters), lmin, rmin) {
 				breakAfter[t] = true
 			}
 		} else {
