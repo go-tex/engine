@@ -612,7 +612,7 @@ const MiniLaTeXKernel = `
 \long\def\endalgorithmic{\par\endgroup}
 \expandafter\let\csname algpseudocode\endcsname\algorithmic
 \expandafter\let\csname endalgpseudocode\endcsname\endalgorithmic
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par}
 \long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
 \long\def\endquote{\par\endgroup\smallskip}
 \long\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
@@ -917,7 +917,7 @@ const MiniLaTeXKernel = `
 \def\ps@plain{\let\@oddhead\@empty\let\@mkboth\@gobbletwo}
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\sectionmark{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\subsectionmark{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
-\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par}
+\def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par}
 % ─── LaTeX counter interface (feat/counters) ─────────────────────────────────
 % Value-reading and counter-formatting commands. The mutating commands
 % (\newcounter/\setcounter/\addtocounter/\stepcounter/\refstepcounter) and the
@@ -1076,6 +1076,33 @@ const MiniLaTeXKernel = `
 % package, or writes \renewcommand\captionfont{\small} itself, is honoured here for
 % free, and the 48 that want a smaller caption have somewhere to say so.
 \def\captionfont{}
+% \captionlabelfont is the LABEL's font — "Figure 7:" — and it is empty by
+% default for the same reason \captionfont is: article.cls's \@makecaption sets
+% the whole caption with \sbox\@tempboxa{#1: #2} (classes.dtx:3554-3562) and
+% changes no font at all.
+%
+% ⛔ WE SET IT BOLD, AND NOT ONE OF THE CLASSES THIS ENGINE EMBEDS DOES. Censused
+% in texmf/:
+%
+%	article.cls:482  \sbox\@tempboxa{#1: #2}        — no font
+%	book.cls:568     \sbox\@tempboxa{#1: #2}        — no font
+%	report.cls       the same
+%	amsart.cls:1376  \@captionfont\@captionheadfont — and :1341 is \scshape
+%
+% Three set nothing and the fourth sets SMALL CAPS. So bold was not even
+% accidentally right for the class-styled case, which is the argument I had
+% assumed held before counting.
+%
+% Measured against tectonic on an article at 11pt, a figure[h!] with a rule:
+% our caption ran x 201.17–409.10 against the reference's 204.45–405.81 — 207.93pt
+% against 201.36pt, +6.57pt, and the caption is centred so it overhung by 3.28pt
+% on each side. Identical on all sixty captions of the witness.
+%
+% The name is caption.sty's own, as \captionfont's is: a document that loads the
+% real package, or writes \renewcommand\captionlabelfont{\bfseries}, is honoured
+% here for free — which is how a class that does want a bold label says so, since
+% this engine does not run \@makecaption (#281).
+\def\captionlabelfont{}
 % The TYPE is checked first, because without one this macro used to put TeX
 % SOURCE on the page: \@captype undefined makes \csname c@\@captype\endcsname
 % into \c@, which is undefined and therefore \relax, and \advance\relax stops
@@ -1103,7 +1130,7 @@ const MiniLaTeXKernel = `
 \def\gotex@caption@plain#1{\expandafter\gotex@caption@dispatch\csname c@\@captype\endcsname{#1}}
 \def\gotex@caption@dispatch#1#2{\ifx#1\relax\gotex@caption@untyped{#2}\else\gotex@caption@typed{#2}\fi}
 \def\gotex@caption@untyped#1{\par\vskip\abovecaptionskip{\captionfont #1}\par\vskip\belowcaptionskip}
-\def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\bf\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
+\def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 \def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 % A theorem's reference type is the ENVIRONMENT's name, not the word "theorem"
