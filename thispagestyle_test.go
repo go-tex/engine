@@ -82,18 +82,26 @@ func TestThisPagestyleAppliesToOnePage(t *testing.T) {
 
 // The running marks are recorded and read back, which is what a head showing
 // \rightmark needs. \markright replaces only the right one.
+//
+// ⛔ Read through \@themark, the kernel's own name for the live pair
+// (ltpage.dtx:355), because \leftmark/\rightmark expand \botmark/\firstmark and
+// those belong to a PAGE: at document time there is nothing in them, here or in a
+// real LaTeX. The sequencing this test is about — markboth sets both, markright
+// replaces only the right — is visible in the pair itself, and the drawn-head
+// tests in pagestyleheadings_test.go cover whether it is reached.
 func TestRunningMarks(t *testing.T) {
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
 	e.SetFont(spMock{})
-	out, err := e.Run(`\markboth{GAUCHE}{DROITE}\message{[\leftmark|\rightmark]}` +
-		`\markright{AUTRE}\message{[\leftmark|\rightmark]}`)
+	out, err := e.Run(`\makeatletter` +
+		`\markboth{GAUCHE}{DROITE}\message{[\@themark]}` +
+		`\markright{AUTRE}\message{[\@themark]}\makeatother`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"[GAUCHE|DROITE]", "[GAUCHE|AUTRE]"} {
+	for _, want := range []string{"[{GAUCHE}{DROITE}]", "[{GAUCHE}{AUTRE}]"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %s in %q", want, out)
 		}

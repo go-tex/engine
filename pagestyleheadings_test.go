@@ -26,24 +26,33 @@ func TestPagestyleHeadingsDeclaresAHead(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.SetFont(spMock{})
+	// ⛔⛔ THE MARK IS READ OFF THE DRAWN HEAD, not out of an expansion.
+	//
+	// This asserted `\message{[\rightmark]}` at DOCUMENT time, and with marks
+	// travelling there is nothing there to read: \rightmark expands \firstmark,
+	// which the page builder publishes per page, and the page builder runs after
+	// the whole document has been read. A real LaTeX answers empty at that point
+	// too, for the same reason — latex.ltx has carried a note about it since 1993
+	// (ltpage.dtx:318-323, with an upstream \task still open).
+	//
+	// So the question becomes the one that matters anyway: does the section's mark
+	// reach the HEAD of the page it belongs to? \newpage is needed because page 1
+	// of article carries no head.
 	out, err := e.Run(`\documentclass{article}\pagestyle{headings}\begin{document}` +
-		`\section{Ma Section}\makeatletter\message{[\meaning\@oddhead]}` +
-		// ⛔ Probed through \rightmark, the name a page style reads, and not
-		// through the pair's storage. These two tests passed against a PRIVATE
-		// pair that only our own \markboth wrote, so they were green on every
-		// document whose class brings its own \markboth — amsart among them —
-		// and #426's head stayed empty. A test that names the storage cannot
-		// tell a mark that was set from a mark that is reachable.
-		`\message{[\rightmark]}\makeatother\end{document}`)
+		`\section{Ma Section}\makeatletter\message{[\meaning\@oddhead]}\makeatother` +
+		`\newpage Deuxieme page.\end{document}`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out, `\rightmark`) || !strings.Contains(out, `\thepage`) {
 		t.Errorf(`\@oddhead = %q, want \rightmark … \thepage`, out)
 	}
-	// \section set the mark through \sectionmark, which \ps@headings redefined.
-	if !strings.Contains(out, "Ma Section") {
-		t.Errorf("the section did not reach the mark: %q", out)
+	// \section set the mark through \sectionmark, which \ps@headings redefined to
+	// \markright{\MakeUppercase{…}} — so the head carries it uppercased.
+	// No space in the needle: pageText collects the glyphs, and the interword glue
+	// between them is not one of them.
+	if page := pageText(e); !strings.Contains(page, "MASECTION") {
+		t.Errorf("the section's mark did not reach the drawn head: %q", page)
 	}
 }
 
@@ -69,17 +78,24 @@ func TestAClassThatBringsItsOwnMarkbothReachesTheHead(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.SetFont(spMock{})
-	out, err := e.Run(`\documentclass{article}\pagestyle{headings}\makeatletter` +
-		// amsart's idiom, verbatim in shape: the class's own \markboth, which
-		// overrides ours and writes the kernel's name.
-		`\def\markboth#1#2{\@temptokena{{#1}{#2}}\xdef\@themark{\the\@temptokena}}` +
-		`\makeatother\begin{document}\markboth{AUTEURS}{TITRE COURT}` +
-		`\message{[\leftmark|\rightmark]}\end{document}`)
+	// ⛔ The fixture now emits the \mark too, as amsart does, and the earlier
+	// version did NOT: it copied the \@themark half of amsart's idiom and left out
+	// `\mark{\the\@temptokena}`. That was enough while \rightmark read the pair
+	// directly, and it is not a class any more now that the pair travels — a
+	// fixture missing the line that makes the mechanism work tests the mechanism
+	// not working.
+	_, err := e.Run(`\documentclass{article}\pagestyle{headings}\makeatletter` +
+		`\def\markboth#1#2{\@temptokena{{#1}{#2}}\xdef\@themark{\the\@temptokena}` +
+		`\mark{\the\@temptokena}}` +
+		`\makeatother\begin{document}\markboth{AUTEURS}{TITRE COURT}Du texte.` +
+		`\newpage Deuxieme page.\end{document}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[AUTEURS|TITRE COURT]") {
-		t.Errorf("a class's own \\markboth does not reach the head: %q", out)
+	// article's \ps@headings puts \rightmark in the odd head, which is the pair's
+	// RIGHT half — the short title.
+	if page := pageText(e); !strings.Contains(page, "TITRECOURT") {
+		t.Errorf("a class's own \\markboth does not reach the drawn head: %q", page)
 	}
 }
 
@@ -93,13 +109,19 @@ func TestMarkrightKeepsTheLeftHalf(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.SetFont(spMock{})
+	// ⛔ Asserted on \@themark, the kernel's OWN variable for the live pair
+	// (ltpage.dtx:355), and not on \leftmark/\rightmark: those read \botmark and
+	// \firstmark, which belong to a PAGE, so at document time there is nothing
+	// there — in a real LaTeX either. \@themark is a documented name that classes
+	// read (amsart writes it), so this is an interface and not an internal; what
+	// it cannot show is reachability, which the drawn-head tests above do.
 	out, err := e.Run(`\documentclass{article}\begin{document}` +
 		`\markboth{GAUCHE}{DROITE}\markright{AUTRE}` +
-		`\message{[\leftmark|\rightmark]}\end{document}`)
+		`\makeatletter\message{[\@themark]}\makeatother\end{document}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[GAUCHE|AUTRE]") {
+	if !strings.Contains(out, "[{GAUCHE}{AUTRE}]") {
 		t.Errorf("\\markright did not keep the left mark: %q", out)
 	}
 }
@@ -127,23 +149,31 @@ func TestPlainAndEmptyClearTheHead(t *testing.T) {
 // the numbered one marks AFTER \refstepcounter, so the mark carries the section
 // it names rather than the one before it.
 func TestOnlyNumberedSectionsMark(t *testing.T) {
+	// Read off the drawn head rather than out of \rightmark at document time: the
+	// mark belongs to a page, so there is nothing to expand before the page
+	// builder has run. The needles carry no spaces — pageText collects glyphs, not
+	// the glue between them — and they are uppercase because \ps@headings's
+	// \sectionmark is \markright{\MakeUppercase{…}}.
 	run := func(src string) string {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
 			t.Fatal(err)
 		}
 		e.SetFont(spMock{})
-		out, err := e.Run(`\documentclass{article}\pagestyle{headings}\begin{document}` +
-			src + `\message{[\rightmark]}\end{document}`)
-		if err != nil {
+		if _, err := e.Run(`\documentclass{article}\pagestyle{headings}\begin{document}` +
+			src + `\newpage Deuxieme page.\end{document}`); err != nil {
 			t.Fatal(err)
 		}
-		return out
+		return pageText(e)
 	}
-	if got := run(`\section*{Sans Numero}`); strings.Contains(got, "Sans Numero") {
-		t.Errorf("a starred section marked: %q", got)
+	// ⛔ The starred form must not mark, and the head of the page it sits on is
+	// where that shows: latex.ltx's \@ssect has no \…mark call.
+	if got := run(`\section*{Sans Numero}`); strings.Contains(got, "SANSNUMERO") {
+		t.Errorf("a starred section reached the head: %q", got)
 	}
-	if got := run(`\section{Une}\section{Deux}`); !strings.Contains(got, "Deux") {
-		t.Errorf("the mark does not carry the latest section: %q", got)
+	// Two numbered sections: the head carries the LATEST, because \sectionmark
+	// marks after \refstepcounter.
+	if got := run(`\section{Une}\section{Deux}`); !strings.Contains(got, "DEUX") {
+		t.Errorf("the head does not carry the latest section: %q", got)
 	}
 }
