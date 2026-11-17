@@ -463,16 +463,56 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 	if style == "fancy" || (style != "plain" && e.hasLatexHead()) {
 		return e.assembleFancyPage(vlist)
 	}
-	// "plain": a centred page number pushed to the foot with vertical fil, filling
-	// the page to \vsize so the number sits at the bottom of the text area.
-	vlist = append(vlist,
-		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, // vfil
-		e.pageFooter(pageNum),
-	)
+	// "plain": a centred page number at the foot, BELOW the text block.
 	if e.vsize > 0 {
-		return vpackSP(vlist, packTo, e.vsize)
+		return e.withFooter(vpackSP(vlist, packTo, e.vsize), e.pageFooter(pageNum))
 	}
-	return vpackSP(vlist, packNatural, 0)
+	return e.withFooter(vpackSP(vlist, packNatural, 0), e.pageFooter(pageNum))
+}
+
+// withFooter puts a running foot under a text block that has ALREADY been
+// packed, separated by \footskip.
+//
+// ⛔⛔ THE FOOT MUST NOT BE INSIDE THE BLOCK. It used to be appended to the
+// text list behind a `vfil` and the whole thing packed to \vsize. That vfil is
+// first-order infinite stretch, so it absorbed ALL of the page's slack and the
+// body's own glue — section skips, \parskip, display skips — stretched by
+// nothing. The page then held its material at natural height on a page that
+// should have filled, and the folio sat at the bottom of the TEXT area instead
+// of in the margin below it.
+//
+// LaTeX keeps them apart. latex.ltx:15314 packs the text block alone:
+//
+//	\setbox\@outputbox \vbox to\@colht {\@texttop … \unvbox \@outputbox … \@textbottom}
+//
+// — so its glue stretches to the column height — and \@outputpage places the
+// running foot under it. \@textbottom is \relax under \flushbottom and a
+// `\vskip \z@ \@plus.0001fil` under \raggedbottom (latex.ltx:13363-13366),
+// which is the ONLY thing that should ever absorb that slack.
+//
+// Measured against tectonic on a witness of 26 sections breaking naturally,
+// y of the last body line of page 1 (fontcmp -pagefill):
+//
+//	pagestyle    before    after    tectonic
+//	empty        672.74   672.74     672.75
+//	plain        653.73      —→      672.75
+//	headings     616.87      —→      672.75
+//
+// "empty" was the only style that already packed the body straight to \vsize,
+// and the only one that agreed with the oracle.
+func (e *Engine) withFooter(body *boxNode, foot *boxNode) *boxNode {
+	if foot == nil {
+		return body
+	}
+	// \footskip is the distance from the bottom of the text block to the foot's
+	// BASELINE (classes.dtx, "Page Layout"), so the gap before the box is that
+	// length less the box's own height. A foot taller than \footskip would
+	// otherwise be pushed down by its own height.
+	gap := e.classDimen("footskip", ptToSP(30)) - foot.height
+	if gap < 0 {
+		gap = 0
+	}
+	return vpackSP([]node{body, glueNode{spec: glueSpec{width: gap}}, foot}, packNatural, 0)
 }
 
 // assembleFancyPage builds a \pagestyle{fancy} page: the running header (with its
@@ -497,24 +537,35 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 		// under it where the reference has 37pt and 31pt.
 		top = append(top, glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}})
 	}
-	page := append(top, body...)
-	page = append(page, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}) // vfil
+	// ⛔ The body is packed ALONE, exactly as in the "plain" path and for the same
+	// reason: a vfil in front of the foot inside this box took all the page's
+	// stretch, so the body never filled. This style was the worse of the two —
+	// 55.88pt of text missing per page against the oracle, close to five lines —
+	// because it also carries a head, and \pagestyle{headings} is what book and
+	// report declare. See withFooter.
+	var text *boxNode
+	if e.vsize > 0 {
+		text = vpackSP(body, packTo, e.vsize)
+	} else {
+		text = vpackSP(body, packNatural, 0)
+	}
+
+	// \vsize is the TEXT block. The head band sits above it — the page is lifted
+	// by exactly that much (renderVMargin/headBand) — so the assembled box is
+	// taller by the band and the body still gets its full \textheight. Packing
+	// the whole thing to \vsize instead took the band out of the text, three
+	// lines a page on a document with a running head.
+	page := append(top, text)
 	if f := e.fancyFooter(); f != nil {
+		var foot []node
 		if e.footRule > 0 {
-			page = append(page,
+			foot = append(foot,
 				ruleNode{width: e.hsize, height: e.footRule},
 				glueNode{spec: glueSpec{width: 2 * unity}},
 			)
 		}
-		page = append(page, f)
-	}
-	if e.vsize > 0 {
-		// \vsize is the TEXT block. The head band sits above it — the page is lifted
-		// by exactly that much (renderVMargin/headBand) — so the assembled box is
-		// taller by the band and the body still gets its full \textheight. Packing
-		// the whole thing to \vsize instead took the band out of the text, three
-		// lines a page on a document with a running head.
-		return vpackSP(page, packTo, e.vsize+e.headBand())
+		foot = append(foot, f)
+		return e.withFooter(vpackSP(page, packNatural, 0), vpackSP(foot, packNatural, 0))
 	}
 	return vpackSP(page, packNatural, 0)
 }
