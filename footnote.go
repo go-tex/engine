@@ -506,16 +506,71 @@ func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) 
 	if style == "fancy" || (style != "plain" && e.hasLatexHead()) {
 		return e.assembleFancyPage(vlist)
 	}
-	// "plain": a centred page number pushed to the foot with vertical fil, filling
-	// the page to \vsize so the number sits at the bottom of the text area.
-	vlist = append(vlist,
-		glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, // vfil
-		e.pageFooter(pageNum),
-	)
+	// "plain": the BODY ALONE is packed to \vsize, and the folio goes below it.
+	//
+	// ⛔⛔ IT USED TO BE PACKED TOGETHER WITH A \vfil IN FRONT OF THE FOLIO. That fil
+	// is first-order infinite, so it took ALL of the page's stretch: the body's own
+	// glue — section skips, \parskip, display skips — stretched by nothing, and the
+	// text block was set at its natural height on a page that should have filled.
+	// The folio then landed at the bottom of the TEXT area instead of \footskip
+	// below it. See #721, which measured both halves.
+	//
+	// The kernel keeps the two apart. \@makecol packs the text block alone
+	// (latex.ltx:15314-15320, `\vbox to\@colht`), and \@outputpage places the foot
+	// under it with
+	//
+	//	\box\@outputbox \baselineskip\footskip \hb@xt@\textwidth{\@thefoot}
+	//
+	// — an ordinary interline glue whose \baselineskip is \footskip, which is why
+	// the folio's baseline sits \footskip from the text block's and not at a fixed
+	// distance from the last line of text.
+	//
+	// ⚠ MEASURED against tectonic, article at 10pt, 12 sections breaking NATURALLY
+	// under \flushbottom (#721's own witness, whose warning about \newpage is why
+	// the break is natural). Page 1:
+	//
+	//	                     last body baseline      folio
+	//	tectonic                     672.75         702.64
+	//	before                       652.80         672.74
+	//	after                        672.74         702.62
+	//
+	// The "empty" branch above was already right — it packs the body straight to
+	// \vsize — and that is what this now does, with the foot moved out of the box.
 	if e.vsize > 0 {
-		return vpackSP(vlist, packTo, e.vsize)
+		body := vpackSP(vlist, packTo, e.vsize)
+		return e.withFootAtFootskip(body, pageNum)
 	}
-	return vpackSP(vlist, packNatural, 0)
+	return e.withFootAtFootskip(vpackSP(vlist, packNatural, 0), pageNum)
+}
+
+// withFootAtFootskip puts the running foot under a packed text block, at the
+// distance \@outputpage puts it: an interline glue whose \baselineskip is
+// \footskip (latex.ltx, `\box\@outputbox \baselineskip\footskip
+// \hb@xt@\textwidth{\@thefoot}`).
+//
+// ⛔ THE RULE IS §679's, NOT A SUBTRACTION. Borrowing interlineGlue rather than
+// writing `footskip - depth - height` here is what keeps \lineskip and
+// \lineskiplimit in play: a text block whose depth is large enough leaves less
+// than \lineskiplimit and the foot must then sit \lineskip below it, exactly as
+// any two boxes do. Writing the subtraction inline would be a fifth copy of §679
+// with the threshold left out — the defect interlineGlue's own header records.
+func (e *Engine) withFootAtFootskip(body *boxNode, pageNum int) *boxNode {
+	foot := e.pageFooter(pageNum)
+	if foot == nil {
+		return body
+	}
+	page := []node{body}
+	// \baselineskip\footskip, restored straight away: this is a local assignment
+	// inside \@outputpage's box, not a change to the document's leading.
+	saved := e.baselineskip
+	e.baselineskip = e.classDimen("footskip", ptToSP(30))
+	g, ok := e.interlineGlue(body.depth, foot.height)
+	e.baselineskip = saved
+	if ok {
+		page = append(page, g)
+	}
+	page = append(page, foot)
+	return vpackSP(page, packNatural, 0)
 }
 
 // assembleFancyPage builds a \pagestyle{fancy} page: the running header (with its
