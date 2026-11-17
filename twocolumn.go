@@ -284,14 +284,15 @@ func (e *Engine) setMeasureFromTextWidth() {
 	}
 }
 
-// dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the columns
-// below it: the \dbltextfloatsep register when the class set it, else LaTeX's 20pt default.
-func (e *Engine) dblTextFloatSep() int {
-	if s := e.namedSkip("dbltextfloatsep"); s.width > 0 {
-		return s.width
-	}
-	return 20 * unity
-}
+// dblTextFloatSep is the gap between a \twocolumn[...] full-width span and the
+// columns below it: the \dbltextfloatsep register, and nothing else.
+//
+// ⛔ The same "is it non-zero" written where "did anyone set it" was meant, and
+// the same remedy: the default is stated in classkernel.go where a real class
+// states it, so a document that writes \dbltextfloatsep=0pt is obeyed instead of
+// being handed 20pt back. See floatSep / textFloatSep in floatplace.go for the
+// measurement that found this shape.
+func (e *Engine) dblTextFloatSep() int { return e.namedSkip("dbltextfloatsep").width }
 
 // enterTwoColumnMeasure sets e.hsize to the column width, remembering the full width
 // (e.oneColHsize) for a later \onecolumn to restore. It is idempotent: the column

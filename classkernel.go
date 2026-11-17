@@ -207,11 +207,36 @@ const LaTeX2eClassKernel = `
 % no inserts, so allocate them as \newcount pointing at high, otherwise-unused
 % register numbers, keeping \skip\footins / \dimen\footins valid scratch stores
 % that never collide with a \newskip/\newdimen allocation.
-\newskip\floatsep
-\newskip\textfloatsep
-\newskip\intextsep
-\newskip\dblfloatsep
-\newskip\dbltextfloatsep
+% ⛔⛔ AND THEY CARRY LaTeX'S DEFAULTS HERE, because a register declared and left
+% at zero cannot be told from one a document deliberately set to zero.
+%
+% classes.dtx:1440-1442 (and :1445-1447 for 11pt, :1450-1452 for 12pt, which give
+% the same \floatsep and \textfloatsep) is where a real class states them. Until
+% now this kernel declared them with \newskip and nothing else, so they were 0pt
+% unless a class assigned them, and the Go side guarded every read with
+%
+%	if s := e.namedSkip("textfloatsep"); s.width > 0 { … } else { 20pt }
+%
+% — a fallback for "no class loaded" that also swallowed \textfloatsep=0pt.
+%
+% ⚠ MEASURED, which is how it was found. article at 11pt, a [t] float, the gap
+% from the caption's baseline to the first text baseline below it:
+%
+%	\textfloatsep default   reference 33.13pt   ours 35.72pt
+%	\textfloatsep=0pt       reference 13.21pt   ours 35.72pt   ← unchanged
+%
+% The reference moved by 19.92pt, which is the glue it was told to drop. We did
+% not move at all: the document's zero reached the register and the register's
+% reader threw it away.
+%
+% Stating the defaults here is what lets the reader drop its guard: with no class
+% these are LaTeX's own values, with a class the class overwrites them, and a
+% document that writes 0pt is obeyed.
+\newskip\floatsep     \floatsep=12pt plus 2pt minus 2pt
+\newskip\textfloatsep \textfloatsep=20pt plus 2pt minus 4pt
+\newskip\intextsep    \intextsep=12pt plus 2pt minus 2pt
+\newskip\dblfloatsep  \dblfloatsep=12pt plus 2pt minus 2pt
+\newskip\dbltextfloatsep \dbltextfloatsep=20pt plus 2pt minus 4pt
 \newdimen\footnotesep
 \newcount\footins \footins=255
 \newcount\@mpfootins \@mpfootins=254

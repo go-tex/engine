@@ -678,21 +678,30 @@ func (e *Engine) assembleMixedPage(top []anchoredFloat, text []node, bottom []an
 	return e.assemblePage(vlist, pageNum)
 }
 
-// floatSep / textFloatSep are the \floatsep (between stacked floats) and \textfloatsep
-// (between the float block and the text) skips, defaulting to LaTeX's 12pt / 20pt.
-func (e *Engine) floatSep() int {
-	if s := e.namedSkip("floatsep"); s.width > 0 {
-		return s.width
-	}
-	return 12 * unity
-}
+// floatSep / textFloatSep are the \floatsep (between stacked floats) and
+// \textfloatsep (between the float block and the text) skips.
+//
+// ⛔⛔ THEY READ THE REGISTER AND NOTHING ELSE. Both used to fall back to LaTeX's
+// 12pt / 20pt behind `if s.width > 0`, which is a test for "did anyone set this"
+// written as a test for "is this non-zero" — and the two differ on exactly the
+// value a document is most likely to write deliberately.
+//
+// ⚠ MEASURED. article at 11pt, a [t] float, the gap from the caption's baseline
+// to the first text baseline below it:
+//
+//	\textfloatsep default   reference 33.13pt   ours 35.72pt
+//	\textfloatsep=0pt       reference 13.21pt   ours 35.72pt   ← unchanged
+//
+// The reference dropped the 19.92pt it was told to drop; we did not move, because
+// \textfloatsep=0pt made s.width zero and the guard handed back 20pt.
+//
+// The defaults now live where a real class states them (classkernel.go, from
+// classes.dtx:1440-1442), so there is nothing left for this to fall back to: no
+// class gives LaTeX's values, a class overwrites them, and a document that writes
+// zero gets zero.
+func (e *Engine) floatSep() int { return e.namedSkip("floatsep").width }
 
-func (e *Engine) textFloatSep() int {
-	if s := e.namedSkip("textfloatsep"); s.width > 0 {
-		return s.width
-	}
-	return 20 * unity
-}
+func (e *Engine) textFloatSep() int { return e.namedSkip("textfloatsep").width }
 
 // notePageLimit records that pagination hit the maxPages backstop.
 func (e *Engine) notePageLimit() {
