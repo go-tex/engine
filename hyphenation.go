@@ -8,6 +8,7 @@ import (
 	"bytes"
 	_ "embed"
 	"strings"
+	"unicode"
 )
 
 // The Liang algorithm itself now lives in github.com/go-typeset/hyphenation (see
@@ -207,6 +208,72 @@ func precededByGlue(list []node, i int) bool {
 	return false // nothing precedes it: the start of the list is not a glue
 }
 
+// lcCodeOf is \lccode, as the hyphenation pass asks it: tex.web:17601 is
+//
+//	if lc_code(c)=0 then goto done3
+//
+// so a character whose \lccode is zero is NOT a letter and ends the word being
+// gathered (§891:17480-17483 defines a letter the same way). This engine gathered
+// every maximal run of charNodes instead, which puts the punctuation INSIDE the
+// word: "word," was hyphenated as a five-letter word and matched patterns against
+// a string no dictionary contains. That is most words in most paragraphs, not an
+// edge case.
+//
+// ⚠ A DELIBERATE DIVERGENCE FROM 8-BIT tex.web, STATED. INITEX gives \lccode only
+// to a-z and A-Z, so `é` would be a non-letter and every French word would be cut
+// at its accents — worse than the defect being fixed. XeTeX and LuaTeX, which is
+// what tectonic is, give every Unicode letter an \lccode, and that is what this
+// follows: an explicit table entry wins, else a Unicode letter is its own
+// lowercase, else zero. go-tex/engine#765 item (3).
+//
+// ⚠ NOT DONE HERE: feeding the hyphenator the \lccode-LOWERED letters. The
+// library lowercases with strings.ToLower, so a document that remaps \lccode to
+// make one character hyphenate as another is still unobeyed. The letter TEST is
+// what moves ordinary text; that mapping is a separate change.
+func (e *Engine) lcCodeOf(r rune) int {
+	if v, ok := e.lccode[r]; ok {
+		return v
+	}
+	if unicode.IsLetter(r) {
+		return int(unicode.ToLower(r))
+	}
+	return 0
+}
+
+// gatherWord collects the word that starts at list[i]: its characters, plus the
+// interior kerns that sit between two of them, and returns the index one past it.
+//
+// ⛔ A CHARACTER WHOSE \lccode IS ZERO IS NOT A LETTER AND ENDS THE WORD
+// (tex.web:17601, `if lc_code(c)=0 then goto done3`). That is what keeps the
+// comma out of "word," and the apostrophe out of "don't"; see lcCodeOf for the
+// one place the rule is decided and for the Unicode divergence it states.
+//
+// It is a function of its own because the rule is worth testing directly: the
+// obvious page-level witness for it does not discriminate (lccodeletter_test.go
+// says why), so what has to be asserted is where the word ends.
+func (e *Engine) gatherWord(list []node, i int) (wordNodes []node, letters []rune, j int) {
+	for j = i; j < len(list); {
+		if c, ok := list[j].(charNode); ok {
+			if e.lcCodeOf(c.ch) == 0 {
+				break
+			}
+			letters = append(letters, c.ch)
+			wordNodes = append(wordNodes, list[j])
+			j++
+			continue
+		}
+		if _, ok := list[j].(kernNode); ok && j+1 < len(list) {
+			if _, ok2 := list[j+1].(charNode); ok2 {
+				wordNodes = append(wordNodes, list[j])
+				j++
+				continue
+			}
+		}
+		break
+	}
+	return wordNodes, letters, j
+}
+
 func (e *Engine) hyphenateList(list []node) []node {
 	h := e.activeHyphenator()
 	if h == nil {
@@ -241,25 +308,17 @@ func (e *Engine) hyphenateList(list []node) []node {
 			i++
 			continue
 		}
-		// gather a word: chars plus interior kerns that sit between two chars
-		var wordNodes []node
-		var letters []rune
-		j := i
-		for j < len(list) {
-			if c, ok := list[j].(charNode); ok {
-				letters = append(letters, c.ch)
-				wordNodes = append(wordNodes, list[j])
-				j++
-				continue
-			}
-			if _, ok := list[j].(kernNode); ok && j+1 < len(list) {
-				if _, ok2 := list[j+1].(charNode); ok2 {
-					wordNodes = append(wordNodes, list[j])
-					j++
-					continue
-				}
-			}
-			break
+		wordNodes, letters, j := e.gatherWord(list, i)
+		// ⛔⛔ A NON-LETTER WHERE A WORD WAS EXPECTED IS NOT A WORD, AND SAYING
+		// NOTHING HERE HANGS THE LOOP. The gather above now stops BEFORE the first
+		// character when its \lccode is zero, so wordNodes is empty and j is still
+		// i — and `i = j` below is then `i = i`. The whole suite went from 15 s to
+		// a 600 s timeout on exactly that, which is the shape a liveness defect
+		// takes when every other test still passes.
+		if len(wordNodes) == 0 {
+			out = append(out, list[i])
+			i++
+			continue
 		}
 		breakAfter := map[int]bool{}
 		// ⛔ A FONT WHOSE \hyphenchar IS NEGATIVE IS NEVER HYPHENATED (tex.web
