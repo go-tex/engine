@@ -307,7 +307,13 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 
 	var pages []*boxNode
 	var deferred []anchoredFloat // floats reached but not yet placed (FIFO)
-	start, fi := 0, 0
+	// ⛔ PAGE ONE STARTS AT ITS FIRST BOX HERE TOO. While page_contents is empty,
+	// build_page DISCARDS a glue, kern or penalty outright (tex.web:19495-19502); the
+	// page proper begins when a box arrives. #698 gave paginateSingleList that start
+	// (pagebuilder.go:240) and this pager kept `start := 0`, so a float document was
+	// charging page one for the interline glue in front of its very first line — 5.76pt
+	// on the witness below, where the reference has none.
+	start, fi := skipDiscardable(text, 0), 0
 	savedVsize := e.vsize
 
 	fh := func(af anchoredFloat) int { return af.f.box.height + af.f.box.depth }
@@ -663,6 +669,16 @@ func (e *Engine) assembleMixedPage(top []anchoredFloat, text []node, bottom []an
 	if len(top) > 0 && (len(text) > 0 || len(bottom) > 0) {
 		vlist = append(vlist, glueNode{spec: glueSpec{width: e.textFloatSep()}})
 	}
+	// ⛔ THE TEXT STARTS A PAGE HERE, under the float block — which is what \@cflt's
+	// \unvbox\@outputbox splices in (ltoutput.dtx:3597-3604). So it gets what the top
+	// of a page gets: its leading discardables dropped (tex.web:19495-19502) and
+	// \topskip above its first box (:19509-19516), reduced by THAT box's height and
+	// not by the float's. assemblePageTopskip's header has the measurement.
+	topskipDone := false
+	if len(top) > 0 && len(text) > 0 {
+		text = e.withTopskip(text[skipDiscardable(text, 0):])
+		topskipDone = true
+	}
 	vlist = append(vlist, text...)
 	if len(bottom) > 0 {
 		if len(text) > 0 || len(top) > 0 {
@@ -675,7 +691,32 @@ func (e *Engine) assembleMixedPage(top []anchoredFloat, text []node, bottom []an
 			vlist = append(vlist, af.f.box)
 		}
 	}
-	return e.assemblePage(vlist, pageNum)
+	traceVlistHead(pageNum, vlist)
+	return e.assemblePageTopskip(vlist, pageNum, !topskipDone)
+}
+
+// traceVlistHead reports the head of a float page's vertical list under
+// GOTEX_FLTRACE, because that head is where the page's first baseline is decided
+// and a PDF shows only where the baseline LANDED (see fltrace.go).
+func traceVlistHead(pageNum int, vlist []node) {
+	if !flTracing() {
+		return
+	}
+	for i, n := range vlist {
+		if i >= 8 {
+			break
+		}
+		switch c := n.(type) {
+		case *boxNode:
+			flTrace("page %d tête %d: boîte h=%s p=%s", pageNum, i, spToStr(c.height), spToStr(c.depth))
+		case glueNode:
+			flTrace("page %d tête %d: glue %s", pageNum, i, spToStr(c.spec.width))
+		case ruleNode:
+			flTrace("page %d tête %d: filet h=%s p=%s", pageNum, i, spToStr(c.height), spToStr(c.depth))
+		default:
+			flTrace("page %d tête %d: %T", pageNum, i, n)
+		}
+	}
 }
 
 // floatSep / textFloatSep are the \floatsep (between stacked floats) and
