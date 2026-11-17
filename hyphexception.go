@@ -64,6 +64,39 @@ func (x hyphExceptions) add(entry string) {
 	x[strings.ToLower(word.String())] = breaks
 }
 
+// clipToMins drops the breaks \lefthyphenmin and \righthyphenmin refuse from an
+// exception's list: n is the word's length in letters, and a break after t
+// letters survives only while lmin <= t <= n-rmin.
+//
+// ⛔⛔ IT IS THE SAME RULE THE PATTERNS GET, AND tex.web APPLIES IT IN ONE PLACE
+// FOR BOTH. :18145-18160 is a single block: the exception table is consulted
+// first and a hit does `goto found` — the SAME label the pattern scan falls
+// through to — and `found` is where the limits are imposed:
+//
+//	found: for j:=0 to l_hyf-1 do hyf[j]:=0;
+//	       for j:=0 to r_hyf-1 do hyf[hn-j]:=0
+//
+// The header above has said so since it was written. The code did not: lookup
+// returned the entry's breaks and the caller wrote them straight into its break
+// set, so an exception escaped the minima. ⚠ The comment was RIGHT and the code
+// was WRONG, which is the harder way round to find — a reader checking the rule
+// meets it stated correctly and moves on.
+//
+// ⛔ The caller applies this when it HYPHENATES, not when the entry is recorded.
+// A document may write \hyphenation{…} in a package and set \lefthyphenmin
+// afterwards, or change it per language mid-document; clipping at `add` time
+// would freeze whichever value happened to be in force when the entry was read.
+func clipToMins(pts []int, n, lmin, rmin int) []int {
+	out := pts[:0:0] // never alias the stored entry: it is reused for every occurrence
+	for _, t := range pts {
+		if t < lmin || t > n-rmin {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
 // lookup returns the breaks an exception prescribes, and whether the word is
 // one. The bool is what distinguishes "no breaks allowed" from "not an
 // exception"; a nil slice would conflate them.
