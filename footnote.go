@@ -598,17 +598,27 @@ func (e *Engine) withFootAtFootskip(body *boxNode, pageNum int) *boxNode {
 	}
 	body.textBlock = true // this box is \@outputbox; the page around it is not
 	page := []node{body}
-	// \baselineskip\footskip, restored straight away: this is a local assignment
-	// inside \@outputpage's box, not a change to the document's leading.
-	saved := e.baselineskip
-	e.baselineskip = e.classDimen("footskip", ptToSP(30))
-	g, ok := e.interlineGlue(body.depth, foot.height)
-	e.baselineskip = saved
-	if ok {
+	if g, ok := e.footskipGlue(body.depth, foot.height); ok {
 		page = append(page, g)
 	}
 	page = append(page, foot)
 	return vpackSP(page, packNatural, 0)
+}
+
+// footskipGlue is the glue between the text block and the running foot:
+// \@outputpage sets \baselineskip to \footskip and then puts the foot box down,
+// so the foot's baseline sits \footskip from the block's.
+//
+// ⛔ ONE IMPLEMENTATION, because there are two callers — the plain page and the
+// running-head page — and they had drifted into two different ideas of where the
+// foot goes. The assignment is local, as it is in \@outputpage's box: it does not
+// change the document's leading.
+func (e *Engine) footskipGlue(blockDepth, footHeight int) (glueNode, bool) {
+	saved := e.baselineskip
+	e.baselineskip = e.classDimen("footskip", ptToSP(30))
+	g, ok := e.interlineGlue(blockDepth, footHeight)
+	e.baselineskip = saved
+	return g, ok
 }
 
 // assembleFancyPage builds a \pagestyle{fancy} page: the running header (with its
@@ -633,24 +643,50 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 		// under it where the reference has 37pt and 31pt.
 		top = append(top, glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}})
 	}
-	page := append(top, body...)
-	page = append(page, glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}) // vfil
+	// ⛔⛔ THE SAME DEFECT THE plain PATH HAD, and on the path that carries nearly
+	// every page of a real document: head, body, a \vfil and the foot were packed
+	// into ONE box. A first-order fil takes all of the page's stretch, so the
+	// body's own glue stretched by nothing and the foot sat wherever the fil left
+	// it. #721's first comment measured it on \pagestyle{headings}: 616.87 against
+	// tectonic's 672.75, a page holding 55.9pt less than it should — close to five
+	// lines at that pitch, against 19pt on the plain path.
+	//
+	// \@outputpage keeps the three apart (latex.ltx):
+	//
+	//	\hb@xt@\textwidth{\@thehead} \vskip \headsep
+	//	\box\@outputbox
+	//	\baselineskip\footskip \hb@xt@\textwidth{\@thefoot}
+	//
+	// so the text block alone is packed to \@colht and the head and foot are
+	// placed around it. \vsize is the TEXT block: the head band sits above it and
+	// the page is lifted by exactly that much (renderVMargin/headBand), which is
+	// why the block is packed to \vsize and the page is left at its natural height
+	// rather than packed to \vsize + the band.
+	var block *boxNode
+	if e.vsize > 0 {
+		block = vpackSP(body, packTo, e.vsize)
+	} else {
+		block = vpackSP(body, packNatural, 0)
+	}
+	block.textBlock = true
+	page := append(top, block)
 	if f := e.fancyFooter(); f != nil {
+		foot := f
 		if e.footRule > 0 {
-			page = append(page,
+			// The rule travels WITH the foot, as it does inside fancyhdr's
+			// \@thefoot: \footskip is the distance to the whole foot assembly, so
+			// leaving the rule outside it would measure to the text line and put
+			// the rule above the block's own bottom.
+			foot = vpackSP([]node{
 				ruleNode{width: e.hsize, height: e.footRule},
 				glueNode{spec: glueSpec{width: 2 * unity}},
-			)
+				f,
+			}, packNatural, 0)
 		}
-		page = append(page, f)
-	}
-	if e.vsize > 0 {
-		// \vsize is the TEXT block. The head band sits above it — the page is lifted
-		// by exactly that much (renderVMargin/headBand) — so the assembled box is
-		// taller by the band and the body still gets its full \textheight. Packing
-		// the whole thing to \vsize instead took the band out of the text, three
-		// lines a page on a document with a running head.
-		return vpackSP(page, packTo, e.vsize+e.headBand())
+		if g, ok := e.footskipGlue(block.depth, foot.height); ok {
+			page = append(page, g)
+		}
+		page = append(page, foot)
 	}
 	return vpackSP(page, packNatural, 0)
 }
