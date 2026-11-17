@@ -242,7 +242,18 @@ const LaTeX2eClassKernel = `
 % the reference's, it is the absence of one: 0 is exactly "no preference", which
 % is what the list already said by having no penalty node at all.
 \newcount\@secpenalty \@secpenalty=-300
-\newcount\@clubpenalty
+% \@clubpenalty is the SAVED \clubpenalty that \@afterheading restores on the
+% second paragraph after a heading (ltsect.dtx:625, \clubpenalty \@clubpenalty).
+% It was DECLARED and never assigned — the same shape as \@secpenalty above — so
+% the restore would have set \clubpenalty to 0: not a weaker club penalty but
+% the removal of one.
+%
+% ⭐ 150 is MEASURED, not recalled. Asked of tectonic on a document that prints
+% all three at four points, the reference answers saved=150 from the preamble
+% onwards, club=150 in the body, and club=10000 only AFTER the paragraph that
+% follows a heading — which is \everypar firing, not \@afterheading itself.
+% The faithful form mirrors whatever \clubpenalty holds, as the kernel does.
+\newcount\@clubpenalty \@clubpenalty\clubpenalty
 \newcount\@topnum
 \newcount\c@secnumdepth \c@secnumdepth=3
 \newcount\c@footnote

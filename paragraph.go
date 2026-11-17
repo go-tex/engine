@@ -163,8 +163,67 @@ func (e *Engine) layoutSegment(hlist []node) {
 				e.contribute(n)
 			}
 		}
+		e.appendInterlinePenalty(i, lines, list, ln)
 	}
 	e.normalParagraph()
+}
+
+// appendInterlinePenalty is tex.web's "Append a penalty node, if a nonzero
+// penalty is appropriate" (:17445-17455), run after each line box:
+//
+//	if cur_line+1<>best_line then
+//	  begin pen:=inter_line_penalty;
+//	  if cur_line=prev_graf+1 then pen:=pen+club_penalty;
+//	  if cur_line+2=best_line then pen:=pen+final_widow_penalty;
+//	  if disc_break then pen:=pen+broken_penalty;
+//	  if pen<>0 then … append a penalty node …
+//
+// ⛔⛔ NONE OF THIS EXISTED. \clubpenalty, \widowpenalty, \interlinepenalty and
+// \brokenpenalty were entries in texparams.go that a document could set and read
+// back and that reached no page — so a widow or a club line cost nothing, and
+// \samepage (latex.go, \interlinepenalty\@M) was a command that did nothing at
+// all. The engine inserted NO penalty between the lines of a paragraph.
+//
+// The spec is in the prose above the code (:17438-17443), and three of its
+// clauses are easy to get wrong:
+//
+//   - ⛔ THE FOUR TERMS ADD. They are not alternatives: "pen will be set to the
+//     SUM of all relevant penalties for the current line".
+//   - ⛔ A TWO-LINE PARAGRAPH GETS BOTH. "Breaking between lines of a two-line
+//     paragraph gets both club-line and widow-line penalties" — with one break,
+//     i==0 is the first line and i==len-2 the penultimate, so both clauses fire
+//     on the same node and the test below pins that sum.
+//   - ⛔ THE FINAL LINE IS NEVER PENALISED, which is the `cur_line+1<>best_line`
+//     guard: there is no break after it to discourage.
+//
+// ⚠ final_widow_penalty is NOT simply \widowpenalty: it is an explicit ARGUMENT
+// of line_break (:16027-16028, "the amount of additional penalty to be inserted
+// before the final line"), and the two call sites choose it — :21181 passes
+// widow_penalty for an ordinary paragraph, :21764 passes display_widow_penalty
+// for one that ends at a display. This engine breaks paragraphs in one place and
+// does not yet distinguish the display case, so \widowpenalty is used and
+// \displaywidowpenalty stays unread; that is a known narrowing, not an oversight.
+func (e *Engine) appendInterlinePenalty(i int, lines []Line, list []node, ln Line) {
+	if i+1 >= len(lines) { // cur_line+1 = best_line: the final line
+		return
+	}
+	pen := e.namedInt("interlinepenalty")
+	if i == 0 {
+		pen += e.namedInt("clubpenalty")
+	}
+	if i+2 == len(lines) {
+		pen += e.namedInt("widowpenalty")
+	}
+	// disc_break: this line ended AT a discretionary, which is the same test the
+	// hyphen-appending code above makes on list[ln.End].
+	if ln.End < len(list) {
+		if _, isDisc := list[ln.End].(discNode); isDisc {
+			pen += e.namedInt("brokenpenalty")
+		}
+	}
+	if pen != 0 {
+		e.contribute(penaltyNode{penalty: pen})
+	}
 }
 
 // normalParagraph is tex.web's procedure of the same name (:20756-20761), run at
