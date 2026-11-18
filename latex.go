@@ -889,9 +889,37 @@ const MiniLaTeXKernel = `
 % ⚠ gotex -report-skipped said "no undefined commands skipped" on the very document
 % that proves it, so the instrument built to find exactly this kind of gap could not
 % see it. That is its own defect and is filed separately.
+%
+% ⛔⛔ FIVE LEVELS, NOT THREE. ltsect.dtx:681-685 is the whole initialisation:
+%
+%	\let\sectionmark\@gobble
+%	\let\subsectionmark\@gobble
+%	\let\subsubsectionmark\@gobble
+%	\let\paragraphmark\@gobble
+%	\let\subparagraphmark\@gobble
+%
+% The fix above stopped at the third, so \paragraph and \subparagraph kept the
+% very defect it removed. They are UNNUMBERED in the standard classes —
+% \c@secnumdepth is 3 and they are levels 4 and 5 — so they take \@gxnum's
+% \ifnum#2>\c@secnumdepth branch, which calls \csname #1mark\endcsname{⟨title⟩}
+% just as the numbered branch does. Measured against tectonic:
+%
+%	\paragraph{Palfa}Body after paragraph.
+%	reference   "Palfa Body after paragraph."
+%	before      "Palfa Palfa Body after paragraph."
+%	\subparagraph{Sbeta}Body after subparagraph.
+%	reference   "Sbeta Body after subparagraph."
+%	before      "Sbeta Sbeta Body after subparagraph."
+%
+% ⚠ \chapter does NOT take this path and was never affected — checked, not
+% assumed: a book's \chapter{Chalfa} sets its title once before and after. It is
+% not \@startsection-based in any class (see classkernel.go), which is also why
+% \chaptermark's absence here does not double anything.
 \long\def\sectionmark#1{}
 \long\def\subsectionmark#1{}
 \long\def\subsubsectionmark#1{}
+\long\def\paragraphmark#1{}
+\long\def\subparagraphmark#1{}
 % The two page styles the standard classes declare, verbatim from article.cls's
 % one-sided branch (\ps@headings) and latex.ltx (\ps@myheadings). doPagestyle
 % RUNS \ps@name, so defining them here is all a document needs: \@oddhead is read
