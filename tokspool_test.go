@@ -25,6 +25,25 @@ import (
 //	\count 250   4242        4242     <- the control: #844 raised that pool
 //
 // go-tex/engine#849.
+//
+// ⛔⛔ EACH ROW BELOW IS MUTATED AGAINST ITS OWN GUARD, not against one. A break
+// check on one row is not a break check on the table: the first version of this
+// file was called break-checked after reverting the `\newtoks` bound and running
+// TWO of the four tests, which says nothing about the two whose guards that
+// mutation does not touch. Verified one at a time:
+//
+//	test                                    guard reverted              result
+//	NewtoksReachesPastTeX82sCeiling         \newtoks's bound            RED
+//	AnExhaustedTokenPoolSaysSo              noteRegisterExhausted call  RED
+//	AHighTokenRegisterStoresAndReadsBack    setToks's growPool          RED
+//	AnUnwrittenTokenRegisterIsNotOutOfRange noteBadRegisterIndex call   RED
+//
+// ⭐ And the two middle rows are why that matters: reverting the `\newtoks` bound
+// leaves AHighTokenRegister GREEN (its guard is setToks) and reverting setToks
+// leaves AnUnwritten GREEN (its guard is the note call). Either mutation alone
+// would have "confirmed" a table in which half the rows were untested. The
+// neighbouring session found exactly this in its own gate, in a row that read a
+// value both branches share.
 func TestNewtoksReachesPastTeX82sCeiling(t *testing.T) {
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
