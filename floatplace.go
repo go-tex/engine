@@ -794,10 +794,10 @@ func (e *Engine) floatFraction(name string, def float64) float64 {
 // counter does not exist or holds a value that cannot bound anything.
 func (e *Engine) floatCount(name string, def int) int {
 	m := e.eq["c@"+name]
-	if m == nil || m.kind != mCountRef || m.code < 0 || m.code >= len(e.count) {
+	if m == nil || m.kind != mCountRef || m.code < 0 || m.code >= registerPoolSize {
 		return def
 	}
-	if v := e.count[m.code]; v > 0 {
+	if v := e.getCount(m.code); v > 0 {
 		return v
 	}
 	return def

@@ -1147,19 +1147,19 @@ func (e *Engine) rawAt(i int) (rune, int) {
 // escapechar is the character TeX prints in front of a control-sequence name —
 // 92 ("\") unless a package changes it. Outside 0..255 it prints nothing.
 func (e *Engine) escapechar() int {
-	if e.escapeReg < 0 || e.escapeReg >= len(e.count) {
+	if e.escapeReg < 0 || e.escapeReg >= registerPoolSize {
 		return '\\'
 	}
-	return e.count[e.escapeReg]
+	return e.getCount(e.escapeReg)
 }
 
 // endlinechar is the character TeX appends to every input line — 13 (^^M) unless
 // a package changes it. A value outside 0..255 means "append nothing".
 func (e *Engine) endlinechar() int {
-	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
+	if e.endlineReg < 0 || e.endlineReg >= registerPoolSize {
 		return '\r'
 	}
-	return e.count[e.endlineReg]
+	return e.getCount(e.endlineReg)
 }
 
 // mouthChar returns the character the mouth sees at index i, the index just past

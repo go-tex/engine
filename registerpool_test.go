@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -202,6 +203,60 @@ func TestARegisterPastTheOldCeilingReachesThePage(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("the page does not carry %q; it carries %q", want, got)
 		}
+	}
+}
+
+// ⛔⛔ THE SAME UNSTORED REGISTER MUST NOT READ TWO WAYS DEPENDING ON ITS NUMBER.
+//
+// Growing the pools on write gives `len(e.skip)` a second meaning — "how much of
+// the pool has been reached" — and eight guards across the engine were asking it
+// as if it still meant "legal". A register bound to a parameter name and never
+// assigned is worth its zero value whether the allocator handed out 20 or 4000;
+// asked with len, index 20 read 0pt through the array and index 4000 fell out of
+// the guard into a DEFAULT. Those are different answers to one question.
+//
+// ⚠ `topskipSpec`'s caller at topskip.go:50 is `spec, _ :=` — it discards the
+// bool — so there "absent" became a silent \topskip=0pt. That file's own comment
+// measures the cost: about 3pt on every page, never a whole line, so Σ pages does
+// not move and no page-count metric can see it.
+//
+// Found by the go-tex session while working on \topskip for #834; the grep is
+// theirs, these rows and the fix are measured here.
+func TestAnUnstoredRegisterReadsTheSameHighAndLow(t *testing.T) {
+	// ⛔ 200, NOT 20. The first version of this test used 20 and the namedInt row
+	// reported 901 against 0 — because loadTeXParams writes every \count parameter
+	// its default at allocation, starting at index 10, so index 20 is an OCCUPIED
+	// register and not an unstored one. The test was measuring its own bad premise.
+	// 200 is inside registerBaseSize and past everything the format allocates.
+	const lowCode, highCode = 200, 4000
+	for _, c := range []struct {
+		name string
+		read func(e *Engine, code int) (string, bool)
+	}{
+		{"topskipSpec", func(e *Engine, code int) (string, bool) {
+			e.eq["topskip"] = &meaning{kind: mSkipRef, code: code}
+			g, ok := e.topskipSpec()
+			return formatGlue(g), ok
+		}},
+		{"namedSkip", func(e *Engine, code int) (string, bool) {
+			e.eq["abovedisplayskip"] = &meaning{kind: mSkipRef, code: code}
+			return formatGlue(e.namedSkip("abovedisplayskip")), true
+		}},
+		{"namedInt", func(e *Engine, code int) (string, bool) {
+			e.eq["lefthyphenmin"] = &meaning{kind: mCountRef, code: code}
+			return strconv.Itoa(e.namedInt("lefthyphenmin")), true
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lowEngine, highEngine := New(), New()
+			low, lowOK := c.read(lowEngine, lowCode)
+			high, highOK := c.read(highEngine, highCode)
+			if low != high || lowOK != highOK {
+				t.Errorf("an unstored register reads %q/%v at index %d and %q/%v at index %d — "+
+					"the answer depends on the register NUMBER, not on its state",
+					low, lowOK, lowCode, high, highOK, highCode)
+			}
+		})
 	}
 }
 

@@ -490,13 +490,16 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 // AND \parfillskip and settled a third of the way across instead of halfway.
 func (e *Engine) withParFill(list []node) []node {
 	fill := glueSpec{stretch: unity, stretchOrder: 1}
-	// ⭐ len(e.skip) IS THE RIGHT QUESTION HERE, UNUSUALLY. Everywhere else it is
-	// the wrong one (engine.go, on the pools) because it answers "stored yet?"
-	// rather than "legal?" — but that is exactly what this needs: the fallback
-	// above is LaTeX's default, not the register's zero value, so a register the
-	// pools have not reached must fall back rather than read as 0pt.
-	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
-		fill = e.skip[m.code]
+	// ⛔ AN EARLIER VERSION OF THIS COMMENT ARGUED THAT len(e.skip) WAS RIGHT HERE,
+	// because the fallback above is LaTeX's default rather than the register's zero.
+	// That reasoning was wrong, and the way it was wrong is worth keeping: len asks
+	// "stored yet", so it would have answered the SAME unstored register two ways —
+	// a low one reads 0pt through the index, a high one falls back to 0pt plus 1fil.
+	// Whatever the right default is, it cannot depend on which register number the
+	// allocator happened to hand out. registerPoolSize asks "legal", consistently,
+	// and the fallback is left for a name that is not a skip register at all.
+	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < registerPoolSize {
+		fill = e.getSkip(m.code)
 	}
 	out := append([]node{}, list...)
 	// ⛔⛔ AN INFINITE PENALTY GOES IN FRONT OF \parfillskip, AND A TRAILING GLUE IS
