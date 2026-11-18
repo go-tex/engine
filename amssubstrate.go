@@ -137,7 +137,11 @@ func (e *Engine) loadAMSPrims() {
 	// TOC/label machinery does not use TeX write streams).
 	e.prim("newwrite", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" || e.allocCnt >= 256 {
+		if name == "" {
+			return
+		}
+		if e.allocCnt >= registerPoolSize {
+			e.noteRegisterExhausted(`\count`)
 			return
 		}
 		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)

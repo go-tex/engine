@@ -92,10 +92,15 @@ func (e *Engine) doNewtheorem() {
 		ctr = "c@" + strings.TrimSpace(e.toksToString(sharedToks))
 	default:
 		// Allocate a fresh \count register, exactly as \newcount would.
-		if e.allocCnt < 256 {
+		if e.allocCnt < registerPoolSize {
 			ctrCode = e.allocCnt
 			e.define(ctr, &meaning{kind: mCountRef, code: ctrCode}, true)
 			e.allocCnt++
+		} else {
+			// Every \newtheorem is one counter, and a paper declares many before
+			// its packages have had their turn: arXiv 2408.08199 declares fourteen.
+			// This is the allocator a package-heavy document reaches first.
+			e.noteRegisterExhausted(`\count`)
 		}
 	}
 

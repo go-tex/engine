@@ -20,7 +20,11 @@ func (e *Engine) loadClassPrims() {
 	// \newsavebox{\cs}).
 	e.prim("newbox", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" || e.allocBox >= 256 {
+		if name == "" {
+			return
+		}
+		if e.allocBox >= registerPoolSize {
+			e.noteRegisterExhausted(`\box`)
 			return
 		}
 		if m := e.eq[name]; m != nil && m.kind == mBoxRef {
