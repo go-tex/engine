@@ -541,11 +541,56 @@ func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) 
 	//
 	// The "empty" branch above was already right — it packs the body straight to
 	// \vsize — and that is what this now does, with the foot moved out of the box.
+	// ⛔⛔ A PLAIN PAGE STILL RESERVES THE HEAD BAND. ltoutput.dtx:3350-3370 runs
+	// the same five lines on every page:
+	//
+	//	\setbox\@tempboxa \vbox to\headheight {\vfil … \hb@xt@\textwidth{\@thehead}}
+	//	\dp \@tempboxa \z@
+	//	\box \@tempboxa
+	//	\vskip \headsep
+	//	\box \@outputbox
+	//
+	// \@thehead being EMPTY does not make the box shorter: \vbox to\headheight is
+	// still \headheight tall and \vskip\headsep still happens. The band belongs to
+	// the PAGE GEOMETRY; a page style decides what is DRAWN in it, never whether it
+	// is reserved.
+	//
+	// This path emitted no band and packed to \vsize alone, while the page was
+	// lifted by headBand() — a per-DOCUMENT quantity (geometry.go) — so a plain
+	// page inside a document that has a head was lifted for a band its box did not
+	// contain, and everything in it rose by that band. assembleFancyPage never had
+	// the defect because it packs to \vsize + headBand() and emits the band it was
+	// lifted for.
+	//
+	// ⚠ The control that says this is per-page and not per-document: a
+	// plain-THROUGHOUT article is unaffected, because \ps@plain does
+	// \let\@oddhead\@empty, hasLatexHead() is then false, and headBand() answers
+	// zero — no lift and no band, which already agreed with the reference.
+	//
+	// go-tex/engine#838.
+	// ⛔ THE BAND GOES OUTSIDE THE TEXT BLOCK, not inside it. \@outputbox is the
+	// text alone — \@makecol packs it to \@colht (latex.ltx:15314-15320) — and
+	// \@outputpage places the head band above it and the foot below. Folding the
+	// band into the block would make \@outputbox \headheight+\headsep taller than
+	// the text it holds, and this engine marks that box (textBlock) precisely so
+	// the rest of the page model can tell the two apart.
+	var out *boxNode
 	if e.vsize > 0 {
-		body := vpackSP(vlist, packTo, e.vsize)
-		return e.withFootAtFootskip(body, pageNum)
+		out = e.withFootAtFootskip(vpackSP(vlist, packTo, e.vsize), pageNum)
+	} else {
+		out = e.withFootAtFootskip(vpackSP(vlist, packNatural, 0), pageNum)
 	}
-	return e.withFootAtFootskip(vpackSP(vlist, packNatural, 0), pageNum)
+	if band := e.headBand(); band > 0 {
+		// An empty head box of \headheight, then \headsep — the reference's own two
+		// items rather than one kern of their sum, built by the same helper the
+		// drawn head uses so the two paths cannot drift apart.
+		out = vpackSP([]node{
+			e.headToHeadheight(hpackSP(nil, packNatural, 0)),
+			glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}},
+			out,
+		}, packNatural, 0)
+	}
+	return out
 }
 
 // textBottom is \@textbottom: the glue LaTeX closes the text block with, INSIDE

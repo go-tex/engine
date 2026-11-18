@@ -128,14 +128,24 @@ Body.
 	if !ok || !boxDraws(last, '1') {
 		t.Errorf("the last item on the page is %T and does not hold the folio; a plain page ends with it", top[len(top)-1])
 	}
-	// ⛔ THE FIRST ITEM IS THE TEXT BLOCK, and the assertion names it rather than
-	// asking whether it draws a '1'. Since the folio moved out of the block
-	// (#721), top[0] is \@outputbox — which contains every digit on the page, so
-	// "does the first box draw a 1" matched the body text and reported a running
-	// head that was not there. What this test is about is which box comes first.
-	if first, ok := top[0].(*boxNode); !ok || !first.textBlock {
-		t.Errorf("the page starts with %T, want the text block: a head box at the "+
-			"top is exactly what \\thispagestyle{plain} had to prevent", top[0])
+	// ⛔⛔ WHAT THE PLAIN STYLE PREVENTS IS THE FOLIO AT THE TOP, NOT A BOX AT THE
+	// TOP. This read `top[0].textBlock` — "the page starts with the text block" —
+	// and that is a stronger claim than the defect it guards, because LaTeX puts a
+	// head box on EVERY page: ltoutput.dtx:3350-3370 always sets
+	// \vbox to\headheight{\vfil … \hb@xt@\textwidth{\@thehead}} and then skips
+	// \headsep, and on a plain page \@thehead is simply \@empty. The band belongs
+	// to the page geometry; the style decides only what is DRAWN in it. A plain
+	// page that reserved nothing put its text \headheight+\headsep too high — 34pt
+	// in article, and every \chapter opening of every book (#838).
+	//
+	// So the assertion is the measured defect itself: nothing is drawn up there.
+	// The folio-is-last check above is the other half, and together they pin the
+	// thing this test was written for — the folio at x=100.90 near the top where
+	// the reference has it centred at the foot.
+	if first, ok := top[0].(*boxNode); ok && boxDraws(first, '1') {
+		t.Error("the page's first box draws the folio: \\thispagestyle{plain} must " +
+			"keep the running head's content off the page, even though the band " +
+			"above the text block is still reserved")
 	}
 }
 
