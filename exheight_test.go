@@ -141,9 +141,18 @@ func TestAParInsideAGroupTakesThatGroupsBaselineskip(t *testing.T) {
 // (ltsect.dtx:491 met ce `\nobreak` là). Les deux motifs ci-dessous ne portent
 // donc plus que sur le groupe et son `\par`, ce qui laisse passer ce qui suit et
 // continue d'attraper le déplacement de l'accolade, qui est le défaut de 5,978pt.
+// ⛔⛔ DEUXIÈME DÉRIVE DU LITTÉRAL, ET LA MÊME LEÇON QUE LA PREMIÈRE. Après
+// `\nobreak`, c'est l'ESPACE PARASITE entre #1 et #2 qui a bougé: il décalait
+// chaque titre d'un demi-cadratin vers la droite (#833) et sa suppression a
+// rendu ce test ROUGE, alors qu'elle ne touche en rien à la place de l'accolade.
+//
+// Les motifs ne nomment donc plus que l'invariant: le `\par` est DANS l'accolade
+// qui se referme après #2, ou il est dehors. Tout ce qui précède #2 — le style,
+// un espace, un `\hskip` d'indentation que \@startsection passe et que nous ne
+// lisons pas encore — leur est désormais indifférent.
 func TestGxheadEndsTheHeadingParagraphInsideTheGroup(t *testing.T) {
-	const inside = `\noindent{#1 #2\par}`
-	const outside = `\noindent{#1 #2}\par`
+	const inside = `#2\par}`
+	const outside = `#2}\par`
 	if !strings.Contains(LaTeX2eClassLead, inside) {
 		t.Errorf("\\@gxhead ne termine pas le paragraphe du titre DANS le groupe de style")
 	}
