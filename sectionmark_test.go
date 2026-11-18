@@ -31,9 +31,30 @@ import (
 // ⭐ The assertion counts OCCURRENCES rather than comparing positions, because that
 // is the defect: the title was set twice, in two different sizes, and no single
 // coordinate says so.
-func TestANumberedHeadingSetsItsTitleOnce(t *testing.T) {
+//
+// ⛔⛔ THE TABLE HAS FIVE ROWS, AND IT USED TO HAVE THREE — WHICH IS WHY THE DEFECT
+// SURVIVED ITS OWN FIX. ltsect.dtx:681-685 initialises five marks, this kernel
+// defined the first three, and the loop here listed exactly those three. So the
+// test agreed with the bug: \paragraph and \subparagraph kept setting their titles
+// twice for as long as the suite was green.
+//
+//	\paragraph{Palfa}Body after paragraph.
+//	reference   "Palfa Body after paragraph."
+//	before      "Palfa Palfa Body after paragraph."
+//
+// They are UNNUMBERED in the standard classes (levels 4 and 5 against
+// \c@secnumdepth 3), so they take \@gxnum's other branch — which calls the mark
+// just the same. Hence the name: it is a heading that sets its title once, not a
+// numbered one.
+//
+// ⚠ \chapter is deliberately NOT in this table: it is not \@startsection-based in
+// any class, never called a mark, and was checked against tectonic to be
+// unaffected both before and after.
+func TestAHeadingSetsItsTitleOnce(t *testing.T) {
 	const marker = "ZZQQTITREQQZZ"
-	for _, cmd := range []string{"section", "subsection", "subsubsection"} {
+	for _, cmd := range []string{
+		"section", "subsection", "subsubsection", "paragraph", "subparagraph",
+	} {
 		src := `\documentclass{article}\begin{document}Avant.\` + cmd +
 			`{` + marker + `}Apres.\end{document}`
 		pages, err := CompileToSVGPages([]byte(src), Options{Lenient: true})
@@ -59,8 +80,11 @@ func TestTheSectioningMarksAreDefined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildEngine: %v", err)
 	}
+	// Five, as ltsect.dtx:681-685 has it. This list was three long, and the two it
+	// omitted were exactly the two that stayed broken.
 	if _, err := e.Run(`\message{[\meaning\sectionmark|\meaning\subsectionmark|` +
-		`\meaning\subsubsectionmark]}`); err != nil {
+		`\meaning\subsubsectionmark|\meaning\paragraphmark|` +
+		`\meaning\subparagraphmark]}`); err != nil {
 		t.Fatal(err)
 	}
 	got := trimNL(e.out.String())
