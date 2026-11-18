@@ -395,6 +395,11 @@ type Engine struct {
 	// it, keyed by the command that asked for one. See recordMissingFile.
 	filesMissing map[string]int
 
+	// regExhausted tallies register allocations refused because that pool is
+	// full, by kind (\count, \dimen, \skip, \box, \toks). See
+	// noteRegisterExhausted and Diagnostics.RegistersExhausted (#788).
+	regExhausted map[string]int
+
 	// alignAbandoned tallies alignments dropped whole because the mandatory brace
 	// was not found, keyed by the primitive. See scanLeftBrace.
 	alignAbandoned map[string]int
@@ -2624,6 +2629,23 @@ type Diagnostics struct {
 	// False for every font whose kerning is pair adjustment, which is the ordinary
 	// case, and false for a face that cannot be asked at all (a test mock).
 	KerningIsAFloor bool
+
+	// RegistersExhausted counts allocations refused because that pool of
+	// registers is full, keyed by kind (`\count`, `\dimen`, `\skip`, `\box`,
+	// `\toks`).
+	//
+	// ⛔ A NON-EMPTY MAP MEANS THE DOCUMENT IS WRONG IN A WAY NOTHING ELSE
+	// REPORTS. The name a \newcount could not satisfy stays UNDEFINED; whatever
+	// used it reads 0 or vanishes, and the run completes normally. TeX stops at
+	// this point with "No room for a new \count"; this engine carries on, which
+	// is a deliberate choice (TestNewcounterExhaustion) — but a choice whose cost
+	// was invisible until now.
+	//
+	// Measured 2026-11-15: loading the real tikz and calc leaves 86 of 256
+	// `\count` registers and 230 of 256 `\box` (#788). A package-heavy paper
+	// spends 86 quickly, so this is reached by real documents and not only by a
+	// probe.
+	RegistersExhausted map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2679,6 +2701,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 			mathDropped[k] = v
 		}
 	}
+	var regExhausted map[string]int
+	if len(e.regExhausted) > 0 {
+		regExhausted = make(map[string]int, len(e.regExhausted))
+		for k, v := range e.regExhausted {
+			regExhausted[k] = v
+		}
+	}
 	var alignAbandoned map[string]int
 	if len(e.alignAbandoned) > 0 {
 		alignAbandoned = make(map[string]int, len(e.alignAbandoned))
@@ -2711,6 +2740,8 @@ func (e *Engine) Diagnostics() Diagnostics {
 		ExpansionSteps:  e.steps,
 		NoProgressPeak:  max(e.noProgPeak, e.noProgSteps),
 		KerningIsAFloor: e.kerningIsAFloor,
+
+		RegistersExhausted: regExhausted,
 	}
 }
 
