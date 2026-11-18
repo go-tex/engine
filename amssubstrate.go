@@ -378,7 +378,11 @@ const AMSClassSubstrate = `
 \def\gotex@setstrutbox{\setbox\strutbox\hbox{\vrule height .7\baselineskip depth .3\baselineskip width 0pt}}
 \gotex@setstrutbox
 \def\strut{\relax\ifmmode\copy\strutbox\else\unhcopy\strutbox\fi}
-\def\lastbox{\hbox{}}
+% ⛔ \lastbox WAS A STUB HERE: \def\lastbox{\hbox{}}, an empty box that removed
+% nothing — which is go-tex/engine#430's title, and the stub is its mechanism.
+% A \def SHADOWS the primitive, so registering one was not enough; the stub had
+% to go. It is a real primitive now (lastbox.go, tex.web:20965-20991), and
+% \@doendpe's {\setbox\z@\lastbox} can at last take the \parindent box away.
 \def\vrulefil{}
 % ── NFSS font selection: no real series/shape machinery, accept and drop ────
 % \selectfont installs the font the current family/series/shape calls for. This

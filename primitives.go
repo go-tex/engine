@@ -2615,6 +2615,12 @@ func (e *Engine) loadStomach() {
 		e.setBox(i, nil) // \box empties the register
 	})
 	e.prim("copy", func(e *Engine) { e.place(cloneBox(e.getBox(e.scanInt()))) })
+	// \lastbox used on its own, rather than as the <box> of \setbox: it REMOVES
+	// the last box of the current list and puts it straight back, which is a
+	// round trip for the list and the identity for the page — but the shift is
+	// zeroed on the way, as tex.web:20990 has it. Its value lives in takeLastBox
+	// (lastbox.go); scanBox reaches the same function for \setbox0\lastbox.
+	e.prim("lastbox", func(e *Engine) { e.place(e.takeLastBox()) })
 	e.prim("kern", func(e *Engine) { e.place(kernNode{width: e.scanDimen()}) })
 	e.prim("vskip", func(e *Engine) { e.contribute(glueNode{spec: e.scanGlue()}) })
 	e.prim("hskip", func(e *Engine) { e.placeHGlue(e.scanGlue()) })
