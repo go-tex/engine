@@ -226,7 +226,7 @@ func (e *Engine) hfil() glueNode {
 // stepEquationCounter advances \c@equation and returns the new \theequation string.
 func (e *Engine) stepEquationCounter() string {
 	if m := e.eq["c@equation"]; m != nil && m.kind == mCountRef {
-		e.setCount(m.code, e.count[m.code]+1, true)
+		e.setCount(m.code, e.getCount(m.code)+1, true)
 	}
 	return e.toksToString(e.expandList([]tok{csTok("theequation")}))
 }
@@ -235,7 +235,7 @@ func (e *Engine) stepEquationCounter() string {
 // carries a \tag or was suppressed (\tag/\nonumber do not consume a number).
 func (e *Engine) unstepEquationCounter() {
 	if m := e.eq["c@equation"]; m != nil && m.kind == mCountRef {
-		e.setCount(m.code, e.count[m.code]-1, true)
+		e.setCount(m.code, e.getCount(m.code)-1, true)
 	}
 }
 

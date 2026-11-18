@@ -820,7 +820,8 @@ func (e *Engine) scanRule(horizontal bool) ruleNode {
 // ── box registers & dimensions ───────────────────────────────────────────────
 
 func (e *Engine) getBox(i int) *boxNode {
-	if i < 0 || i >= 256 {
+	if i < 0 || i >= len(e.box) {
+		e.noteBadRegisterIndex(i, `\box`)
 		return nil
 	}
 	return e.box[i]
@@ -832,9 +833,12 @@ func (e *Engine) getBox(i int) *boxNode {
 // inside the group that collects its text, and every node already accumulated
 // there has to survive that.
 func (e *Engine) setBoxScoped(i int, b *boxNode, global bool) {
-	if i < 0 || i >= 256 {
+	grown, ok := growPool(e.box, i)
+	if !ok {
+		e.noteBadRegisterIndex(i, `\box`)
 		return
 	}
+	e.box = grown
 	if global {
 		e.forgetSaved(10, i, "")
 	} else if len(e.groups) > 0 {
@@ -847,9 +851,12 @@ func (e *Engine) setBoxScoped(i int, b *boxNode, global bool) {
 // register read with \box or \unhbox is voided for good, not until the end of
 // the group that read it. Measured the same way.
 func (e *Engine) setBox(i int, b *boxNode) {
-	if i < 0 || i >= 256 {
+	grown, ok := growPool(e.box, i)
+	if !ok {
+		e.noteBadRegisterIndex(i, `\box`)
 		return
 	}
+	e.box = grown
 	e.forgetSaved(10, i, "")
 	e.box[i] = b
 }

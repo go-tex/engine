@@ -125,21 +125,21 @@ func (e *Engine) doDivide(global bool) {
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		if v := e.scanInt(); v != 0 {
-			e.setCount(i, e.count[i]/v, global)
+			e.setCount(i, e.getCount(i)/v, global)
 		}
 		return
 	}
 	if i, ok := e.dimenIndex(); ok {
 		e.skipByKeyword()
 		if v := e.scanInt(); v != 0 {
-			e.setDimen(i, e.dimen[i]/v, global)
+			e.setDimen(i, e.getDimen(i)/v, global)
 		}
 		return
 	}
 	if i, ok := e.skipIndex(); ok {
 		e.skipByKeyword()
 		if v := e.scanInt(); v != 0 {
-			g := e.skip[i]
+			g := e.getSkip(i)
 			g.width /= v
 			g.stretch /= v
 			g.shrink /= v

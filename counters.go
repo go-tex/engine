@@ -152,7 +152,7 @@ func (e *Engine) doAddtocounter() {
 	name := e.readBraceName()
 	v := e.readBraceInt()
 	if m := e.eq["c@"+name]; m != nil && m.kind == mCountRef {
-		e.setCount(m.code, e.count[m.code]+v, true)
+		e.setCount(m.code, e.getCount(m.code)+v, true)
 	}
 }
 
@@ -168,7 +168,7 @@ func (e *Engine) doStepcounter() {
 // (as they do when a sectioning macro reaches its appended \cl@… — see hookReset).
 func (e *Engine) stepCounter(name string) {
 	if m := e.eq["c@"+name]; m != nil && m.kind == mCountRef {
-		e.setCount(m.code, e.count[m.code]+1, true)
+		e.setCount(m.code, e.getCount(m.code)+1, true)
 	}
 	if cl := e.eq["cl@"+name]; cl != nil && cl.kind == mMacro {
 		e.push([]tok{csTok("cl@" + name)})

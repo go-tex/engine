@@ -205,7 +205,7 @@ func (e *Engine) normalParagraph() {
 			e.setCount(m.code, 0, false)
 		}
 	}
-	if e.hangIndentReg >= 0 && e.hangIndentReg < len(e.dimen) && e.dimen[e.hangIndentReg] != 0 {
+	if e.hangIndentReg >= 0 && e.getDimen(e.hangIndentReg) != 0 {
 		e.setDimen(e.hangIndentReg, 0, false)
 	}
 	if e.namedInt("hangafter") != 1 {
@@ -299,10 +299,10 @@ func (e *Engine) paragraphShape(lineWidth float64) Measure {
 	if len(e.parShape) > 0 {
 		return ParShape(e.parShape)
 	}
-	if e.hangIndentReg < 0 || e.hangIndentReg >= len(e.dimen) {
+	if e.hangIndentReg < 0 {
 		return Uniform(lineWidth)
 	}
-	indent := spToPt(e.dimen[e.hangIndentReg])
+	indent := spToPt(e.getDimen(e.hangIndentReg))
 	if indent == 0 {
 		// tex.web:16689: "if hang_indent=0, the value of hang_after is
 		// irrelevant" — and a uniform measure is cheaper to consult.
@@ -490,6 +490,11 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 // AND \parfillskip and settled a third of the way across instead of halfway.
 func (e *Engine) withParFill(list []node) []node {
 	fill := glueSpec{stretch: unity, stretchOrder: 1}
+	// ⭐ len(e.skip) IS THE RIGHT QUESTION HERE, UNUSUALLY. Everywhere else it is
+	// the wrong one (engine.go, on the pools) because it answers "stored yet?"
+	// rather than "legal?" — but that is exactly what this needs: the fallback
+	// above is LaTeX's default, not the register's zero value, so a register the
+	// pools have not reached must fall back rather than read as 0pt.
 	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
 		fill = e.skip[m.code]
 	}

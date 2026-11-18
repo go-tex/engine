@@ -286,7 +286,13 @@ func TestSetLengthUnbracedValue(t *testing.T) {
 }
 
 // \newlength eventually exhausts the \skip register pool; the overflow is an
-// error, not a panic. Allocators start at 10, so 246 allocations fill them.
+// error, not a panic.
+//
+// ⛔ 250 ALLOCATIONS WAS THE WHOLE TEST, AND 250 WAS THE POOL. It read as
+// "\newlength exhausts the pool" and meant "250 \newlength exhaust a pool of
+// 256" — so raising the pool to eTeX's 32768 turned it red while \newlength
+// behaved exactly as before. The brink is set instead, and a control asks the
+// other half: 250 lengths must now ALL succeed.
 func TestNewLengthExhaustion(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
@@ -297,8 +303,16 @@ func TestNewLengthExhaustion(t *testing.T) {
 		b = append(b, []byte{'a' + byte(i%26), 'a' + byte((i/26)%26)}...)
 		b = append(b, '}')
 	}
-	if _, err := e.Run(string(b)); err == nil {
+	// ⭐ The control: past TeX82's ceiling, inside eTeX's, so none of these fail.
+	if _, err := e.Run(string(b)); err != nil {
+		t.Errorf("250 \\newlength in a pool of %d: %v", registerPoolSize, err)
+	}
+	e.allocSkp = registerPoolSize
+	if _, err := e.Run(`\newlength{\onetoomany}`); err == nil {
 		t.Error("exhausting the skip pool should error")
+	}
+	if e.Diagnostics().RegistersExhausted[`\skip`] == 0 {
+		t.Error("the refused \\newlength was not reported (#830)")
 	}
 }
 

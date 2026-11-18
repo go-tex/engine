@@ -23,7 +23,12 @@ func runMsg(t *testing.T, src string) string {
 // counterValue reads the raw \count value behind \c@<name>, or -1 if undefined.
 func counterValue(e *Engine, name string) int {
 	if m := e.eq["c@"+name]; m != nil && m.kind == mCountRef {
-		return e.count[m.code]
+		// ⛔ e.getCount, not e.count[m.code]. The pools are grown on write
+		// (registers.go), so a counter allocated high and never assigned has a
+		// legal index with nothing stored at it: the raw index panicked with
+		// "index out of range [436] with length 256" the moment the pool went
+		// past TeX82's 256, on a counter whose value is simply 0.
+		return e.getCount(m.code)
 	}
 	return -1
 }
@@ -222,26 +227,47 @@ func TestCounterErrorBranches(t *testing.T) {
 
 // Exhausting the \count registers must not panic; \newcounter past the limit
 // simply allocates no register (its \arabic then reads as 0).
+//
+// ⛔ THE CEILING IS registerPoolSize, NOT 300 ALLOCATIONS. This test used to
+// declare 300 counters and assert that ctr299 got none, which was true only
+// while the pool was TeX82's 256 — the number was written into the test, so
+// raising the pool turned a passing test into a failing one without anything
+// about counters changing. The allocator is driven to the brink instead, which
+// asks the same question at whatever the pool is.
 func TestNewcounterExhaustion(t *testing.T) {
 	e := New()
 	if err := e.LoadLaTeX(); err != nil {
 		t.Fatal(err)
 	}
+	// ⭐ THE CONTROL THAT ONLY PASSES IF THE POOL REALLY GREW. 300 counters is
+	// past TeX82's ceiling and well inside eTeX's, so every one of them must get
+	// a register. Without this row a pool still stuck at 256 would pass the
+	// exhaustion rows below exactly as a raised one does.
 	for i := 0; i < 300; i++ {
 		if _, err := e.Run(`\newcounter{ctr` + itoa(i) + `}`); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The \count file has 256 registers, allocated from index 10, so at most 246
-	// counters get one; the rest allocate none (their \c@ alias stays undefined).
-	if v := counterValue(e, "ctr0"); v != 0 {
-		t.Errorf("first counter register = %d, want 0 (allocated)", v)
+	if v := counterValue(e, "ctr299"); v != 0 {
+		t.Errorf("counter 300 register = %d, want 0 (allocated) — the pool is %d, so 300 counters fit", v, registerPoolSize)
 	}
-	if v := counterValue(e, "ctr299"); v != -1 {
+
+	// At the brink: the next allocation is the last one the pool can satisfy.
+	e.allocCnt = registerPoolSize - 1
+	if _, err := e.Run(`\newcounter{last}\newcounter{over}`); err != nil {
+		t.Fatal(err)
+	}
+	if v := counterValue(e, "last"); v != 0 {
+		t.Errorf("last counter in the pool = %d, want 0 (allocated)", v)
+	}
+	if v := counterValue(e, "over"); v != -1 {
 		t.Errorf("over-limit counter = %d, want -1 (no register)", v)
 	}
+	if e.Diagnostics().RegistersExhausted[`\count`] == 0 {
+		t.Error("the refused allocation was not reported (#830)")
+	}
 	// Stepping an unallocated counter is a harmless no-op (must not panic).
-	if _, err := e.Run(`\stepcounter{ctr299}\setcounter{ctr299}{5}`); err != nil {
+	if _, err := e.Run(`\stepcounter{over}\setcounter{over}{5}`); err != nil {
 		t.Fatal(err)
 	}
 }

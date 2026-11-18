@@ -282,6 +282,19 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+	if n := totalCount(d.RegistersOutOfRange); n > 0 {
+		// ⛔ A SEPARATE LINE FROM THE ONE ABOVE, BECAUSE IT IS A SEPARATE FACT.
+		// That one is a pool this engine filled; this is a register number that
+		// cannot exist — \count99999, or a negative index — which TeX refuses with
+		// "Bad register code". Each of these used to be a PANIC: \the\count300 took
+		// the process down until the pools became eTeX's 32768 and the bound moved
+		// into one place (go-tex/engine#788).
+		fmt.Fprintf(w, "gotex: %d register access(es) REFUSED — the index cannot exist in any pool "+
+			"(TeX answers \"Bad register code\"); a read gave 0 and a write was dropped:\n", n)
+		for _, e := range sortedByCount(d.RegistersOutOfRange) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if n := totalCount(d.FilesMissing); n > 0 {
 		// Not a missing command: \input, \bibliography and \putbib all ran and
 		// found nothing to read. Saying so keeps them out of the undefined channel,
