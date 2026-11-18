@@ -292,10 +292,17 @@ type Engine struct {
 	noBase           bool         // when true, getNext does not fall through to the base string
 	// boxLists is the stack of lists being built by buildBoxList, innermost last.
 	// Only \lastskip reads it: TeX's "current list" is the box's when one is open.
-	boxLists     []*[]node
-	negateNextIf int // pending \unless prefixes (e-TeX): reverse the next conditional
-	allocCnt     int // next free \count register handed out by \newcount
-	allocDim     int // next free \dimen register handed out by \newdimen
+	boxLists []*[]node
+	// internalVertical counts the \vbox/\vtop bodies open right now. It is not
+	// bookkeeping for its own sake: buildVBoxList SWAPS e.mvl for the box's list,
+	// so while a \vbox is open "the current list is e.mvl" is true of the BOX,
+	// and nothing else in the engine can tell that from outer vertical mode. A
+	// zero here, with no paragraph and no hbox open, is the only reading of "we
+	// are on the page" — which is what \lastbox has to refuse (lastbox.go).
+	internalVertical int
+	negateNextIf     int // pending \unless prefixes (e-TeX): reverse the next conditional
+	allocCnt         int // next free \count register handed out by \newcount
+	allocDim         int // next free \dimen register handed out by \newdimen
 	// boxMetricDims holds the \dimen registers \height / \depth / \width /
 	// \totalheight are bound to inside \raisebox (see bindBoxMetrics).
 	boxMetricDims map[string]int
