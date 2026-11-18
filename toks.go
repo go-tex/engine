@@ -23,16 +23,24 @@ package engine
 // register may be reassigned in the same expression (\toks@\expandafter{\the\toks@…}).
 func (e *Engine) toksValue(n int) []tok {
 	if n < 0 || n >= len(e.toks) || e.toks[n] == nil {
+		// len() is the fast path, not the legality test: a legal register above the
+		// current length is simply unwritten, and nil is what it holds.
+		// noteBadRegisterIndex carries the bound and returns early for anything
+		// inside the pool, exactly as getCount/getDimen/getSkip rely on it to.
+		e.noteBadRegisterIndex(n, `\toks`)
 		return nil
 	}
 	return append([]tok(nil), e.toks[n]...)
 }
 
-// setToks stores a token list into register n.
+// setToks stores a token list into register n, growing the pool to reach it.
 func (e *Engine) setToks(n int, ts []tok) {
-	if n < 0 || n >= len(e.toks) {
+	grown, ok := growPool(e.toks, n)
+	if !ok {
+		e.noteBadRegisterIndex(n, `\toks`)
 		return
 	}
+	e.toks = grown
 	e.toks[n] = ts
 }
 
@@ -80,9 +88,32 @@ func (e *Engine) loadToksPrims() {
 		e.setToks(n, e.readToksValue())
 	})
 	// \newtoks\name : allocate the next free token register and bind \name to it.
+	//
+	// ⛔⛔ THE BOUND WAS len(e.toks), AND THE POOL WAS A FLAT 256. #844 raised
+	// \count, \dimen, \skip and \box to eTeX's 32768 and grew them on demand;
+	// `toks` was a separate [][]tok allocated in full at registerBaseSize, so the
+	// 247th \newtoks (the allocator starts at 10) was refused — and refused with a
+	// bare `return`: no report, exit 0, and \the on the never-defined name
+	// TYPESET the control sequence instead of its contents. Measured against
+	// tectonic at 7dec596, 250 \newtoks then write and read the 250th:
+	//
+	//	             reference   ours
+	//	\toks 250    ALFA250     \zzt250
+	//	\toks 1      BRAVO1      BRAVO1
+	//	\count 250   4242        4242     ← the control: #844 raised that pool
+	//
+	// ⛔ AND Diagnostics.RegistersExhausted DOCUMENTED a `\toks` key that nothing
+	// ever wrote, so a consumer was told the exhaustion was reported. Documenting
+	// a key the engine cannot emit is worse than documenting none: it answers the
+	// question instead of leaving it open. The key is true now.
+	// go-tex/engine#849.
 	e.prim("newtoks", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" || e.allocToks >= len(e.toks) {
+		if name == "" {
+			return
+		}
+		if e.allocToks >= registerPoolSize {
+			e.noteRegisterExhausted(`\toks`)
 			return
 		}
 		e.define(name, &meaning{kind: mToksRef, code: e.allocToks}, false)
