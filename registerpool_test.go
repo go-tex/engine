@@ -238,8 +238,21 @@ func TestAnUnstoredRegisterReadsTheSameHighAndLow(t *testing.T) {
 			g, ok := e.topskipSpec()
 			return formatGlue(g), ok
 		}},
-		{"namedSkip", func(e *Engine, code int) (string, bool) {
+		// ⛔⛔ THIS ROW WRITES, AND AN EARLIER VERSION ONLY READ — WHICH MADE IT
+		// UNFALSIFIABLE. Reading an unstored register through namedSkip gives the
+		// zero glue, and namedSkip's own fallback for "not a register" is ALSO the
+		// zero glue, so with the bound put back to len(e.skip) both index 200 and
+		// index 4000 answered 0.0pt and the row stayed GREEN under its own break
+		// check. It could never fail for the reason it existed.
+		//
+		// setNamedSkip is where the difference lives: asked with len(), a write to
+		// an unstored high register is DROPPED, so the read back is 0.0pt against
+		// the 5.0pt a low register keeps. A test of a guard has to assert the
+		// difference the guard makes, and refuse a zero difference — zero is what
+		// an instrument that measures nothing returns.
+		{"setNamedSkip then namedSkip", func(e *Engine, code int) (string, bool) {
 			e.eq["abovedisplayskip"] = &meaning{kind: mSkipRef, code: code}
+			e.setNamedSkip("abovedisplayskip", glueSpec{width: 5 * unity})
 			return formatGlue(e.namedSkip("abovedisplayskip")), true
 		}},
 		{"namedInt", func(e *Engine, code int) (string, bool) {
