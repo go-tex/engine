@@ -62,7 +62,7 @@ func TestLeaderPitchComesFromThePositions(t *testing.T) {
 // the last line of the other document.
 func TestLinesComeOutTopDown(t *testing.T) {
 	runs := []pdfruns.Run{{X: 1, Y: 100, Text: "lower"}, {X: 1, Y: 700, Text: "upper"}}
-	got := groupLines(runs, 792, reportOptions{})
+	got, _ := groupLines(runs, 792, reportOptions{})
 	if len(got) != 2 || got[0].Text != "upper" {
 		t.Fatalf("lines = %+v, want the upper one first", got)
 	}
@@ -81,7 +81,7 @@ func TestWordBreaksComeBackFromTheGaps(t *testing.T) {
 		{X: 15, W: 10, Size: 10, Text: "section", Y: 700},
 		{X: 25, W: 5, Size: 10, Text: "1", Y: 700}, // touching: no break
 	}
-	got := groupLines(runs, 792, reportOptions{})
+	got, _ := groupLines(runs, 792, reportOptions{})
 	if len(got) != 1 || got[0].Text != "First section1" {
 		t.Fatalf("line text = %q, want %q", got[0].Text, "First section1")
 	}
@@ -89,7 +89,7 @@ func TestWordBreaksComeBackFromTheGaps(t *testing.T) {
 		t.Errorf("line ends at %v, want 30 (the last run's origin plus its width)", got[0].X1)
 	}
 	// A run of unknown width must say so rather than report a short line.
-	got = groupLines([]pdfruns.Run{{X: 0, Size: 10, Text: "x", Y: 700}}, 792, reportOptions{})
+	got, _ = groupLines([]pdfruns.Run{{X: 0, Size: 10, Text: "x", Y: 700}}, 792, reportOptions{})
 	if !got[0].unknownW {
 		t.Error("a run with no width did not mark the line's end unknown")
 	}
@@ -143,9 +143,64 @@ Quarantine. \par Umbrella.
 // keeps its meaning when the two documents have different page heights.
 func TestAboveFiltersFromTheTop(t *testing.T) {
 	runs := []pdfruns.Run{{X: 1, Y: 700, W: 1, Size: 10, Text: "near the top"}, {X: 1, Y: 100, W: 1, Size: 10, Text: "far down"}}
-	got := groupLines(runs, 792, reportOptions{above: 200})
+	got, hidden := groupLines(runs, 792, reportOptions{above: 200})
 	if len(got) != 1 || got[0].Text != "near the top" {
 		t.Errorf("above=200 kept %+v, want only the line 92pt from the top", got)
+	}
+	if hidden != 1 {
+		t.Errorf("above=200 hid %d lines, want 1 — a filter that does not count what it drops cannot report it", hidden)
+	}
+}
+
+// ⛔⛔ A FILTERED PAGE MUST SAY SO. This is the gate, not a nicety: -grep and
+// -above produce an EXTRACT that looks exactly like a page, and a line that is
+// not shown is a line that cannot contradict the number being published.
+// go-tex/engine#834 was filed on five rows of which one moved 7.87pt and four
+// were "exact"; the running head, absent from the extract, was itself 5.34pt out
+// of place, so the 7.87 was measured from a datum under repair. The unfiltered
+// page showed the head at -0.03 and the issue closed on that reading.
+//
+// The two halves are asserted against each other: an UNFILTERED report of the
+// same document must carry no banner, or the banner would be noise that teaches
+// a reader to skip it.
+func TestAFilteredPageSaysHowMuchItIsHiding(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.pdf")
+	if err := os.WriteFile(a, pdfOf(t, `\documentclass{article}
+\begin{document}
+Quarantine. \par Umbrella. \par Vineyard.
+\end{document}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := run([]string{a}, reportOptions{page: 1, grep: "Umbrella"}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "PAGE FILTRÉE") {
+		t.Errorf("-grep hid lines and said nothing; an extract passed for a page:\n%s", out)
+	}
+	// The COUNTS, not merely the word: how much of the page is missing is what a
+	// reader needs. A banner without them is a shrug.
+	//
+	// ⭐ THREE of FOUR, not of three: the page carries the folio as well as the
+	// three paragraphs, and this assertion was written "2 des 3" before the
+	// output corrected it. The folio is exactly the kind of line a filter hides
+	// and a reader then forgets is there — which is the hazard, demonstrated by
+	// the test for it.
+	if !strings.Contains(out, "3 des 4 lignes") {
+		t.Errorf("the banner does not say how much it hid (want \"3 des 4 lignes\"):\n%s", out)
+	}
+	if !strings.Contains(out, "engine#834") {
+		t.Errorf("the banner does not cite the issue that earned it:\n%s", out)
+	}
+
+	buf.Reset()
+	if err := run([]string{a}, reportOptions{page: 1}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "PAGE FILTRÉE") {
+		t.Errorf("an UNFILTERED report carried the banner; a warning that always fires is one nobody reads:\n%s", buf.String())
 	}
 }
 
