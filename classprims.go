@@ -456,8 +456,13 @@ const LaTeX2eClassLead = `
 % This was first written the other way round, with \addvspace\topsep on \list and
 % nothing on \@trivlist, from measuring a description against tectonic. The
 % measurement put it within 2.9pt and the source names that 2.9pt: \partopsep.
-\def\@trivlist{\@topsepadd\topsep\ifvmode\advance\@topsepadd\partopsep\else\par\fi
-  \addvspace\@topsepadd\begingroup\@listfirsttrue\def\@itemlabel{}}
+% ⭐ The space itself is \gotex@listtopspace (latex.go), which this line used to
+% spell out. \itemize, \enumerate and \description each spelled it out too, and
+% got it wrong — \par first, then \partopsep unconditionally — which cost 1.99pt
+% at each end of every list that follows running text (#685). This copy was the
+% CORRECT one, and having two is what let the other three diverge unnoticed, so
+% there is one now and all four call it.
+\def\@trivlist{\gotex@listtopspace\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
 \def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
 \def\@itemlabel{\textbullet}
