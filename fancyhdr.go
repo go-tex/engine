@@ -112,8 +112,23 @@ func (e *Engine) scanFancyPos() int {
 // and returns the resulting line as a natural-width hbox, so a header/footer field
 // keeps its fonts, colours and \thepage. An empty field yields an empty hbox.
 func (e *Engine) typesetFieldToHbox(toks []tok) *boxNode {
+	return hpackSP(e.typesetFieldToList(toks), packNatural, 0)
+}
+
+// typesetFieldToList is typesetFieldToHbox without the packing: it returns the
+// horizontal list itself.
+//
+// ⛔ THE DIFFERENCE IS WHETHER AN \hfil IN THE FIELD CAN STRETCH. Packing here
+// and handing back a box means any glue inside it has already been set at the
+// box's natural width, and a later hpack to \hsize then slides that rigid box to
+// the left. \@oddhead is `{\slshape\rightmark}\hfil\thepage` — one field with the
+// \hfil INSIDE it — so a caller that needs LaTeX's \hb@xt@\textwidth{\@thehead}
+// (ltoutput.dtx:3363) has to pack the LIST. fancyhdr's three fields are a
+// different shape: each is packed naturally and the \hfil's sit BETWEEN them
+// (fancyLine), which is why that path was right and this one was not.
+func (e *Engine) typesetFieldToList(toks []tok) []node {
 	if len(toks) == 0 {
-		return hpackSP(nil, packNatural, 0)
+		return nil
 	}
 	savedMvl, savedPar, savedIn, savedPD := e.mvl, e.parList, e.inPar, e.prevDepth
 	savedBuilding, savedFont, savedHsize := e.buildingFootnote, e.curFont, e.hsize
@@ -131,11 +146,11 @@ func (e *Engine) typesetFieldToHbox(toks []tok) *boxNode {
 			break
 		}
 	}
-	line := hpackSP(e.parList, packNatural, 0)
+	list := e.parList
 
 	e.mvl, e.parList, e.inPar, e.prevDepth = savedMvl, savedPar, savedIn, savedPD
 	e.buildingFootnote, e.curFont, e.hsize = savedBuilding, savedFont, savedHsize
-	return line
+	return list
 }
 
 // fancyLine packs the three fields (left/centre/right) of a header or footer into an
@@ -150,10 +165,58 @@ func (e *Engine) fancyLine(l, c, r int) *boxNode {
 // fancyHeader / fancyFooter build the running header / footer for a page, or nil
 // when all three of the respective fields are empty.
 func (e *Engine) fancyHeader() *boxNode {
+	var line *boxNode
 	if len(e.fancyHF[fldHL])+len(e.fancyHF[fldHC])+len(e.fancyHF[fldHR]) == 0 {
-		return e.latexHead() // no fancyhdr field: LaTeX's own \@oddhead, if any
+		line = e.latexHead() // no fancyhdr field: LaTeX's own \@oddhead, if any
+	} else {
+		line = e.fancyLine(fldHL, fldHC, fldHR)
 	}
-	return e.fancyLine(fldHL, fldHC, fldHR)
+	if line == nil {
+		return nil
+	}
+	return e.headToHeadheight(line)
+}
+
+// headToHeadheight is the \vbox the running head actually travels in.
+// ltoutput.dtx:3350-3369, inside \@outputpage:
+//
+//	\setbox\@tempboxa \vbox to\headheight {%
+//	  \vfil
+//	  … \hb@xt@ \textwidth {\@thehead }%
+//	}
+//	\dp \@tempboxa \z@
+//	\box \@tempboxa
+//	\vskip \headsep
+//
+// ⛔⛔ THE \vfil IS WHAT FIXES THE BASELINE. A \vbox to h measures its height to
+// the baseline of its LAST box, so with the glue above it the head's baseline
+// sits exactly \headheight below the band's top WHATEVER the head contains. This
+// engine emitted the line at its NATURAL height, so the baseline sat at the
+// height of the tallest glyph in it instead — and therefore MOVED with the text.
+//
+// Measured against tectonic, same band top (87.90pt) in both engines, article
+// 10pt \pagestyle{headings}, head baseline from the top of the page:
+//
+//	head text     reference      ours        deficit   glyph height
+//	1 ALFA 1      99.90          95.05       4.85      cap   ≈ .717em
+//	1 (QJPY) 1    99.90          95.39       4.51      paren ≈ .75em
+//	1             99.90          94.55       5.35      digit ≈ .667em
+//
+// The reference is 99.90 in all three — identical to the hundredth of a point —
+// and every one of our deficits is \headheight minus the height of the head's own
+// glyphs. That is the whole defect, and it is why the witness varies the head's
+// CONTENT rather than asserting one number. go-tex/engine#822.
+//
+// ⛔ THE DEPTH IS ZEROED, as \dp\@tempboxa\z@ does, because \headsep is measured
+// from the head's BASELINE and not from under its descenders. Without it a head
+// containing a `y` would push the whole text block down by that descender.
+func (e *Engine) headToHeadheight(line *boxNode) *boxNode {
+	b := vpackSP(
+		[]node{glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, line},
+		packTo, e.classDimen("headheight", 12*unity),
+	)
+	b.depth = 0
+	return b
 }
 
 // latexHead is the running head LaTeX's OWN page styles declare, as opposed to
@@ -178,7 +241,14 @@ func (e *Engine) latexHead() *boxNode {
 	if m == nil || m.kind != mMacro || len(m.body) == 0 {
 		return nil
 	}
-	return hpackSP([]node{e.typesetFieldToHbox(m.body)}, packTo, e.hsize)
+	// ⛔ THE LIST, NOT A BOX. LaTeX sets the head as \hb@xt@\textwidth{\@thehead}
+	// (ltoutput.dtx:3363), so the \hfil that \@oddhead itself contains —
+	// `{\slshape\rightmark}\hfil\thepage` — is what pushes the folio to the right
+	// margin. Packing the field into its own natural-width box first set that
+	// \hfil to zero and left the whole head huddled at the left: the running head
+	// read "1 ALFA1", folio abutting the title, ending at x=180.35pt on a page
+	// where the reference runs to 477.48pt.
+	return hpackSP(e.typesetFieldToList(m.body), packTo, e.hsize)
 }
 
 // hasLatexHead reports whether \@oddhead would draw something, WITHOUT typesetting
