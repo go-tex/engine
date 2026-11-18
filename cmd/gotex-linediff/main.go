@@ -78,7 +78,7 @@ type reportOptions struct {
 func run(paths []string, opt reportOptions, w io.Writer) error {
 	var sb strings.Builder
 	for i, p := range paths {
-		lines, pageH, err := linesOf(p, opt)
+		lines, hidden, pageH, err := linesOf(p, opt)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
@@ -86,12 +86,41 @@ func run(paths []string, opt reportOptions, w io.Writer) error {
 			sb.WriteString("\n")
 		}
 		fmt.Fprintf(&sb, "### %s  page %d  (height %s pt, %d lines)\n", p, opt.page, ftoa(pageH), len(lines))
+		sb.WriteString(filteredBanner(hidden, len(lines)))
 		for _, l := range lines {
 			sb.WriteString(l.String() + "\n")
 		}
 	}
 	_, err := io.WriteString(w, sb.String())
 	return err
+}
+
+// filteredBanner is this command's refusal to let an EXTRACT pass for a page.
+//
+// ⛔⛔ -grep and -above hide lines, and a hidden line is a line that cannot
+// contradict the number about to be published. go-tex/engine#834 was filed on a
+// table of five rows in which one row moved by 7.87pt and four were "exact": the
+// running head, which the extract did not show, was itself 5.34pt out of place,
+// and the 7.87 was a distance measured from a datum that was under repair. The
+// unfiltered page said so at once — its head row read -0.03 — and the issue was
+// closed on that reading.
+//
+// So a filtered report SAYS it is filtered, every time, and says how much of the
+// page it is not showing. This is the gate for the fourth occurrence of
+// "proxy-measure-lets-two-errors-cancel"; a rule that lives only in a note is
+// one a reader has to remember at the moment they think "let us measure", which
+// is exactly when they do not.
+func filteredBanner(hidden, shown int) string {
+	if hidden == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"⛔ PAGE FILTRÉE: %d des %d lignes de cette page sont CACHÉES (-grep / -above).\n"+
+			"   Une ligne cachée ne peut pas contredire le chiffre que vous allez citer —\n"+
+			"   l'en-tête courant et le folio en font partie, et un décalage UNIFORME de\n"+
+			"   toute la page s'y lit comme l'anomalie d'UNE SEULE ligne (engine#834).\n"+
+			"   Relancer sans filtre avant de publier un écart.\n",
+		hidden, hidden+shown)
 }
 
 // A Line groups the runs that share a baseline, in the order they were drawn.
@@ -128,31 +157,35 @@ func trunc(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// linesOf reads one page of one PDF and groups its runs into lines.
-func linesOf(path string, opt reportOptions) ([]Line, float64, error) {
+// linesOf reads one page of one PDF and groups its runs into lines. The second
+// result is how many lines of that page the options HID (see filteredBanner).
+func linesOf(path string, opt reportOptions) ([]Line, int, float64, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	doc, err := pdfruns.Open(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	if opt.page < 1 || opt.page > doc.PageCount() {
-		return nil, 0, fmt.Errorf("page %d of %d", opt.page, doc.PageCount())
+		return nil, 0, 0, fmt.Errorf("page %d of %d", opt.page, doc.PageCount())
 	}
 	runs, err := pdfruns.PageRuns(doc, opt.page) // the reader numbers pages from 1
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	h := pdfruns.PageHeight(doc, opt.page)
-	return groupLines(runs, h, opt), h, nil
+	lines, hidden := groupLines(runs, h, opt)
+	return lines, hidden, h, nil
 }
 
 // groupLines gathers runs that share a baseline. Runs are grouped by their y
 // rounded to a hundredth of a point: two glyphs a renderer puts on one line can
 // differ in the last digit, and two real lines never differ by so little.
-func groupLines(runs []pdfruns.Run, pageH float64, opt reportOptions) []Line {
+// The second result is how many lines the options dropped, which the report has
+// to say out loud: see filteredBanner.
+func groupLines(runs []pdfruns.Run, pageH float64, opt reportOptions) ([]Line, int) {
 	byY := map[int][]pdfruns.Run{}
 	for _, r := range runs {
 		byY[int(r.Y*100+0.5)] = append(byY[int(r.Y*100+0.5)], r)
@@ -164,19 +197,22 @@ func groupLines(runs []pdfruns.Run, pageH float64, opt reportOptions) []Line {
 	// Descending y is top-down on the page.
 	sort.Sort(sort.Reverse(sort.IntSlice(keys)))
 	var out []Line
+	hidden := 0
 	for _, k := range keys {
 		rs := byY[k]
 		sort.SliceStable(rs, func(i, j int) bool { return rs[i].X < rs[j].X })
 		l := lineOf(rs, pageH)
 		if opt.above > 0 && l.Y > opt.above {
+			hidden++
 			continue
 		}
 		if opt.grep != "" && !strings.Contains(l.Text, opt.grep) {
+			hidden++
 			continue
 		}
 		out = append(out, l)
 	}
-	return out
+	return out, hidden
 }
 
 func lineOf(rs []pdfruns.Run, pageH float64) Line {
