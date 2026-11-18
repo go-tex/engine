@@ -205,7 +205,7 @@ func (e *Engine) normalParagraph() {
 			e.setCount(m.code, 0, false)
 		}
 	}
-	if e.hangIndentReg >= 0 && e.hangIndentReg < len(e.dimen) && e.dimen[e.hangIndentReg] != 0 {
+	if e.hangIndentReg >= 0 && e.getDimen(e.hangIndentReg) != 0 {
 		e.setDimen(e.hangIndentReg, 0, false)
 	}
 	if e.namedInt("hangafter") != 1 {
@@ -299,10 +299,10 @@ func (e *Engine) paragraphShape(lineWidth float64) Measure {
 	if len(e.parShape) > 0 {
 		return ParShape(e.parShape)
 	}
-	if e.hangIndentReg < 0 || e.hangIndentReg >= len(e.dimen) {
+	if e.hangIndentReg < 0 {
 		return Uniform(lineWidth)
 	}
-	indent := spToPt(e.dimen[e.hangIndentReg])
+	indent := spToPt(e.getDimen(e.hangIndentReg))
 	if indent == 0 {
 		// tex.web:16689: "if hang_indent=0, the value of hang_after is
 		// irrelevant" — and a uniform measure is cheaper to consult.
@@ -490,8 +490,16 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 // AND \parfillskip and settled a third of the way across instead of halfway.
 func (e *Engine) withParFill(list []node) []node {
 	fill := glueSpec{stretch: unity, stretchOrder: 1}
-	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
-		fill = e.skip[m.code]
+	// ⛔ AN EARLIER VERSION OF THIS COMMENT ARGUED THAT len(e.skip) WAS RIGHT HERE,
+	// because the fallback above is LaTeX's default rather than the register's zero.
+	// That reasoning was wrong, and the way it was wrong is worth keeping: len asks
+	// "stored yet", so it would have answered the SAME unstored register two ways —
+	// a low one reads 0pt through the index, a high one falls back to 0pt plus 1fil.
+	// Whatever the right default is, it cannot depend on which register number the
+	// allocator happened to hand out. registerPoolSize asks "legal", consistently,
+	// and the fallback is left for a name that is not a skip register at all.
+	if m := e.eq["parfillskip"]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < registerPoolSize {
+		fill = e.getSkip(m.code)
 	}
 	out := append([]node{}, list...)
 	// ⛔⛔ AN INFINITE PENALTY GOES IN FRONT OF \parfillskip, AND A TRAILING GLUE IS

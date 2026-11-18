@@ -103,12 +103,18 @@ type Engine struct {
 	coveringDepth int
 	curSrcLine    int // 1-based line of the current token (0 = unknown)
 	curSrcCol     int // 0-based column of the current token
-	count         [256]int
-	dimen         [256]int      // \dimen registers, in scaled points (1pt = 65536sp)
-	skip          [256]glueSpec // \skip (glue) registers
-	box           [256]*boxNode // \box registers (nil = void)
-	mvl           []node        // main vertical list (top-level contributions)
-	curFont       fontFace      // current font for measuring/rendering characters
+	// The four register pools. ⛔ THEIR LENGTH IS NOT THE POOL SIZE — it is how
+	// much of the pool has been reached so far, grown on write by growPool and
+	// capped at registerPoolSize (registers.go). Anything asking "is this index
+	// legal?" must ask registerPoolSize; len() answers "is it stored yet?", and
+	// a guard written against len() refuses every register a document has not
+	// used, which is most of them.
+	count   []int      // \count registers
+	dimen   []int      // \dimen registers, in scaled points (1pt = 65536sp)
+	skip    []glueSpec // \skip (glue) registers
+	box     []*boxNode // \box registers (nil = void)
+	mvl     []node     // main vertical list (top-level contributions)
+	curFont fontFace   // current font for measuring/rendering characters
 	// fontDimens holds \fontdimen<n><font> values a document ASSIGNED, per face.
 	// TeX derives the interword glue from three of them — 2 nominal, 3 stretch,
 	// 4 shrink (tex.web §433, and the comment block in IEEEtran.cls l.1037-1039
@@ -399,6 +405,12 @@ type Engine struct {
 	// full, by kind (\count, \dimen, \skip, \box, \toks). See
 	// noteRegisterExhausted and Diagnostics.RegistersExhausted (#788).
 	regExhausted map[string]int
+
+	// regBadIndex tallies register accesses whose index cannot exist in any pool
+	// (negative, or at least registerPoolSize), by kind. A merely unwritten
+	// register is NOT one of these. See noteBadRegisterIndex and
+	// Diagnostics.RegistersOutOfRange.
+	regBadIndex map[string]int
 
 	// alignAbandoned tallies alignments dropped whole because the mandatory brace
 	// was not found, keyed by the primitive. See scanLeftBrace.
@@ -740,6 +752,12 @@ type saveItem struct {
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
 	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10, allocToks: 10, toks: make([][]tok, 256)} // allocators start at 10
+	// The pools start at TeX82's width and grow from there (registers.go), so a
+	// document that never names a high register costs what it always did.
+	e.count = make([]int, registerBaseSize)
+	e.dimen = make([]int, registerBaseSize)
+	e.skip = make([]glueSpec, registerBaseSize)
+	e.box = make([]*boxNode, registerBaseSize)
 	e.lccode = map[rune]int{}
 	e.uccode = map[rune]int{}
 	e.hsize = ptToSP(6.5 * 7227.0 / 100.0) // plain TeX \hsize = 6.5in
@@ -1129,19 +1147,19 @@ func (e *Engine) rawAt(i int) (rune, int) {
 // escapechar is the character TeX prints in front of a control-sequence name —
 // 92 ("\") unless a package changes it. Outside 0..255 it prints nothing.
 func (e *Engine) escapechar() int {
-	if e.escapeReg < 0 || e.escapeReg >= len(e.count) {
+	if e.escapeReg < 0 || e.escapeReg >= registerPoolSize {
 		return '\\'
 	}
-	return e.count[e.escapeReg]
+	return e.getCount(e.escapeReg)
 }
 
 // endlinechar is the character TeX appends to every input line — 13 (^^M) unless
 // a package changes it. A value outside 0..255 means "append nothing".
 func (e *Engine) endlinechar() int {
-	if e.endlineReg < 0 || e.endlineReg >= len(e.count) {
+	if e.endlineReg < 0 || e.endlineReg >= registerPoolSize {
 		return '\r'
 	}
-	return e.count[e.endlineReg]
+	return e.getCount(e.endlineReg)
 }
 
 // mouthChar returns the character the mouth sees at index i, the index just past
@@ -1263,7 +1281,16 @@ func (e *Engine) forgetSaved(kind, idx int, name string) {
 	}
 }
 
+// setCount assigns \count<i>. ⛔ THE GUARD IS HERE AND NOWHERE ELSE: it used to
+// live at each caller as `i >= 0 && i < 256`, which is how \the\count300 came to
+// have no guard at all (registers.go).
 func (e *Engine) setCount(i, v int, global bool) {
+	grown, ok := growPool(e.count, i)
+	if !ok {
+		e.noteBadRegisterIndex(i, `\count`)
+		return
+	}
+	e.count = grown
 	if global {
 		e.forgetSaved(1, i, "")
 	} else if len(e.groups) > 0 {
@@ -1273,9 +1300,12 @@ func (e *Engine) setCount(i, v int, global bool) {
 }
 
 func (e *Engine) setDimen(i, v int, global bool) {
-	if i < 0 || i >= 256 {
+	grown, ok := growPool(e.dimen, i)
+	if !ok {
+		e.noteBadRegisterIndex(i, `\dimen`)
 		return
 	}
+	e.dimen = grown
 	if global {
 		e.forgetSaved(3, i, "")
 	} else if len(e.groups) > 0 {
@@ -1304,9 +1334,12 @@ func (e *Engine) setDimen(i, v int, global bool) {
 // every hanging indent is ignored again. droppedshape_test.go guards it.
 
 func (e *Engine) setSkip(i int, v glueSpec, global bool) {
-	if i < 0 || i >= 256 {
+	grown, ok := growPool(e.skip, i)
+	if !ok {
+		e.noteBadRegisterIndex(i, `\skip`)
 		return
 	}
+	e.skip = grown
 	if global {
 		e.forgetSaved(4, i, "")
 	} else if len(e.groups) > 0 {
@@ -2646,6 +2679,22 @@ type Diagnostics struct {
 	// spends 86 quickly, so this is reached by real documents and not only by a
 	// probe.
 	RegistersExhausted map[string]int
+
+	// RegistersOutOfRange counts register accesses whose index cannot exist in
+	// any pool — negative, or at least registerPoolSize (eTeX's 32768) — keyed
+	// by kind (`\count`, `\dimen`, `\skip`, `\box`).
+	//
+	// ⛔ EACH OF THESE USED TO BE A PANIC, NOT A TALLY. Measured at 39da8fe,
+	// `\the\count300` took the process down with "index out of range [300] with
+	// length 256": the bound lived as a literal at the write sites and was simply
+	// absent from the reads. 300 is now an ordinary register, so what remains
+	// here is a genuinely impossible index, which TeX answers with "Bad register
+	// code" and refuses outright.
+	//
+	// A register inside the pool that nothing has written is not counted: it
+	// holds its zero value legitimately, and counting it would report every
+	// `\the\count` of a fresh register.
+	RegistersOutOfRange map[string]int
 }
 
 // Diagnostics returns the compile's Diagnostics (see the type). Internal markers
@@ -2708,6 +2757,13 @@ func (e *Engine) Diagnostics() Diagnostics {
 			regExhausted[k] = v
 		}
 	}
+	var regBadIndex map[string]int
+	if len(e.regBadIndex) > 0 {
+		regBadIndex = make(map[string]int, len(e.regBadIndex))
+		for k, v := range e.regBadIndex {
+			regBadIndex[k] = v
+		}
+	}
 	var alignAbandoned map[string]int
 	if len(e.alignAbandoned) > 0 {
 		alignAbandoned = make(map[string]int, len(e.alignAbandoned))
@@ -2741,7 +2797,8 @@ func (e *Engine) Diagnostics() Diagnostics {
 		NoProgressPeak:  max(e.noProgPeak, e.noProgSteps),
 		KerningIsAFloor: e.kerningIsAFloor,
 
-		RegistersExhausted: regExhausted,
+		RegistersExhausted:  regExhausted,
+		RegistersOutOfRange: regBadIndex,
 	}
 }
 
@@ -2992,10 +3049,10 @@ func (e *Engine) scanInt() int {
 					return sign * m.code
 				}
 				if m.kind == mCountRef {
-					return sign * e.count[m.code]
+					return sign * e.getCount(m.code)
 				}
 				if m.kind == mPrim && m.name == "count" {
-					return sign * e.count[e.scanInt()]
+					return sign * e.getCount(e.scanInt())
 				}
 				// TeX coerces an internal dimension (or glue) to an integer: its
 				// value in scaled points. \number\pgf@x and \ifnum\wd0>0 both
@@ -3272,14 +3329,14 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 		if m := e.eq[t.cs]; m != nil {
 			switch {
 			case m.kind == mDimenRef:
-				return e.dimen[m.code], 0
+				return e.getDimen(m.code), 0
 			// A skip register / LaTeX length used where a rigid <dimen> is wanted
 			// coerces to its natural width component (TeX's glue→dimen coercion),
 			// so \parbox{\len}, \framebox[\len] and \setlength{\x}{\len} all work.
 			case m.kind == mSkipRef:
-				return e.skip[m.code].width, 0
+				return e.getSkip(m.code).width, 0
 			case m.kind == mPrim && m.name == "skip":
-				return e.skip[e.scanInt()].width, 0
+				return e.getSkip(e.scanInt()).width, 0
 			case m.kind == mPrim && m.name == "dimexpr":
 				return e.scanExpr(true), 0
 			case m.kind == mPrim && m.name == "numexpr":
@@ -3287,7 +3344,7 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				// points, matching \dimexpr <number>sp.
 				return e.scanExpr(false), 0
 			case m.kind == mPrim && m.name == "dimen":
-				return e.dimen[e.scanInt()], 0
+				return e.getDimen(e.scanInt()), 0
 			case m.kind == mPrim && isFontCharDim(m.name):
 				return e.fontCharDim(m.name), 0
 			case m.kind == mPrim && m.name == "wd":
@@ -3634,9 +3691,9 @@ func (e *Engine) scanGlue() glueSpec {
 			if m := e.eq[t.cs]; m != nil {
 				switch {
 				case m.kind == mSkipRef:
-					return e.skip[m.code]
+					return e.getSkip(m.code)
 				case m.kind == mPrim && m.name == "skip":
-					return e.skip[e.scanInt()]
+					return e.getSkip(e.scanInt())
 				}
 			}
 		}
@@ -3673,13 +3730,13 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 		if m := e.eq[t.cs]; m != nil {
 			switch {
 			case m.kind == mDimenRef:
-				return e.dimen[m.code], true
+				return e.getDimen(m.code), true
 			case m.kind == mSkipRef:
-				return e.skip[m.code].width, true
+				return e.getSkip(m.code).width, true
 			case m.kind == mPrim && m.name == "dimen":
-				return e.dimen[e.scanInt()], true
+				return e.getDimen(e.scanInt()), true
 			case m.kind == mPrim && m.name == "skip":
-				return e.skip[e.scanInt()].width, true
+				return e.getSkip(e.scanInt()).width, true
 			case m.kind == mPrim && m.name == "wd":
 				return e.boxDim('w'), true
 			case m.kind == mPrim && m.name == "ht":

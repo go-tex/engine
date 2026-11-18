@@ -24,8 +24,10 @@ package engine
 // is not a skip register — undefined, or bound to something else — reads back as
 // the zero glue, so a caller gets a harmless 0pt rather than a wrong value.
 func (e *Engine) namedSkip(name string) glueSpec {
-	if m := e.eq[name]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
-		return e.skip[m.code]
+	// registerPoolSize, not len(e.skip): see topskipSpec. len asks "stored yet",
+	// which answers the same unstored register two ways depending on its index.
+	if m := e.eq[name]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < registerPoolSize {
+		return e.getSkip(m.code)
 	}
 	return glueSpec{}
 }
@@ -35,7 +37,7 @@ func (e *Engine) namedSkip(name string) glueSpec {
 // not have been loaded (the engine runs plain-TeX documents too), and a caller
 // keeping a register in step must not care.
 func (e *Engine) setNamedSkip(name string, g glueSpec) {
-	if m := e.eq[name]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < len(e.skip) {
+	if m := e.eq[name]; m != nil && m.kind == mSkipRef && m.code >= 0 && m.code < registerPoolSize {
 		e.setSkip(m.code, g, true)
 	}
 }

@@ -89,10 +89,10 @@ func (e *Engine) loadTeXParams() {
 	// every assignment to it look like a dropped hanging indent.
 	e.hangIndentReg = -1
 	for name, def := range texIntParams {
-		if e.eq[name] != nil || e.allocCnt >= 256 {
+		if e.eq[name] != nil || e.allocCnt >= registerPoolSize {
 			continue
 		}
-		e.count[e.allocCnt] = def
+		e.storeCount(e.allocCnt, def)
 		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, true)
 		e.allocCnt++
 	}
@@ -120,7 +120,7 @@ func (e *Engine) loadTeXParams() {
 	// to 104 once a document declares its own. The census then reports nothing
 	// for every document for ever.
 	for _, name := range texDimenParams {
-		if e.eq[name] != nil || e.allocDim >= 256 {
+		if e.eq[name] != nil || e.allocDim >= registerPoolSize {
 			continue
 		}
 		// \pagegoal is \maxdimen while no page is being built — TeX's value for an
@@ -132,7 +132,7 @@ func (e *Engine) loadTeXParams() {
 		// enter a \vsplit-to-fit \loop that never terminates — 142841 near-empty
 		// pages. Initialise it to \maxdimen so such code sees a full, empty page.
 		if name == "pagegoal" {
-			e.dimen[e.allocDim] = maxDimenSP
+			e.storeDimen(e.allocDim, maxDimenSP)
 		}
 		// ⛔⛔ \splitmaxdepth AND \boxmaxdepth ARE \maxdimen, NOT ZERO. ltplain.dtx
 		// sets both on consecutive lines, and LaTeX inherits them:
@@ -157,13 +157,13 @@ func (e *Engine) loadTeXParams() {
 		// implements vpack's depth cap — the day that lands, a default of 0 would clamp
 		// every \vbox to depth zero and move the excess into its height, silently.
 		if name == "splitmaxdepth" || name == "boxmaxdepth" {
-			e.dimen[e.allocDim] = maxDimenSP
+			e.storeDimen(e.allocDim, maxDimenSP)
 		}
 		e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, true)
 		e.allocDim++
 	}
 	for _, name := range texGlueParams {
-		if e.eq[name] != nil || e.allocSkp >= 256 {
+		if e.eq[name] != nil || e.allocSkp >= registerPoolSize {
 			continue
 		}
 		// \parfillskip is the one of these with a non-zero value in every format:
@@ -173,7 +173,7 @@ func (e *Engine) loadTeXParams() {
 		// exactly how it stood while the paragraph builder had the value written
 		// into it and never read the register at all.
 		if name == "parfillskip" {
-			e.skip[e.allocSkp] = glueSpec{stretch: unity, stretchOrder: 1}
+			e.storeSkip(e.allocSkp, glueSpec{stretch: unity, stretchOrder: 1})
 		}
 		// \topskip is the second of these with a non-zero value in every format:
 		// 10pt in plain.tex and in size10.clo, and it sits above the FIRST box of
@@ -187,7 +187,7 @@ func (e *Engine) loadTeXParams() {
 		// rather than a guard, and reading a register holding 0 as "absent" would
 		// have overridden a document's deliberate \topskip=0pt.
 		if name == "topskip" {
-			e.skip[e.allocSkp] = glueSpec{width: 10 * unity}
+			e.storeSkip(e.allocSkp, glueSpec{width: 10 * unity})
 		}
 		// \splittopskip is the third, and it is 10pt for the same reason and in the
 		// same place: ltplain.dtx:920-921 sets \topskip=10pt and \splittopskip=10pt
@@ -203,7 +203,7 @@ func (e *Engine) loadTeXParams() {
 		// pushes the SAME column back DOWN by an unrelated amount. Two errors of
 		// opposite sign on one measurement.
 		if name == "splittopskip" {
-			e.skip[e.allocSkp] = glueSpec{width: 10 * unity}
+			e.storeSkip(e.allocSkp, glueSpec{width: 10 * unity})
 		}
 		e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true)
 		e.allocSkp++
