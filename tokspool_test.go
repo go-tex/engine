@@ -147,3 +147,68 @@ func TestAnUnwrittenTokenRegisterIsNotOutOfRange(t *testing.T) {
 			e.Diagnostics().RegistersOutOfRange)
 	}
 }
+
+// ⛔⛔ THE VALUE ON BOTH SIDES OF toksValue's GUARD, not just the tally.
+//
+// `mutsweep -files toks.go -- go test .` reported that guard as "caught by
+// PANIC": deleting it reddens the suite because the code after it indexes out of
+// range, and no assertion anywhere said what the guard is FOR. The tool's own
+// words for why that is not a test — "A PANIC red is luck... The next change
+// that enlarges the table or adds a check turns it into a survivor, silently."
+//
+// The row above asserts the DIAGNOSTIC; this one asserts the VALUE, which is
+// what a document sees. Both sides: an index no pool can hold, and one inside
+// the pool that nothing has written.
+func TestAnOutOfRangeTokenRegisterReadsEmptyRatherThanCrashing(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"past the pool", fmt.Sprintf(`\message{[\the\toks%d]}`, registerPoolSize+4)},
+		{"unwritten, inside the pool", `\message{[\the\toks9000]}`},
+		{"negative", `\message{[\the\toks-3]}`},
+	} {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(tc.src); err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if got := e.Diagnostics().Messages; !strings.Contains(got, "[]") {
+			t.Errorf("%s: read %q, want an EMPTY register. The guard that returns "+
+				"nil here was held only by the panic that follows its deletion.",
+				tc.name, got)
+		}
+	}
+}
+
+// \newtoks with no control sequence after it allocates nothing and consumes
+// nothing it should not.
+//
+// ⭐ `mutsweep` reported this guard as SURVIVED — `name == ""` could be deleted
+// with the whole suite still green, so nothing held it. A survivor is not yet a
+// defect, as the tool says, but an unheld guard is one change away from being
+// one: without it an empty name would be \define'd and the next \newtoks would
+// take the register after it.
+func TestNewtoksWithoutANameAllocatesNothing(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	before := e.allocToks
+	if _, err := e.Run(`\newtoks 7 \newtoks\zzafter`); err != nil {
+		t.Fatal(err)
+	}
+	if e.eq[""] != nil {
+		t.Error("\\newtoks defined the EMPTY name as a register")
+	}
+	m := e.eq["zzafter"]
+	if m == nil || m.kind != mToksRef {
+		t.Fatalf("\\zzafter is not a token register: %+v", m)
+	}
+	if m.code != before {
+		t.Errorf("\\zzafter took register %d, want %d — the nameless \\newtoks "+
+			"consumed an allocation", m.code, before)
+	}
+}
