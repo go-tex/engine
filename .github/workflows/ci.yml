@@ -1,5 +1,40 @@
 name: ci
-on: [push, pull_request]
+# ⛔⛔ ONE RUN PER COMMIT. `on: [push, pull_request]` fired BOTH events for every
+# push to a branch with an open pull request, so every commit ran this whole
+# matrix TWICE and queued TWO macos-latest jobs against the same scarce pool.
+#
+# MEASURED, two independent occurrences on 2026-11-17 (#828 and #827):
+#
+#   job "test + conformance (macos-latest)"   runner_name=""   steps=0
+#   #828 push  created 20:35:52  started 20:35:52  completed 20:50:53  = 15m01s
+#   #827 pr    created 20:21:09  started 20:21:09  completed 20:36:10  = 15m01s
+#
+# `started_at` EQUAL to `created_at`, no runner ever assigned, zero steps, and
+# both killed at the same 15m01s: that is a QUEUE limit, not a flake and not a
+# test. It is also not a concurrency group (this file had none) and not a job
+# timeout (none is set here, and the default is 360m).
+#
+# ⛔ AND IT READS AS A DEFECT IN THE DIFF. A cancelled job makes the RUN
+# `failure` while containing nothing red — a job with zero steps has no red step
+# to find — so the pull request reports FAIL and a reader audits a change that
+# was never implicated. Worse, WHICH event survived was pure queue luck: #824
+# was green on push and red on pull_request, #828 the exact mirror, same commit
+# both times. A verdict that depends on which event you read is not about the
+# code.
+#
+# So branch pushes are left to the `pull_request` event, which is the one
+# `prwait` and `ghmerge` judge. This halves the demand for every runner, not
+# only macos.
+#
+# ⚠ WHAT IS GIVEN UP, NAMED: a branch with NO open pull request is no longer
+# tested on push. That is deliberate — nothing reads those runs; a branch is
+# judged when it asks to be merged — but it does mean "I pushed and CI was
+# green" stops being available before opening the pull request.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
 permissions: { contents: read }
 jobs:
   test:
