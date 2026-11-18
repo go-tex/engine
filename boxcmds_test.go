@@ -327,23 +327,40 @@ func TestNewsaveboxExhausted(t *testing.T) {
 	e := New()
 	e.LoadLaTeX()
 	e.SetFont(spMock{})
+	// ⭐ FIRST, THE CONTROL: 300 boxes is past TeX82's 256 and well inside eTeX's
+	// pool, so every one must get a register. Without it the exhaustion rows
+	// below pass identically whether the pool is 256 or 32768.
+	base := e.allocBox // LoadLaTeX has already taken a few
 	var src string
-	// allocBox starts at 10; 246 allocations exhaust registers 10..255.
-	for i := 0; i < 246; i++ {
+	for i := 0; i < 300; i++ {
 		src += `\newsavebox{\z` + string(rune('a'+i%26)) + string(rune('a'+(i/26)%26)) + string(rune('a'+i/676)) + `}`
 	}
 	if _, err := e.Run(src); err != nil {
 		t.Fatal(err)
 	}
-	if e.allocBox != 256 {
-		t.Fatalf("allocBox = %d, want 256 (registers exhausted)", e.allocBox)
+	if e.allocBox != base+300 {
+		t.Fatalf("allocBox = %d after 300 \\newsavebox, want %d — the pool is %d", e.allocBox, base+300, registerPoolSize)
+	}
+
+	// ⛔ THEN THE BRINK, SET RATHER THAN REACHED. This test used to allocate 246
+	// boxes and assert allocBox == 256, which asserted the POOL SIZE and not the
+	// behaviour: raising the pool reddened it while nothing about \newsavebox
+	// changed. Driving the allocator to registerPoolSize-1 asks the real question
+	// — "does the allocation after the last one refuse quietly?" — at whatever
+	// the pool happens to be.
+	e.allocBox = registerPoolSize - 1
+	if _, err := e.Run(`\newsavebox{\lastone}`); err != nil {
+		t.Fatal(err)
+	}
+	if e.allocBox != registerPoolSize {
+		t.Fatalf("allocBox = %d, want %d (registers exhausted)", e.allocBox, registerPoolSize)
 	}
 	// One more allocation must not advance the counter or panic.
 	if _, err := e.Run(`\newsavebox{\overflow}`); err != nil {
 		t.Fatal(err)
 	}
-	if e.allocBox != 256 {
-		t.Errorf("allocBox = %d after overflow, want 256", e.allocBox)
+	if e.allocBox != registerPoolSize {
+		t.Errorf("allocBox = %d after overflow, want %d", e.allocBox, registerPoolSize)
 	}
 	if m := e.eq["overflow"]; m != nil && m.kind == mBoxRef {
 		t.Error("\\overflow was allocated a register despite exhaustion")

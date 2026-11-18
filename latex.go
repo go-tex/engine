@@ -290,10 +290,34 @@ const MiniLaTeXKernel = `
 \newcount\c@itemdepth
 \def\@alph#1{\ifcase#1\or a\or b\or c\or d\or e\or f\or g\or h\or i\or j\or k\or l\or m\or n\or o\or p\or q\or r\or s\or t\or u\or v\or w\or x\or y\or z\fi}
 \def\@Alph#1{\ifcase#1\or A\or B\or C\or D\or E\or F\or G\or H\or I\or J\or K\or L\or M\or N\or O\or P\or Q\or R\or S\or T\or U\or V\or W\or X\or Y\or Z\fi}
-\long\def\theenumi{\the\c@enumi.}
-\long\def\theenumii{(\@alph\c@enumii)}
-\long\def\theenumiii{\romannumeral\c@enumiii.}
-\long\def\theenumiv{\@Alph\c@enumiv.}
+% ⛔ THE DECORATION BELONGS TO THE LABEL, NOT TO THE COUNTER. These read
+%
+%	\theenumi{\the\c@enumi.}  \theenumii{(\@alph\c@enumii)}  …
+%
+% with the period and the parentheses built in, which is the opposite of what
+% every standard class does — article.cls:344-351 renews the four \the<ctr> to
+% the BARE counter and puts the decoration in \label<ctr>:
+%
+%	\renewcommand\theenumi{\@arabic\c@enumi}   \newcommand\labelenumi{\theenumi.}
+%	\renewcommand\theenumii{\@alph\c@enumii}   \newcommand\labelenumii{(\theenumii)}
+%
+% \the<ctr> is what \ref prints (\refstepcounter composes \@currentlabel from
+% \p@<ctr>\the<ctr>, ltcounts.dtx), so a decorated counter puts the period
+% inside every cross-reference. It was invisible only because a class overrides
+% all four; a document whose class does not — and every test here that writes
+% \begin{enumerate} with no \documentclass — got the kernel's version.
+%
+% So the kernel now holds article's doctrine rather than its inverse, and
+% carries the four \label<ctr> that a class-less document would otherwise find
+% undefined the moment an item asks for its label by name (#845).
+\long\def\theenumi{\the\c@enumi}
+\long\def\theenumii{\@alph\c@enumii}
+\long\def\theenumiii{\romannumeral\c@enumiii}
+\long\def\theenumiv{\@Alph\c@enumiv}
+\long\def\labelenumi{\theenumi.}
+\long\def\labelenumii{(\theenumii)}
+\long\def\labelenumiii{\theenumiii.}
+\long\def\labelenumiv{\theenumiv.}
 \long\def\labelitemi{\bullet}
 \long\def\labelitemii{--}
 \long\def\labelitemiii{*}
@@ -307,7 +331,34 @@ const MiniLaTeXKernel = `
 \def\@iteminterspace{\if@listfirst\@listfirstfalse\else
   \@tempskipa\itemsep\advance\@tempskipa\parsep
   \ifdim\@tempskipa>\z@\vskip\@tempskipa\fi\fi}
-\def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#2\enspace}}
+% \@listitem{counter}{what \ref prints}{what the PAGE shows}: a numbered item.
+%
+% The third argument exists because the first two uses were ONE. It read
+%
+%	\def\@listitem#1#2{...\edef\@currentlabel{#2}\llap{#2\enspace}}
+%
+% and every call site handed it \the<ctr>, so the page showed the bare counter:
+% \labelenumi is \theenumi. and \labelenumii is (\theenumii), and neither was
+% ever expanded. Measured against tectonic, one document, unfiltered page:
+%
+%	what is set          reference   ours
+%	label, level 1       1.          1
+%	label, level 2       (a)         a
+%	\ref to level 1      1           1      <- already right
+%
+% LaTeX prints \makelabel{\@itemlabel} with \@itemlabel taken from
+% \labelenum<level> (ltlists.dtx, \@item), which is why its decoration differs
+% per level and a counter cannot carry it. \itemize three lines below was
+% already right — \@bulletitem takes \labelitemi, the LABEL — so the two
+% environments disagreed about which macro an item is named by.
+%
+% ⛔ AND THE TWO USES MUST NOT BE MERGED BACK. \@currentlabel is what \ref
+% prints, and \refstepcounter composes it from \p@<ctr>\the<ctr>, never from the
+% label (ltcounts.dtx). Row 3 above is the control: \ref to a level-one item is
+% "1" in BOTH engines already, so passing \labelenumi for both would print "1."
+% on the page and turn that \ref into "1." as well — a visible defect traded for
+% a quieter one in every cross-reference. go-tex/engine#845.
+\def\@listitem#1#2#3{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#3\enspace}}
 \def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
 % \@itemopt reads the optional [label] of an \item in itemize/enumerate and uses
 % it verbatim in place of the default bullet/number. \@descitem does the same for
@@ -317,7 +368,7 @@ const MiniLaTeXKernel = `
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
 \def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
 \def\enditemize{\par\endgroup\addvspace\@topsepadd}
-\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv}}\fi\@enumitemopt{enumerate}}
+\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv\labelenumiv}}\fi\@enumitemopt{enumerate}}
 \def\endenumerate{\par\@enumitemrec\endgroup\addvspace\@topsepadd}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
@@ -1159,7 +1210,10 @@ const MiniLaTeXKernel = `
 \def\gotex@caption@dispatch#1#2{\ifx#1\relax\gotex@caption@untyped{#2}\else\gotex@caption@typed{#2}\fi}
 \def\gotex@caption@untyped#1{\par\vskip\abovecaptionskip{\captionfont #1}\par\vskip\belowcaptionskip}
 \def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
-\def\@listitem#1#2{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
+% The typed-reference layer's \@listitem REDEFINES the one above, so it takes the
+% same three arguments or every numbered item loses its label again the moment
+% this layer loads. #2 is what \ref prints, #3 is what the page shows (#845).
+\def\@listitem#1#2#3{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#3\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 % A theorem's reference type is the ENVIRONMENT's name, not the word "theorem"
 % and not the counter's: cleveref keys its naming on it, and it is what

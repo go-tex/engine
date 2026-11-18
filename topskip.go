@@ -92,10 +92,17 @@ func glueAboveFirstBox(list []node, spec glueSpec) (glueNode, int, bool) {
 // silently gets 10pt instead. A test asking for exactly that is what found it.
 func (e *Engine) topskipSpec() (glueSpec, bool) {
 	m := e.eq["topskip"]
-	if m == nil || m.kind != mSkipRef || m.code < 0 || m.code >= len(e.skip) {
+	// ⛔ registerPoolSize, NOT len(e.skip). The pools are grown on write, so len is
+	// how much of the pool has been REACHED and a legal register above it is simply
+	// unstored — worth 0pt, not absent. Asked with len, this function answered
+	// "absent" for a high unstored register and "0pt" for a low one, the SAME state
+	// read two ways; and the caller at :50 discards the bool, so "absent" became a
+	// silent \topskip=0pt there. That is the loss this file's own comment describes:
+	// about 3pt on every page, never a whole line, so no page count moves.
+	if m == nil || m.kind != mSkipRef || m.code < 0 || m.code >= registerPoolSize {
 		return glueSpec{}, false
 	}
-	return e.skip[m.code], true
+	return e.getSkip(m.code), true
 }
 
 // topskipFirstHeight is the HEIGHT of a node that ends \topskip's search, and

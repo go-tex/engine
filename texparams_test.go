@@ -133,14 +133,18 @@ func TestNamedParamsRespectExistingNames(t *testing.T) {
 // With the register file full the loader stops rather than running past its end.
 func TestNamedParamsStopWhenRegistersRunOut(t *testing.T) {
 	e := New()
-	e.allocCnt, e.allocDim, e.allocSkp = 256, 256, 256
+	// registerPoolSize, not the literal 256 this said while the pool was TeX82's:
+	// the question is "does the loader stop at the end of the pool", and spelling
+	// the end as a number put the test's answer out of step with the engine's.
+	e.allocCnt, e.allocDim, e.allocSkp = registerPoolSize, registerPoolSize, registerPoolSize
 	for name := range e.eq { // start from a table with none of the names taken
 		if texIntParams[name] != 0 || name == "spaceskip" {
 			delete(e.eq, name)
 		}
 	}
 	e.loadTeXParams() // must not panic or allocate past the end
-	if e.allocCnt != 256 || e.allocDim != 256 || e.allocSkp != 256 {
-		t.Errorf("allocated past the register file: %d/%d/%d", e.allocCnt, e.allocDim, e.allocSkp)
+	if e.allocCnt != registerPoolSize || e.allocDim != registerPoolSize || e.allocSkp != registerPoolSize {
+		t.Errorf("allocated past the register file: %d/%d/%d, pool is %d",
+			e.allocCnt, e.allocDim, e.allocSkp, registerPoolSize)
 	}
 }

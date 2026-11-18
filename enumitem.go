@@ -21,7 +21,7 @@ import (
 //   label=<spec>      Override the item marker. For enumerate, the counter
 //                     commands \arabic* \alph* \Alph* \roman* \Roman* (the "*"
 //                     stands for the list counter) are mapped to this level's
-//                     \theenumN, so "label=\alph*)" yields "a)", "b)", … and
+//                     \labelenumN, so "label=\alph*)" yields "a)", "b)", … and
 //                     "label=(\roman*)" yields "(i)", "(ii)", …. Surrounding
 //                     literals (parentheses, dots, …) are kept verbatim. For
 //                     itemize the spec is used verbatim as \labelitemN, so
@@ -216,7 +216,15 @@ func (e *Engine) doEnumitemOpt() {
 			}
 			switch kind {
 			case "enumerate":
-				out = append(out, defToks("theenum"+suffix, enumLabelBody(ent.val, suffix))...)
+				// ⛔ \labelenumN, not \theenumN — the LABEL, exactly as the
+				// itemize line below writes \labelitemN. It wrote the counter,
+				// which is the same confusion this file's two neighbours had
+				// (#845): \theenumN is what \ref prints, so "label=\alph*)" put
+				// the closing parenthesis inside every cross-reference to an
+				// item, and once \labelenumN carried its own decoration the two
+				// stacked ("a)." where the spec says "a)"). Real enumitem puts
+				// label= on the label and keeps ref= for the counter.
+				out = append(out, defToks("labelenum"+suffix, enumLabelBody(ent.val, suffix))...)
 			case "itemize":
 				out = append(out, defToks("labelitem"+suffix, append([]tok(nil), ent.val...))...)
 			}

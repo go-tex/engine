@@ -81,8 +81,12 @@ func newEnglishHyphenator() *hyphenator {
 // from the count register it was bound to, falling back to plain TeX's default if
 // it is somehow unbound.
 func (e *Engine) namedInt(name string) int {
-	if m := e.eq[name]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < len(e.count) {
-		return e.count[m.code]
+	// registerPoolSize, not len(e.count): see topskipSpec. The fallback below is a
+	// plain-TeX DEFAULT, so answering "unbound" for a register that is merely
+	// unstored would give \language or \lefthyphenmin its default where a low
+	// register in the same state already reads 0.
+	if m := e.eq[name]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < registerPoolSize {
+		return e.getCount(m.code)
 	}
 	return texIntParams[name]
 }

@@ -46,6 +46,14 @@ LaTeX engine (`tectonic`).
   part of the value.
 - **Grouping** — `{…}`, `\begingroup`/`\endgroup`, save/restore of meanings,
   registers, and catcodes; `\global` escapes the current group.
+- **Registers** — `\count`, `\dimen`, `\skip` and `\box`, **32768 of each kind**,
+  which is eTeX's register file and not TeX82's 256. Packages written against
+  eTeX allocate accordingly: the real `tikz` and `calc` together leave 86 of 256
+  `\count` registers free, and a package-heavy paper spends those before its own
+  `\newtheorem` counters are declared. The pools are grown on demand, so a
+  document that stays inside TeX82's range costs what it always did. An index no
+  pool can hold — negative, or at least 32768 — is refused rather than
+  allocated, and counted in `Diagnostics.RegistersOutOfRange`.
 
 Faithfulness is checked on subtleties only real TeX gets right (a control word
 absorbing its following space; significant spaces in conditional branches).
@@ -95,6 +103,16 @@ report what was dropped. `Diagnostics` also records the paths the document read 
 excluding the search directories the host itself configured. Reading a named file is
 what `\input` is for and it is not an error, but a service compiling a document it did
 not write is the one who can judge it, and nothing else in this package will tell it.
+
+Two register tallies sit beside those, and they are different facts.
+`Diagnostics.RegistersExhausted` counts allocations this engine refused because
+that pool is full — the name a `\newcount` could not satisfy stays **undefined**,
+whatever used it reads `0` or vanishes, and the run completes normally, where TeX
+stops with *"No room for a new \count"*. `Diagnostics.RegistersOutOfRange` counts
+a document naming a register *number* that cannot exist, which TeX answers with
+*"Bad register code"*; a read gives the zero value and a write is dropped. A
+register inside the pool that nothing has written is neither: it legitimately
+holds `0`, `0pt`, zero glue or a void box.
 
 `Diagnostics.KerningIsAFloor` says a face was used whose kerning this engine
 **cannot fully read**, so the compile's kern figures are a floor and not a

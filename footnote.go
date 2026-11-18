@@ -38,11 +38,9 @@ func (footnoteNode) isNode() {}
 // by the class kernel and was never given a value — so the 10pt default stands in
 // rather than being taken for a document that wants no space at all.
 func (e *Engine) footinsSkip() int {
-	if m := e.eq["footins"]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < len(e.count) {
-		if n := e.count[m.code]; n >= 0 && n < len(e.skip) {
-			if w := e.skip[n].width; w > 0 {
-				return w
-			}
+	if m := e.eq["footins"]; m != nil && m.kind == mCountRef {
+		if w := e.getSkip(e.getCount(m.code)).width; w > 0 {
+			return w
 		}
 	}
 	return 9 * unity // size10.clo:203
@@ -51,11 +49,13 @@ func (e *Engine) footinsSkip() int {
 // setFootinsSkip stores v in \skip\footins, through the \footins count the way a
 // class would write it.
 func (e *Engine) setFootinsSkip(v int) {
-	if m := e.eq["footins"]; m != nil && m.kind == mCountRef && m.code >= 0 && m.code < len(e.count) {
-		if n := e.count[m.code]; n >= 0 && n < len(e.skip) {
-			e.skip[n] = glueSpec{width: v, stretch: 4 * unity, shrink: 2 * unity}
-		}
+	m := e.eq["footins"]
+	if m == nil || m.kind != mCountRef {
+		return
 	}
+	// ⛔ storeSkip, not setSkip: the class kernel installing a value, with no
+	// save-stack effect — see registers.go for why global=true would be wrong.
+	e.storeSkip(e.getCount(m.code), glueSpec{width: v, stretch: 4 * unity, shrink: 2 * unity})
 }
 
 // doFootnote implements \footnote{text}: step the counter, typeset the numbered
@@ -94,8 +94,8 @@ func (e *Engine) footnoteCounterIndex() int {
 func (e *Engine) stepFootnote() int {
 	if i := e.footnoteCounterIndex(); i >= 0 {
 		e.stepCounter("footnote")
-		e.footnoteCounter = e.count[i]
-		return e.count[i]
+		e.footnoteCounter = e.getCount(i)
+		return e.footnoteCounter
 	}
 	e.footnoteCounter++
 	return e.footnoteCounter
@@ -118,10 +118,10 @@ func (e *Engine) footnoteMark(n int) string {
 	if i < 0 || m == nil || m.kind != mMacro {
 		return strconv.Itoa(n)
 	}
-	old := e.count[i]
-	e.count[i] = n
+	old := e.getCount(i)
+	e.storeCount(i, n)
 	s := strings.TrimSpace(e.expandToString([]tok{csTok("thefootnote")}))
-	e.count[i] = old
+	e.storeCount(i, old)
 	if s == "" {
 		// ⛔ An empty expansion is not a mark. Falling back to the digits keeps a note
 		// visible rather than silently losing its reference, which is the failure a

@@ -870,7 +870,7 @@ func (e *Engine) setNamedDimen(name string, v int) {
 	case mDimenRef:
 		e.setDimen(m.code, v, true)
 	case mSkipRef:
-		sp := e.skip[m.code]
+		sp := e.getSkip(m.code)
 		sp.width = v
 		e.setSkip(m.code, sp, true)
 	}
@@ -978,9 +978,9 @@ func (e *Engine) namedDimen(name string) (int, bool) {
 	}
 	switch m.kind {
 	case mDimenRef:
-		return e.dimen[m.code], true
+		return e.getDimen(m.code), true
 	case mSkipRef:
-		return e.skip[m.code].width, true
+		return e.getSkip(m.code).width, true
 	}
 	return 0, false
 }

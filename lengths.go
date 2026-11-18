@@ -41,7 +41,8 @@ func (e *Engine) doNewlength() {
 		e.fail("Missing control sequence for \\newlength")
 		return
 	}
-	if e.allocSkp >= 256 {
+	if e.allocSkp >= registerPoolSize {
+		e.noteRegisterExhausted(`\skip`)
 		e.fail("No room for a new \\skip (\\newlength)")
 		return
 	}
@@ -123,12 +124,12 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 	switch {
 	case m.kind == mSkipRef:
 		if add {
-			e.setSkip(m.code, addGlue(e.skip[m.code], g), global)
+			e.setSkip(m.code, addGlue(e.getSkip(m.code), g), global)
 		} else {
 			e.setSkip(m.code, g, global)
 		}
 	case m.kind == mDimenRef:
-		e.setDimen(m.code, addOrSet(add, e.dimen[m.code], g.width), global)
+		e.setDimen(m.code, addOrSet(add, e.getDimen(m.code), g.width), global)
 	// The engine's dimension parameters go through setEngineDimen so \setlength is
 	// scoped to its group exactly as \hsize=… is: \setlength\textwidth{…} inside a
 	// box must not resize every page that follows.
@@ -239,7 +240,8 @@ func (e *Engine) registerHandle(prim tok) (tok, bool) {
 		return tok{}, false
 	}
 	i := e.scanInt()
-	if i < 0 || i >= 256 {
+	if i < 0 || i >= registerPoolSize {
+		e.noteBadRegisterIndex(i, `\`+prim.cs)
 		return tok{}, false
 	}
 	name := "gotex@reg@" + prim.cs + strconv.Itoa(i)

@@ -502,9 +502,7 @@ func (e *Engine) doNewcount() {
 func (e *Engine) countRefAssign(code int, global bool) {
 	e.scanEquals()
 	v := e.scanInt()
-	if code >= 0 && code < 256 {
-		e.setCount(code, v, global)
-	}
+	e.setCount(code, v, global)
 }
 
 // countIndex reads a count-register reference for \advance/\multiply/\the: either
@@ -538,9 +536,7 @@ func (e *Engine) doCountAssign(global bool) {
 	i := e.scanInt()
 	e.scanEquals()
 	v := e.scanInt()
-	if i >= 0 && i < 256 {
-		e.setCount(i, v, global)
-	}
+	e.setCount(i, v, global)
 }
 
 // doDimenAssign handles \dimen<n>=<dimen>.
@@ -696,21 +692,19 @@ func (e *Engine) doAdvance(global bool) {
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt()
-		if i >= 0 && i < 256 {
-			e.setCount(i, e.count[i]+v, global)
-		}
+		e.setCount(i, e.getCount(i)+v, global)
 		return
 	}
 	if i, ok := e.dimenIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanDimen()
-		e.setDimen(i, e.dimen[i]+v, global)
+		e.setDimen(i, e.getDimen(i)+v, global)
 		return
 	}
 	if i, ok := e.skipIndex(); ok {
 		e.skipByKeyword()
 		g := e.scanGlue()
-		e.setSkip(i, addGlue(e.skip[i], g), global)
+		e.setSkip(i, addGlue(e.getSkip(i), g), global)
 	}
 }
 
@@ -846,21 +840,19 @@ func (e *Engine) doMultiply(global bool) {
 	if i, ok := e.countIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt()
-		if i >= 0 && i < 256 {
-			e.setCount(i, e.count[i]*v, global)
-		}
+		e.setCount(i, e.getCount(i)*v, global)
 		return
 	}
 	if i, ok := e.dimenIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt() // \multiply scales a dimen by an integer
-		e.setDimen(i, e.dimen[i]*v, global)
+		e.setDimen(i, e.getDimen(i)*v, global)
 		return
 	}
 	if i, ok := e.skipIndex(); ok {
 		e.skipByKeyword()
 		v := e.scanInt()
-		e.setSkip(i, scaleGlue(e.skip[i], v), global)
+		e.setSkip(i, scaleGlue(e.getSkip(i), v), global)
 	}
 }
 
@@ -1233,19 +1225,19 @@ func (e *Engine) doThe() {
 				e.pushString(e.doTheHyphenChar())
 				return
 			case m.kind == mPrim && m.name == "count":
-				e.pushString(strconv.Itoa(e.count[e.scanInt()]))
+				e.pushString(strconv.Itoa(e.getCount(e.scanInt())))
 				return
 			case m.kind == mCountRef:
-				e.pushString(strconv.Itoa(e.count[m.code]))
+				e.pushString(strconv.Itoa(e.getCount(m.code)))
 				return
 			case m.kind == mPrim && m.name == "dimen":
-				e.pushString(formatPt(e.dimen[e.scanInt()]))
+				e.pushString(formatPt(e.getDimen(e.scanInt())))
 				return
 			case m.kind == mDimenRef:
-				e.pushString(formatPt(e.dimen[m.code]))
+				e.pushString(formatPt(e.getDimen(m.code)))
 				return
 			case m.kind == mPrim && m.name == "skip":
-				e.pushString(formatGlue(e.skip[e.scanInt()]))
+				e.pushString(formatGlue(e.getSkip(e.scanInt())))
 				return
 			case m.kind == mPrim && m.name == "wd":
 				e.pushString(formatPt(e.boxDim('w')))
@@ -1284,7 +1276,7 @@ func (e *Engine) doThe() {
 				e.pushString(formatGlue(e.lastSkip()))
 				return
 			case m.kind == mSkipRef:
-				e.pushString(formatGlue(e.skip[m.code]))
+				e.pushString(formatGlue(e.getSkip(m.code)))
 				return
 			case m.kind == mToksRef:
 				e.push(e.theToks(e.toksValue(m.code)))
