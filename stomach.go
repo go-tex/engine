@@ -448,6 +448,8 @@ func (e *Engine) scanBox() *boxNode {
 				return b
 			case "copy":
 				return cloneBox(e.getBox(e.scanInt()))
+			case "lastbox":
+				return e.takeLastBox()
 			}
 		}
 	}
@@ -509,6 +511,13 @@ func (e *Engine) makeBox(kind boxKind) *boxNode {
 func (e *Engine) buildVBoxList() []node {
 	savedMvl, savedPar, savedIn, savedPD := e.mvl, e.parList, e.inPar, e.prevDepth
 	e.mvl, e.parList, e.inPar, e.prevDepth = nil, nil, false, ignoreDepth
+	// ⛔ e.mvl IS THE VBOX'S LIST WHILE THIS RUNS, not the page's — the swap above
+	// is what makes the page machinery fill this box. So "the current list is
+	// e.mvl" does NOT mean "outer vertical mode", and anything that must tell the
+	// two apart counts this instead (takeLastBox, lastbox.go: TeX refuses to
+	// reach onto the current page, and a \vbox is not the page).
+	e.internalVertical++
+	defer func() { e.internalVertical-- }()
 
 	depth := 0
 	for e.err == nil {
