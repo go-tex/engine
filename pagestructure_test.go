@@ -3,7 +3,10 @@
 
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // pageTextList is the content of a page's TEXT BLOCK.
 //
@@ -24,6 +27,69 @@ func pageTextList(p *boxNode) []node {
 		}
 	}
 	return p.list
+}
+
+// ⛔⛔ AND THE RUNNING-HEAD PAGE IS THE SAME PAGE, which is the whole point: it
+// carries nearly every page of a real document and it had its own copy of the
+// defect. assembleFancyPage packed the head, the body, a \vfil and the foot into
+// ONE box, so the body's glue stretched by nothing — #721's first comment
+// measured 616.87 against tectonic's 672.75 on \pagestyle{headings}, a page
+// holding 55.9pt less than it should.
+//
+// \@outputpage keeps the three apart (latex.ltx): the head, \vskip\headsep, then
+// \box\@outputbox — the block ALONE packed to \@colht — then \baselineskip\footskip
+// and the foot. So the invariant is the same one as for a plain page, and this is
+// the row that was missing when the whole suite stayed green through the change.
+//
+// ⚠ MEASURED on \pagestyle{headings}, article at 10pt, \flushbottom, last body
+// baseline of page 1: tectonic 672.75, before 655.87, after 667.92. The residual
+// 4.83pt is NOT this defect — our running head sits 4.85pt high and our first
+// text baseline 3.94pt low, so the band between them is 8.79pt too tall and the
+// block is that much shorter. Filed separately; this test asserts the structure,
+// not that residual.
+func TestARunningHeadPageAlsoWrapsItsTextBlock(t *testing.T) {
+	e := New()
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	e.SetFont(spMock{})
+	// ⛔⛔ PAGE TWO, AND THE REASON IS A FIXTURE THAT FOOLED THIS TEST ONCE.
+	// \chapter sets \thispagestyle{plain}, so page ONE of a book chapter is a
+	// PLAIN page and goes down the other branch entirely. Written against page
+	// one, this test passed against main — where assembleFancyPage marks no text
+	// block at all — because it was measuring the plain path a second time. The
+	// red-before check is what caught it; the assertions had not changed.
+	src := `\documentclass{book}\begin{document}\chapter{Alfa}` +
+		strings.Repeat(`Opening paragraph. `, 400) + `\par\end{document}`
+	if _, err := e.Run(src); err != nil {
+		t.Fatal(err)
+	}
+	if !e.hasLatexHead() {
+		t.Skip("book.cls defined no \\@oddhead here; there is no running-head page to test")
+	}
+	pages := e.Pages()
+	if len(pages) < 2 {
+		t.Fatalf("%d page(s): the witness needs a page that is NOT the chapter "+
+			"opening, because that one is \\thispagestyle{plain}", len(pages))
+	}
+	var block *boxNode
+	for _, n := range pages[1].list {
+		if b, ok := n.(*boxNode); ok && b.textBlock {
+			block = b
+		}
+	}
+	if block == nil {
+		t.Fatal("a running-head page must wrap a marked text block: \\@outputpage " +
+			"packs \\@outputbox alone and places the head and foot around it")
+	}
+	if e.vsize > 0 && block.height != e.vsize {
+		t.Errorf("text block = %d, want \\vsize = %d — the head band is not part of "+
+			"the text (renderVMargin lifts the page by it)", block.height, e.vsize)
+	}
+	if pages[1].height <= block.height {
+		t.Errorf("page = %d, not taller than its text block %d: the head and foot "+
+			"are inside the block again (#721)", pages[1].height, block.height)
+	}
 }
 
 // ⛔ THE TEXT BLOCK IS \vsize AND THE PAGE AROUND IT IS TALLER.
