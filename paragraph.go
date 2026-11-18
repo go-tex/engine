@@ -327,6 +327,20 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 		DoubleHyph:  float64(e.namedInt("doublehyphendemerits")),
 		FinalHyph:   float64(e.namedInt("finalhyphendemerits")),
 		Background:  e.skipBackground(),
+		// \looseness: how many lines longer (or shorter) the paragraph should come
+		// out than the breaking would otherwise make it (tex.web:17197-17237). It
+		// was declared in texparams.go and read by nothing — go-tex/engine#754 item
+		// (C), go-typeset/linebreak#12 item (7) — so a document that set it was
+		// ignored in silence. go-typeset/linebreak v1.12.0 added the choice; this
+		// hands the parameter over.
+		//
+		// ⛔ IT IS NOT A SECOND SEARCH. Every feasible way of ending the paragraph
+		// is already an active node when the last break is tried, and \looseness
+		// picks among them; a paragraph with one feasible ending cannot be loosened
+		// at all. The pass then FAILS unless it is the final one (:17203), which is
+		// exactly the shape of the three passes below: the pretolerance pass
+		// declines, and the pass carrying FinalPass takes what it reached.
+		Looseness: e.namedInt("looseness"),
 	}
 	if pre := e.namedInt("pretolerance"); pre >= 0 {
 		q := p
