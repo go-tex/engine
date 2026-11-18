@@ -1,5 +1,40 @@
 name: ci
-on: [push, pull_request]
+# ⛔⛔ ONE RUN PER COMMIT. `on: [push, pull_request]` fired BOTH events for every
+# push to a branch with an open pull request, so every commit ran this whole
+# matrix TWICE and queued TWO macos-latest jobs against the same scarce pool.
+#
+# MEASURED, two independent occurrences on 2026-11-17 (#828 and #827):
+#
+#   job "test + conformance (macos-latest)"   runner_name=""   steps=0
+#   #828 push  created 20:35:52  started 20:35:52  completed 20:50:53  = 15m01s
+#   #827 pr    created 20:21:09  started 20:21:09  completed 20:36:10  = 15m01s
+#
+# `started_at` EQUAL to `created_at`, no runner ever assigned, zero steps, and
+# both killed at the same 15m01s: that is a QUEUE limit, not a flake and not a
+# test. It is also not a concurrency group (this file had none) and not a job
+# timeout (none is set here, and the default is 360m).
+#
+# ⛔ AND IT READS AS A DEFECT IN THE DIFF. A cancelled job makes the RUN
+# `failure` while containing nothing red — a job with zero steps has no red step
+# to find — so the pull request reports FAIL and a reader audits a change that
+# was never implicated. Worse, WHICH event survived was pure queue luck: #824
+# was green on push and red on pull_request, #828 the exact mirror, same commit
+# both times. A verdict that depends on which event you read is not about the
+# code.
+#
+# So branch pushes are left to the `pull_request` event, which is the one
+# `prwait` and `ghmerge` judge. This halves the demand for every runner, not
+# only macos.
+#
+# ⚠ WHAT IS GIVEN UP, NAMED: a branch with NO open pull request is no longer
+# tested on push. That is deliberate — nothing reads those runs; a branch is
+# judged when it asks to be merged — but it does mean "I pushed and CI was
+# green" stops being available before opening the pull request.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
 permissions: { contents: read }
 jobs:
   test:
@@ -117,8 +152,24 @@ jobs:
           # four seconds into its own run — and a reader who starts there audits
           # the wrong thing. What it was DOING is in the goroutine dump.
           #
+          # ⛔⛔ AND ON 2026-11-17 UBUNTU CROSSED IT TOO, on main and not only on a
+          # branch: run 44108150777 (the merge of #819) and run 44109218291 (#821)
+          # both ended `panic: test timed out after 30m0s` / `FAIL … 1800.2s`.
+          # Nothing was hung — the panic names ONE test, one second into its own
+          # run, and the dump shows ordinary scanning — the suite simply no longer
+          # fits. The lane was measured at 1229 s on 2026-11-17 12:50 (#812), so it
+          # has 46% less headroom than that figure suggests.
+          #
+          # ⚠ 45m IS A STOPGAP AND THE ATTRIBUTION IS OPEN. The only change between
+          # the 1229 s green and these two reds is #819, which touches page
+          # assembly for every page, and I have NOT measured its cost: this machine
+          # was at 1-min load 11.16 and a time taken there is not a measurement
+          # (#799 was published at 12.7% from exactly that mistake). If #819 proves
+          # to carry the 46%, the answer is to fix #819 and lower this again, not to
+          # keep it. #812 holds the thread.
+          #
           # ${{ matrix.race }} is '-race' on ubuntu and macos, empty on windows.
-          go test -timeout 30m ${{ matrix.race }} -coverprofile=cover.out ./...
+          go test -timeout 45m ${{ matrix.race }} -coverprofile=cover.out ./...
           pct=$(go tool cover -func=cover.out | tail -1 | grep -oE '[0-9.]+' | tail -1)
           echo "coverage ${pct}% (in-progress engine; primary gate is the conformance ratchet in TestConformance)"
           awk "BEGIN{exit !(${pct} >= 80.0)}" || { echo "coverage ${pct}% below 80% floor"; exit 1; }
