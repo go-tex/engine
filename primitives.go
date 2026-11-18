@@ -485,7 +485,11 @@ func (e *Engine) doCountdef() {
 // \countdef \name to it (a primitive stand-in for plain.tex's allocator).
 func (e *Engine) doNewcount() {
 	name := e.scanCSName()
-	if name == "" || e.allocCnt >= 256 {
+	if name == "" {
+		return
+	}
+	if e.allocCnt >= registerPoolSize {
+		e.noteRegisterExhausted(`\count`)
 		return
 	}
 	// Allocation is GLOBAL: ltplain.dtx's \e@alloc ends with `\global#2#6\allocationnumber`,
@@ -560,7 +564,11 @@ func (e *Engine) doDimendef() {
 // doNewdimen handles \newdimen\name (allocate the next free \dimen register).
 func (e *Engine) doNewdimen() {
 	name := e.scanCSName()
-	if name == "" || e.allocDim >= 256 {
+	if name == "" {
+		return
+	}
+	if e.allocDim >= registerPoolSize {
+		e.noteRegisterExhausted(`\dimen`)
 		return
 	}
 	e.define(name, &meaning{kind: mDimenRef, code: e.allocDim}, true) // global, see doNewcount
@@ -614,7 +622,11 @@ func (e *Engine) doSkipdef() {
 // doNewskip handles \newskip\name (allocate the next free \skip register).
 func (e *Engine) doNewskip() {
 	name := e.scanCSName()
-	if name == "" || e.allocSkp >= 256 {
+	if name == "" {
+		return
+	}
+	if e.allocSkp >= registerPoolSize {
+		e.noteRegisterExhausted(`\skip`)
 		return
 	}
 	e.define(name, &meaning{kind: mSkipRef, code: e.allocSkp}, true) // global, see doNewcount

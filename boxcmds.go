@@ -183,7 +183,8 @@ func (e *Engine) doRaisebox() *boxNode {
 // internal dimen, and "-.512.34pt" is not a dimension at all.
 func (e *Engine) bindBoxMetrics(b *boxNode) {
 	if e.boxMetricDims == nil {
-		if e.allocDim+4 > 256 {
+		if e.allocDim+4 > registerPoolSize {
+			e.noteRegisterExhausted(`\dimen`)
 			return
 		}
 		e.boxMetricDims = map[string]int{}
@@ -248,7 +249,8 @@ func (e *Engine) doNewsavebox() {
 	if m := e.eq[name]; m != nil && m.kind == mBoxRef {
 		return // already allocated: reuse the register
 	}
-	if e.allocBox >= 256 {
+	if e.allocBox >= registerPoolSize {
+		e.noteRegisterExhausted(`\box`)
 		return // out of box registers
 	}
 	e.define(name, &meaning{kind: mBoxRef, code: e.allocBox}, true)

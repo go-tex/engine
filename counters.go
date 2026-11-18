@@ -69,10 +69,15 @@ func (e *Engine) defineCounter(name string) int {
 	code := -1
 	if m := e.eq[ctr]; m != nil && m.kind == mCountRef {
 		code = m.code // already allocated (\newcounter of an existing counter): reuse
-	} else if e.allocCnt < 256 {
+	} else if e.allocCnt < registerPoolSize {
 		code = e.allocCnt
 		e.define(ctr, &meaning{kind: mCountRef, code: code}, true)
 		e.allocCnt++
+	} else {
+		// The counter is still DEFINED below (\the<name> etc.), it simply has no
+		// register behind it, so \arabic reads 0. That is the documented choice
+		// (TestNewcounterExhaustion); what it lacked was a word saying so.
+		e.noteRegisterExhausted(`\count`)
 	}
 	// \the<name> := \arabic{name}, the LaTeX default representation.
 	body := append([]tok{csTok("arabic"), chTok('{', catBegin)}, stringToToks(name)...)

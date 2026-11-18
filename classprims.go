@@ -20,7 +20,11 @@ func (e *Engine) loadClassPrims() {
 	// \newsavebox{\cs}).
 	e.prim("newbox", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" || e.allocBox >= 256 {
+		if name == "" {
+			return
+		}
+		if e.allocBox >= registerPoolSize {
+			e.noteRegisterExhausted(`\box`)
 			return
 		}
 		if m := e.eq[name]; m != nil && m.kind == mBoxRef {
@@ -237,9 +241,31 @@ const LaTeX2eClassLead = `
 % symptom was only 1.99pt per section, and fixing either alone makes headings
 % worse than leaving both — go-tex/engine#620 has the arithmetic:
 % −1.989 + 5.978 − 4.00 ≈ 0.
+% ⛔⛔ NO SPACE BETWEEN #1 AND #2. It read {#1 <space> #2}, and that space is a real
+% space TOKEN: #1 is a parameter, not a control word, so nothing absorbs it.
+% Expanded in horizontal mode at the very start of the heading it became
+% interword glue, and EVERY sectioning heading in every document began that far
+% right of the margin. LaTeX has none — ltsect.dtx:418 is
+% \@hangfrom{\hskip #3\relax\@svsec}. Measured against tectonic, leftmost glyph
+% in points from the page edge:
+%
+%	heading           font    reference   before   after
+%	\section          14.35   133.77      140.95   133.77
+%	\subsection       11.96   133.77      139.75   133.77
+%	\subsubsection     9.96   133.77      138.86   133.77
+%	body lines         9.96   133.77      133.77   133.77
+%
+% The right edges land with them (185.66/185.67, 190.40/190.41, 206.51/206.51).
+% go-tex/engine#833.
+%
+% ⚠ STILL MISSING, and deliberately not fixed here: \@startsection's INDENT
+% argument. LaTeX passes it (\hskip #3 above); \@gxhead is only handed
+% {style}{title}{afterskip} and never sees it. It is \z@ in every standard class,
+% so nothing in the corpus moves, but a class that indents its headings is
+% unobeyed. That is a signature change and wants its own witness.
 \def\@gxhead#1#2#3{\@tempskipa#3\relax
   \ifdim\@tempskipa<\z@
-    \noindent{#1 #2}\hskip-\@tempskipa
+    \noindent{#1#2}\hskip-\@tempskipa
   \else
 % ⛔ \nobreak BETWEEN THE HEADING'S \par AND ITS AFTERSKIP. ltsect.dtx:483-493,
 % \@xsect's display-heading branch, verbatim:
@@ -259,7 +285,7 @@ const LaTeX2eClassLead = `
 % heading runs in beside its text and the reference takes the else branch
 % instead, which sets \@nobreakfalse — there is no vertical break to forbid
 % because there is no vertical space.
-    \noindent{#1 #2\par}\nobreak\vskip\@tempskipa
+    \noindent{#1#2\par}\nobreak\vskip\@tempskipa
     \@afterheading
   \fi}
 % \@sect and \@ssect: LaTeX's own sectioning continuations, which \@startsection

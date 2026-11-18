@@ -269,6 +269,19 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+	if n := totalCount(d.RegistersExhausted); n > 0 {
+		// Its own line because NOTHING else can show it. The name the allocation
+		// could not satisfy stays undefined, whatever used it reads 0 or vanishes,
+		// and the run completes normally — so this does not reach the undefined
+		// census, the skipped-command tally or the page. TeX stops here with
+		// "No room for a new \count"; this engine carries on by choice, and the
+		// choice was invisible (go-tex/engine#788).
+		fmt.Fprintf(w, "gotex: %d register allocation(s) REFUSED — the pool of that kind is full, "+
+			"so the name stays undefined and whatever used it reads 0 or vanishes:\n", n)
+		for _, e := range sortedByCount(d.RegistersExhausted) {
+			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
+		}
+	}
 	if n := totalCount(d.FilesMissing); n > 0 {
 		// Not a missing command: \input, \bibliography and \putbib all ran and
 		// found nothing to read. Saying so keeps them out of the undefined channel,
