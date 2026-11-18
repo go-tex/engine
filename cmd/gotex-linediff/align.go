@@ -276,7 +276,9 @@ func pagesOf(path string) ([]page, error) {
 			out = append(out, page{}) // unreadable: empty, and it will not match a key
 			continue
 		}
-		lines := groupLines(runs, pdfruns.PageHeight(doc, n), reportOptions{})
+		// -align never filters: it walks every page whole, so nothing is hidden
+		// and the count has nothing to report.
+		lines, _ := groupLines(runs, pdfruns.PageHeight(doc, n), reportOptions{})
 		var words []string
 		for _, l := range lines {
 			for _, w := range strings.Fields(normaliseText(l.Text)) {
