@@ -758,7 +758,11 @@ type saveItem struct {
 
 // New builds an engine with TeX's default category codes and primitives loaded.
 func New() *Engine {
-	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10, allocToks: 10, toks: make([][]tok, 256)} // allocators start at 10
+	// ⚠ registerBaseSize, not a literal 256: `toks` is grown by setToks like the
+	// other four pools, and a second spelling of the base size is a second place
+	// for it to drift (#849, and #844's own lesson about a bound duplicated per
+	// site).
+	e := &Engine{eq: map[string]*meaning{}, allocCnt: 10, allocDim: 10, allocSkp: 10, allocBox: 10, allocToks: 10, toks: make([][]tok, registerBaseSize)} // allocators start at 10
 	// The pools start at TeX82's width and grow from there (registers.go), so a
 	// document that never names a high register costs what it always did.
 	e.count = make([]int, registerBaseSize)
