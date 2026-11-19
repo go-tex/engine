@@ -273,6 +273,64 @@ func TestAnUnstoredRegisterReadsTheSameHighAndLow(t *testing.T) {
 	}
 }
 
+// ⛔⛔ A WRITE INSIDE THE POOL MUST ALLOCATE NOTHING, AND NOTHING SAID SO.
+//
+// Found by `mutsweep -files registers.go -- go test .`, which reported
+// `registers.go:56  i < len(p)  SURVIVED`: growPool's fast path could be deleted
+// with the whole suite green. It is not a correctness bug — with the early
+// return gone, `for n <= i` never runs for an in-range i, so n stays len(p) and
+// the function returns a slice of the same length — but it allocates a new pool
+// and copies it ON EVERY REGISTER WRITE. A `\count` assignment in a loop would
+// copy 256 ints each time, and no test would notice.
+//
+// ⭐ Allocations are the right assertion here and times would not be: CLAUDE.md's
+// rule is that allocation counts are exact under load while times are not, and
+// this machine runs ~25 sessions. AllocsPerRun on a warm engine answers the
+// question exactly.
+//
+// The other four guards in that file came back "caught by PANIC", which is the
+// ceiling for a bounds guard rather than a gap: deleting them indexes out of
+// range before any assertion can compare, and the values ARE asserted either
+// side — `\the\count300` reads 0 and `\count300=7` reads 7, two tests up.
+func TestAWriteInsideThePoolAllocatesNothing(t *testing.T) {
+	e := New()
+	// Warm: the pools exist at registerBaseSize and these indices are inside them.
+	e.setCount(5, 1, true)
+	e.setDimen(5, 1, true)
+	e.setSkip(5, glueSpec{}, true)
+
+	for _, c := range []struct {
+		name  string
+		write func()
+	}{
+		{`\count`, func() { e.setCount(5, 7, true) }},
+		{`\dimen`, func() { e.setDimen(5, 7, true) }},
+		{`\skip`, func() { e.setSkip(5, glueSpec{width: 7}, true) }},
+		{`\count via storeCount`, func() { e.storeCount(5, 7) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if n := testing.AllocsPerRun(100, c.write); n != 0 {
+				t.Errorf("a write to %s register 5, inside the pool, allocates %.0f time(s) per call, want 0 — "+
+					"growPool's fast path is gone and every write is copying the pool", c.name, n)
+			}
+		})
+	}
+}
+
+// And growing DOES allocate, which is the control: without it the test above
+// passes against a growPool that never grows at all.
+func TestAWriteOutsideTheReachedPoolDoesAllocate(t *testing.T) {
+	e := New()
+	before := len(e.count)
+	e.setCount(before+1, 7, true)
+	if len(e.count) <= before {
+		t.Fatalf("the pool did not grow: len %d before, %d after", before, len(e.count))
+	}
+	if got := e.getCount(before + 1); got != 7 {
+		t.Errorf("after growing, register %d reads %d, want 7", before+1, got)
+	}
+}
+
 // cmd/gotex prints the refusals; this is the engine-side half of that line, so
 // the two cannot drift apart silently.
 func TestTheOutOfRangeTallyNamesTheKind(t *testing.T) {
