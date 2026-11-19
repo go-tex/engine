@@ -366,15 +366,69 @@ const MiniLaTeXKernel = `
 % the bracket that \@ifnextbracket has already confirmed is present.
 \def\@itemopt[#1]{\par\noindent\llap{#1\enspace}}
 \def\@descitem[#1]{\par\noindent\llap{{\bf #1}\enspace}}
-\def\itemize{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
+% \gotex@listtopspace: the vertical space a list environment opens with, and the
+% value \@topsepadd keeps for closing with too.
+%
+% ⛔⛔ \partopsep IS ADDED ONLY IN VERTICAL MODE. ltlists.dtx:596-603:
+%
+%	\def\@trivlist{%
+%	  \if@noskipsec \leavevmode \fi
+%	  \@topsepadd \topsep
+%	  \ifvmode
+%	    \advance\@topsepadd \partopsep
+%	  \else
+%	    \unskip \par
+%	  \fi
+%
+% so a list that starts a FRESH paragraph gets \topsep+\partopsep and one that
+% runs on from a sentence gets \topsep alone. \itemize, \enumerate and
+% \description each opened with
+%
+%	\par\@topsepadd\topsep\advance\@topsepadd\partopsep
+%
+% — the \par FIRST, which forces vertical mode, so even a conditional written
+% after it would have fired every time, and then \partopsep unconditionally.
+% ⭐ And \@topsepadd is set ONCE and spent at BOTH ends (\end… closes with
+% \addvspace\@topsepadd), so one wrong value is paid twice.
+%
+% Measured against tectonic, one document, two lists differing ONLY in the mode
+% they start in — the first runs on from a sentence, the second has a blank line
+% before it. Baselines in points:
+%
+%	                    mode         reference   ours (before)
+%	gap into item       horizontal     19.93        21.92
+%	gap out of list     horizontal     19.93        21.92
+%	gap into item       vertical       21.92        21.92
+%	gap out of list     vertical       21.92        21.92
+%
+% The vertical-mode list already agreed, because both engines add \partopsep
+% there; only the horizontal one diverged, by 1.99pt at each end against a
+% \partopsep of 2.0pt. ⭐ Note the reference's own two rows differ from each
+% other: LaTeX really does charge the two cases differently and we charged both
+% the higher way. go-tex/engine#685.
+%
+% ⭐ AND THE ENGINE ALREADY KNEW THIS. \@trivlist (classprims.go) carries the
+% mode test, correctly, and has since it was ported — these three environments
+% reimplemented the same space BESIDE it and got it wrong. That is why this is
+% ONE macro now, used by all four, rather than the same line written four times:
+% a second copy is what made the first copy's divergence invisible.
+%
+% ⚠ Still missing against the reference, deliberately: the \unskip in the \else
+% branch, which removes the glue before the \par. \@trivlist omits it here too,
+% so this macro keeps the engine's existing behaviour rather than mixing a
+% second change into a measured one.
+\def\gotex@listtopspace{\@topsepadd\topsep
+  \ifvmode\advance\@topsepadd\partopsep\else\par\fi
+  \addvspace\@topsepadd}
+\def\itemize{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
 \def\enditemize{\par\endgroup\addvspace\@topsepadd}
-\def\enumerate{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv\labelenumiv}}\fi\@enumitemopt{enumerate}}
+\def\enumerate{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv\labelenumiv}}\fi\@enumitemopt{enumerate}}
 \def\endenumerate{\par\@enumitemrec\endgroup\addvspace\@topsepadd}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
-\long\def\description{\par\@topsepadd\topsep\advance\@topsepadd\partopsep\addvspace\@topsepadd\begingroup\@listfirsttrue\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
+\long\def\description{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
 \long\def\enddescription{\par\endgroup\addvspace\@topsepadd}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
