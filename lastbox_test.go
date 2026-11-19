@@ -106,6 +106,41 @@ func TestLastboxWillNotReachOntoThePage(t *testing.T) {
 	}
 }
 
+// ⛔⛔ \lastbox ON AN EMPTY LIST, the guard nothing held.
+//
+// Found by `mutsweep -files lastbox.go -- go test .` on already-MERGED code:
+//
+//	[1/3] caught       lastbox.go:72  list == &e.mvl && e.internalVertical == 0
+//	[2/3] SURVIVED     lastbox.go:75  len(*list) == 0
+//	[3/3] not a mutant lastbox.go:82  !ok || b == nil   (did not compile)
+//
+// A SURVIVED guard is one the whole suite leaves intact: three tests exercised
+// a vbox with a box in it, one with a kern, and the main vertical list, and
+// none ever asked \lastbox for the last box of an EMPTY one. Deleting that line
+// indexes (*list)[-1].
+//
+// ⭐ A survivor is not a defect, as the tool says, and this one is not: the
+// behaviour is right and agrees with the reference. `\setbox1\vbox{\global
+// \setbox0\lastbox}` gives wd=0.0pt ht=0.0pt under tectonic and the same here.
+// What was missing was the assertion, and the three tests above all took a path
+// that could not reach it — my hand break-check of this file mutated the mode
+// guard and called the file covered.
+//
+// ⚠ And it is a legal document, not a corner: \vbox{\lastbox} is what
+// ltlists.dtx's {\setbox\z@\lastbox} becomes whenever \everypar fires in a
+// paragraph that has not placed its indent box yet.
+func TestLastboxOnAnEmptyListIsVoid(t *testing.T) {
+	e := lastboxEngine(t, `\setbox1\vbox{\global\setbox0\lastbox}`)
+	if b := e.getBox(0); b != nil && (b.width != 0 || b.height != 0) {
+		t.Errorf("\\lastbox in an empty vbox gave %.2fpt x %.2fpt, want a void box",
+			spToPt(b.width), spToPt(b.height))
+	}
+	// And the vbox itself must survive the attempt.
+	if e.getBox(1) == nil {
+		t.Error("the empty vbox is void: \\lastbox took something that was not there")
+	}
+}
+
 // boxesUnder counts the boxes a page box holds, at any depth. (countBoxes is
 // already taken in this package, by a helper that counts a []node.)
 func boxesUnder(b *boxNode) int {
