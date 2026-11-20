@@ -614,6 +614,15 @@ Each stage is gated by an objective oracle:
    ⚠ **Only English patterns are embedded.** A paper in another language is set
    unhyphenated where a real TeX hyphenates it; that gap is tracked in
    [#754](https://github.com/go-tex/engine/issues/754).
+   **The line straight after a list is not indented**, as in LaTeX: after an
+   `itemize`, `enumerate`, `description`, `center`, `quote`, `quotation` or
+   `verse` with no blank line before the text, the paragraph continues flush
+   left; a blank line indents it as usual. Measured against tectonic, such a
+   line used to start one `\parindent` (14.94bp) in. The mechanism is
+   `\@doendpe` from the **2021-11-15 kernel the reference runs**, read from it
+   with `\meaning`: its flag is local, so a list closed inside `{…}` leaves
+   the next line indented there, as it does here — the 2024 kernel would not
+   ([#857](https://github.com/go-tex/engine/pull/857)).
 3. ✅ **Math** — `$…$` and the display environments delegated to `go-tex/math`
    (vector output).
 4. ✅ **Fonts** — OpenType via `go-opentype`; a built-in font so it runs with no
