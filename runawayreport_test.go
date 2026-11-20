@@ -68,13 +68,20 @@ func TestRunawayArgumentNamesTheMacro(t *testing.T) {
 	}
 }
 
-// tex.web §392 tests the COMMAND CODE, cur_cmd = par_end — not the name. Matching
-// on the name "par" was wrong in both directions, and both are pinned here.
-func TestRunawayFollowsTheCommandCodeNotTheName(t *testing.T) {
-	// A \let copy of \par carries par_end, so it ends an argument. \@@par is such a
-	// copy, and latex.ltx:12794 writes it at the end of every section heading — the
-	// name test made the whole census a floor rather than a count.
-	t.Run("alias counts", func(t *testing.T) {
+// tex.web :8035 and :8148 test the TOKEN — `if cur_tok=par_token`, par_token being
+// the control sequence named \par (:7139) — not its command code. Both directions
+// are pinned here, each against what tectonic does with the same source:
+//
+//	\let\myp\par \one{A\myp B}         → \one runs ("[ONE OK]")
+//	{\def\par{x}\one{A\par B}}         → "Runaway argument? ! Paragraph ended
+//	                                      before \one was complete."
+//
+// These two subtests pinned the OPPOSITE from #324 until #587's \list work hit it:
+// the kernel's \@setpar{{\@@par}} is a non-\long argument carrying \@@par, and was
+// abandoned as a runaway, so every list lost the \par that keeps its shape.
+func TestRunawayFollowsTheParTokenNotItsMeaning(t *testing.T) {
+	// A \let copy of \par is a DIFFERENT token: it does not end an argument.
+	t.Run("alias does not", func(t *testing.T) {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
 			t.Fatal(err)
@@ -83,13 +90,12 @@ func TestRunawayFollowsTheCommandCodeNotTheName(t *testing.T) {
 		if _, err := e.Run(`\def\one#1{[#1]}\let\myp\par\one{A\myp B}\par`); err != nil {
 			t.Fatal(err)
 		}
-		if n := e.Diagnostics().RunawayArgs; n != 1 {
-			t.Errorf("RunawayArgs = %d on a \\let copy of \\par, want 1", n)
+		if n := e.Diagnostics().RunawayArgs; n != 0 {
+			t.Errorf("RunawayArgs = %d on a \\let copy of \\par, want 0 (tectonic runs \\one)", n)
 		}
 	})
-	// A \par redefined as a MACRO is no longer par_end, so it does NOT end an
-	// argument. The name test fired here, reporting a runaway TeX would not.
-	t.Run("redefined par does not", func(t *testing.T) {
+	// \par redefined as a macro is still par_token: still a runaway.
+	t.Run("redefined par counts", func(t *testing.T) {
 		e := New()
 		if err := e.LoadLaTeX(); err != nil {
 			t.Fatal(err)
@@ -98,8 +104,22 @@ func TestRunawayFollowsTheCommandCodeNotTheName(t *testing.T) {
 		if _, err := e.Run(`\def\one#1{[#1]}{\def\par{x}\one{A\par B}}\par`); err != nil {
 			t.Fatal(err)
 		}
+		if n := e.Diagnostics().RunawayArgs; n != 1 {
+			t.Errorf("RunawayArgs = %d on a redefined \\par, want 1 (tectonic: Paragraph ended before \\one)", n)
+		}
+	})
+	// The case that found it: the kernel's own idiom.
+	t.Run("kernel setpar", func(t *testing.T) {
+		e := New()
+		if err := e.LoadLaTeX(); err != nil {
+			t.Fatal(err)
+		}
+		e.SetFont(spMock{})
+		if _, err := e.Run(`\catcode64=11 \let\@@par\par\def\sp#1{\def\x{#1}}\sp{{\@@par}}\par`); err != nil {
+			t.Fatal(err)
+		}
 		if n := e.Diagnostics().RunawayArgs; n != 0 {
-			t.Errorf("RunawayArgs = %d on a \\par redefined as a macro, want 0", n)
+			t.Errorf("RunawayArgs = %d on \\@setpar-style {{\\@@par}}, want 0", n)
 		}
 	})
 }

@@ -1911,12 +1911,26 @@ func (e *Engine) grabUndelimited() []tok {
 //
 // The call is abandoned through the same argRunaway path a delimited runaway uses.
 func (e *Engine) parEndsArgument(t tok) bool {
-	// tex.web §392 tests the COMMAND CODE, cur_cmd = par_end, not the name. A \let
-	// copy of \par carries that code — \@@par is one (classkernel.go, and
-	// latex.ltx:12794 writes it at the end of every section heading) — and a
-	// \def\par{…} does NOT, being a macro. Matching on the name "par" was wrong in
-	// both directions: it missed every alias and fired on a redefined \par.
-	if !e.scanningNonLong || !t.cs_ || !e.isPrim(t.cs, "par") {
+	// ⛔⛔ tex.web tests the TOKEN, not its meaning — :8035 and :8148 both read
+	//
+	//	if cur_tok=par_token then if long_state<>long_call then
+	//	  <Report a runaway argument and abort>
+	//
+	// with par_token:=cs_token_flag+par_loc (:7139): the control sequence NAMED
+	// \par, whatever it means at the time. So:
+	//   - \@@par, a \let copy of the primitive, is a different token and is ALLOWED
+	//     in a non-\long argument. The kernel depends on it: \@trivlist runs
+	//     \@setpar{\if@newlist … {\@@par}\fi} (ltlists.dtx:617-625), and \@setpar is
+	//     not \long. Treated as a runaway, every LaTeX list lost its \par.
+	//   - \par redefined as a macro is STILL par_token and still a runaway.
+	// Measured against tectonic (plain TeX, \def\one#1{…}): `\let\myp\par
+	// \one{A\myp B}` runs \one; `{\def\par{x}\one{A\par B}}` reports "Runaway
+	// argument? ! Paragraph ended before \one was complete."
+	//
+	// #324 had changed this to the command code (cur_cmd=par_end), citing an
+	// unmeasured "real TeX reports a runaway here" — inverted in both directions.
+	// The name test it replaced was the right one.
+	if !e.scanningNonLong || !t.cs_ || t.cs != "par" {
 		return false
 	}
 	e.back(t) // back_error: the \par is put back, not consumed
