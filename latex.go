@@ -461,7 +461,23 @@ const MiniLaTeXKernel = `
 % eqtb and being ignored at the one point that mattered. Measured before: a document
 % writing \def\@biblabel#1{<<#1>>} rendered BYTE-IDENTICALLY to one that did not.
 \def\@biblabel#1{[#1]}
-\def\bibitem{\@ifnextbracket\@bibitemopt\@bibitemnoopt}
+% ⭐ INSIDE A \list (every class's thebibliography is one — article.cls:568-575,
+% \list{\@biblabel{\@arabic\c@enumiv}}{…\usecounter{enumiv}…}) \bibitem IS AN \item,
+% as ltbibl.dtx:154-177 has it:
+%
+%	\def\@lbibitem[#1]#2{\item[\@biblabel{#1}\hfill]…\bibcite{#2}{#1}…\ignorespaces}
+%	\def\@bibitem#1{\item…\bibcite{#1}{\the\value{\@listctr}}…\ignorespaces}
+%
+% so it takes the list's label layout, its \itemsep and its counter. The two macros
+% below set the entry by hand beside the list: measured against tectonic on a
+% three-entry article bibliography, every entry 4pt short of its \itemsep, and the
+% first line one interword space short (no \ignorespaces), so it broke a word early.
+% Outside a \list — this kernel's own class-less thebibliography above — they stay.
+\def\bibitem{\ifx\@gotexitem\gotex@listitem
+    \expandafter\@ifnextbracket\expandafter\gotex@lbibitem\expandafter\gotex@bibitem
+  \else\expandafter\@ifnextbracket\expandafter\@bibitemopt\expandafter\@bibitemnoopt\fi}
+\def\gotex@lbibitem[#1]#2{\item[\@biblabel{#1}\hfill]\def\@currentlabel{#1}\label{#2}\ignorespaces}
+\def\gotex@bibitem#1{\item\label{#1}\ignorespaces}
 \def\@bibitemopt[#1]#2{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#2}\llap{\@biblabel{\thebibitem}\enspace}}
 \def\@bibitemnoopt#1{\par\noindent\advance\c@bibitem by1\relax\edef\@currentlabel{\thebibitem}\label{#1}\llap{\@biblabel{\thebibitem}\enspace}}
 % xstring's \IfSubStr[<n>]{<string>}{<substring>}{<true>}{<false>} — four mandatory
@@ -1349,18 +1365,20 @@ const MiniLaTeXKernel = `
 \def\cubed{³}
 % ── end siunitx unit-name macros ────────────────────────────────────────────
 % Width lengths used as the target of \begin{tabularx}{...} (and tabular*):
-% \linewidth IS the current measure, so it resolves to \hsize wherever a rigid
-% <dimen> is scanned: a minipage sets it from \hsize (latex.ltx:11861) and so does
-% \begin{document} (6688).
+% \linewidth, \textwidth and \columnwidth are each their OWN \newdimen in LaTeX —
+% \linewidth at latex.ltx:11414 — and each is an engine dimension parameter here
+% (lineWidthValue, twocolumn.go). An unset \linewidth reads as \hsize, which is what
+% the old \let\linewidth\hsize gave. ⛔ The \let had to go: \list decrements
+% \linewidth by both margins before \parshape (ltlists.dtx:569-572), and through
+% the \let that shrank \hsize itself (go-tex/engine#587).
 %
-% \textwidth and \columnwidth are NOT. Each is its own \newdimen in LaTeX
+% \textwidth and \columnwidth: each is its own \newdimen in LaTeX
 % (\columnwidth at latex.ltx:15020) and each is its own engine dimension parameter
 % here: \textwidth is the whole text block — both columns and the gutter — and
 % \columnwidth is ONE column. \hsize is set FROM \columnwidth (6688, 15079, 15113),
 % never the reverse, which is what a class relies on when it sets \hsize for a block
 % of front matter and then asks how wide a column is (acmart.cls:2712 then :2718).
 % In single-column mode all three coincide, so nothing changes there.
-\let\linewidth\hsize
 % ─── sub-captions / \captionof / \captionsetup (feat/subcaption) ─────────────
 % A pragmatic subset of the caption / subcaption packages. Everything here is
 % pure macro glue that REUSES the existing counter, \caption and \parbox

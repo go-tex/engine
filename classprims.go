@@ -398,7 +398,11 @@ const LaTeX2eClassLead = `
 \def\gotex@wraptab#1#2{\@float{table}\parbox{#2}\bgroup}
 \def\endwrapfigure{\egroup\end@float}
 \def\endwraptable{\egroup\end@float}
-\def\usecounter#1{}
+% \usecounter makes a \list NUMBERED (ltlists.dtx:1083): its items step #1 through
+% \refstepcounter (see \gotex@listitem). It was a no-op, so thebibliography's
+% \usecounter{enumiv} numbered nothing and \bibitem kept its own counter beside it.
+\newif\if@noitemarg
+\def\usecounter#1{\@nmbrlisttrue\def\@listctr{#1}\setcounter{#1}\z@}
 % \twocolumn / \onecolumn are Go primitives (see twocolumn.go / primitives.go): under
 % the two-column opt-in they switch the page column mode, otherwise they gobble the
 % optional [span] and do nothing (the historical stub behaviour).
@@ -429,7 +433,118 @@ const LaTeX2eClassLead = `
 %
 % The space goes on \list, NOT on \@trivlist: a theorem and amsart's author block
 % run through \@trivlist directly and already match the reference.
-\def\list#1#2{\@trivlist}
+%
+% ⛔ AND \list THREW ITS SETTINGS AWAY (\def\list#1#2{\@trivlist}), which is where every
+% \list-based environment states its margins — article.cls:
+%
+%	\newenvironment{quote}{\list{}{\rightmargin\leftmargin}\item\relax}{\endlist}
+%
+% so quote, quotation and verse had NO indentation and description no bold label.
+% Measured against tectonic (testdata/parity/listmargin.tex): quote 133.77–477.50
+% where the reference sets 158.67–452.57, verse's two lines merged into one.
+% go-tex/engine#587; the \list body is #646's, re-measured on today's main.
+%
+% This is ltlists.dtx:552-573 in its own order: the per-depth defaults run FIRST
+% (\@listi sets \leftmargin\leftmargini), then the settings argument, which can
+% therefore override them; the indentation is a PARAGRAPH SHAPE, not \leftskip
+% (\@trivlist zeroes \leftskip, :613).
+%
+% Two pieces of \@trivlist's are put here rather than in our \@trivlist, which theorems
+% and the author block also use and which match the reference as they are:
+%   - \@setpar{{\@@par}} (ltlists.dtx:617-625, without the missing-\item loop count):
+%     the primitive \par runs in a group of its own, so its end-of-paragraph reset of
+%     \parshape (tex.web:20760) is undone and the next paragraph keeps the list's shape.
+%     That needs \parshape to be group-scoped, which it is now (setParShape).
+%   - the item: \gotex@listitem lays the label out as \@item does (ltlists.dtx:1037-1052).
+\newcount\@listdepth \@listdepth=0
+\newdimen\@totalleftmargin \@totalleftmargin=0pt
+\def\@toodeep{}% LaTeX's "Too deeply nested" (lterror.dtx:718); the depth is capped below
+\def\@setpar#1{\def\par{#1}\def\@par{#1}}% ltpar.dtx:167
+\def\@mklab#1{\hfil #1}% ltlists.dtx:902
+\let\makelabel\@mklab
+\def\list#1#2{%
+  \ifnum \@listdepth >5\relax \@toodeep \else \global\advance\@listdepth\@ne \fi
+  \rightmargin\z@ \listparindent\z@ \itemindent\z@
+  \csname @list\romannumeral\the\@listdepth\endcsname
+  \def\@itemlabel{#1}%
+  \let\makelabel\@mklab
+  \@nmbrlistfalse
+  #2\relax
+  \@trivlist
+  % Again, after: OUR \@trivlist empties \@itemlabel (LaTeX's \trivlist does, its
+  % \@trivlist does not), and without this every thebibliography entry lost its
+  % [N] — the label is \@biblabel{\@arabic\c@enumiv}, the list's #1.
+  \def\@itemlabel{#1}%
+  \let\@gotexitem\gotex@listitem
+  % \item as \list has it (ltlists.dtx, \item): no [label] raises \@noitemarg, which
+  % is what lets a numbered list step its counter for that item and not for one
+  % that names its own label.
+  \def\item{\@ifnextchar[\gotex@listitem{\@noitemargtrue\gotex@listitem[\@itemlabel]}}%
+  % What \@setpar{{\@@par}} defines, written out: this engine stops a non-\long
+  % argument at anything MEANING \par, \@@par included, so passing {\@@par}
+  % through \@setpar abandoned the call. tex.web stops at the \par TOKEN only
+  % (:8035) — that fix is ready but held, because it unmasks a chain of acmart
+  % heading defects (go-tex/engine#859); this does not depend on it.
+  \def\par{{\@@par}}\def\@par{{\@@par}}%
+  \parskip\parsep \parindent\listparindent
+  \advance\linewidth -\rightmargin
+  \advance\linewidth -\leftmargin
+  \advance\@totalleftmargin \leftmargin
+  \parshape \@ne \@totalleftmargin \linewidth
+  \ignorespaces}
+% \gotex@listitem is \@item's label layout (ltlists.dtx:1037-1052): back out of the
+% indentation by \labelwidth and \labelsep, set the label in a box \labelwidth wide
+% (its natural width when wider), step forward by \labelsep, with \itemindent first.
+% For a quote's empty label the four cancel and the text starts at the list's left
+% margin; description's \itemindent -\leftmargin puts its bold label at the page
+% margin while the wrapped lines hang at the list's.
+%
+% ⛔ AND THE LABEL WAITS FOR THE PARAGRAPH, as \@item's does (ltlists.dtx:940-1017):
+% the item stays in VERTICAL mode, the label goes into \@labels, and \everypar puts
+% it at the start of the paragraph once one begins, taking the indentation box back
+% off with \lastbox. Starting the paragraph here instead (a first draft did) typeset
+% the space after "\item\relax", which LaTeX drops in vertical mode, and every first
+% line came out one stretched interword space — 4.6 to 7.9bp — right of tectonic's.
+% Left out of \@item: the page-break penalties (\@beginparpenalty, \@itempenalty,
+% \@nbitem); the spacing between items is our \@iteminterspace.
+\def\gotex@listitem[#1]{%
+  \if@inlabel \indent\par \fi% a pending label with no text yet: give it its line
+  \ifhmode \unskip\unskip\par \fi
+  % The space, as \@item spaces it (ltlists.dtx:950-961) now that \list sets
+  % \parskip\parsep: the paragraph's own \parskip brings the \parsep, so the first
+  % item cancels it (\addvspace{-\parskip}, :956) and the others add \itemsep only
+  % (:960). \@iteminterspace adds \parsep itself, which is right for itemize and
+  % enumerate (they keep the outer \parskip) and counted it twice here.
+  \if@listfirst \@listfirstfalse \vskip-\parskip \else \vskip\itemsep \fi
+  \global\@inlabeltrue
+  \everypar{%
+    \if@inlabel
+      \global\@inlabelfalse
+      {\setbox\z@\lastbox \ifvoid\z@ \kern-\itemindent \fi}%
+      \box\@labels
+      \penalty\z@
+    \fi
+    \everypar{}}%
+  % A numbered list steps its counter for an item with no [label] of its own
+  % (ltlists.dtx:1024-1032), BEFORE the label is set, since the label reads it.
+  \if@noitemarg \@noitemargfalse \if@nmbrlist \refstepcounter\@listctr \fi \fi
+  \sbox\@tempboxa{\makelabel{#1}}%
+  \global\setbox\@labels\hbox{%
+    \unhbox\@labels
+    \hskip\itemindent\hskip-\labelwidth\hskip-\labelsep
+    \ifdim\wd\@tempboxa>\labelwidth \box\@tempboxa
+    \else\hbox to\labelwidth{\unhbox\@tempboxa}\fi
+    \hskip\labelsep}%
+  \ignorespaces}
+% \@centercr is \\ in centering environments and in verse (article.cls's verse does
+% \let\\\@centercr): it ENDS THE PARAGRAPH (ltmiscen.dtx:1155-1187), so each verse
+% line is a paragraph of its own, indented by \listparindent. Undefined, \\ was
+% skipped and both verse lines of the witness were set as one.
+\def\@centercr{\ifhmode \unskip\else \@nolnerr\fi
+  \par\@ifstar{\nobreak\@xcentercr}\@xcentercr}
+\def\@xcentercr{\addvspace{-\parskip}\@ifnextchar[\@icentercr\ignorespaces}
+\def\@icentercr[#1]{\vskip #1\ignorespaces}
+\providecommand\@nolnerr{}
 % \endlist ends the innermost list by ending its trivlist, as ltlists.dtx does —
 % \def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}. That chain is what a
 % class hooks: beamer patches \endtrivlist to run \beamer@closeitem, which closes the
@@ -437,7 +552,7 @@ const LaTeX2eClassLead = `
 % \item left open — every earlier item is closed by the NEXT \item. With \endlist a bare
 % \par those three stayed open past \end{itemize}, and every \end after them closed one
 % group too high.
-\def\endlist{\endtrivlist}
+\def\endlist{\global\advance\@listdepth\m@ne \endtrivlist}
 % \trivlist opens a group so a real class's redefined \trivlist (amsart's
 % \maketitle author block: \trivlist … \item\relax … \endtrivlist, which calls
 % \@trivlist) contains its material and CLOSES cleanly at \endtrivlist instead of
@@ -468,7 +583,12 @@ const LaTeX2eClassLead = `
 % what makes \end run \@doendpe, so the next line is flush unless a blank line
 % intervenes. \gotex@endparenv is the one copy every list end calls.
 \def\gotex@endparenv{\addvspace\@topsepadd\@endpetrue}
-\def\endtrivlist{\endgroup\par\gotex@endparenv}
+% ⛔ \par BEFORE \endgroup (ltlists.dtx's \endtrivlist ends the last paragraph while
+% still inside the list). Everything \list sets is scoped to the group \@trivlist
+% opened here, and with \endgroup first the shape was gone before the last paragraph
+% reached the breaker: a quote whose text ends without a \par came out at the full
+% measure while the same quote with one was indented (#646).
+\def\endtrivlist{\par\endgroup\gotex@endparenv}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the

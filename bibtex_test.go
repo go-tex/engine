@@ -629,9 +629,17 @@ An entry whose \bibitem carries no optional label at all.
 		t.Errorf("\\Url skipped %d time(s); it must be defined so the \\doi branch balances", d.Skipped["Url"])
 	}
 	// Every entry — including the last, which the group leak used to swallow —
-	// is numbered in order, and the optional [label] never desynced the key.
+	// keeps its key, and the optional [label] never desynced it. Without natbib
+	// loaded (this document loads none) the label IS the citation text, as
+	// LaTeX's \@lbibitem writes \bibcite{#2}{#1} (ltbibl.dtx:162), and an entry
+	// with no label is the list's FIRST numbered item, since a labelled \item does
+	// not step the counter. Measured on the same shape against tectonic
+	// (TestBibitemLabelIsNotTypeset). With natbib, its own \bibitem numbers them
+	// 1, 2, 3 — that is the other configuration, not this one.
 	for k, want := range map[string]string{
-		"Garcia-Vidal2021": "1", "Schlawin2022": "2", "PlainKey2023": "3",
+		"Garcia-Vidal2021": "Garcia-Vidal et~al.(2021)Garcia-Vidal, Ciuti, and Ebbesen",
+		"Schlawin2022":     "Schlawin et~al.(2022)Schlawin, Kennes, and Sentef",
+		"PlainKey2023":     "1",
 	} {
 		if got := e.labels[k]; got != want {
 			t.Errorf("label[%q] = %q, want %q", k, got, want)

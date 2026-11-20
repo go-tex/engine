@@ -139,6 +139,8 @@ func (e *Engine) assignLength(target tok, g glueSpec, add, global bool) {
 		e.setTextWidth(addOrSet(add, e.fullWidth(), g.width), global)
 	case m.kind == mPrim && m.name == "columnwidth":
 		e.setColumnWidth(addOrSet(add, e.columnWidthValue(), g.width), global)
+	case m.kind == mPrim && m.name == "linewidth":
+		e.setLineWidth(addOrSet(add, e.lineWidthValue(), g.width), global)
 	case m.kind == mPrim && m.name == "vsize":
 		e.setEngineDimen(saveVsize, &e.vsize, addOrSet(add, e.vsize, g.width), global)
 	case m.kind == mPrim && m.name == "parindent":
@@ -311,11 +313,24 @@ func (e *Engine) scanOptBracketGlue() (glueSpec, bool) {
 func (e *Engine) readBraceGlue() glueSpec {
 	e.skipOptSpace()
 	t, ok := e.getXToken()
-	if !ok || !(t.cat == catBegin && !t.cs_) {
-		if ok {
-			e.back(t)
-		}
+	if !ok {
 		return glueSpec{}
+	}
+	if !(t.cat == catBegin && !t.cs_) {
+		// ⛔ An UNBRACED argument is that one token, as for any undelimited macro
+		// parameter: `\hspace\labelsep` is `\hspace{\labelsep}`. article.cls writes
+		// exactly that in \descriptionlabel (\hspace\labelsep\normalfont\bfseries #1),
+		// and returning zero here left \labelsep in the input to run as an
+		// ASSIGNMENT — every description label came out \labelsep (4.98bp) left of
+		// the margin against tectonic (go-tex/engine#587). The scan is bounded to the
+		// token by a \relax sentinel, which is consumed if the glue did not use it.
+		e.back(csTok("relax"))
+		e.back(t)
+		g := e.scanGlue()
+		if nt, ok := e.getNext(); ok && !(nt.cs_ && nt.cs == "relax") {
+			e.back(nt)
+		}
+		return g
 	}
 	// \setlength is the command calc exists to extend. The arithmetic is applied to
 	// the natural width only: calc's own documentation notes that TeX drops a glue's

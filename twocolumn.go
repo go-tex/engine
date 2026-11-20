@@ -249,6 +249,27 @@ func (e *Engine) setColumnWidth(v int, global bool) {
 	e.setEngineDimen(saveColumnWidth, &e.columnWidth, v, global)
 }
 
+// lineWidthValue is \linewidth, its OWN \newdimen in LaTeX (latex.ltx:11414). It was
+// \let to \hsize, and \list decrements it by BOTH margins before handing it to
+// \parshape (ltlists.dtx:569-572): with the \let, that arithmetic shrank \hsize
+// itself, and the text AROUND a list was narrowed by every list it contained.
+// go-tex/engine#587, measured in #646 as a quotation packed to 295pt against 345pt.
+//
+// ⚠ Zero means "nobody has stated it", and then it answers with the current measure
+// — what the \let gave — so a minipage or \parbox that sets \hsize (and not this,
+// as latex.ltx:11861 does) still reads its own width when nothing is set.
+func (e *Engine) lineWidthValue() int {
+	if e.lineWidth > 0 {
+		return e.lineWidth
+	}
+	return e.hsize
+}
+
+// setLineWidth assigns \linewidth, group-scoped like any dimension register.
+func (e *Engine) setLineWidth(v int, global bool) {
+	e.setEngineDimen(saveLineWidth, &e.lineWidth, v, global)
+}
+
 // setMeasureFromTextWidth is the width half of LaTeX's \document (latex.ltx:6682):
 //
 //	\columnwidth\textwidth

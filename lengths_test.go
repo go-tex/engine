@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // theLen runs src (with spMock loaded) and returns \the of the given length cs,
 // captured through \message. It fails the test on any engine error.
@@ -278,10 +281,51 @@ func TestLengthMissingTarget(t *testing.T) {
 	}
 }
 
-// An unbraced value assigns zero (readBraceGlue requires a { … } group).
+// \setcounter's value, unbraced, is that one token — the kernel writes it so in
+// \usecounter (\setcounter{#1}\z@, ltlists.dtx:1083). readBraceInt returned 0 for
+// any unbraced value and left the token in the input; with \z@ that is the right
+// number BY ACCIDENT, so the value asked here is \@ne, and the text after it must
+// survive (a bare register left behind runs as an assignment and eats it).
+func TestSetcounterUnbracedValueIsOneToken(t *testing.T) {
+	e := runEI(t, `\documentclass{article}\makeatletter\newcounter{x}\begin{document}`+
+		`\setcounter{x}{5}\setcounter{x}\@ne [\arabic{x}] after\end{document}`)
+	if got := mvlText(e.mvl); !strings.Contains(got, "[1]after") {
+		t.Errorf("typeset %q, want \"[1]after\" — \\setcounter{x}\\@ne sets 1", got)
+	}
+}
+
+// \linewidth is its OWN register (latex.ltx:11414), not \let to \hsize: \list
+// decrements it by both margins (ltlists.dtx:569-570), and through the \let that
+// shrank \hsize — the measure of everything after the list. Unset, it reads as
+// \hsize, which is what the \let gave. go-tex/engine#587.
+func TestLinewidthIsItsOwnRegister(t *testing.T) {
+	if got := theLen(t, `\hsize=345pt \advance\linewidth by -50pt`, `\hsize`); got != "345.0pt" {
+		t.Errorf("\\advance\\linewidth moved \\hsize to %s, want 345.0pt", got)
+	}
+	if got := theLen(t, `\hsize=345pt \advance\linewidth by -50pt`, `\linewidth`); got != "295.0pt" {
+		t.Errorf("\\linewidth = %s after \\advance by -50pt from \\hsize 345pt, want 295.0pt", got)
+	}
+	if got := theLen(t, `\hsize=300pt`, `\linewidth`); got != "300.0pt" {
+		t.Errorf("an unset \\linewidth reads %s, want \\hsize's 300.0pt", got)
+	}
+}
+
+// An unbraced value is ONE token, as any undelimited macro argument is.
+//
+// `\setlength{\z}2pt` gives \z the single token `2`: tectonic stops on "! Illegal
+// unit of measure (pt inserted)", and tex.web:9043-9047 says what that recovery
+// assigns — "I'll assume that you meant to say pt" — so 2pt, and the "pt" that
+// follows is left in the input. This test used to pin 0pt, which was the old
+// readBraceGlue discarding any unbraced argument; that same discard made
+// article.cls's \hspace\labelsep a zero space and put every description label
+// \labelsep left of the margin (go-tex/engine#587).
 func TestSetLengthUnbracedValue(t *testing.T) {
-	if got := theLen(t, `\newlength{\z}\setlength{\z}2pt`, `\z`); got != "0.0pt" {
-		t.Errorf("unbraced value: got %q want %q", got, "0.0pt")
+	if got := theLen(t, `\newlength{\z}\setlength{\z}2pt`, `\z`); got != "2.0pt" {
+		t.Errorf("unbraced value: got %q want %q (one token, pt assumed)", got, "2.0pt")
+	}
+	// The case that matters: an unbraced REGISTER is its value.
+	if got := theLen(t, `\parindent=7pt\newlength{\z}\setlength{\z}\parindent`, `\z`); got != "7.0pt" {
+		t.Errorf("unbraced register: got %q want %q", got, "7.0pt")
 	}
 }
 
