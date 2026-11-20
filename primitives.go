@@ -1010,6 +1010,12 @@ func (e *Engine) doCheckEnv() {
 		return // no braced argument, or an empty one: nothing meaningful to probe
 	}
 	e.beginGroupKind(semiSimpleGroup) // \begin{env} … \end{env} is a group
+	// \begin's \begingroup\@endpefalse (ltmiscen.dtx): an environment opened
+	// while an outer \@endpetrue stands must not inherit it, or its own \end
+	// would run \@doendpe a second time. Done here, as a local \let, because a
+	// \let written into \begin's expansion would print where \begin is only
+	// expanded.
+	e.assignLetMeaning("if@endpe", csTok("iffalse"), false)
 	e.setCurrentEnv(name)
 	if e.envUndefined(name) {
 		if e.undefinedEnvs == nil {

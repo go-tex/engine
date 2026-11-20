@@ -1,0 +1,7 @@
+Charlie 0.00
+Foxtrot 14.94
+India 0.00
+Lima 0.00
+Oscar 14.94
+Romeo 0.00
+Uniform 0.00

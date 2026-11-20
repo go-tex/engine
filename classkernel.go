@@ -267,7 +267,20 @@ const LaTeX2eClassKernel = `
 % the reference's, it is the absence of one: 0 is exactly "no preference", which
 % is what the list already said by having no penalty node at all.
 \newcount\@secpenalty \@secpenalty=-300
-\newcount\@clubpenalty
+% \@clubpenalty is the SAVED \clubpenalty that \@afterheading restores on the
+% second paragraph after a heading (ltsect.dtx:625, \clubpenalty \@clubpenalty).
+% It was DECLARED and never assigned — the same shape as \@secpenalty above — so
+% the restore would have set \clubpenalty to 0: not a weaker club penalty but
+% the removal of one.
+%
+% ⭐ 150 is MEASURED, not recalled. Asked of tectonic on a document that prints
+% all three at four points, the reference answers saved=150 from the preamble
+% onwards, club=150 in the body, and club=10000 only AFTER the paragraph that
+% follows a heading — which is \everypar firing, not \@afterheading itself.
+% The faithful form mirrors whatever \clubpenalty holds, as the kernel does.
+% (This hunk is #803's, verbatim: \@doendpe restores the same register after
+% every list, and lands first.)
+\newcount\@clubpenalty \@clubpenalty\clubpenalty
 \newcount\@topnum
 \newcount\c@secnumdepth \c@secnumdepth=3
 \newcount\c@footnote
@@ -473,6 +486,34 @@ const LaTeX2eClassKernel = `
 % \@endpefalse (amsart's \@endtheorem is \endtrivlist\@endpefalse). Undefined, the
 % \@endpefalse token leaks into the page as text after every theorem/proof.
 \newif\if@endpe
+% \@doendpe: the paragraph straight after a list, quote or centre is NOT indented
+% unless a blank line came between. It is the 2021-11-15 kernel's, the one the
+% reference runs — read from tectonic itself with \meaning, not recalled:
+%
+%   \@endpetrue = \let\if@endpe\iftrue                       (LOCAL)
+%   \@doendpe   = \@endpetrue \def\par{\@restorepar\clubpenalty\@clubpenalty
+%                 \everypar{}\par\@endpefalse}
+%                 \everypar{{\setbox\z@\lastbox}\everypar{}\@endpefalse}
+%   \@restorepar = \def\par{\@par}     \@par = \let\par\@@par\par
+%   \end{x}     = … \csname endx\endcsname \@checkend{x}
+%                 \expandafter\endgroup\if@endpe\@doendpe\fi …
+%
+% ⛔ NOT the 2024/11 ltlists.dtx, whose \@endpetrue is GLOBAL and pushed out of
+% an enclosing simple group by \aftergroup\propagate@doendpe. The reference has
+% no \propagate@doendpe ("undefined"), and it shows: a list closed inside {…}
+% leaves the next line INDENTED there, because the closing brace restores the
+% \par and \everypar \@doendpe set. Porting the newer source would have moved
+% that line where the reference does not.
+%
+% A blank line is \par, which runs \@restorepar and empties \everypar, so the
+% paragraph after it is indented as usual; \noindent leaves nothing to remove.
+% The \lastbox in braces is #848's, which takes the \parindent box back off the
+% paragraph that has just begun.
+\def\@par{\let\par\@@par\par}
+\def\@restorepar{\def\par{\@par}}
+\def\@doendpe{\@endpetrue
+  \def\par{\@restorepar\clubpenalty\@clubpenalty\everypar{}\par\@endpefalse}%
+  \everypar{{\setbox\z@\lastbox}\everypar{}\@endpefalse}}
 % Set the flags a class expects to have a definite state.
 \@compatibilityfalse
 \@twocolumnfalse
