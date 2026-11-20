@@ -85,6 +85,15 @@ func TestATextWidthNodeInAnInputFileDoesNotSwallowTheRestOfTheDocument(t *testin
 			if !strings.Contains(out, markerAfter) {
 				t.Errorf("%q never reached the page: everything after the picture was swallowed", markerAfter)
 			}
+			// go-tex/engine#816: keeping the document was half of it. The node's OWN
+			// text must reach the page too. Before, the scan's exit closed the
+			// minipage's group as it handed the tokens back, so the \end{minipage}
+			// that pgf queues with \aftergroup closed nothing of its own and the
+			// text ran outside its box: the node rendered EMPTY. The inline control
+			// shows that this text can render at all.
+			if !strings.Contains(out, "Taylor") {
+				t.Errorf("the node's own text never reached the page: the node rendered empty (go-tex/engine#816)")
+			}
 		})
 	}
 }
