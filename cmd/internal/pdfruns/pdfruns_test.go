@@ -311,6 +311,39 @@ BT /F1 10 Tf 200 Tz 0 20 Td (A) Tj ET`))
 	}
 }
 
+// A content stream is untrusted input: every operator below arrives with too
+// few operands, or none. Each one must be skipped, not panic and not move the
+// pen, so the one well-formed run after them lands exactly where it says.
+// The bare " is the case that did panic: it shows its LAST operand, index -1.
+func TestOperandStarvedOperatorsAreSkipped(t *testing.T) {
+	doc, err := Open(handPDF(t, `BT /F1 10 Tf
+Tj
+'
+"
+TJ
+Td
+TD
+TL
+Tc
+1 2 3 4 5 Tm
+ET
+1 2 3 4 5 cm
+BT /F1 10 Tf 10 20 Td (A) Tj ET`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs, err := PageRuns(doc, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("%d runs, want only the well-formed one: %+v", len(runs), runs)
+	}
+	if r := runs[0]; r.X != 10 || r.Y != 20 || r.W != 10 || r.Size != 10 {
+		t.Errorf("run = x %v y %v w %v size %v, want 10 20 10 10: a short cm or Tm was applied", r.X, r.Y, r.W, r.Size)
+	}
+}
+
 // TJ's numbers move the pen BACK by n/1000 of the size: that is how a producer
 // kerns, and reading them as forward motion mirrors every kern on the line.
 func TestTJNumbersMoveBackwards(t *testing.T) {

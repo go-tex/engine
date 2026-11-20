@@ -48,10 +48,7 @@ func (m matrix) apply(x, y float64) (float64, float64) {
 // scale is the matrix's horizontal magnification, which is what a font size has
 // to be multiplied by to give the size a reader sees.
 func (m matrix) scale() float64 {
-	if m.b == 0 {
-		return abs(m.a)
-	}
-	return hypot(m.a, m.b)
+	return hypot(m.a, m.b) // |a| when b is 0: no shortcut needed
 }
 
 // textState is the part of the graphics state that positions text.
@@ -197,9 +194,10 @@ func (st *textState) advance(w float64) {
 	st.tm = matrix{1, 0, 0, 1, w, 0}.mul(st.tm)
 }
 
-// show emits one run for the operand at index i (the last operand for ' and ").
+// show emits one run for the operand at index i (the last operand for ").
+// i is -1 for a " with no operands at all, so both ends are bounds.
 func (st *textState) show(runs []Run, operands []reader.Object, i int) []Run {
-	if i >= len(operands) {
+	if i < 0 || i >= len(operands) {
 		return runs
 	}
 	return st.showString(runs, operands[i])
@@ -255,5 +253,4 @@ func matrixOf(ops []reader.Object) (matrix, bool) {
 	return matrix{v[0], v[1], v[2], v[3], v[4], v[5]}, true
 }
 
-func abs(x float64) float64      { return math.Abs(x) }
 func hypot(a, b float64) float64 { return math.Hypot(a, b) }
