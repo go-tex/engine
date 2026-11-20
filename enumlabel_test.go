@@ -71,6 +71,50 @@ func TestAReferenceToAnItemDoesNotCarryTheLabelsDecoration(t *testing.T) {
 	}
 }
 
+// A reference to a NESTED item carries its parent's number: \refstepcounter
+// composes \@currentlabel as \p@<ctr>\the<ctr> (ltxref.dtx:596-599), and
+// article.cls:352-354 sets \p@enumii to \theenumi and \p@enumiii to
+// \theenumi(\theenumii). tectonic on the same source: "2a" and "2(a)i". Here the
+// item stepped its register by hand and wrote \the<ctr> alone, so both read "a"
+// and "i". Three pieces had to land together for this one line to move: \newcounter
+// creating \p@<ctr> (ltcounts.dtx:404-412), \refstepcounter composing it, and the
+// item stepping through \refstepcounter at all. go-tex/engine#845.
+//
+// The level-one reference and a section's and an equation's are the controls:
+// their \p@ is empty, and they must not move.
+func TestAReferenceToANestedItemCarriesItsParentsNumber(t *testing.T) {
+	e := runEI(t, `\documentclass{article}\begin{document}`+
+		`\begin{enumerate}\item\label{one} one\item two`+
+		`\begin{enumerate}\item\label{nested} nested`+
+		`\begin{enumerate}\item\label{deep} deep\end{enumerate}`+
+		`\end{enumerate}\end{enumerate}`+
+		`seen[\ref{one}|\ref{nested}|\ref{deep}]`+
+		`\section{S}\label{sec:s}\begin{equation}x\label{eq:x}\end{equation}`+
+		`also[\ref{sec:s}|\ref{eq:x}]\end{document}`)
+	got := mvlText(e.mvl)
+	if !strings.Contains(got, "seen[1|2a|2(a)i]") {
+		t.Errorf("typeset %q, want \"seen[1|2a|2(a)i]\" — a nested item's \\ref "+
+			"is \\p@<ctr>\\the<ctr>, as tectonic prints it", got)
+	}
+	if !strings.Contains(got, "also[1|1]") {
+		t.Errorf("typeset %q, want \"also[1|1]\" — counters with an empty \\p@ "+
+			"must not move", got)
+	}
+}
+
+// \newcounter creates \p@<name> as \@empty (ltcounts.dtx:404-412), so a package
+// asking \@ifundefined{p@<name>} — or \let-ing one prefix to another — finds it.
+// Held by nothing else: article.cls \renewcommand's the enumerate prefixes, and
+// this engine's \renewcommand does not require the macro to exist, so the nested
+// \ref test above passes without the line (mutsweep-by-hand found it unheld).
+func TestNewcounterDefinesAnEmptyRefPrefix(t *testing.T) {
+	e := runEI(t, `\documentclass{article}\makeatletter\newcounter{foo}\begin{document}`+
+		`[\@ifundefined{p@foo}{undefined}{defined}|\p@foo|]\end{document}`)
+	if got := mvlText(e.mvl); !strings.Contains(got, "[defined||]") {
+		t.Errorf("typeset %q, want \"[defined||]\" — \\newcounter{foo} defines \\p@foo, empty", got)
+	}
+}
+
 // enumitem's label= sets the LABEL, as its itemize branch always did for
 // \labelitemN. It set \theenumN, which is the same confusion one layer down:
 // the spec's closing parenthesis ended up inside every \ref, and once

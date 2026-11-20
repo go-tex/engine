@@ -365,7 +365,16 @@ const MiniLaTeXKernel = `
 % "1" in BOTH engines already, so passing \labelenumi for both would print "1."
 % on the page and turn that \ref into "1." as well — a visible defect traded for
 % a quieter one in every cross-reference. go-tex/engine#845.
-\def\@listitem#1#2#3{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\llap{#3\enspace}}
+%
+% ⭐ AND THE COUNTER IS STEPPED BY NAME, through \refstepcounter, as \@item does
+% (\refstepcounter\@listctr, ltlists.dtx:1030). It used to advance the REGISTER and
+% write \@currentlabel from \the<ctr> by hand, which skipped the \p@<ctr> prefix
+% \refstepcounter composes (ltxref.dtx:596-599) — and article.cls:352-354 gives
+% exactly the enumerate levels a non-empty one: \p@enumii is \theenumi. So \ref to
+% a nested item printed "a" where tectonic prints "2a", and a third-level one "i"
+% where it prints "2(a)i". So the signature is now {counter name}{page label}: what
+% \ref prints is \refstepcounter's to compose, not the call site's.
+\def\@listitem#1#2{\par\noindent\refstepcounter{#1}\llap{#2\enspace}}
 \def\@bulletitem#1{\par\noindent\llap{#1\enspace}}
 % \@itemopt reads the optional [label] of an \item in itemize/enumerate and uses
 % it verbatim in place of the default bullet/number. \@descitem does the same for
@@ -429,7 +438,7 @@ const MiniLaTeXKernel = `
   \addvspace\@topsepadd}
 \def\itemize{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
 \def\enditemize{\par\endgroup\gotex@endparenv}
-\def\enumerate{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv\labelenumiv}}\fi\@enumitemopt{enumerate}}
+\def\enumerate{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem{enumi}\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem{enumii}\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem{enumiii}\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem{enumiv}\labelenumiv}}\fi\@enumitemopt{enumerate}}
 \def\endenumerate{\par\@enumitemrec\endgroup\gotex@endparenv}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
@@ -1275,9 +1284,11 @@ const MiniLaTeXKernel = `
 \def\gotex@caption@untyped#1{\par\vskip\abovecaptionskip{\captionfont #1}\par\vskip\belowcaptionskip}
 \def\gotex@caption@typed#1{\par\vskip\abovecaptionskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\edef\@currentreftype{\@captype}\def\@currentlabelname{#1}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par\vskip\belowcaptionskip}
 % The typed-reference layer's \@listitem REDEFINES the one above, so it takes the
-% same three arguments or every numbered item loses its label again the moment
-% this layer loads. #2 is what \ref prints, #3 is what the page shows (#845).
-\def\@listitem#1#2#3{\par\noindent\advance#1 by1\relax\edef\@currentlabel{#2}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#3\enspace}}
+% same two arguments or every numbered item loses its label again the moment this
+% layer loads: #1 the counter's NAME (stepped through \refstepcounter, which
+% composes \p@<ctr>\the<ctr> for \ref), #2 what the page shows (#845). The reference
+% type is "item" here, overriding the counter name \refstepcounter records.
+\def\@listitem#1#2{\par\noindent\refstepcounter{#1}\def\@currentreftype{item}\def\@currentlabelname{}\llap{#2\enspace}}
 \def\@npart#1{\par\bigskip\advance\c@part by1 \edef\@currentlabel{\thepart}\def\@currentreftype{part}\def\@currentlabelname{#1}\centerline{\Large\bf Part \thepart}\smallskip\centerline{\Large\bf#1}\par\bigskip}
 % A theorem's reference type is the ENVIRONMENT's name, not the word "theorem"
 % and not the counter's: cleveref keys its naming on it, and it is what

@@ -87,6 +87,15 @@ func (e *Engine) defineCounter(name string) int {
 	if e.eq["cl@"+name] == nil {
 		e.define("cl@"+name, &meaning{kind: mMacro}, true)
 	}
+	// …and an empty \p@<name>, on the line after it, as \@definecounter has them
+	// (ltcounts.dtx:404-412: `\global\expandafter\let\csname p@#1\endcsname\@empty`).
+	// \refstepcounter composes \@currentlabel as \p@<name>\the<name>; a class then
+	// \renewcommand's the ones with a parent — article.cls:352-354 does \p@enumii,
+	// \p@enumiii and \p@enumiv. Not overwritten when it already exists, so a class
+	// that set it before a re-\newcounter keeps its value.
+	if e.eq["p@"+name] == nil {
+		e.define("p@"+name, &meaning{kind: mMacro}, true)
+	}
 	return code
 }
 
@@ -183,7 +192,17 @@ func (e *Engine) doRefstepcounter() {
 	name := e.readBraceName()
 	e.stepCounter(name)
 	if e.eq["the"+name] != nil {
-		expanded := e.expandList([]tok{csTok("the" + name)})
+		// ltxref.dtx:596-599:
+		//	\protected@edef\@currentlabel
+		//	  {\csname p@#1\expandafter\endcsname\csname the#1\endcsname}
+		// The prefix is included only when it is DEFINED: a counter that reached the
+		// engine some other way (a bare \newcount\c@foo) has no \p@, and \csname would
+		// make it \relax rather than empty. go-tex/engine#845.
+		label := []tok{csTok("the" + name)}
+		if e.eq["p@"+name] != nil {
+			label = append([]tok{csTok("p@" + name)}, label...)
+		}
+		expanded := e.expandList(label)
 		e.define("@currentlabel", &meaning{kind: mMacro, body: expanded}, false)
 	}
 	// …and the counter's NAME is the reference type, which is where cleveref gets
