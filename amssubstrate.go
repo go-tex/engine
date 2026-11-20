@@ -576,7 +576,22 @@ const AMSClassSubstrate = `
 % with it — and an argument is exactly where a \par may not appear: tex.web §392
 % abandons the call, dropping THE WHOLE HEADING, number and title both. Measured,
 % this one macro is 179 of the corpus's 199 abandoned calls, 44 on a single paper.
-\long\def\@hangfrom#1#2{\global\let\@svsechd\relax\par\noindent#1#2}
+% ⛔ NOW REAL LaTeX'S, one argument (latex.ltx:12865), since \hangindent works:
+% the engine had "no hanging-indent primitive" when the two-argument stand-in above
+% was written, and it has one now (tex.web §847-850, README). amsart's second brace
+% group is then ordinary material, typeset as a group, so no \par passes through an
+% argument at all — the reason the stand-in was \long.
+%
+% ⛔ AND THE STAND-IN LEAKED A HEADING INTO THE NEXT ONE. Its body held
+% \global\let\@svsechd\relax, and \MakeTextUppercase (acmart's \@secfont) \edef's
+% its argument — \@ssect's \@hangfrom{…}\interlinepenalty\@M #5\@@par — so the
+% \@svsechd inside that \let EXPANDED: the previous run-in \paragraph's heading,
+% which acmart never clears, was pasted into the next \section* and uppercased
+% ("POPULAR SOLUTION APPROACHES" above "ACKNOWLEDGMENTS", go-tex/engine#859).
+% LaTeX's body is \setbox, \hbox, \hangindent, \wd, \noindent and \box: nothing an
+% \edef can expand.
+\def\@hangfrom#1{\setbox\@tempboxa\hbox{{#1}}%
+  \hangindent \wd\@tempboxa\noindent\box\@tempboxa}
 \def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
 % (\@afterheading is classprims.go's: it used to be stubbed empty HERE, which loads
 % later and silently undid it — the first paragraph after a heading kept its indent.)
