@@ -34,11 +34,18 @@ func pdfOf(t *testing.T, src string) []byte {
 // side of every comparison is a PDF this package did not produce.
 func handPDF(t *testing.T, content string) []byte {
 	t.Helper()
+	return handPDFWith(t, "", content)
+}
+
+// handPDFWith is handPDF with extra keys in the content stream's dictionary —
+// " /Filter /FlateDecode" to declare a filter the bytes may not honour.
+func handPDFWith(t *testing.T, streamDict, content string) []byte {
+	t.Helper()
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-		"<< /Length " + strconv.Itoa(len(content)) + " >>\nstream\n" + content + "\nendstream",
+		"<< /Length " + strconv.Itoa(len(content)) + streamDict + " >>\nstream\n" + content + "\nendstream",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica /FirstChar 65 /Widths [1000 500] /FontDescriptor 6 0 R >>",
 		"<< /Type /FontDescriptor /FontName /Helvetica /MissingWidth 250 >>",
 	}
@@ -56,6 +63,47 @@ func handPDF(t *testing.T, content string) []byte {
 	}
 	fmt.Fprintf(&sb, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
 	return []byte(sb.String())
+}
+
+// ⛔⛔ A DAMAGED PAGE IS COUNTED IN bad — and until this change it never could be.
+//
+// Glyphs has long said "a page that fails to decode contributes nothing and is
+// counted in bad, because a damaged page is not an empty one". But PageRuns read
+// pages through reader.PageOperations, which SALVAGES an undecodable stream and
+// returns no error, so the bad branch was unreachable: a corrupt file read as a
+// document that had lost its text — the exact reading the comment exists to
+// prevent. The comment promised a branch the code could not take.
+//
+// Two halves, asserted against each other: a page that decodes and reads, and a
+// page whose stream claims FlateDecode and does not inflate. Without the control,
+// a Glyphs that reported every page bad would pass the second row.
+//
+// ⚠ The control is a PDF the ENGINE wrote, not handPDF's. handPDF's simple font
+// has no ToUnicode, so its runs decode with Text "" and Glyphs counts 0 for a
+// page that read perfectly well — the first version of this control did exactly
+// that and failed on a page with nothing wrong with it.
+func TestGlyphsCountsAPageThatDidNotDecodeAsBad(t *testing.T) {
+	good, err := Open(pdfOf(t, `\documentclass{article}
+\begin{document}
+Quarantine.
+\end{document}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total, bad := Glyphs(good); bad != 0 || total == 0 {
+		t.Errorf("a page that decodes: total=%d bad=%d, want total>0 bad=0", total, bad)
+	}
+
+	damaged, err := Open(handPDFWith(t, " /Filter /FlateDecode", "this is not a zlib stream at all"))
+	if err != nil {
+		t.Fatalf("the damaged PDF did not open (%v) — the test would measure Open, not the page", err)
+	}
+	if n := damaged.PageCount(); n != 1 {
+		t.Fatalf("the damaged PDF has %d pages, want 1", n)
+	}
+	if total, bad := Glyphs(damaged); bad != 1 || total != 0 {
+		t.Errorf("a page whose stream does not decode: total=%d bad=%d, want total=0 bad=1 — read as an empty page instead of a damaged one", total, bad)
+	}
 }
 
 // The whole point of the package: a line's text has to come back. Reading the x

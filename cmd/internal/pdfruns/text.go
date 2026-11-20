@@ -4,6 +4,7 @@
 package pdfruns
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/go-pdfkit/reader"
@@ -74,11 +75,35 @@ func newTextState() textState {
 // order they were drawn. A page whose fonts cannot be read still yields runs:
 // their Text is empty and their W is zero, because a position measured without
 // a width is still a position, and saying so beats guessing one.
+//
+// ⛔ A page whose content stream did not decode is an ERROR here, not an empty
+// page. This read the page through reader.PageOperations, a convenience the
+// reader documents as being for RENDERERS: "a content stream whose filters
+// cannot be applied contributes what could be salvaged from it rather than
+// failing the page, which is what a renderer needs … PageContentDecoded says
+// whether any salvaging happened". This is not a renderer, it is a measurement,
+// and through PageOperations a page that could not be read came back as a page
+// with nothing on it — zero runs, no error. An A/B of rendered text reads that
+// as "the engine dropped everything on this page". Found by mutsweep: the guard
+// on this function's error survived, because nothing it was given could fail.
+//
+// Measured before tightening, 2026-11-20, against the populations this package
+// serves: 154 tectonic reference PDFs (3 343 pages) and 153 gotex outputs of the
+// same corpus (3 386 pages) — ZERO salvaged pages in either. So refusing one
+// changes no current measurement; it only stops a future one from lying.
+//
+// ⚠ The tokeniser's own error is still discarded, as the reader's PageOperations
+// does: "the operations it returns are still worth having". It counted 0 on the
+// same 6 729 pages, and it is a separate change with its own test to write.
 func PageRuns(doc *reader.Document, page int) ([]Run, error) {
-	ops, err := doc.PageOperations(page)
+	dec, err := doc.PageContentDecoded(page)
 	if err != nil {
 		return nil, err
 	}
+	if dec.Recovered {
+		return nil, fmt.Errorf("page %d: its content stream did not decode (%s): %v — read as nothing, not as an empty page", page, dec.Filter, dec.Cause)
+	}
+	ops, _ := reader.Operations(dec.Data)
 	fonts := pageFonts(doc, page)
 	st := newTextState()
 	var stack []textState

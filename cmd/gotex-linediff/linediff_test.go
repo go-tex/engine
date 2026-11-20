@@ -6,9 +6,11 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -296,6 +298,66 @@ Quarantine.
 	_, _, _, _, err = linesOf(one, reportOptions{page: 99})
 	if err == nil || !strings.Contains(err.Error(), "page 99 of 1") {
 		t.Errorf("page 99 of a one-page document: got %v, want the range check's \"page 99 of 1\"", err)
+	}
+}
+
+// onePagePDFWithCorruptContents is a well-formed one-page PDF — correct xref
+// offsets, so a reader cannot refuse it at OPEN for the wrong reason — whose
+// page content stream claims FlateDecode and holds bytes that do not inflate.
+func onePagePDFWithCorruptContents() []byte {
+	var b strings.Builder
+	var offs []int
+	obj := func(s string) {
+		offs = append(offs, b.Len())
+		b.WriteString(s)
+	}
+	b.WriteString("%PDF-1.4\n")
+	obj("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	obj("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	obj("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n")
+	garbage := "this is not a zlib stream at all"
+	obj("4 0 obj\n<< /Length " + strconv.Itoa(len(garbage)) + " /Filter /FlateDecode >>\nstream\n" +
+		garbage + "\nendstream\nendobj\n")
+	xref := b.Len()
+	b.WriteString("xref\n0 5\n0000000000 65535 f \n")
+	for _, o := range offs {
+		b.WriteString(fmt.Sprintf("%010d 00000 n \n", o))
+	}
+	b.WriteString("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + strconv.Itoa(xref) + "\n%%EOF\n")
+	return []byte(b.String())
+}
+
+// ⛔ A page INSIDE the range whose content stream does not decode must be an
+// ERROR, not an empty page. mutsweep found linesOf's last guard (the err from
+// PageRuns) survivable: the range check before it turns away every page the
+// document does not have, so no test reached a page that exists and cannot be
+// read. Without the guard, the runs come back nil, groupLines makes zero lines
+// of them, and the report prints a heading over an empty page — "0 lines" — for
+// a page that was never read. That is a scan that could not read reporting zero.
+func TestAPageThatDoesNotDecodeIsAnErrorNotAnEmptyPage(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "corrupt.pdf")
+	if err := os.WriteFile(p, onePagePDFWithCorruptContents(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The control: the file OPENS and has one page, so the refusal below is the
+	// content stream's and not the parser's or the range check's.
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := pdfruns.Open(b)
+	if err != nil {
+		t.Fatalf("the corrupt-contents PDF did not even open (%v) — the test would measure Open, not the page", err)
+	}
+	if n := doc.PageCount(); n != 1 {
+		t.Fatalf("the corrupt-contents PDF has %d pages, want 1", n)
+	}
+	lines, _, _, _, err := linesOf(p, reportOptions{page: 1})
+	if err == nil {
+		t.Fatalf("page 1 of a PDF whose contents do not decode was read as %d line(s) — an unread page reported as a page", len(lines))
+	}
+	if strings.Contains(err.Error(), "page 1 of") {
+		t.Errorf("got the range check's error %q, want the content stream's", err)
 	}
 }
 
