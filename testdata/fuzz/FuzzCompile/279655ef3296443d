@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\bAAAAAAAAAAA012798BA0\\begin{document}$82791$\\end{documet%")

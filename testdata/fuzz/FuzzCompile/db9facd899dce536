@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\AAAAAA000m29300 ay 1a0 \\the\\dimen700")

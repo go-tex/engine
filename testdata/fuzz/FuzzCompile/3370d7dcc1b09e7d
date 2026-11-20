@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\documentcla{s{article}\\begin{document}Hello.\\end{document}")

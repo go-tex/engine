@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\setbo\x96300=\\hbox{A}\\copy300")
