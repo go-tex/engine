@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\documentclass{articenle}\\begin{document}$x^2+y_1$\\end{document}")

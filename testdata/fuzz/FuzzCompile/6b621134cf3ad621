@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\documentclass{article}\\begin{document}HA0A0\\0\xffBAAXmAYx")

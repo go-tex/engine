@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\document\x00\x00ass{article}\\begin{document}\\label{x}\\ref{x}\\end{document}")

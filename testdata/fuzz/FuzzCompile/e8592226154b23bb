@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte(">dimen0=3 true pt \\the\\dimen0")

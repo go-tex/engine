@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\newcount\\x \\count\\x=5 \\the\\c")
