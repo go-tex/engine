@@ -464,7 +464,11 @@ const LaTeX2eClassLead = `
 % there is one now and all four call it.
 \def\@trivlist{\gotex@listtopspace\begingroup\@listfirsttrue\def\@itemlabel{}}
 \def\trivlist{\@trivlist}
-\def\endtrivlist{\endgroup\par\addvspace\@topsepadd}
+% \@endpetrue is \@endparenv's last word (ltlists.dtx), after the space: it is
+% what makes \end run \@doendpe, so the next line is flush unless a blank line
+% intervenes. \gotex@endparenv is the one copy every list end calls.
+\def\gotex@endparenv{\addvspace\@topsepadd\@endpetrue}
+\def\endtrivlist{\endgroup\par\gotex@endparenv}
 \def\@itemlabel{\textbullet}
 \def\item{\@ifnextchar[{\@gotexitem}{\@gotexitem[\@itemlabel]}}
 % \@iteminterspace puts \itemsep between items and nothing before the first (the

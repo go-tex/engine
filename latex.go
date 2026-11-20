@@ -42,7 +42,14 @@ const MiniLaTeXKernel = `
 % \@currenvir is defined inside that group (see doCheckEnv), as LaTeX's own \def is.
 \def\@currenvir{}
 \def\begin#1{\gotex@checkenv{#1}\csname #1\endcsname}
-\def\end#1{\csname end#1\endcsname\gotex@endenv{#1}}
+% \end tests \if@endpe BEFORE the group closes, as the reference's
+% \expandafter\endgroup\if@endpe does: an environment's \@endpetrue is local, so
+% it can only be read inside. \gotex@endenv closes the group in the gullet, so
+% the test has to come first and choose between the two closings; \@doendpe
+% then runs one level out, where the next paragraph will start.
+% \@endpefalse at the opening is in doCheckEnv (Go), to keep \begin expandable.
+\def\end#1{\csname end#1\endcsname
+  \if@endpe\gotex@endenv{#1}\@doendpe\else\gotex@endenv{#1}\fi}
 \def\document{\if1\gotexatasked\else\catcode64=12 \fi}
 \def\enddocument{\par\vfill\penalty-10000 }
 \def\rm{}
@@ -421,15 +428,15 @@ const MiniLaTeXKernel = `
   \ifvmode\advance\@topsepadd\partopsep\else\par\fi
   \addvspace\@topsepadd}
 \def\itemize{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@itemdepth by1\relax\ifcase\c@itemdepth\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemi}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemii}}\or\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiii}}\else\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@bulletitem\labelitemiv}}\fi\@enumitemopt{itemize}}
-\def\enditemize{\par\endgroup\addvspace\@topsepadd}
+\def\enditemize{\par\endgroup\gotex@endparenv}
 \def\enumerate{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\advance\c@enumdepth by1\relax\ifcase\c@enumdepth\or\c@enumi=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumi\theenumi\labelenumi}}\or\c@enumii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumii\theenumii\labelenumii}}\or\c@enumiii=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiii\theenumiii\labelenumiii}}\else\c@enumiv=0\relax\def\item{\par\@iteminterspace\@ifnextbracket{\@itemopt}{\@listitem\c@enumiv\theenumiv\labelenumiv}}\fi\@enumitemopt{enumerate}}
-\def\endenumerate{\par\@enumitemrec\endgroup\addvspace\@topsepadd}
+\def\endenumerate{\par\@enumitemrec\endgroup\gotex@endparenv}
 % description: each \item[term] sets the bold term in the left margin, with the
 % following text indented like the other list environments. \item here always
 % takes a [label]; the label may overflow the 24pt margin (not reflowed onto a
 % separate line as full LaTeX would) — acceptable for this kernel.
 \long\def\description{\gotex@listtopspace\begingroup\@listfirsttrue\advance\leftskip by24pt\def\item{\@descitem}\@enumitemopt{description}}
-\long\def\enddescription{\par\endgroup\addvspace\@topsepadd}
+\long\def\enddescription{\par\endgroup\gotex@endparenv}
 \newcount\c@bibitem
 \def\thebibitem{\the\c@bibitem}
 \long\def\thebibliography#1{\par\bigskip\noindent\bf References\rm\par\smallskip\c@bibitem=0\begingroup\leftskip=24pt}
@@ -719,11 +726,14 @@ const MiniLaTeXKernel = `
 \expandafter\let\csname endalgpseudocode\endcsname\endalgorithmic
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par}
 \long\def\quote{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
-\long\def\endquote{\par\endgroup\smallskip}
+% quote, quotation and verse are \list in the reference, so they end through
+% \endtrivlist's \@endparenv and raise \@endpetrue like every list (#587 is
+% their margins and space, still \smallskip here).
+\long\def\endquote{\par\endgroup\smallskip\@endpetrue}
 \long\def\quotation{\par\begingroup\leftskip=20pt\rightskip=20pt\smallskip}
-\long\def\endquotation{\par\endgroup\smallskip}
+\long\def\endquotation{\par\endgroup\smallskip\@endpetrue}
 \long\def\verse{\par\begingroup\leftskip=20pt\smallskip}
-\long\def\endverse{\par\endgroup\smallskip}
+\long\def\endverse{\par\endgroup\smallskip\@endpetrue}
 % \centering and \raggedleft also zero \parfillskip, and all three alignment
 % commands zero \parindent (latex.ltx:11014-11028):
 %
