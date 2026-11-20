@@ -549,17 +549,8 @@ const AMSClassSubstrate = `
 % silence fell precisely on the cases it was asked about: 170 of the 2935 corpus
 % papers (5.8%).
 % Sectioning support for classes that define their OWN \@startsection→\@sect (amsart)
-% rather than using the engine's built-in \@startsection (article/report/book). Real
-% LaTeX's \@hangfrom sets a hanging indent with the label #1 followed by body #2; the
-% engine has no hanging-indent primitive, so typeset label then body on one paragraph.
-% \@xsect finishes the heading (its argument is the after-skip, already applied), so a
-% \par is enough to let the following text start its own paragraph.
-% Display headings call \@hangfrom{label}{body}; the engine has no hanging indent,
-% so typeset label then body on one line and clear \@svsechd so \@xsect does not
-% re-emit it. Run-in headings instead defer the whole heading to \@svsechd, which
-% \@sect \def's and real LaTeX fires from the next \everypar; the engine has no live
-% everypar, so \@xsect runs \@svsechd itself (then clears it). This makes amsart
-% headings visible whether \@sect chose the display or the run-in path.
+% rather than using the engine's built-in \@startsection (article/report/book): the
+% kernel's \@hangfrom and \@xsect, which such an \@sect ends in.
 \let\@svsechd\relax
 % ⚠ \long. Real LaTeX's \@hangfrom takes ONE argument — the label — and the heading
 % body that follows is ordinary material, not an argument (latex.ltx:12865):
@@ -592,7 +583,42 @@ const AMSClassSubstrate = `
 % \edef can expand.
 \def\@hangfrom#1{\setbox\@tempboxa\hbox{{#1}}%
   \hangindent \wd\@tempboxa\noindent\box\@tempboxa}
-\def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
+% ⛔ \@xsect IS THE KERNEL'S, ltsect.dtx:481-517 (v1.1h), verbatim. It was a stand-in
+% written when the engine had "no live everypar":
+%
+%	\def\@xsect#1{\ifx\@svsechd\relax\else\@svsechd\global\let\@svsechd\relax\fi\par}
+%
+% which dropped #1, the afterskip, in BOTH branches. Measured against tectonic on an
+% amsart witness: every display heading sat .5\linespacing (5.98pt) too close to its
+% text, and every run-in \subsection and \subsubsection was set as a paragraph of its
+% own with the text on the next line. \everypar and \lastbox are live now (#848,
+% #861), so the run-in branch is LaTeX's: the heading waits in \@svsechd for the
+% next paragraph's \everypar, which takes the indent box back and sets the heading
+% in its place, followed by -#1 of space.
+\def\@xsect#1{%
+  \@tempskipa #1\relax
+  \ifdim \@tempskipa>\z@
+    \par \nobreak
+    \vskip \@tempskipa
+    \@afterheading
+  \else
+    \@nobreakfalse
+    \global\@noskipsectrue
+    \everypar{%
+      \if@noskipsec
+        \global\@noskipsecfalse
+       {\setbox\z@\lastbox}%
+        \clubpenalty\@M
+        \begingroup \@svsechd \endgroup
+        \unskip
+        \@tempskipa #1\relax
+        \hskip -\@tempskipa
+      \else
+        \clubpenalty \@clubpenalty
+        \everypar{}%
+      \fi}%
+  \fi
+  \ignorespaces}
 % (\@afterheading is classprims.go's: it used to be stubbed empty HERE, which loads
 % later and silently undid it — the first paragraph after a heading kept its indent.)
 % \@ifclasswith{class}{opt}{then}{else}: the class-file analogue of
