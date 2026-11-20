@@ -45,7 +45,7 @@ func (e *Engine) doParShape() {
 	n := e.scanInt()
 	if n <= 0 {
 		// Off, and nothing further is scanned.
-		e.parShape = nil
+		e.setParShape(nil)
 		return
 	}
 	shape := make([]Shape, 0, n)
@@ -53,6 +53,21 @@ func (e *Engine) doParShape() {
 		indent := spToPt(e.scanDimen())
 		width := spToPt(e.scanDimen())
 		shape = append(shape, Shape{Indent: indent, Width: width})
+	}
+	e.setParShape(shape)
+}
+
+// setParShape is `define(par_shape_loc, shape_ref, p)`: a LOCAL assignment that the
+// enclosing group undoes, as eq_define does in TeX. The end-of-paragraph reset
+// (normal_paragraph, :20760) goes through here too, and that is what LaTeX's lists
+// are built on. Inside a list \par is `{\@@par}` (ltlists.dtx:617-625): the
+// primitive runs in a group of its own, its reset of the shape is undone when that
+// group closes, and the list's \parshape \@ne \@totalleftmargin \linewidth is still
+// in force for the next paragraph. With a plain field the reset was permanent, and
+// every paragraph of a quotation after the first came out at the full measure.
+func (e *Engine) setParShape(shape []Shape) {
+	if len(e.groups) > 0 {
+		e.save = append(e.save, saveItem{kind: saveParShape, oldshp: e.parShape})
 	}
 	e.parShape = shape
 }

@@ -215,13 +215,14 @@ func (e *Engine) normalParagraph() {
 	}
 	// :20760, `if par_shape_ptr<>null then eq_define(par_shape_loc,shape_ref,null)`.
 	//
-	// ⚠ This one is NOT grouped the way the three above are: parShape is a plain
-	// field, not a register, so it is not on the save stack and a \parshape set
-	// inside a group is not restored when the group ends. TeX's eq_define does
-	// restore it. For a shape that lasts one paragraph the difference is only
-	// visible to a group that opens and closes WITHIN a paragraph without a \par,
-	// which is narrow — but it is a real divergence and better said than hidden.
-	e.parShape = nil
+	// eq_define, so it is grouped like the three above (see setParShape): a list's
+	// `{\@@par}` resets the shape inside its own group, and the group puts it back.
+	// This comment used to record the opposite — a plain field, not restored — as a
+	// known divergence; it was the one that kept a quotation's later paragraphs from
+	// being indented.
+	if e.parShape != nil {
+		e.setParShape(nil)
+	}
 }
 
 // extractAdjusts takes the \vadjust material out of a line and returns the line

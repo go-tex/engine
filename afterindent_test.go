@@ -31,27 +31,14 @@ func bodyLineIndents(t *testing.T, name string) []string {
 			if !ok {
 				continue
 			}
-			if b.kind == hbox {
-				x, hasChar := 0.0, false
-				for _, c := range b.list {
-					if ch, ok := c.(charNode); ok {
-						_ = ch
-						hasChar = true
-						break
-					}
-					switch v := c.(type) {
-					case *boxNode:
-						x += spToPt(v.width)
-					case kernNode:
-						x += spToPt(v.width)
-					case glueNode:
-						x += spToPt(b.setWidth(v.spec))
-					}
-				}
-				if hasChar {
+			if b.kind == hbox && directChar(b) {
+				// A line. Where its first glyph is — INSIDE a leading box too: a list
+				// item's label is \box\@labels, and summing that box's whole width
+				// put a description label 26pt in where the reference has it at 0.
+				if x, ok := firstGlyphX(b); ok {
 					out = append(out, fmt.Sprintf("%.2f", x*72/72.27))
-					continue // a line: do not look inside it
 				}
+				continue // do not look inside a line for further lines
 			}
 			walk(b.list, depth+1)
 		}
@@ -60,6 +47,46 @@ func bodyLineIndents(t *testing.T, name string) []string {
 		walk([]node{p}, 0)
 	}
 	return out
+}
+
+// directChar reports whether an hbox is a LINE: a glyph among its own nodes, or
+// inside a box among them (a line that opens with a label box).
+func directChar(b *boxNode) bool {
+	for _, c := range b.list {
+		switch v := c.(type) {
+		case charNode:
+			return true
+		case *boxNode:
+			if v.kind == hbox && directChar(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// firstGlyphX is the horizontal offset, in pt, of the first glyph of an hbox,
+// descending into a leading box that holds it.
+func firstGlyphX(b *boxNode) (float64, bool) {
+	x := 0.0
+	for _, c := range b.list {
+		switch v := c.(type) {
+		case charNode:
+			return x, true
+		case *boxNode:
+			if v.kind == hbox {
+				if dx, ok := firstGlyphX(v); ok {
+					return x + dx, true
+				}
+			}
+			x += spToPt(v.width)
+		case kernNode:
+			x += spToPt(v.width)
+		case glueNode:
+			x += spToPt(b.setWidth(v.spec))
+		}
+	}
+	return 0, false
 }
 
 // \section's beforeskip is negative in the standard classes, which is LaTeX's flag for

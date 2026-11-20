@@ -509,6 +509,7 @@ type Engine struct {
 	lookahead        int      // >0 inside a scan that may back its tokens out (see getXToken)
 	textWidth        int      // \textwidth's own value; 0 until a class states it (see setTextWidth)
 	columnWidth      int      // \columnwidth's own value; 0 until something states it (see setColumnWidth)
+	lineWidth        int      // \linewidth's own value; 0 reads as \hsize (see lineWidthValue)
 	trace            []string // names of the last expansions, for the runaway report (GOTEX_TRACE)
 	traceHead        []string // and the first ones since the input last moved forward
 	literalActive    bool     // suppress active-char expansion: a file name reads ~ (and any active char) as a literal character, not the \nobreakspace tie
@@ -754,6 +755,7 @@ type saveItem struct {
 	oldf    fontFace
 	oldtoks []tok
 	oldbox  *boxNode
+	oldshp  []Shape
 }
 
 // New builds an engine with TeX's default category codes and primitives loaded.
@@ -1555,6 +1557,10 @@ func (e *Engine) endGroup() {
 			e.textWidth = s.oldd
 		case saveColumnWidth:
 			e.columnWidth = s.oldd
+		case saveParShape:
+			e.parShape = s.oldshp
+		case saveLineWidth:
+			e.lineWidth = s.oldd
 		}
 	}
 	// \aftergroup's tokens are put back once the group is closed and its values
@@ -3370,6 +3376,8 @@ func (e *Engine) scanDimenValue(inf bool) (int, int) {
 				return e.fullWidth(), 0
 			case m.kind == mPrim && m.name == "columnwidth":
 				return e.columnWidthValue(), 0
+			case m.kind == mPrim && m.name == "linewidth":
+				return e.lineWidthValue(), 0
 			case m.kind == mPrim && m.name == "vsize":
 				return e.vsize, 0
 			case m.kind == mPrim && m.name == "parindent":
@@ -3760,6 +3768,8 @@ func (e *Engine) coerceInternalDimen() (int, bool) {
 				return e.fullWidth(), true
 			case m.kind == mPrim && m.name == "columnwidth":
 				return e.columnWidthValue(), true
+			case m.kind == mPrim && m.name == "linewidth":
+				return e.lineWidthValue(), true
 			case m.kind == mPrim && m.name == "vsize":
 				return e.vsize, true
 			case m.kind == mPrim && m.name == "parindent":

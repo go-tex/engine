@@ -189,7 +189,7 @@ func (e *Engine) stepCounter(name string) {
 // expanded, like \edef), so a following \label/\ref resolves to this number —
 // exactly as equation.go and theorem.go do for their counters.
 func (e *Engine) doRefstepcounter() {
-	name := e.readBraceName()
+	name := e.readCounterNameArg()
 	e.stepCounter(name)
 	if e.eq["the"+name] != nil {
 		// ltxref.dtx:596-599:
@@ -215,16 +215,57 @@ func (e *Engine) doRefstepcounter() {
 	e.define("@currentreftype", &meaning{kind: mMacro, body: stringToToks(name)}, false)
 }
 
+// readCounterNameArg reads \refstepcounter's argument: a {name}, or — as the kernel
+// writes it in \@item, \refstepcounter\@listctr (ltlists.dtx:1030) — ONE unbraced
+// token, which LaTeX expands where it builds \csname p@#1\endcsname and
+// \csname the#1\endcsname. A macro is expanded to its name; anything else that is
+// not a brace gives no name, as before.
+func (e *Engine) readCounterNameArg() string {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if !ok {
+		return ""
+	}
+	if !t.cs_ {
+		e.back(t)
+		return e.readBraceName()
+	}
+	if m := e.eq[t.cs]; m == nil || m.kind != mMacro {
+		e.back(t)
+		return ""
+	}
+	var b []rune
+	for _, u := range e.expandList([]tok{t}) {
+		if u.cs_ {
+			b = append(b, []rune(u.cs)...)
+		} else {
+			b = append(b, u.ch)
+		}
+	}
+	return string(b)
+}
+
 // readBraceInt reads a {…} group whose content is scanned as a <number> and
 // returns it. A missing group yields 0 (the token, if any, is pushed back).
 func (e *Engine) readBraceInt() int {
 	e.skipOptSpace()
 	t, ok := e.getXToken()
-	if !ok || !(t.cat == catBegin && !t.cs_) {
-		if ok {
-			e.back(t)
-		}
+	if !ok {
 		return 0
+	}
+	if !(t.cat == catBegin && !t.cs_) {
+		// ⛔ An UNBRACED argument is that one token, as for any undelimited macro
+		// parameter — and the kernel writes exactly that: \usecounter's
+		// \setcounter{#1}\z@ (ltlists.dtx:1083). Returning 0 here left \z@ in the
+		// input, where a bare dimen register runs as an ASSIGNMENT and eats what
+		// follows. Bounded by a \relax sentinel, as readBraceGlue does.
+		e.back(csTok("relax"))
+		e.back(t)
+		v := e.scanInt()
+		if nt, ok := e.getNext(); ok && !(nt.cs_ && nt.cs == "relax") {
+			e.back(nt)
+		}
+		return v
 	}
 	v := e.scanInt()
 	if c, ok := e.getXToken(); ok && !(c.cat == catEnd && !c.cs_) {
