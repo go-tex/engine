@@ -204,6 +204,54 @@ Quarantine. \par Umbrella. \par Vineyard.
 	}
 }
 
+// ⛔⛔ THE REPORT NAMES ITS SURFACE: "page N of M". This command reads one page,
+// and an extract of a long document must not read as the document.
+//
+// A rendered-text A/B for go-tex/engine#816 went through this command page 1
+// only, on a 48-page paper. Every phrase from page 2 onward counted 0, and two
+// false conclusions followed from those zeros. The positive control could not
+// catch it: the witness was ONE page, so it fitted entirely inside the blind
+// spot. Which is why this test's subject is a TWO-page document — a one-page
+// document reads "page 1 of 1" and would pass with the total left out.
+func TestTheReportSaysHowManyPagesItDidNotRead(t *testing.T) {
+	dir := t.TempDir()
+	two := filepath.Join(dir, "two.pdf")
+	if err := os.WriteFile(two, pdfOf(t, `\documentclass{article}
+\begin{document}
+Quarantine.
+\newpage
+Umbrella.
+\end{document}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	one := filepath.Join(dir, "one.pdf")
+	if err := os.WriteFile(one, pdfOf(t, `\documentclass{article}
+\begin{document}
+Quarantine.
+\end{document}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name, path string
+		page       int
+		want       string
+	}{
+		{"page 1 of a two-page document", two, 1, "page 1 of 2"},
+		{"page 2 of a two-page document", two, 2, "page 2 of 2"},
+		{"a one-page document", one, 1, "page 1 of 1"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := run([]string{c.path}, reportOptions{page: c.page}, &buf); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(buf.String(), c.want) {
+				t.Errorf("the heading does not name its surface (want %q):\n%s", c.want, buf.String())
+			}
+		})
+	}
+}
+
 // A line with an unknown width must SAY its end is unknown rather than print a
 // number that is short by however much the last run advances.
 func TestLineStringMarksAnUnknownEnd(t *testing.T) {
