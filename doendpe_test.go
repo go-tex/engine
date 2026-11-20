@@ -52,9 +52,16 @@ func TestParityLineAfterAListIsNotIndented(t *testing.T) {
 			t.Fatalf("%s: golden has %d lines, the table %d", w.name, len(want), len(w.at))
 		}
 		for _, row := range want {
-			name, x, ok := strings.Cut(row, " ")
+			// Fields, not Cut on " ": a Windows checkout gives the golden CRLF
+			// line ends, and Cut left "0.00\r", which printed as 0.00 and
+			// compared unequal on every row (CI, windows-latest).
+			f := strings.Fields(row)
+			if len(f) != 2 {
+				t.Fatalf("%s: golden row %q is not <name> <bp>", w.name, row)
+			}
+			name, x := f[0], f[1]
 			i, known := w.at[name]
-			if !ok || !known {
+			if !known {
 				t.Fatalf("%s: golden row %q names no line of the table", w.name, row)
 			}
 			if got[i] != x {

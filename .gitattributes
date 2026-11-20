@@ -1,3 +1,9 @@
 texmf/*.cls text eol=lf
 texmf/*.clo text eol=lf
 *.tex text eol=lf
+# Goldens are compared to what the engine prints, which is LF on every OS. A
+# Windows checkout gave testdata/parity/*.txt CRLF line ends, and a golden row
+# read "0.00\r" — printed as 0.00, compared unequal (go-tex/engine#857, CI
+# windows-latest). The same CRLF checkout corrupted article.cls in 2026-08;
+# that fix pinned *.tex and texmf/ but not the goldens, so it came back.
+testdata/**/*.txt text eol=lf
