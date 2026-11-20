@@ -5,6 +5,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,6 +251,51 @@ Quarantine.
 				t.Errorf("the heading does not name its surface (want %q):\n%s", c.want, buf.String())
 			}
 		})
+	}
+}
+
+// ⛔ linesOf checks each step and returns that step's OWN error — and the old
+// tests asserted only THAT an error came back, never WHICH. mutsweep found all
+// four of its guards survivable: they are a cascade, so deleting one leaves the
+// next to fail the same input with a different error, and "an error" was still
+// what arrived. A missing file still errored (at Open), page 99 still errored
+// (at PageRuns). Each row names the step that must have refused.
+func TestLinesOfNamesTheStepThatRefused(t *testing.T) {
+	dir := t.TempDir()
+	one := filepath.Join(dir, "one.pdf")
+	if err := os.WriteFile(one, pdfOf(t, `\documentclass{article}
+\begin{document}
+Quarantine.
+\end{document}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notPDF := filepath.Join(dir, "notes.pdf")
+	if err := os.WriteFile(notPDF, []byte("these are plain words, not a PDF\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The file is not there: the READ refused it, so the error is the
+	// filesystem's own, and errors.Is can say so through every wrap.
+	_, _, _, _, err := linesOf(filepath.Join(dir, "absent.pdf"), reportOptions{page: 1})
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing file: got %v, want an fs.ErrNotExist from the read — a later step answered instead", err)
+	}
+
+	// The file reads but is not a PDF: OPEN refused it. It is not "missing",
+	// and it must not reach the page-range check as a document of zero pages.
+	_, _, _, _, err = linesOf(notPDF, reportOptions{page: 1})
+	if err == nil {
+		t.Fatal("a file that is not a PDF was read as one")
+	}
+	if errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "page 1 of") {
+		t.Errorf("a non-PDF: got %q, want the PDF parser's refusal, not the read's or the range check's", err)
+	}
+
+	// The page is out of range: the RANGE CHECK refused it, and says against
+	// what total — the same total the heading now prints.
+	_, _, _, _, err = linesOf(one, reportOptions{page: 99})
+	if err == nil || !strings.Contains(err.Error(), "page 99 of 1") {
+		t.Errorf("page 99 of a one-page document: got %v, want the range check's \"page 99 of 1\"", err)
 	}
 }
 
