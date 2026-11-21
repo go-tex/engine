@@ -28,26 +28,39 @@ import (
 // boundary rather than on the theme or the block.
 func TestARoundedBlockInAFragileFrameKeepsTheNextFrame(t *testing.T) {
 	withTeXMF(t, texmf.Beamer)
-	const frames = `\begin{document}
-\begin{frame}%s
+	const block = "\\begin{block}{BLOCKTITLE}\nBLOCKBODY\n\\end{block}"
+	for _, c := range []struct{ name, preamble, opt, body string }{
+		{"rounded block, fragile frame", `\usetheme{Warsaw}`, `[fragile]`, block},
+		{"empty rounded block, fragile frame", `\usetheme{Warsaw}`, `[fragile]`,
+			`\begin{block}{BLOCKTITLE}\end{block}`},
+		// The same shape without beamer's theme: wrap's closer reaches \end{minipage}
+		// one \relax too late for the rewind to see it.
+		{"bare closer, fragile frame",
+			`\newenvironment{wrap}{\begin{minipage}{3cm}}{\relax\end{minipage}}`,
+			`[fragile]`, `\begin{wrap}WRAPBODY\end{wrap}`},
+		// With the minipage written in the text, its closer's \end{wrap} is the very
+		// FIRST token the scan stores. (Treating position 0 as "nothing stored" does
+		// not turn this green-to-red: the scan then stores the next \end past the
+		// boundary and stops a few gathered, never-run tokens later. Measured.)
+		{"bare closer as the first token, fragile frame",
+			`\newenvironment{wrap}{}{\relax\end{minipage}}`,
+			`[fragile]`, `\begin{wrap}\begin{minipage}{3cm}\end{wrap}`},
+		{"control: no [fragile]", `\usetheme{Warsaw}`, ``, block},
+		{"control: no theme", ``, `[fragile]`, block},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			src := `\documentclass{beamer}` + "\n" + c.preamble + `
+\begin{document}
+\begin{frame}` + c.opt + `
 \frametitle{FRAGTITLE}
-\begin{block}{BLOCKTITLE}
 FRAGBODY
-\end{block}
+` + c.body + `
 \end{frame}
 \begin{frame}
 \frametitle{LASTTITLE}
 LASTBODY
 \end{frame}
 \end{document}`
-	for _, c := range []struct{ name, theme, opt string }{
-		{"rounded block, fragile frame", `\usetheme{Warsaw}`, `[fragile]`},
-		{"control: no [fragile]", `\usetheme{Warsaw}`, ``},
-		{"control: no theme", ``, `[fragile]`},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			src := `\documentclass{beamer}` + "\n" + c.theme + "\n" +
-				strings.Replace(frames, "%s", c.opt, 1)
 			e, err := compile([]byte(src), Options{Lenient: true})
 			if err != nil {
 				t.Fatalf("compile: %v", err)
