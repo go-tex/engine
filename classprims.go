@@ -321,7 +321,29 @@ const LaTeX2eClassLead = `
 % (\@afterindentfalse) the paragraph after it is not indented — \section in article
 % and report, where tectonic sets the first paragraph flush with the margin. The
 % engine indented it, 15pt of width on the first line of every section.
-\def\@afterheading{\if@afterindent\else\gotexnoindentnext\fi}
+%
+% ⛔ NOW THE KERNEL'S, ltsect.dtx:615-627 (v1.1h), verbatim. The stand-in was
+% \if@afterindent\else\gotexnoindentnext\fi: it removed the indent and did nothing
+% else. LaTeX's also clears \@nobreak at the first paragraph, and amsart's \@sect
+% sets \global\@nobreaktrue relying on exactly that. With the stand-in, \@nobreak
+% stayed true through the section's whole first paragraph, so the next
+% \@startsection took its \if@nobreak branch and dropped \addvspace: an amsart
+% \subsection after a section's first paragraph sat .5\linespacing (5.98pt) too
+% close to it, measured against tectonic. The first line after a heading also
+% gets \clubpenalty\@M, the second paragraph \@clubpenalty back.
+\def\@afterheading{%
+  \@nobreaktrue
+  \everypar{%
+    \if@nobreak
+      \@nobreakfalse
+      \clubpenalty \@M
+      \if@afterindent \else
+        {\setbox\z@\lastbox}%
+      \fi
+    \else
+      \clubpenalty \@clubpenalty
+      \everypar{}%
+    \fi}}
 % \secdef\CMDA\CMDB: the unstarred branch goes through \@dblarg so a command with an
 % optional argument (\chapter/\part's \@chapter[#1]#2) receives its mandatory title
 % as the optional one too — without this, \chapter{T} mis-parses (\@chapter would
