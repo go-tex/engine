@@ -62,6 +62,31 @@ func TestParityAmsartFolioIsTheStylesFoot(t *testing.T) {
 	}
 }
 
+// A style whose foot field is empty draws no foot at all: \ps@headings defines an
+// empty \@oddfoot (latex.go), so a \thispagestyle{headings} override under a plain
+// document style typesets an empty list, and pageFooter answers nil rather than
+// packing it into an empty hbox that would still cost a \footskip. The control is
+// the document's own plain style, whose foot is the folio.
+func TestAStyleWithAnEmptyFootFieldDrawsNoFoot(t *testing.T) {
+	e, err := compile([]byte("\\documentclass{article}\n\\begin{document}\nx\n\\end{document}\n"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.pageStyle != "plain" {
+		t.Fatalf("the document style is %q, the witness needs plain", e.pageStyle)
+	}
+	if foot := e.pageFooter(1, "plain"); foot == nil {
+		t.Fatal("the plain style's foot is nil, the control has no folio")
+	}
+	if foot := e.pageFooter(1, "headings"); foot != nil {
+		t.Errorf("a style with an empty \\@oddfoot drew a foot of %d nodes", len(foot.list))
+	}
+	body := vpackSP(nil, packNatural, 0)
+	if got := e.withFootAtFootskip(body, 1, "headings"); got != body {
+		t.Error("an empty foot was put under the text block")
+	}
+}
+
 // The override's \ps@ runs at output time, side effects included. amsart's
 // \maketitle sets \global\topskip42\p@ for the title page (amsart.cls:623), and
 // it is the output routine running \thispagestyle{plain}'s \ps@plain — whose
