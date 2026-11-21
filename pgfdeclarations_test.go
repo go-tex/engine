@@ -32,9 +32,10 @@ BLOCKBODY
 		t.Fatalf("compile: %v", err)
 	}
 	got := pageChars(e)
-	for _, junk := range []string{"pgftransparent", "bmb@shadow", "color(0bp)"} {
+	// "gray" is \selectcolormodel{gray}'s argument (beamerbaseboxes.sty:172).
+	for _, junk := range []string{"pgftransparent", "bmb@shadow", "color(0bp)", "gray"} {
 		if strings.Contains(got, junk) {
-			t.Errorf("a shading declaration was typeset: %q on the page", junk)
+			t.Errorf("a declaration's argument was typeset: %q on the page", junk)
 		}
 	}
 	for _, want := range []string{"BLOCKTITLE", "BLOCKBODY"} {
@@ -64,6 +65,7 @@ func TestPGFDeclarationStubsReadPGFsArguments(t *testing.T) {
 		{"use shading", `\pgfuseshading{n}`},
 		{"use image", `\pgfuseimage{n}`},
 		{"set colour", `\pgfsetcolor{n}`},
+		{"xcolor target model", `\selectcolormodel{gray}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e, err := compile([]byte(`\documentclass{article}

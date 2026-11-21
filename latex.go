@@ -1673,6 +1673,13 @@ const MiniLaTeXKernel = `
 \def\XC@mod@rgb{rgb}
 \def\XC@mod@cmyk{cmyk}
 \def\XC@mod@gray{gray}
+% \selectcolormodel{<model>} — xcolor.dtx:3892-3901 redefines \XC@tgt@mod, the
+% target of later \definecolor calls. RGB is this engine's only model, so the
+% target stays rgb and the argument is read and dropped. Undefined, it printed its
+% argument: beamer's rounded shadow calls \selectcolormodel{gray} in the document
+% body (beamerbaseboxes.sty:172), and every Warsaw talk showed "gray" under its
+% first block.
+\def\selectcolormodel#1{}
 % \extractcolorspec{name}{\cmd} hands back a colour as {model}{values}, and
 % \convertcolorspec converts one to another model. Both read the stored form this
 % engine publishes for every named colour (see colorbridge.go); since that form is
