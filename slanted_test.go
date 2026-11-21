@@ -10,6 +10,24 @@ import (
 	"testing"
 )
 
+// The embedded slanted face is parsed when the default family is built, and a face
+// that does not parse refuses the build. The embedded bytes cannot fail to parse,
+// so the test truncates them. Only the default family reaches this refusal: a host
+// that names its own fonts binds its italic as "sl", and the italic's own binding
+// has refused a bad one before.
+func TestATruncatedSlantedFaceRefusesTheDefaultFamily(t *testing.T) {
+	saved := lmRomanSlant
+	t.Cleanup(func() { lmRomanSlant = saved })
+	lmRomanSlant = saved[:len(saved)/2]
+	if _, err := buildEngine(Options{}, true); err == nil {
+		t.Error("buildEngine with a truncated slanted face: want an error, got nil")
+	}
+	lmRomanSlant = saved
+	if _, err := buildEngine(Options{}, true); err != nil {
+		t.Errorf("buildEngine with the embedded slanted face: %v", err)
+	}
+}
+
 // ⛔ THE LINE ENDS BELOW CANNOT TELL SLANTED FROM UPRIGHT. Latin Modern's slanted
 // shape is the roman sheared, with the roman's advances: a mutant that bound no
 // slanted face at all, so \slshape fell to the upright roman, ended all three
