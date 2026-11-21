@@ -1,0 +1,38 @@
+\documentclass{article}
+\begin{document}
+\setbox0\hbox{f}\typeout{W f=\the\wd0}
+\setbox0\hbox{f\/}\typeout{W f-ic=\the\wd0}
+\setbox0\hbox{{\itshape f}}\typeout{W itshape-f=\the\wd0}
+\setbox0\hbox{{\itshape f\/}}\typeout{W itshape-f-ic=\the\wd0}
+\setbox0\hbox{{\itshape d}}\typeout{W itshape-d=\the\wd0}
+\setbox0\hbox{{\itshape d\/}}\typeout{W itshape-d-ic=\the\wd0}
+\typeout{W fontcharic-f=\the\fontcharic\font`f}
+{\itshape\typeout{W fontcharic-itshape-f=\the\fontcharic\font`f}}
+{\itshape\typeout{W fontcharic-itshape-o=\the\fontcharic\font`o}}
+\setbox0\hbox{\textit{f}}\typeout{W textit-f=\the\wd0}
+\setbox0\hbox{\textit{d}}\typeout{W textit-d=\the\wd0}
+\setbox0\hbox{\textit{f}.}\typeout{W textit-f-dot=\the\wd0}
+\setbox0\hbox{\textit{f},}\typeout{W textit-f-comma=\the\wd0}
+\setbox0\hbox{\textit{f})}\typeout{W textit-f-paren=\the\wd0}
+\setbox0\hbox{\textit{f}\nocorr}\typeout{W textit-f-nocorr=\the\wd0}
+\setbox0\hbox{\textit{\nocorr f}}\typeout{W textit-nocorr-f=\the\wd0}
+\setbox0\hbox{\textit{f\nocorr}}\typeout{W textit-f-nocorrin=\the\wd0}
+\setbox0\hbox{\textit{f} x}\typeout{W textit-f-space-x=\the\wd0}
+\setbox0\hbox{\textit{f}\hskip3pt x}\typeout{W textit-f-skip-x=\the\wd0}
+\setbox0\hbox{\textit{f\hskip2pt}x}\typeout{W textit-f-skip-in-x=\the\wd0}
+\setbox0\hbox{\textit{f\penalty7}x}\typeout{W textit-f-penalty-x=\the\wd0}
+\setbox0\hbox{\textit{}}\typeout{W textit-empty=\the\wd0}
+\setbox0\hbox{\textit{f}\textit{f}}\typeout{W textit-ff=\the\wd0}
+\setbox0\hbox{x\textit{f}}\typeout{W x-textit-f=\the\wd0}
+\setbox0\hbox{\emph{f}}\typeout{W emph-f=\the\wd0}
+\setbox0\hbox{\itshape\emph{f}}\typeout{W itshape-emph-f=\the\wd0}
+\setbox0\hbox{\textup{\itshape f}}\typeout{W textup-itshape-f=\the\wd0}
+\setbox0\hbox{\itshape f\textup{x}}\typeout{W itshape-f-textup-x=\the\wd0}
+\setbox0\hbox{\textbf{f}}\typeout{W textbf-f=\the\wd0}
+\setbox0\hbox{{\bfseries f}}\typeout{W bfseries-f=\the\wd0}
+\setbox0\hbox{\textrm{f}}\typeout{W textrm-f=\the\wd0}
+\setbox0\hbox{\textsc{f}}\typeout{W textsc-f=\the\wd0}
+\setbox0\hbox{\texttt{f}}\typeout{W texttt-f=\the\wd0}
+\setbox0\hbox{\textsl{f}}\typeout{W textsl-f=\the\wd0}
+x
+\end{document}

@@ -1227,6 +1227,15 @@ func (e *Engine) doThe() {
 			case m.kind == mPrim && m.name == "spacefactor":
 				e.pushString(strconv.Itoa(e.spaceFactor))
 				return
+			case m.kind == mPrim && m.name == "lastpenalty":
+				e.pushString(strconv.Itoa(e.lastPenalty()))
+				return
+			// \the\fontcharic\font`f inside \typeout, \edef or \write: executed, the
+			// primitive pushes its value, but \the in an expansion-only context never
+			// executes it, and the tokens went through unexpanded.
+			case m.kind == mPrim && isFontCharDim(m.name):
+				e.pushString(formatPt(e.fontCharDim(m.name)))
+				return
 			// ⛔ \the OF A FONT'S OWN QUANTITIES. Both were assignable and
 			// neither was readable, so `\the\fontdimen2\font` produced the
 			// literal tokens where tectonic answers 3.33pt (#762). tex.web
@@ -2633,6 +2642,9 @@ func (e *Engine) loadStomach() {
 	// (lastbox.go); scanBox reaches the same function for \setbox0\lastbox.
 	e.prim("lastbox", func(e *Engine) { e.place(e.takeLastBox()) })
 	e.prim("kern", func(e *Engine) { e.place(kernNode{width: e.scanDimen()}) })
+	e.prim("/", (*Engine).appendItalicCorrection)
+	// \lastpenalty is read, never run: an internal integer (see lastPenalty).
+	e.prim("lastpenalty", func(e *Engine) {})
 	e.prim("vskip", func(e *Engine) { e.contribute(glueNode{spec: e.scanGlue()}) })
 	e.prim("hskip", func(e *Engine) { e.placeHGlue(e.scanGlue()) })
 	e.prim("hfil", func(e *Engine) { e.placeHGlue(glueSpec{stretch: unity, stretchOrder: 1}) })
@@ -2940,6 +2952,20 @@ func (e *Engine) lastSkip() glueSpec {
 	return glueSpec{}
 }
 
+// lastPenalty is TeX's \lastpenalty (tex.web §424): the penalty at the end of
+// the current list, or zero when the last item is not a penalty. The kernel's
+// \fix@penalty reads it to lift a penalty off, put \/ under it, and set it back.
+func (e *Engine) lastPenalty() int {
+	list := *e.currentList()
+	if len(list) == 0 {
+		return 0
+	}
+	if p, ok := list[len(list)-1].(penaltyNode); ok {
+		return p.penalty
+	}
+	return 0
+}
+
 // currentList is TeX's "current list" (tex.web §212): the list the next node
 // would be appended to. It is returned as a POINTER because delete_last removes
 // from it, not merely reads it.
@@ -2987,6 +3013,40 @@ func (e *Engine) deleteLast(want func(node) bool) {
 	if n := len(*list); n > 0 && want((*list)[n-1]) {
 		*list = (*list)[:n-1]
 	}
+}
+
+// appendItalicCorrection is \/, tex.web §1113 append_italic_correction: when the
+// current list ends in a character, append an explicit kern of that character's
+// italic correction, measured in the character's own font. Anything else at the
+// tail — glue, a kern, a box, an empty list — gets nothing.
+//
+// It was \def\/{} in the substrate, "a zero-width adjustment the engine does not
+// need": tectonic sets {\itshape f\/} 0.50pt wider than {\itshape f}, and
+// \textit/\emph end with one (\check@icr), so every italic word before upright
+// text was set short.
+func (e *Engine) appendItalicCorrection() {
+	list := e.currentList()
+	n := len(*list)
+	if n == 0 {
+		return
+	}
+	c, ok := (*list)[n-1].(charNode)
+	if !ok {
+		return
+	}
+	*list = append(*list, kernNode{width: italCorrOf(c.face, c.ch)})
+}
+
+// italCorrOf is r's italic correction in face f, in sp, or 0 for a face that
+// cannot say (a test mock, nullFont). One function, so \/ and \fontcharic give
+// the same answer. A type assertion and not a fontFace method, as noteKerningFloor
+// explains: the mocks would have to answer a question about outlines.
+func italCorrOf(f fontFace, r rune) int {
+	type italCorrector interface{ italCorrSP(rune) int }
+	if ic, ok := f.(italCorrector); ok {
+		return ic.italCorrSP(r)
+	}
+	return 0
 }
 
 // place adds material that is legal in both modes: inside a paragraph
