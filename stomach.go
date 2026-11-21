@@ -138,6 +138,10 @@ type boxNode struct {
 	// not the page, and inferring it from the page's shape is how a walker ends
 	// up measuring the folio.
 	textBlock bool
+	// pageShift is, on a PAGE box, how far right its content sits from where an odd
+	// page's does: \evensidemargin - \oddsidemargin on an even page of a twoside
+	// document, 0 everywhere else (see pageMarginShift).
+	pageShift int
 }
 
 type packMode uint8

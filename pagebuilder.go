@@ -239,7 +239,7 @@ func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 	// not inside findPageBreak where only one of the two would see it.
 	for start := skipDiscardable(list, 0); start < len(list); {
 		end := e.findPageBreak(list, start)
-		page := trimTrailingGlue(list[start:end])
+		page := trimPageEnd(list[start:end])
 		switch {
 		case pageIsUnshippable(page):
 			for _, n := range page {
@@ -629,6 +629,30 @@ func trimTrailingGlue(page []node) []node {
 	return page
 }
 
+// trimPageEnd is trimTrailingGlue for a page that will be PACKED to \vsize: it keeps
+// the last glue with infinite stretch of the trimmed run.
+//
+// ⛔ TeX DISCARDS ONLY THE BREAK NODE AND WHAT FOLLOWS IT (tex.web:19835-19837); the
+// glue before it stays on the page, which is how \vfill\penalty-10000 (\clearpage,
+// \end{document}) makes a short page keep its natural height: the fill takes the
+// slack. Dropping it was harmless while every page was \raggedbottom — its
+// \@textbottom fil took the slack instead — and wrong the moment a page is
+// \flushbottom, which every twoside class asks for: the last page then stretched
+// its own glue to \textheight (amshead, 151pt gaps). A run that holds no such glue,
+// and a page that would be empty without it, are trimmed exactly as before.
+func trimPageEnd(page []node) []node {
+	base := trimTrailingGlue(page)
+	if len(base) == 0 {
+		return base
+	}
+	for i := len(page) - 1; i >= len(base); i-- {
+		if g, ok := page[i].(glueNode); ok && g.spec.stretchOrder >= 1 && g.spec.stretch > 0 {
+			return page[:i+1]
+		}
+	}
+	return base
+}
+
 // splitVList splits a vertical list at the first break that keeps the height within
 // vsize, returning the taken part and the remainder AS IT STANDS.
 //
@@ -718,7 +742,7 @@ func (e *Engine) RenderPages(margin float64) []string {
 	paperW, paperH, _ := e.paperSizePt()
 	out := make([]string, len(pages))
 	for i, p := range pages {
-		out[i] = renderBoxSVG(p, margin, vmargin, paperW, paperH, e.renderFont(), e.pageFill())
+		out[i] = renderBoxSVG(p, margin+spToPt(p.pageShift), vmargin, paperW, paperH, e.renderFont(), e.pageFill())
 	}
 	return out
 }

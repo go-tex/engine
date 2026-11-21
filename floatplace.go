@@ -634,7 +634,7 @@ func (e *Engine) pagesWithFloats() []*boxNode {
 			}
 			deferred = append(deferred, af)
 		}
-		pageText := trimTrailingGlue(text[start:end])
+		pageText := trimPageEnd(text[start:end])
 
 		// Emit only a non-empty page (as paginateSingleList does): an empty text break with
 		// no floats to show would otherwise leave a blank leading/interior page.

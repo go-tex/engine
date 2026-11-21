@@ -194,9 +194,14 @@ func (e *Engine) pageFooter(num int, style string) *boxNode {
 	}
 	// Always inside a group: the foot sets its own font and size (\scriptsize), and
 	// typesetFieldToList restores only the current font.
-	toks := []tok{chTok('{', catBegin), csTok("@oddfoot"), chTok('}', catEnd)}
+	// ⛔ \@evenfoot on an even page of a twoside document (latex.ltx:15387-15393).
+	foot := "@oddfoot"
+	if m := e.pageSidedMacro("foot", num); m != nil && m == e.eq["@evenfoot"] {
+		foot = "@evenfoot"
+	}
+	toks := []tok{chTok('{', catBegin), csTok(foot), chTok('}', catEnd)}
 	if style != e.pageStyle {
-		toks = []tok{chTok('{', catBegin), csTok("ps@" + style), csTok("@oddfoot"), chTok('}', catEnd)}
+		toks = []tok{chTok('{', catBegin), csTok("ps@" + style), csTok(foot), chTok('}', catEnd)}
 	}
 	list := e.typesetFieldToList(toks)
 	if len(list) == 0 {

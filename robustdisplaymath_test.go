@@ -46,8 +46,16 @@ func TestRobustDisplayMathDecoyDefined(t *testing.T) {
 // math that swallowed a lone \input body typeset after \maketitle. The robust decoy
 // routes the patch to the (inert) space-suffixed form, so the input body survives.
 func TestInputBodyAfterMaketitleSurvivesAmsart(t *testing.T) {
+	// Put back what was THERE, not `true`: amsart is not an emulated class, so
+	// restoring true switched it on for every later test in the package, and the real
+	// amsart.cls tests that ran after this one (go-tex/engine#875) read the stand-in.
+	was, had := emulatedClasses["amsart"]
 	delete(emulatedClasses, "amsart")
-	defer func() { emulatedClasses["amsart"] = true }()
+	defer func() {
+		if had {
+			emulatedClasses["amsart"] = was
+		}
+	}()
 
 	const marker = "INPUTAFTERMAKETITLE"
 	dir := t.TempDir()
