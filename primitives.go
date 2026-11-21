@@ -231,6 +231,8 @@ func (e *Engine) loadPrimitives() {
 
 	// \selectfont's engine-side primitive — see font.go.
 	e.loadSelectFont()
+	// \fontseries, \fontshape and \selectfont with the kernel's merge rules — nfss.go.
+	e.loadNFSS()
 
 	// The xparse / LaTeX3 document-command interface — see xparse.go.
 	e.loadXparse()

@@ -158,11 +158,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	// And the bold italic and bold slanted shapes, which only the default family
 	// has: without them a series and a shape switch fall back to the last one
 	// alone, as they always did (see nfss.go).
-	var boldItalicBytes, boldSlantBytes []byte
+	var boldItalicBytes, boldSlantBytes, capsSlantBytes []byte
 	if fontBytes == nil {
 		capsBytes = lmRomanCaps
 		slantBytes = lmRomanSlant
 		boldItalicBytes, boldSlantBytes = lmRomanBoldItalic, lmRomanBoldSlant
+		capsSlantBytes = lmRomanCapsOblique
 		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
 		// caller that names only some faces keeps exactly what it named.
 		fontBytes = lmRomanRegular
@@ -212,6 +213,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if err := e.bindOptionalFont(boldSlantName, boldSlantBytes, opt.size()); err != nil {
 		return nil, err
 	}
+	if err := e.bindOptionalFont(capsSlantName, capsSlantBytes, opt.size()); err != nil {
+		return nil, err
+	}
 	e.aliasFontSwitches()
 	return e, nil
 }
@@ -227,6 +231,9 @@ func (e *Engine) aliasFontSwitches() {
 		{"bfseries", "bf"}, {"itshape", "it"}, {"slshape", "sl"}, {"scshape", "sc"},
 		{"ttfamily", "tt"}, {"sffamily", "sf"}, {"rmfamily", "rm"},
 		{"normalfont", "rm"}, {"upshape", "rm"}, {"mdseries", "rm"},
+		// \ulcshape undoes small capitals (the kernel's rule sc+ulc is n); nfss.go
+		// gives it its meaning, the roman face is only its fallback.
+		{"ulcshape", "rm"},
 	} {
 		if m := e.eq[p[1]]; m != nil {
 			cp := *m

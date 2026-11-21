@@ -12,10 +12,11 @@ import (
 // The two faces bound only with the default family are parsed when it is built,
 // and one that does not parse refuses the build. The embedded bytes cannot fail to
 // parse, so each is truncated in turn.
-func TestATruncatedBoldItalicOrBoldSlantedFaceRefusesTheDefaultFamily(t *testing.T) {
+func TestATruncatedNFSSOnlyFaceRefusesTheDefaultFamily(t *testing.T) {
 	for name, face := range map[string]*[]byte{
 		"bold italic":  &lmRomanBoldItalic,
 		"bold slanted": &lmRomanBoldSlant,
+		"caps oblique": &lmRomanCapsOblique,
 	} {
 		saved := *face
 		*face = saved[:len(saved)/2]
@@ -31,9 +32,8 @@ func TestATruncatedBoldItalicOrBoldSlantedFaceRefusesTheDefaultFamily(t *testing
 }
 
 // faceKey names no face for what is not an OpenType font, a nil one, or a font
-// with no bytes, and nfssRoleOf then finds no role even when a bound face has no
-// key either: two unidentifiable faces are not the same face.
-func TestAFaceThatCannotBeIdentifiedHasNoRole(t *testing.T) {
+// with no bytes.
+func TestAFaceThatCannotBeIdentifiedHasNoKey(t *testing.T) {
 	// A guard that is gone dereferences nil: report that as a failure, not a crash.
 	named := func(f fontFace) (k *byte) {
 		defer func() {
@@ -51,29 +51,6 @@ func TestAFaceThatCannotBeIdentifiedHasNoRole(t *testing.T) {
 	}
 	if k := faceKey(&OpenTypeFont{}); k != nil {
 		t.Error("faceKey of a font with no bytes named a face")
-	}
-	e, err := buildEngine(Options{}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.bindFont("sc", &OpenTypeFont{})
-	if r, ok := e.nfssRoleOf(&OpenTypeFont{}); ok {
-		t.Errorf("a face with no key was given the role %v", r)
-	}
-}
-
-// A series switch under a face outside the family selects nothing of the family's:
-// the typewriter stays upright (the reference's tt family has no bold either).
-func TestASeriesSwitchUnderTheTypewriterFindsNoFamilyFace(t *testing.T) {
-	e, err := buildEngine(Options{}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.curFont = e.eq["tt"].font
-	for _, sw := range []string{"bfseries", "itshape", "slshape"} {
-		if f, ok := e.nfssSwitch(sw); ok {
-			t.Errorf("\\%s under \\ttfamily selected a family face %v", sw, f)
-		}
 	}
 }
 

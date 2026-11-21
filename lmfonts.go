@@ -51,6 +51,14 @@ var lmRomanBoldItalic []byte
 //go:embed fonts/lm/lmromanslant10-bold.otf
 var lmRomanBoldSlant []byte
 
+// lmRomanCapsOblique is small capitals in the slanted shape, m/scsl. tulmr.fd
+// declares it at one design size ("<-> lmromancaps10-oblique") and no m/scit, so
+// it is also where \scshape\itshape lands: the kernel's rule sc+it is {scit}{scsl}
+// (nfss.go).
+//
+//go:embed fonts/lm/lmromancaps10-oblique.otf
+var lmRomanCapsOblique []byte
+
 // lmMath is Latin Modern Math (OpenType with a MATH table), the maths face of the same
 // distribution and licence (its copyright field names the GUST Font License too);
 // go-tex/math sets every formula from it.
