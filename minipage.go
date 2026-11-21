@@ -176,6 +176,30 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			lastEnd = -1
 			continue
 		}
+		if ok && len(e.levels) < level && lastEnd >= 0 {
+			// The scan has left the file it began in, it stored an \end{other} there,
+			// and the rewind above cannot follow that \end to ours. Stop at the
+			// boundary all the same: nothing past it belongs to this body.
+			//
+			// This is #115's shape read from a file. beamer's rounded block opens
+			// \begin{minipage} in beamerboxesrounded and closes it from
+			// \endbeamerboxesrounded, so the \end{block} stored here IS what will
+			// produce our \end{minipage}, too many macros deep for the rewind to see.
+			// A [fragile] frame reads its body back from a file, and the scan used to
+			// carry on past that file's end into the document, to EOF: the next frames
+			// were gathered raw and handed back with three groups unbalanced, the next
+			// frame's body collection never found its \end{frame}, and it was lost with
+			// everything after it (go-tex/engine#866).
+			//
+			// The gathered tokens go back, never having run. The environment's group
+			// stays OPEN, unlike the exit above with no stored \end: here an \end is
+			// still coming, and #816 measured what closing its group early costs.
+			e.back(t)
+			if len(body) > 0 {
+				e.push(append([]tok(nil), body...))
+			}
+			return nil
+		}
 		if !ok {
 			// The \end never came. Put back everything the scan read, so the material
 			// flows as ordinary text — a locally wrong box, not a lost document.
