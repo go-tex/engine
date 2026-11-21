@@ -391,15 +391,12 @@ const AMSClassSubstrate = `
 % to go. It is a real primitive now (lastbox.go, tex.web:20965-20991), and
 % \@doendpe's {\setbox\z@\lastbox} can at last take the \parindent box away.
 \def\vrulefil{}
-% ── NFSS font selection: no real series/shape machinery, accept and drop ────
-% \selectfont installs the font the current family/series/shape calls for. This
-% engine has one text face per family rather than NFSS's tables, so it
-% re-selects the roman face — which is what matters in practice: a package
-% switches to \nullfont around material it wants measured but not set, and
-% brings the real font back with \selectfont. Without that, everything typeset
-% afterwards is set in a font with no characters (pgf does this for every
-% picture, which left every node's text empty).
-\def\selectfont{\gotex@selectbasefont}
+% ── NFSS font selection: series and shape, with the kernel's merge rules ────
+% \selectfont installs the face \f@series/\f@shape call for, at the size in
+% force (nfss.go). A package that switches to \nullfont around material it wants
+% measured but not set gets the roman face back with it, as before (pgf does
+% this for every picture).
+\def\selectfont{\gotex@selectfont}
 \def\f@shape{n}
 \def\f@series{m}
 \def\f@family{}
@@ -430,8 +427,8 @@ const AMSClassSubstrate = `
 \def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}\gotex@notefontsize{#3}\gotex@setstrutbox}
 \def\fontencoding#1{}
 \def\fontfamily#1{}
-\def\fontseries#1{}
-\def\fontshape#1{}
+\def\fontseries#1{\gotex@fontseries{#1}}
+\def\fontshape#1{\gotex@fontshape{#1}}
 \def\usefont#1#2#3#4{}
 \def\try@load@fontshape{}
 \def\check@mathfonts{}

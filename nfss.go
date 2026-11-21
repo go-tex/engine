@@ -3,48 +3,118 @@
 
 package engine
 
-// A series switch and a shape switch COMBINE, as NFSS's two axes do.
+// NFSS's series and shape axes, with the kernel's own merge rules.
 //
-// ⛔ EACH FONT SWITCH WAS ONE FACE, and the last one won: \textbf{\textit{x}} set x
-// in the medium italic, and {\itshape\bfseries x} in the upright bold, where
-// LaTeX selects TU/lmr/bx/it — lmroman10-bolditalic — for both. \bfseries only
-// changes the SERIES and \itshape only the SHAPE (ltfssdcl.dtx: \bfseries is
-// \fontseries\bfdefault\selectfont, \itshape is \fontshape\itdefault\selectfont),
-// so the face is the pair, looked up in the family's shape table.
+// A font switch is not a face. \bfseries changes only the SERIES and \itshape
+// only the SHAPE (ltfssdcl.dtx: \bfseries is \fontseries\bfdefault\selectfont),
+// and \selectfont installs the face the family declares for the pair. Since the
+// 2020 kernel, \fontshape does not simply overwrite \f@shape either: it MERGES the
+// request into the current shape through a rule table, which is why
+// \scshape\itshape gives italic small capitals rather than italics.
 //
-// Only the NFSS names combine. The old one-letter switches do NOT: latex.ltx
-// declares \bf as \normalfont\bfseries (\DeclareOldFontCommand), so {\it\bf x} is
-// upright bold in LaTeX too, and \bf, \it, \sl keep their own face here.
+// The algorithm and both tables below are tectonic's (LaTeX2e 2021-11-15),
+// read out of the running kernel with \meaning and \detokenize, not recalled:
 //
-// ⚠ A pair the family does not have falls back to the switch's own face, which is
-// what this engine always did. NFSS would substitute along its own rules (to the
-// family's default shape first), so {\bfseries\scshape x} — bx/sc does not exist
-// in Latin Modern — is medium small caps here where LaTeX gives upright bold.
-// Bounded and stated rather than guessed at.
+//	\merge@font@shape #1 -> \csname shape@\f@shape @#1\endcsname {#1}\@nil
+//	\merge@font@shape@ #1#2#3\@nil ->
+//	   no rule: \f@shape := the request
+//	   else:    the rule's result if the family declares series/result,
+//	            else its fallback if declared, else the request (with a warning)
+//
+// and \merge@font@series is the same over \series@<current>@<requested>, testing
+// <requested>/\f@shape. \DeclareFontShapeChangeRule{#1}{#2}{#3}{#4} is
+// \@namedef{shape@#1@#2}{{#3}{#4}}.
+//
+// \selectfont then sets the face for \f@series/\f@shape. A pair the family does
+// not declare is \wrong@fontshape's: the default shape (n) in the same series,
+// then the default series and shape (m/n) — and \f@shape KEEPS the requested
+// shape, so {\bfseries\scshape\mdseries x} is small capitals again (measured:
+// "bx/sc ... using bx/n", then m/sc).
+//
+// Measured against tectonic (testdata/parity/nfssrules.tex):
+//
+//	\bfseries\scshape          bx/sc  -> lmroman10-bold          (bx/sc undeclared)
+//	\scshape\itshape           m/scsl -> lmromancaps10-oblique   (sc+it = scit, else scsl)
+//	\slshape\scshape           m/scsl -> lmromancaps10-oblique
+//	\bfseries\scshape\mdseries m/sc   -> lmromancaps10-regular
+//	\scshape\itshape\upshape   m/sc   -> lmromancaps10-regular   (scit+up = sc)
+//	\scshape\ulcshape          m/n    -> lmroman10-regular
+//	\bfseries\scshape\itshape  bx/it  -> lmroman10-bolditalic    (neither scit nor scsl in bx)
+//	\fontshape{it}\selectfont  m/it   -> lmroman10-italic
+//	\itshape\rmfamily          m/it   -> lmroman10-italic        (a family switch keeps the shape)
+//
+// The old one-letter switches do not merge: latex.ltx declares \bf as
+// \normalfont\bfseries (\DeclareOldFontCommand), so {\it\bf x} is upright bold.
+//
+// ⚠ Bounded, and stated rather than guessed at:
+//   - ONE family's declarations, tulmr.fd's. The typewriter and sans faces have no
+//     shape table here; a series or shape switch inside them sets the roman face,
+//     as this engine always did.
+//   - tulmr.fd declares three pairs this engine has no face for: m/ui (unslanted
+//     italic) and the b series (lmromandemi). Each is set in the nearest face it
+//     has (nfssStandIn); \f@series/\f@shape still read what LaTeX's do.
+//   - NFSS's font warnings are not printed.
 
-// nfssRole is a face's place on the two axes: series 'm' or 'b', shape 'n'
-// (upright), 'i' (italic), 's' (slanted) or 'c' (small caps).
-type nfssRole struct{ series, shape byte }
-
-// Internal names for the two faces only a series+shape pair reaches. Not \bfit:
+// Internal names for the faces only a series+shape pair reaches. Not \bfit:
 // documents define that one themselves.
 const (
 	boldItalicName = "gotex@font@bx/it"
 	boldSlantName  = "gotex@font@bx/sl"
+	capsSlantName  = "gotex@font@m/scsl"
 )
 
-// nfssFaces is the family's shape table: which bound face holds each pair.
-var nfssFaces = []struct {
-	name string
-	role nfssRole
-}{
-	{"rm", nfssRole{'m', 'n'}},
-	{"bf", nfssRole{'b', 'n'}},
-	{"it", nfssRole{'m', 'i'}},
-	{"sl", nfssRole{'m', 's'}},
-	{"sc", nfssRole{'m', 'c'}},
-	{boldItalicName, nfssRole{'b', 'i'}},
-	{boldSlantName, nfssRole{'b', 's'}},
+// nfssShapeRules is the kernel's \shape@<current>@<requested> table, verbatim.
+var nfssShapeRules = map[string][2]string{
+	"n@it": {"it", "sl"}, "n@sl": {"sl", "it"}, "n@up": {"n", ""}, "n@ulc": {"n", ""},
+	"it@sl": {"sl", "it"}, "it@sc": {"scit", "scsl"}, "it@up": {"n", ""}, "it@ulc": {"it", ""},
+	"sl@it": {"it", "sl"}, "sl@sc": {"scsl", "scit"}, "sl@up": {"n", ""}, "sl@ulc": {"sl", ""},
+	"sc@it": {"scit", "scsl"}, "sc@sl": {"scsl", "scit"}, "sc@up": {"n", ""}, "sc@ulc": {"n", ""},
+	"sc@sw":   {"scsw", "sw"},
+	"scit@it": {"scit", ""}, "scit@sl": {"scsl", "scit"}, "scit@sc": {"scit", ""},
+	"scit@up": {"sc", ""}, "scit@ulc": {"it", ""}, "scit@sw": {"scsw", "sc"},
+	"scsl@it": {"scit", "scsl"}, "scsl@sl": {"scsl", ""}, "scsl@sc": {"scsl", ""},
+	"scsl@up": {"sc", ""}, "scsl@ulc": {"sl", ""}, "scsl@sw": {"scsw", "sc"},
+	"sw@sc": {"scsw", ""}, "sw@up": {"n", ""}, "sw@ulc": {"sw", ""},
+	"scsw@it": {"scit", "scsw"}, "scsw@sl": {"scsl", ""}, "scsw@sc": {"scsw", ""},
+	"scsw@up": {"sc", ""}, "scsw@ulc": {"sw", ""}, "scsw@sw": {"scsw", ""},
+}
+
+// nfssSeriesRules is the kernel's \series@<current>@<requested> table, verbatim.
+var nfssSeriesRules = map[string][2]string{
+	"m@b": {"b", "bx"}, "m@bx": {"bx", "b"}, "m@sb": {"sb", "b"}, "m@l": {"l", "m"}, "m@c": {"c", "m"},
+	"b@bx": {"bx", "b"}, "b@sb": {"sb", "b"}, "b@c": {"bc", "b"},
+	"bx@b": {"bx", ""}, "bx@sb": {"sbx", ""}, "bx@l": {"lx", ""}, "bx@c": {"bc", "bx"},
+	"bx@eb": {"ebx", ""}, "bx@ub": {"ubx", ""}, "bx@el": {"elx", ""}, "bx@ul": {"ulx", ""},
+	"sb@c": {"sbc", "bc"},
+	"l@b":  {"b", "bx"}, "l@bx": {"bx", "b"}, "l@sb": {"sb", "b"}, "l@c": {"lc", "l"},
+	"c@b": {"bc", ""}, "c@bx": {"bx", "b"}, "c@sb": {"sbc", ""}, "c@l": {"lc", ""},
+	"c@eb": {"ebc", ""}, "c@ub": {"ubc", ""}, "c@el": {"elc", ""}, "c@ul": {"ulc", ""},
+	"bc@b": {"bc", ""}, "bc@sb": {"sbc", ""}, "bc@l": {"lc", ""}, "bc@c": {"bc", ""},
+	"bc@eb": {"ebc", ""}, "bc@ub": {"ubc", ""}, "bc@el": {"elc", ""}, "bc@ul": {"ulc", ""},
+	"lc@b": {"bc", ""}, "lc@sb": {"sbc", ""}, "lc@l": {"lc", ""}, "lc@c": {"lc", ""},
+	"lc@eb": {"ebc", ""}, "lc@ub": {"ubc", ""}, "lc@el": {"elc", ""}, "lc@ul": {"ulc", ""},
+	"eb@c": {"ebc", ""}, "ub@c": {"ubc", ""}, "el@c": {"elc", ""}, "ul@c": {"ulc", ""},
+}
+
+// lmrDeclared is every series/shape pair tulmr.fd declares (\ifcsname
+// TU/lmr/<series>/<shape>, read from tectonic). b/it is declared as a
+// substitution (sub*lmr/b/sl), which \ifcsname counts as declared.
+var lmrDeclared = map[string]bool{
+	"m/n": true, "m/it": true, "m/sl": true, "m/sc": true, "m/scsl": true, "m/ui": true,
+	"b/n": true, "b/it": true, "b/sl": true,
+	"bx/n": true, "bx/it": true, "bx/sl": true,
+}
+
+// nfssFaces is which bound face holds each declared pair.
+var nfssFaces = map[string]string{
+	"m/n": "rm", "bx/n": "bf", "m/it": "it", "m/sl": "sl", "m/sc": "sc",
+	"bx/it": boldItalicName, "bx/sl": boldSlantName, "m/scsl": capsSlantName,
+}
+
+// nfssStandIn is the face set for a declared pair this engine has no file for.
+var nfssStandIn = map[string]string{
+	"m/ui": "m/it",
+	"b/n":  "bx/n", "b/it": "bx/sl", "b/sl": "bx/sl", // b/it is sub*lmr/b/sl
 }
 
 // faceKey identifies the face a font was bound as, at whatever size it is now
@@ -64,60 +134,146 @@ func faceKey(f fontFace) *byte {
 	return nil
 }
 
-// nfssRoleOf is where the current face sits on the two axes, or false when it is
-// none of the family's bound faces (the typewriter, a math font, a host's face
-// bound under no role).
-func (e *Engine) nfssRoleOf(f fontFace) (nfssRole, bool) {
-	k := faceKey(f)
-	if k == nil {
-		return nfssRole{}, false
+// nfssGet reads \f@series or \f@shape; def when the kernel defined neither.
+func (e *Engine) nfssGet(name, def string) string {
+	m := e.eq[name]
+	if m == nil || m.kind != mMacro {
+		return def
 	}
-	for _, s := range nfssFaces {
-		if m := e.eq[s.name]; m != nil && m.kind == mFont && faceKey(m.font) == k {
-			return s.role, true
-		}
-	}
-	return nfssRole{}, false
+	return plainText(m.body)
 }
 
-// nfssSwitch is the face an NFSS series or shape switch selects from the current
-// one: the other axis is kept. false means "not such a switch, or no such pair":
-// the caller then selects the switch's own face, as before.
+// nfssSet assigns \f@series or \f@shape locally, so a group restores it.
+func (e *Engine) nfssSet(name, v string) {
+	e.define(name, &meaning{kind: mMacro, body: stringToToks(v)}, false)
+}
+
+func (e *Engine) nfssSeries() string { return e.nfssGet("f@series", "m") }
+func (e *Engine) nfssShape() string  { return e.nfssGet("f@shape", "n") }
+
+// mergeShape is \merge@font@shape@: the shape a \fontshape{req} leaves.
+func mergeShape(series, cur, req string) string {
+	r, ok := nfssShapeRules[cur+"@"+req]
+	if !ok {
+		return req
+	}
+	if lmrDeclared[series+"/"+r[0]] {
+		return r[0]
+	}
+	if r[1] != "" && lmrDeclared[series+"/"+r[1]] {
+		return r[1]
+	}
+	return req
+}
+
+// mergeSeries is \merge@font@series@: the series a \fontseries{req} leaves.
+func mergeSeries(cur, req, shape string) string {
+	r, ok := nfssSeriesRules[cur+"@"+req]
+	if !ok {
+		return req
+	}
+	if lmrDeclared[r[0]+"/"+shape] {
+		return r[0]
+	}
+	if r[1] != "" && lmrDeclared[r[1]+"/"+shape] {
+		return r[1]
+	}
+	return req
+}
+
+// nfssFace is the face \selectfont installs for series/shape: the declared pair,
+// else \wrong@fontshape's substitutes, series/n then m/n. nil when none of them
+// is bound (a host that named its own faces).
+func (e *Engine) nfssFace(series, shape string) fontFace {
+	try := []string{series + "/" + shape}
+	if !lmrDeclared[try[0]] {
+		try = append(try, series+"/n", "m/n")
+	}
+	for _, k := range try {
+		if s, ok := nfssStandIn[k]; ok {
+			k = s
+		}
+		if m := e.eq[nfssFaces[k]]; m != nil && m.kind == mFont {
+			return m.font
+		}
+	}
+	return nil
+}
+
+// nfssSwitch runs a font switch through NFSS: it updates \f@series/\f@shape as
+// the kernel would and returns the face to set. false means "set the switch's
+// own face", as before: a family switch to the typewriter or sans, a face this
+// table cannot find, or a name that is not an NFSS switch at all.
 func (e *Engine) nfssSwitch(name string) (fontFace, bool) {
-	var series, shape byte
+	series, shape := e.nfssSeries(), e.nfssShape()
 	switch name {
 	case "bfseries":
-		series = 'b'
+		series = mergeSeries(series, "bx", shape)
 	case "mdseries":
-		series = 'm'
+		series = mergeSeries(series, "m", shape)
 	case "itshape":
-		shape = 'i'
+		shape = mergeShape(series, shape, "it")
 	case "slshape":
-		shape = 's'
+		shape = mergeShape(series, shape, "sl")
 	case "scshape":
-		shape = 'c'
+		shape = mergeShape(series, shape, "sc")
 	case "upshape":
-		shape = 'n'
+		shape = mergeShape(series, shape, "up")
+	case "ulcshape":
+		shape = mergeShape(series, shape, "ulc")
+	case "rmfamily":
+		// The family changes; series and shape stay: {\itshape\rmfamily x} is italic.
+	case "normalfont", "rm":
+		series, shape = "m", "n"
+	case "bf":
+		series, shape = "bx", "n"
+	case "it":
+		series, shape = "m", "it"
+	case "sl":
+		series, shape = "m", "sl"
+	case "sc":
+		series, shape = "m", "sc"
+	case "tt", "sf":
+		e.nfssSet("f@series", "m")
+		e.nfssSet("f@shape", "n")
+		return nil, false
 	default:
 		return nil, false
 	}
-	// A current face outside the family (the typewriter, a math font) has the zero
-	// role. A switch sets one axis only, so the other stays 0, and no entry of
-	// nfssFaces has a 0 axis: the search below finds nothing and the caller
-	// selects the switch's own face, as it does for a pair the family lacks.
-	want, _ := e.nfssRoleOf(e.curFont)
-	if series != 0 {
-		want.series = series
-	}
-	if shape != 0 {
-		want.shape = shape
-	}
-	for _, s := range nfssFaces {
-		if s.role == want {
-			if m := e.eq[s.name]; m != nil && m.kind == mFont {
-				return m.font, true
-			}
-		}
+	e.nfssSet("f@series", series)
+	e.nfssSet("f@shape", shape)
+	if f := e.nfssFace(series, shape); f != nil {
+		return f, true
 	}
 	return nil, false
+}
+
+// loadNFSS installs the primitives the kernel layers define \fontseries,
+// \fontshape and \selectfont through.
+func (e *Engine) loadNFSS() {
+	e.prim("gotex@fontseries", func(e *Engine) {
+		req := e.expandToString(e.grabUndelimited())
+		e.nfssSet("f@series", mergeSeries(e.nfssSeries(), req, e.nfssShape()))
+	})
+	e.prim("gotex@fontshape", func(e *Engine) {
+		req := e.expandToString(e.grabUndelimited())
+		e.nfssSet("f@shape", mergeShape(e.nfssSeries(), e.nfssShape(), req))
+	})
+	// \selectfont: the face for \f@series/\f@shape at the size in force. It used to
+	// reselect the \normalsize roman face, which undid both the shape and the size
+	// in force. A package that switched to \nullfont gets the roman face back as
+	// before, at the base size, since \nullfont has none.
+	//
+	// ⚠ \fontsize is still a no-op, so {\fontsize{12}{14}\selectfont x} keeps the
+	// size it had (tectonic: 12pt). That is its own defect.
+	e.prim("gotex@selectfont", func(e *Engine) {
+		f := e.nfssFace(e.nfssSeries(), e.nfssShape())
+		if f == nil {
+			f = e.baseFont
+		}
+		if f == nil {
+			return
+		}
+		e.selectFont(e.faceAtCurrentSize(f))
+	})
 }

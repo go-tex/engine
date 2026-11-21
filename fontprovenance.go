@@ -98,6 +98,12 @@ var embeddedFontProvenance = []fontProvenance{
 		"c37a28eed7a6e03f792b98b5e5f637b2fcda378bb4855f99284f1a88fe35f124"},
 	{"lm/lmromanslant10-bold.otf", "fonts/lm", "2.004",
 		"5f6689646a5e88b402d2e60085c813fca3a4d60707b0383c65cb023107a8bddc"},
+	// Small capitals slanted, tulmr.fd's m/scsl ("<-> lmromancaps10-oblique").
+	// Fetched from the same mirror on 2026-11-21, listed in MANIFEST-Latin-Modern.txt
+	// (fonts/opentype/public/lm/lmromancaps10-oblique.otf); its name table reads
+	// "Version 2.004".
+	{"lm/lmromancaps10-oblique.otf", "fonts/lm", "2.004",
+		"603e6bb88c206f3252d2ca1a061d0faf252dd6c87501f2efa32ce2f70793b1ad"},
 	{"lm/latinmodern-math.otf", "fonts/lm-math", "1.959",
 		"6075562b771f8b82f0c179e363389684f2dd09de30038269e2628e504bd7be0f"},
 

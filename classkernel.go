@@ -310,15 +310,16 @@ const LaTeX2eClassKernel = `
 % how amsart's \deferred@thm@head emits a "Theorem 1.1." heading (see amsart.cls
 % \dth@everypar). Without the box register the head is silently dropped.
 \newbox\@labels
-% NFSS's maths versions (\mathversion{bold} and friends) and the font-shape
-% switches a class uses around its headings. This engine has one face per family,
-% so a version switch has nothing to select; the argument is consumed.
+% NFSS's maths versions (\mathversion{bold} and friends) and the family switch.
+% This engine has one face per family, so a version or family switch has nothing
+% to select; the argument is consumed. \fontseries and \fontshape are real: they
+% merge into \f@series/\f@shape as the kernel does (nfss.go).
 \def\mathversion#1{}
 \def\DeclareMathVersion#1{}
 \def\SetMathAlphabet@#1#2#3#4#5#6{}
 \def\fontfamily#1{\@gobbleone@nil}
-\def\fontseries#1{\@gobbleone@nil}
-\def\fontshape#1{\@gobbleone@nil}
+\def\fontseries#1{\gotex@fontseries{#1}}
+\def\fontshape#1{\gotex@fontshape{#1}}
 \def\fontsize#1#2{}
 \def\@gobbleone@nil{}
 \def\usefont#1#2#3#4{}

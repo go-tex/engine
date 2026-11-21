@@ -1,0 +1,24 @@
+\documentclass{article}
+\makeatletter
+\newcommand\report[1]{\typeout{#1:\f@series/\f@shape}}
+\begin{document}
+\noindent{\bfseries\scshape\report{BXSC}Alfa bravo charlie delta.}
+
+\noindent{\scshape\itshape\report{SCIT}Alfa bravo charlie delta.}
+
+\noindent{\slshape\scshape\report{SLSC}Alfa bravo charlie delta.}
+
+\noindent{\bfseries\scshape\mdseries\report{BSCM}Alfa bravo charlie delta.}
+
+\noindent{\scshape\itshape\upshape\report{SCITUP}Alfa bravo charlie delta.}
+
+\noindent{\scshape\ulcshape\report{SCULC}Alfa bravo charlie delta.}
+
+\noindent{\bfseries\scshape\itshape\report{BSCIT}Alfa bravo charlie delta.}
+
+\noindent{\fontshape{it}\selectfont\report{FSIT}Alfa bravo charlie delta.}
+
+\noindent{\itshape\rmfamily\report{ITRM}Alfa bravo charlie delta.}
+
+\noindent{\itshape\bf\report{ITBF}Alfa bravo charlie delta.}
+\end{document}
