@@ -9,6 +9,24 @@ import (
 	"testing"
 )
 
+// The embedded small-caps face is parsed when the default family is built, and a
+// face that does not parse refuses the whole build rather than leaving \scshape a
+// no-op. The embedded bytes cannot fail to parse, so the test truncates them: the
+// refusal is buildEngine's, the only caller of the "sc" binding. A host that names
+// its own roman binds no small caps and is not affected.
+func TestATruncatedSmallCapsFaceRefusesTheDefaultFamily(t *testing.T) {
+	saved := lmRomanCaps
+	t.Cleanup(func() { lmRomanCaps = saved })
+	lmRomanCaps = saved[:len(saved)/2]
+	if _, err := buildEngine(Options{}, true); err == nil {
+		t.Error("buildEngine with a truncated small-caps face: want an error, got nil")
+	}
+	lmRomanCaps = saved
+	if _, err := buildEngine(Options{}, true); err != nil {
+		t.Errorf("buildEngine with the embedded small-caps face: %v", err)
+	}
+}
+
 // \scshape and \textsc set Latin Modern small capitals, against tectonic on
 // testdata/parity/smallcaps.tex. \scshape was an empty macro and \textsc was
 // undefined in article (amsart's stand-in was {#1}), so both came out in the
