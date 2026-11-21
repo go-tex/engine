@@ -71,6 +71,11 @@ var embeddedFontProvenance = []fontProvenance{
 		"c1fce25075567bb8dbf2151658c3b442690041db17a2d49fc9e55905ea5b7169"},
 	{"lm/lmmono10-regular.otf", "fonts/lm", "2.004",
 		"22deb6d3be3ffcb40b33f0e010afb256c677d97c2a2bdee1f5740cdc97751558"},
+	// Fetched from the same mirror on 2026-11-20, listed in MANIFEST-Latin-Modern.txt
+	// (fonts/opentype/public/lm/lmromancaps10-regular.otf); its name table reads
+	// "Version 2.004".
+	{"lm/lmromancaps10-regular.otf", "fonts/lm", "2.004",
+		"1ab40332a969892c7ed6cb010193b5276ccef1da6798bcbd1a465fee23d29334"},
 	{"lm/latinmodern-math.otf", "fonts/lm-math", "1.959",
 		"6075562b771f8b82f0c179e363389684f2dd09de30038269e2628e504bd7be0f"},
 

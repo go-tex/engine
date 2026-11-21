@@ -521,7 +521,7 @@ const AMSClassSubstrate = `
 % than leaving it undefined and gobbled) is what lets amsart's \@seccntformat
 % (\textup{…the section number…}) actually emit the number in a heading.
 \def\textup#1{#1}
-\def\textsc#1{#1}
+% (\textsc is the kernel layer's {\scshape #1}, latex.go: a small-caps face exists.)
 \def\textmd#1{#1}
 \def\textnormal#1{#1}
 % ⛔⛔ \mark IS A PRIMITIVE AGAIN. A one-line stub here used to define it away,
