@@ -418,7 +418,63 @@ const LaTeX2eClassKernel = `
 \def\DeclareFontShape#1#2#3#4#5#6{}
 \def\DeclareFontEncoding#1#2#3{}
 \def\DeclareFontSubstitution#1#2#3#4{}
-\def\DeclareTextFontCommand#1#2{\def#1##1{{#2##1}}}
+% \DeclareTextFontCommand and the italic correction it carries, as LaTeX
+% 2021-11-15 has them (ltfntcmd; the meanings tectonic prints). The text is set
+% in a group between \check@icl and \check@icr; \check@icr runs \maybe@ic AFTER
+% the group, so it sees the token that follows the closing brace and puts the
+% last glyph's \/ in the outer list — unless that token is in \nocorrlist, or
+% the outer font is slanted (\fontdimen1 > 0). XeTeX reports \fontdimen1 = 0 for
+% Latin Modern italic as well, so under the reference the correction is made
+% after every \textit{…} not followed by "," or ".": {\itshape f} is 3.07pt and
+% \textit{f} 4.52pt there. These used to be {#2##1}, with no correction at all.
+%
+% Departures: \DeclareRobustCommand is \protected\long\def here, and the math
+% branch is {#2##1} where the kernel has \nfss@text (an \mbox at math sizes),
+% which is what it was before. \protected is not optional: \protected@edef is a
+% plain \edef in this engine, so only e-TeX's prefix keeps \textit{…} whole in a
+% mark — sn-jnl.cls:486 puts one in every running head.
+\def\nocorrlist{,.}
+\let\nocorr\relax
+\let\@@italiccorr\/
+\def\hmode@bgroup{\leavevmode\bgroup}
+\newif\ifmaybe@ic
+\def\maybe@ic{\futurelet\@let@token\maybe@ic@}
+\def\maybe@ic@{\ifdim\fontdimen\@ne\font>\z@\else\maybe@ictrue
+  \expandafter\@tfor\expandafter\reserved@a\expandafter:\expandafter=\nocorrlist
+  \do\t@st@ic\ifmaybe@ic\sw@slant\fi\fi}
+\def\t@st@ic{\expandafter\let\expandafter\reserved@b\expandafter=\reserved@a\relax
+  \ifx\reserved@b\@let@token\maybe@icfalse\@break@tfor\fi}
+\def\sw@slant{\ifdim\lastskip=\z@\fix@penalty\else
+  \skip@\lastskip\unskip\fix@penalty\hskip\skip@\fi}
+\def\fix@penalty{\ifnum\lastpenalty=\z@\@@italiccorr\else
+  \count@\lastpenalty\unpenalty\@@italiccorr\penalty\count@\fi}
+\def\text@command#1{\edef\reserved@a{\unexpanded{#1}}%
+  \ifx\reserved@a\@empty\let\check@icl\@empty\let\check@icr\@empty
+  \else\ifx\reserved@a\space\let\check@icl\@empty\let\check@icr\@empty
+  \else\check@nocorr@#1\nocorr\@nil\fi\fi}
+\def\check@nocorr@#1#2\nocorr#3\@nil{\let\check@icl\maybe@ic
+  \def\check@icr{\ifvmode\else\aftergroup\maybe@ic\fi}%
+  \def\reserved@a{\nocorr}\def\reserved@b{#1}\def\reserved@c{#3}%
+  \ifx\reserved@a\reserved@b
+    \ifx\reserved@c\@empty\let\check@icl\@empty
+    \else\let\check@icl\@empty\let\check@icr\@empty\fi
+  \else\ifx\reserved@c\@empty\else\let\check@icr\@empty\fi\fi}
+\def\DeclareTextFontCommand#1#2{\protected\long\def#1##1{\ifmmode{#2##1}\else
+  \hmode@bgroup\text@command{##1}#2\check@icl##1\check@icr
+  \expandafter\egroup\fi}}
+\DeclareTextFontCommand{\textrm}{\rmfamily}
+\DeclareTextFontCommand{\textsf}{\sffamily}
+\DeclareTextFontCommand{\texttt}{\ttfamily}
+\DeclareTextFontCommand{\textbf}{\bfseries}
+\DeclareTextFontCommand{\textmd}{\mdseries}
+\DeclareTextFontCommand{\textit}{\itshape}
+\DeclareTextFontCommand{\textsl}{\slshape}
+\DeclareTextFontCommand{\textsc}{\scshape}
+\DeclareTextFontCommand{\textup}{\upshape}
+\DeclareTextFontCommand{\textnormal}{\normalfont}
+% \emph is \em's text command, and \em is \itshape when \fontdimen1 is 0 —
+% always, under XeTeX's Latin Modern (a nested \emph stays italic there).
+\DeclareTextFontCommand{\emph}{\itshape}
 % Which engine is this? A document asks before it chooses how to include a
 % graphic, which font machinery to load, or which encoding package to use — and
 % an unanswered question is a hard error, since \ifpdf…\else…\fi then has no
