@@ -41,6 +41,10 @@ const (
 )
 
 var (
+	// badness is tex.web §108's badness(t,s), one implementation for the page
+	// builder here and the line breaker there.
+	badness = linebreak.TeXBadness
+
 	Box            = linebreak.Box
 	Glue           = linebreak.Glue
 	GlueOrder      = linebreak.GlueOrder
