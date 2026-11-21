@@ -201,6 +201,11 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 		case imageNode:
 			lg.close()
 			// the image sits on the baseline: top at baseline-height, no depth
+			if c.format == imgPDF {
+				sb.WriteString(c.pdfSVG(f(cx), f(baseline-spToPt(c.height)), f(spToPt(c.width)), f(spToPt(c.height))))
+				cx += spToPt(c.width)
+				break
+			}
 			fmt.Fprintf(sb, `<image x="%s" y="%s" width="%s" height="%s" href="%s"/>`,
 				f(cx), f(baseline-spToPt(c.height)), f(spToPt(c.width)), f(spToPt(c.height)), c.dataURI())
 			cx += spToPt(c.width)
