@@ -153,14 +153,14 @@ func (e *Engine) nfssShape() string  { return e.nfssGet("f@shape", "n") }
 
 // mergeShape is \merge@font@shape@: the shape a \fontshape{req} leaves.
 func mergeShape(series, cur, req string) string {
-	r, ok := nfssShapeRules[cur+"@"+req]
-	if !ok {
-		return req
-	}
+	// No rule for the pair is the zero entry, whose two shapes are empty: no pair
+	// "<series>/" is declared, so both tests fail and the request stands, as it does
+	// when the kernel has no \shape@<cur>@<req>.
+	r := nfssShapeRules[cur+"@"+req]
 	if lmrDeclared[series+"/"+r[0]] {
 		return r[0]
 	}
-	if r[1] != "" && lmrDeclared[series+"/"+r[1]] {
+	if lmrDeclared[series+"/"+r[1]] {
 		return r[1]
 	}
 	return req
@@ -168,14 +168,13 @@ func mergeShape(series, cur, req string) string {
 
 // mergeSeries is \merge@font@series@: the series a \fontseries{req} leaves.
 func mergeSeries(cur, req, shape string) string {
-	r, ok := nfssSeriesRules[cur+"@"+req]
-	if !ok {
-		return req
-	}
+	// No rule for the pair is the zero entry, as in mergeShape: "/<shape>" is not a
+	// declared pair, and the request stands.
+	r := nfssSeriesRules[cur+"@"+req]
 	if lmrDeclared[r[0]+"/"+shape] {
 		return r[0]
 	}
-	if r[1] != "" && lmrDeclared[r[1]+"/"+shape] {
+	if lmrDeclared[r[1]+"/"+shape] {
 		return r[1]
 	}
 	return req

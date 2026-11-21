@@ -112,3 +112,83 @@ func TestNFSSStateIsScopedToTheGroup(t *testing.T) {
 		t.Errorf("after the group: %q, want AFTER:m/n", got)
 	}
 }
+
+// A request with no rule stands: \fontshape{xx} leaves xx, and \fontseries{eb}
+// from medium (no \series@m@eb) leaves eb. The rules, where there are some, give
+// the requested pair or its fallback.
+func TestNFSSMergeWithNoRuleKeepsTheRequest(t *testing.T) {
+	if got := mergeShape("m", "n", "xx"); got != "xx" {
+		t.Errorf("mergeShape with no rule = %q, want xx", got)
+	}
+	if got := mergeSeries("m", "eb", "n"); got != "eb" {
+		t.Errorf("mergeSeries with no rule = %q, want eb", got)
+	}
+	// The first answer of a rule is used when declared, the second when it is not.
+	if got := mergeSeries("m", "b", "n"); got != "b" {
+		t.Errorf("mergeSeries(m, b, n) = %q, want b (b/n is declared)", got)
+	}
+	if got := mergeSeries("m", "b", "ui"); got != "b" {
+		t.Errorf("mergeSeries(m, b, ui) = %q, want the request b: neither b/ui nor bx/ui is declared", got)
+	}
+	if got := mergeSeries("l", "b", "it"); got != "b" {
+		t.Errorf("mergeSeries(l, b, it) = %q, want b", got)
+	}
+	// m/sl, bx/n: \series@m@bx is {bx}{b}, and bx/sl is declared.
+	if got := mergeSeries("m", "bx", "sl"); got != "bx" {
+		t.Errorf("mergeSeries(m, bx, sl) = %q, want bx", got)
+	}
+	// \series@m@b is {b}{bx}; with no b/sc the second answer is not declared either,
+	// so the request is kept.
+	if got := mergeSeries("m", "b", "sc"); got != "b" {
+		t.Errorf("mergeSeries(m, b, sc) = %q, want b", got)
+	}
+}
+
+// nfssGet reads a macro's text, and answers the default for a name that is
+// undefined or not a macro. A guard that is gone dereferences nil: reported here as
+// a failure, not a crash.
+func TestNFSSGetAnswersTheDefaultForWhatIsNotAMacro(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := func(name string) (s string) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("nfssGet(%q) panicked: %v", name, r)
+			}
+		}()
+		return e.nfssGet(name, "dflt")
+	}
+	if s := got("gotex@never@defined"); s != "dflt" {
+		t.Errorf("undefined name: %q, want dflt", s)
+	}
+	if s := got("relax"); s != "dflt" {
+		t.Errorf("a primitive: %q, want dflt", s)
+	}
+	e.nfssSet("f@series", "bx")
+	if s := got("f@series"); s != "bx" {
+		t.Errorf("a macro: %q, want bx", s)
+	}
+}
+
+// \selectfont with no face to select and no base face leaves the current font
+// alone: it does not install nil, which every later glyph would dereference.
+func TestSelectfontWithNoFaceKeepsTheCurrentFont(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range nfssFaces {
+		delete(e.eq, name)
+	}
+	e.baseFont = nil
+	before := e.curFont
+	if before == nil {
+		t.Fatal("the engine has no current font to keep")
+	}
+	e.eq["gotex@selectfont"].prim(e)
+	if e.curFont != before {
+		t.Errorf("\\selectfont with no face set the font to %v", e.curFont)
+	}
+}

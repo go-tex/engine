@@ -12,10 +12,11 @@ import (
 // The two faces bound only with the default family are parsed when it is built,
 // and one that does not parse refuses the build. The embedded bytes cannot fail to
 // parse, so each is truncated in turn.
-func TestATruncatedBoldItalicOrBoldSlantedFaceRefusesTheDefaultFamily(t *testing.T) {
+func TestATruncatedNFSSOnlyFaceRefusesTheDefaultFamily(t *testing.T) {
 	for name, face := range map[string]*[]byte{
 		"bold italic":  &lmRomanBoldItalic,
 		"bold slanted": &lmRomanBoldSlant,
+		"caps oblique": &lmRomanCapsOblique,
 	} {
 		saved := *face
 		*face = saved[:len(saved)/2]
