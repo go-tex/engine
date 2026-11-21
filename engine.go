@@ -3108,6 +3108,9 @@ func (e *Engine) scanInt() int {
 				if m.kind == mPrim && m.name == "spacefactor" {
 					return sign * e.spaceFactor
 				}
+				if m.kind == mPrim && m.name == "lastpenalty" {
+					return sign * e.lastPenalty()
+				}
 				if m.kind == mPrim {
 					if v, ok := e.groupQuery(m.name); ok {
 						return sign * v

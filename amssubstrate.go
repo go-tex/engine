@@ -519,13 +519,10 @@ const AMSClassSubstrate = `
 % keeps the two names independent, exactly as textcase and the kernel are.
 \def\MakeTextUppercase#1{\protected@edef\@gotexuctmp{#1}%
   \expandafter\uppercase\expandafter{\@gotexuctmp}}
-% \textup: upright text — no series/shape machinery, so identity. Defining it (rather
-% than leaving it undefined and gobbled) is what lets amsart's \@seccntformat
-% (\textup{…the section number…}) actually emit the number in a heading.
-\def\textup#1{#1}
-% (\textsc is the kernel layer's {\scshape #1}, latex.go: a small-caps face exists.)
-\def\textmd#1{#1}
-\def\textnormal#1{#1}
+% \textup, \textmd, \textnormal: the class kernel's \DeclareTextFontCommand
+% (classkernel.go), with the shape switch and the italic correction. They were
+% identities here, so \textup{…} inside italic text stayed italic. amsart's
+% \@seccntformat (\textup{…the section number…}) emits the number through it.
 % ⛔⛔ \mark IS A PRIMITIVE AGAIN. A one-line stub here used to define it away,
 % for the reason it stated: page marks feed running heads the engine does not
 % build. That was true when it was written; the engine builds them now
@@ -537,8 +534,6 @@ const AMSClassSubstrate = `
 % separate fixes to the chain above it — the band (#726), the dispatch, and the
 % pair's name (#728) — because each of those was right and this one line still
 % threw the mark away.
-% \/ : italic correction — a zero-width adjustment the engine does not need.
-\def\/{}
 % \hyphenation{…} is NOT stubbed here any more: there is now somewhere to record
 % it (hyphexception.go), and the primitive must be the one that runs.
 %

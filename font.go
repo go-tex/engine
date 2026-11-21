@@ -49,6 +49,8 @@ type OpenTypeFont struct {
 	// (rawAppendChar → charDimsSP → CharDims), which dominates run time on
 	// glyph-heavy math papers.
 	dimCache map[rune][3]float64
+	// icCache memoises italCorrSP per rune, on dimCache's argument.
+	icCache map[rune]int
 	// pathCache memoises the SVG outline per rune, for the same reason and with the
 	// same safety argument as dimCache: the face is a fixed size, so a glyph's path
 	// never changes. Without it every OCCURRENCE of a character re-ran the CFF
@@ -212,6 +214,35 @@ func (o *OpenTypeFont) CharDims(r rune) (float64, float64, float64) {
 	}
 	o.dimCache[r] = [3]float64{w, -minY, maxY}
 	return w, -minY, maxY
+}
+
+// italCorrSP is r's italic correction in scaled points: how far the glyph's ink
+// reaches past its advance, never negative. It is XeTeX's for an OpenType face —
+// XeTeXFontInst::getGlyphItalCorr sets rval = bbox.xMax - width when the
+// unscaled glyph box (FT_Glyph_Get_CBox) reaches past the advance, and 0
+// otherwise — because an OpenType font carries no per-glyph italic correction
+// outside its MATH table, which is a different quantity.
+//
+// FreeType's box is the CONTROL box — every on- and off-curve point — which
+// GlyphControlBox answers. The flattened outline's maximum is not it: a slanted
+// f's control points reach past its curve (\textsl{f} 4.64pt against tectonic's
+// 4.69 when this read the outline).
+func (o *OpenTypeFont) italCorrSP(r rune) int {
+	if ic, ok := o.icCache[r]; ok {
+		return ic
+	}
+	ic := 0
+	if gid, ok := o.glyphFor(r); ok {
+		_, _, xMax, _, seen := o.fc.GlyphControlBox(gid)
+		if adv := o.fc.AdvanceIndexUnits(gid); seen && xMax > adv {
+			ic = ptToSP((xMax - adv) * o.fc.Scale())
+		}
+	}
+	if o.icCache == nil {
+		o.icCache = map[rune]int{}
+	}
+	o.icCache[r] = ic
+	return ic
 }
 
 // glyphPath returns the SVG path ("d") for a rune's glyph at the face's size,

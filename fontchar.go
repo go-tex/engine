@@ -60,13 +60,17 @@ var fontCharDimNames = []string{"fontcharht", "fontcharwd", "fontchardp", "fontc
 // character on the page, so \fontcharht\font`X answers with the X the document will show.
 // The engine's \ex unit is a design-size fraction; this is not.
 //
-// \fontcharic is zero because this engine's faces carry no italic correction — and zero is
-// also what \/ contributes here, so the two agree rather than one of them lying.
+// \fontcharic is the correction \/ appends after that character (italCorrOf), so the two
+// agree: XeTeX answers both from getGlyphItalCorr. tectonic prints 144.99998pt for
+// \fontcharic\font`f in lmroman10-italic at 1000pt.
 func (e *Engine) fontCharDim(which string) int {
 	e.scanFontSpec()
 	r := rune(e.scanInt())
-	if e.curFont == nil || r <= 0 || which == "fontcharic" {
+	if e.curFont == nil || r <= 0 {
 		return 0
+	}
+	if which == "fontcharic" {
+		return italCorrOf(e.curFont, r)
 	}
 	w, h, d := e.curFont.charDimsSP(r)
 	switch which {
