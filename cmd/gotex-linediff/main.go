@@ -78,14 +78,29 @@ type reportOptions struct {
 func run(paths []string, opt reportOptions, w io.Writer) error {
 	var sb strings.Builder
 	for i, p := range paths {
-		lines, hidden, pageH, err := linesOf(p, opt)
+		lines, hidden, pageH, pages, err := linesOf(p, opt)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		fmt.Fprintf(&sb, "### %s  page %d  (height %s pt, %d lines)\n", p, opt.page, ftoa(pageH), len(lines))
+		// ⛔ "page N OF M", and the M is the whole point. This command reads ONE
+		// page (-page, default 1) and used to say only which one, so an extract
+		// of a 48-page document read as the document. A rendered-text A/B for
+		// go-tex/engine#816 was run through it page 1 only: every phrase from
+		// page 2 onward counted 0, and two conclusions were drawn from those
+		// zeros — "the fix does not render the paper's nodes" and "the shipped
+		// engine swallows the rest of the document" — both false, both nearly
+		// published. The positive control could not catch it, because the
+		// witness document was one page long: a control that fits inside an
+		// instrument's blind spot cannot reveal that blind spot.
+		//
+		// Not a banner: a multi-page read ALWAYS leaves pages unread, so a
+		// banner would fire on every real document and be skipped — the rule
+		// filteredBanner states. The surface goes in the line a reader already
+		// reads, as staleref's "N of M file(s) read" does for the same lesson.
+		fmt.Fprintf(&sb, "### %s  page %d of %d  (height %s pt, %d lines)\n", p, opt.page, pages, ftoa(pageH), len(lines))
 		sb.WriteString(filteredBanner(hidden, len(lines)))
 		for _, l := range lines {
 			sb.WriteString(l.String() + "\n")
@@ -158,26 +173,29 @@ func trunc(s string, n int) string {
 }
 
 // linesOf reads one page of one PDF and groups its runs into lines. The second
-// result is how many lines of that page the options HID (see filteredBanner).
-func linesOf(path string, opt reportOptions) ([]Line, int, float64, error) {
+// result is how many lines of that page the options HID (see filteredBanner);
+// the fourth is how many pages the document HAS, which the report must print
+// beside the one it read.
+func linesOf(path string, opt reportOptions) ([]Line, int, float64, int, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 	doc, err := pdfruns.Open(b)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
-	if opt.page < 1 || opt.page > doc.PageCount() {
-		return nil, 0, 0, fmt.Errorf("page %d of %d", opt.page, doc.PageCount())
+	pages := doc.PageCount()
+	if opt.page < 1 || opt.page > pages {
+		return nil, 0, 0, 0, fmt.Errorf("page %d of %d", opt.page, pages)
 	}
 	runs, err := pdfruns.PageRuns(doc, opt.page) // the reader numbers pages from 1
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 	h := pdfruns.PageHeight(doc, opt.page)
 	lines, hidden := groupLines(runs, h, opt)
-	return lines, hidden, h, nil
+	return lines, hidden, h, pages, nil
 }
 
 // groupLines gathers runs that share a baseline. Runs are grouped by their y

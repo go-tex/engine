@@ -4,6 +4,7 @@
 package pdfruns
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/go-pdfkit/reader"
@@ -47,10 +48,7 @@ func (m matrix) apply(x, y float64) (float64, float64) {
 // scale is the matrix's horizontal magnification, which is what a font size has
 // to be multiplied by to give the size a reader sees.
 func (m matrix) scale() float64 {
-	if m.b == 0 {
-		return abs(m.a)
-	}
-	return hypot(m.a, m.b)
+	return hypot(m.a, m.b) // |a| when b is 0: no shortcut needed
 }
 
 // textState is the part of the graphics state that positions text.
@@ -74,11 +72,35 @@ func newTextState() textState {
 // order they were drawn. A page whose fonts cannot be read still yields runs:
 // their Text is empty and their W is zero, because a position measured without
 // a width is still a position, and saying so beats guessing one.
+//
+// ⛔ A page whose content stream did not decode is an ERROR here, not an empty
+// page. This read the page through reader.PageOperations, a convenience the
+// reader documents as being for RENDERERS: "a content stream whose filters
+// cannot be applied contributes what could be salvaged from it rather than
+// failing the page, which is what a renderer needs … PageContentDecoded says
+// whether any salvaging happened". This is not a renderer, it is a measurement,
+// and through PageOperations a page that could not be read came back as a page
+// with nothing on it — zero runs, no error. An A/B of rendered text reads that
+// as "the engine dropped everything on this page". Found by mutsweep: the guard
+// on this function's error survived, because nothing it was given could fail.
+//
+// Measured before tightening, 2026-11-20, against the populations this package
+// serves: 154 tectonic reference PDFs (3 343 pages) and 153 gotex outputs of the
+// same corpus (3 386 pages) — ZERO salvaged pages in either. So refusing one
+// changes no current measurement; it only stops a future one from lying.
+//
+// ⚠ The tokeniser's own error is still discarded, as the reader's PageOperations
+// does: "the operations it returns are still worth having". It counted 0 on the
+// same 6 729 pages, and it is a separate change with its own test to write.
 func PageRuns(doc *reader.Document, page int) ([]Run, error) {
-	ops, err := doc.PageOperations(page)
+	dec, err := doc.PageContentDecoded(page)
 	if err != nil {
 		return nil, err
 	}
+	if dec.Recovered {
+		return nil, fmt.Errorf("page %d: its content stream did not decode (%s): %v — read as nothing, not as an empty page", page, dec.Filter, dec.Cause)
+	}
+	ops, _ := reader.Operations(dec.Data)
 	fonts := pageFonts(doc, page)
 	st := newTextState()
 	var stack []textState
@@ -172,9 +194,10 @@ func (st *textState) advance(w float64) {
 	st.tm = matrix{1, 0, 0, 1, w, 0}.mul(st.tm)
 }
 
-// show emits one run for the operand at index i (the last operand for ' and ").
+// show emits one run for the operand at index i (the last operand for ").
+// i is -1 for a " with no operands at all, so both ends are bounds.
 func (st *textState) show(runs []Run, operands []reader.Object, i int) []Run {
-	if i >= len(operands) {
+	if i < 0 || i >= len(operands) {
 		return runs
 	}
 	return st.showString(runs, operands[i])
@@ -230,5 +253,4 @@ func matrixOf(ops []reader.Object) (matrix, bool) {
 	return matrix{v[0], v[1], v[2], v[3], v[4], v[5]}, true
 }
 
-func abs(x float64) float64      { return math.Abs(x) }
 func hypot(a, b float64) float64 { return math.Hypot(a, b) }
