@@ -263,8 +263,8 @@ func (e *Engine) loadNFSS() {
 	// in force. A package that switched to \nullfont gets the roman face back as
 	// before, at the base size, since \nullfont has none.
 	//
-	// ⚠ \fontsize is still a no-op, so {\fontsize{12}{14}\selectfont x} keeps the
-	// size it had (tectonic: 12pt). That is its own defect.
+	// The kernel layers run \gotex@pendingsize first: a \fontsize recorded since
+	// the last \selectfont is applied there, and this face is then taken at it.
 	e.prim("gotex@selectfont", func(e *Engine) {
 		f := e.nfssFace(e.nfssSeries(), e.nfssShape())
 		if f == nil {

@@ -320,7 +320,7 @@ const LaTeX2eClassKernel = `
 \def\fontfamily#1{\@gobbleone@nil}
 \def\fontseries#1{\gotex@fontseries{#1}}
 \def\fontshape#1{\gotex@fontshape{#1}}
-\def\fontsize#1#2{}
+\def\fontsize#1#2{\edef\f@size{#1}\def\gotex@pendingsize{\gotex@fontsizeat{#1}\gotex@notefontsize{#2}\gotex@setstrutbox\let\gotex@pendingsize\relax}}
 \def\@gobbleone@nil{}
 \def\usefont#1#2#3#4{}
 % Line numbering (the lineno package, which several conference classes turn on

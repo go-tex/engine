@@ -3,7 +3,11 @@
 
 package engine
 
-import "github.com/go-opentype/opentype"
+import (
+	"strings"
+
+	"github.com/go-opentype/opentype"
+)
 
 // OpenTypeFont adapts a go-opentype face for the engine: it measures glyphs (in
 // points via CharDims and in scaled points via charDimsSP), supplies the interword
@@ -598,5 +602,14 @@ func (e *Engine) doClassNormalsize() {
 // The class tables state a size as one of the kernel's number macros (\@xivpt →
 // 14.4), so the argument has to be expanded before it can be read.
 func (e *Engine) scanPtArg() (float64, bool) {
-	return parseFloatArg(e.toksToString(e.expandList(e.grabUndelimited())))
+	return parsePtArg(e.toksToString(e.expandList(e.grabUndelimited())))
+}
+
+// parsePtArg reads a size as \set@fontsize does (latex.ltx: \@defaultunits
+// \@tempdimb#2pt\relax\nnil): a bare number is points, and an explicit "pt" is
+// accepted, so \fontsize{12pt}{14pt} and \fontsize{12}{14} are one size. Any other
+// unit is refused rather than misread as points.
+func parsePtArg(s string) (float64, bool) {
+	s = strings.TrimSuffix(trimSpaces(s), "pt")
+	return parseFloatArg(s)
 }

@@ -186,7 +186,7 @@ func parseFloatArg(s string) (float64, bool) {
 // corpus's 157 papers 10% loose, worth 12 pages on a 26-page paper.
 func (e *Engine) doSetfontsize() {
 	skip := e.grabUndelimited()
-	f, ok := parseFloatArg(e.toksToString(e.expandList(skip)))
+	f, ok := parsePtArg(e.toksToString(e.expandList(skip)))
 	if !ok || f <= 0 {
 		return
 	}
