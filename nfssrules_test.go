@@ -133,6 +133,10 @@ func TestNFSSMergeWithNoRuleKeepsTheRequest(t *testing.T) {
 	if got := mergeSeries("l", "b", "it"); got != "b" {
 		t.Errorf("mergeSeries(l, b, it) = %q, want b", got)
 	}
+	// \series@m@sb is {sb}{b}: sb/n is not declared, b/n is, so the second answer.
+	if got := mergeSeries("m", "sb", "n"); got != "b" {
+		t.Errorf("mergeSeries(m, sb, n) = %q, want b", got)
+	}
 	// m/sl, bx/n: \series@m@bx is {bx}{b}, and bx/sl is declared.
 	if got := mergeSeries("m", "bx", "sl"); got != "bx" {
 		t.Errorf("mergeSeries(m, bx, sl) = %q, want bx", got)
