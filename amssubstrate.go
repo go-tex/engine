@@ -195,7 +195,14 @@ func (e *Engine) loadAMSPrims() {
 	// engine is never in math mode; \ifhmode/\ifvmode track whether a paragraph is
 	// open, \ifinner is always outer, and \ifvoid/\ifhbox/\ifvbox query a box
 	// register (every unused register is void).
-	e.prim("ifmmode", func(e *Engine) { e.doIf(false) })
+	//
+	// \ifmmode is true while flattenMathBody expands a macro body for the maths
+	// layer: that body is maths-mode material, and a macro that branches on the mode
+	// must take its maths branch there. \ensuremath{X} is \ifmmode X\else $X$\fi, so
+	// with false here every \newcommand{\Data}{\ensuremath{\boldsymbol{D}}} used
+	// inside a formula put "$D$" in the formula's text layer: no dollar is drawn,
+	// but two are copied, searched and extracted.
+	e.prim("ifmmode", func(e *Engine) { e.doIf(e.mathFlatten) })
 	e.prim("ifhmode", func(e *Engine) { e.doIf(e.inPar) })
 	e.prim("ifvmode", func(e *Engine) { e.doIf(!e.inPar) })
 	e.prim("ifinner", func(e *Engine) { e.doIf(false) })
