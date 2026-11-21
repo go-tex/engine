@@ -396,11 +396,16 @@ const AMSClassSubstrate = `
 % force (nfss.go). A package that switches to \nullfont around material it wants
 % measured but not set gets the roman face back with it, as before (pgf does
 % this for every picture).
-\def\selectfont{\gotex@selectfont}
+% \fontsize RECORDS a size and a leading, and \selectfont applies them
+% (latex.ltx \set@fontsize: \edef\f@size, \edef\f@baselineskip, then
+% \size@update from \selectfont), so {\fontsize{12}{14}x} alone changes nothing,
+% as in LaTeX. The pending pair is a macro, so a group drops it.
+\def\selectfont{\gotex@pendingsize\gotex@selectfont}
+\let\gotex@pendingsize\relax
 \def\f@shape{n}
 \def\f@series{m}
 \def\f@family{}
-\def\fontsize#1#2{}
+\def\fontsize#1#2{\edef\f@size{#1}\def\gotex@pendingsize{\gotex@fontsizeat{#1}\gotex@notefontsize{#2}\gotex@setstrutbox\let\gotex@pendingsize\relax}}
 % \@setfontsize keeps the exact shape it always had — a macro with three
 % undelimited arguments — so nothing about how a class's tokens are consumed
 % changes. It puts the font at the size the class states (\gotex@fontsizeat) AND
