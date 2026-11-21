@@ -67,3 +67,52 @@ func TestLastPenaltyIsScannedAsAnInteger(t *testing.T) {
 		t.Errorf("got %q, want [77]", got)
 	}
 }
+
+// attempt runs f and reports a panic as a failure naming what was asked: a guard
+// that is gone dereferences or indexes past the list, and that is the failure.
+func attempt(t *testing.T, what string, f func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("%s panicked: %v", what, r)
+		}
+	}()
+	f()
+}
+
+// On an empty list there is no last node: \/ adds nothing, \lastpenalty is 0.
+func TestTheEndOfAnEmptyListHasNoCorrectionAndNoPenalty(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*e.currentList() = nil
+	attempt(t, `\/ on an empty list`, func() {
+		e.appendItalicCorrection()
+		if n := len(*e.currentList()); n != 0 {
+			t.Errorf("\\/ on an empty list added %d node(s)", n)
+		}
+	})
+	attempt(t, `\lastpenalty on an empty list`, func() {
+		if p := e.lastPenalty(); p != 0 {
+			t.Errorf("\\lastpenalty = %d, want 0", p)
+		}
+	})
+}
+
+// The same, for a metric asked of no font, or of a code that is not positive.
+func TestFontCharMetricWithNoFontOrNoCodeDoesNotPanic(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.curFont = nil
+	for _, which := range fontCharDimNames {
+		attempt(t, which+" with no current font", func() {
+			e.push(stringToToks(`\font 65 `))
+			if v := e.fontCharDim(which); v != 0 {
+				t.Errorf("%s with no current font = %d, want 0", which, v)
+			}
+		})
+	}
+}
