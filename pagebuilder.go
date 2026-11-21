@@ -573,17 +573,47 @@ func precedesBreak(n node) bool {
 	return kind == vBoxLike
 }
 
-// skipDiscardable advances past glue/penalty/kern at a page break (discarded).
+// skipDiscardable is where a page starts at or after list[i]: past every glue,
+// kern and penalty that comes before the page's first box.
+//
+// ⛔⛔ A MARK, A WHATSIT OR AN INSERT DOES NOT END THE DISCARD. tex.web:19495-19502
+// drops a glue, kern or penalty node while page_contents < box_there, and only a
+// box or a rule raises it to box_there (:19509-19516). A mark or a whatsit is
+// contributed without touching page_contents, and an insert raises it no higher
+// than inserts_only, so the glue AFTER any of them is still thrown away. This
+// stopped at the first node that was not glue, kern or penalty, and every amsart
+// paper opens its list with one: \thispagestyle{plain} (amsart.cls:1894) is a
+// pageStyleNode here. The \section beforeskip behind it, .7\linespacing = 8.40pt,
+// stayed on the page and set the first heading that much below tectonic's.
+//
+// The nodes that are kept are MOVED, in their own order, to sit just before the
+// first box, and the index returned is the first of them; the discarded run is
+// left behind it. That rewrites list[i:box] in place, which is safe because
+// nothing in that run is ever drawn or measured once the page starts after it, and
+// doing it again finds it already in order. The box is what topskipFirstHeight
+// calls one, so \topskip's search and this one end at the same node.
 func skipDiscardable(list []node, i int) int {
-	for i < len(list) {
-		switch list[i].(type) {
+	end := i
+	for end < len(list) {
+		if _, isBox := topskipFirstHeight(list[end]); isBox {
+			break
+		}
+		end++
+	}
+	// Stable partition of list[i:end]: discardables first, then everything kept.
+	keep := make([]node, 0, end-i)
+	w := i
+	for j := i; j < end; j++ {
+		switch list[j].(type) {
 		case glueNode, penaltyNode, kernNode:
-			i++
+			list[w] = list[j]
+			w++
 		default:
-			return i
+			keep = append(keep, list[j])
 		}
 	}
-	return i
+	copy(list[w:end], keep)
+	return w
 }
 
 // trimTrailingGlue drops trailing glue/penalty/kern from a page's material.
