@@ -39,6 +39,18 @@ var lmMonoRegular []byte
 //go:embed fonts/lm/lmromancaps10-regular.otf
 var lmRomanCaps []byte
 
+// lmRomanBoldItalic and lmRomanBoldSlant are the bold series in the italic and
+// slanted shapes. tulmr.fd declares each at one design size for every size
+// ("bx/it <-> lmroman10-bolditalic", "bx/sl <-> lmromanslant10-bold"), so neither
+// has an optical table and both scale linearly. See nfss.go for how a series and a
+// shape switch combine into them.
+//
+//go:embed fonts/lm/lmroman10-bolditalic.otf
+var lmRomanBoldItalic []byte
+
+//go:embed fonts/lm/lmromanslant10-bold.otf
+var lmRomanBoldSlant []byte
+
 // lmMath is Latin Modern Math (OpenType with a MATH table), the maths face of the same
 // distribution and licence (its copyright field names the GUST Font License too);
 // go-tex/math sets every formula from it.

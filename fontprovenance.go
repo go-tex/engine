@@ -90,6 +90,14 @@ var embeddedFontProvenance = []fontProvenance{
 		"25f2ecfb860f2e45e6ebe69d11bc6305f5bfbef8f13476638ba291f47d1f130c"},
 	{"lm/lmromanslant17-regular.otf", "fonts/lm", "2.004",
 		"4f30eda1d4674a1f4eea513b3baf85e3ba3fb17b2e4cf09bf627aee91dc0a4cc"},
+	// The two bold shapes beside upright: tulmr.fd declares each at ONE design size
+	// ("bx/it <-> lmroman10-bolditalic", "bx/sl <-> lmromanslant10-bold"). Fetched
+	// from the same mirror on 2026-11-21, each listed in MANIFEST-Latin-Modern.txt;
+	// each name table reads "Version 2.004".
+	{"lm/lmroman10-bolditalic.otf", "fonts/lm", "2.004",
+		"c37a28eed7a6e03f792b98b5e5f637b2fcda378bb4855f99284f1a88fe35f124"},
+	{"lm/lmromanslant10-bold.otf", "fonts/lm", "2.004",
+		"5f6689646a5e88b402d2e60085c813fca3a4d60707b0383c65cb023107a8bddc"},
 	{"lm/latinmodern-math.otf", "fonts/lm-math", "1.959",
 		"6075562b771f8b82f0c179e363389684f2dd09de30038269e2628e504bd7be0f"},
 

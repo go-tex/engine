@@ -2433,7 +2433,12 @@ func (e *Engine) execCS(t tok) bool {
 		// in every document back at body size. Measured against tectonic:
 		// {\Large\bfseries …} came out at 9.96 where {\Large …} alone came out at
 		// 13.95 and the reference gives 14.35 for both.
-		e.selectFont(e.faceAtCurrentSize(m.font)) // \rm etc., group-scoped
+		face := m.font
+		// \bfseries keeps the shape and \itshape the series (nfss.go).
+		if f, ok := e.nfssSwitch(m.name); ok {
+			face = f
+		}
+		e.selectFont(e.faceAtCurrentSize(face)) // \rm etc., group-scoped
 	case mPrim:
 		if !isExpandable(m.name) {
 			m.prim(e)
