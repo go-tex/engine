@@ -152,8 +152,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	// its own roman has named no small caps to go with it, and \scshape then keeps
 	// the no-op the kernel layer defines rather than switching to Latin Modern.
 	var capsBytes []byte
+	// The slanted face, likewise: Latin Modern's own with the default family, the
+	// italic otherwise (NFSS's substitution for a family with no slanted shape).
+	slantBytes := opt.ItalicFont
 	if fontBytes == nil {
 		capsBytes = lmRomanCaps
+		slantBytes = lmRomanSlant
 		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
 		// caller that names only some faces keeps exactly what it named.
 		fontBytes = lmRomanRegular
@@ -181,10 +185,11 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if err := e.bindOptionalFont("it", opt.ItalicFont, opt.size()); err != nil {
 		return nil, err
 	}
-	// The slanted face falls back to the italic one — NFSS's own substitution for a
-	// family with no slanted shape. Nothing bound "sl" before, so \slshape and
-	// \textsl selected nothing at all.
-	if err := e.bindOptionalFont("sl", opt.ItalicFont, opt.size()); err != nil {
+	// ⛔ "sl" WAS THE ITALIC EVEN WITH THE DEFAULT FAMILY, which has a slanted shape
+	// of its own (tulmr.fd m/sl). \ps@headings and \ps@myheadings set the running
+	// head in \slshape (latex.go), and tectonic sets it in LMRomanSlant10 where this
+	// set LMRoman10-Italic: a different design, narrower, with italic letterforms.
+	if err := e.bindOptionalFont("sl", slantBytes, opt.size()); err != nil {
 		return nil, err
 	}
 	if err := e.bindOptionalFont("tt", opt.MonoFont, opt.size()); err != nil {
