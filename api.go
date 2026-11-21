@@ -155,9 +155,14 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	// The slanted face, likewise: Latin Modern's own with the default family, the
 	// italic otherwise (NFSS's substitution for a family with no slanted shape).
 	slantBytes := opt.ItalicFont
+	// And the bold italic and bold slanted shapes, which only the default family
+	// has: without them a series and a shape switch fall back to the last one
+	// alone, as they always did (see nfss.go).
+	var boldItalicBytes, boldSlantBytes []byte
 	if fontBytes == nil {
 		capsBytes = lmRomanCaps
 		slantBytes = lmRomanSlant
+		boldItalicBytes, boldSlantBytes = lmRomanBoldItalic, lmRomanBoldSlant
 		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
 		// caller that names only some faces keeps exactly what it named.
 		fontBytes = lmRomanRegular
@@ -199,6 +204,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		return nil, err
 	}
 	if err := e.bindOptionalFont("sc", capsBytes, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont(boldItalicName, boldItalicBytes, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont(boldSlantName, boldSlantBytes, opt.size()); err != nil {
 		return nil, err
 	}
 	e.aliasFontSwitches()
