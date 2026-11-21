@@ -31,6 +31,14 @@ var lmRomanItalic []byte
 //go:embed fonts/lm/lmmono10-regular.otf
 var lmMonoRegular []byte
 
+// lmRomanCaps is the small-caps shape. tulmr.fd declares it at ONE design size for
+// every size ("<-> ec-lmcsc10"), so it has no optical table and scales linearly.
+// Without it \scshape selected nothing: amsart's \section headings and every
+// \textsc came out in lower case where the reference sets small capitals.
+//
+//go:embed fonts/lm/lmromancaps10-regular.otf
+var lmRomanCaps []byte
+
 // lmMath is Latin Modern Math (OpenType with a MATH table), the maths face of the same
 // distribution and licence (its copyright field names the GUST Font License too);
 // go-tex/math sets every formula from it.

@@ -69,6 +69,7 @@ const MiniLaTeXKernel = `
 % SHAPE command the census of undefined commands reports — every other \text… it
 % names is a textgreek or tipa symbol, one paper each.
 \def\textsl#1{{\slshape #1}}
+\def\textsc#1{{\scshape #1}}
 \def\texttt#1{{\ttfamily #1}}
 \def\textsf#1{{\sffamily #1}}
 \def\textrm#1{{\rmfamily #1}}

@@ -148,7 +148,12 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		e.define("jobname", &meaning{kind: mMacro, body: stringToToks(opt.JobName)}, true)
 	}
 	fontBytes := opt.Font
+	// The small-caps face is bound only with the default family: a host that names
+	// its own roman has named no small caps to go with it, and \scshape then keeps
+	// the no-op the kernel layer defines rather than switching to Latin Modern.
+	var capsBytes []byte
 	if fontBytes == nil {
+		capsBytes = lmRomanCaps
 		// No face named: the whole default FAMILY is Latin Modern, as tectonic's. A
 		// caller that names only some faces keeps exactly what it named.
 		fontBytes = lmRomanRegular
@@ -188,6 +193,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	if err := e.bindOptionalFont("sf", opt.SansFont, opt.size()); err != nil {
 		return nil, err
 	}
+	if err := e.bindOptionalFont("sc", capsBytes, opt.size()); err != nil {
+		return nil, err
+	}
 	e.aliasFontSwitches()
 	return e, nil
 }
@@ -200,7 +208,7 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 // (\textbf→\bfseries→\bf→\textbf…), which otherwise consumes the whole document.
 func (e *Engine) aliasFontSwitches() {
 	for _, p := range [][2]string{
-		{"bfseries", "bf"}, {"itshape", "it"}, {"slshape", "sl"},
+		{"bfseries", "bf"}, {"itshape", "it"}, {"slshape", "sl"}, {"scshape", "sc"},
 		{"ttfamily", "tt"}, {"sffamily", "sf"}, {"rmfamily", "rm"},
 		{"normalfont", "rm"}, {"upshape", "rm"}, {"mdseries", "rm"},
 	} {
