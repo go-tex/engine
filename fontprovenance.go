@@ -76,6 +76,20 @@ var embeddedFontProvenance = []fontProvenance{
 	// "Version 2.004".
 	{"lm/lmromancaps10-regular.otf", "fonts/lm", "2.004",
 		"1ab40332a969892c7ed6cb010193b5276ccef1da6798bcbd1a465fee23d29334"},
+	// The slanted shape, all five design sizes tulmr.fd's m/sl declares. Fetched
+	// from the same mirror on 2026-11-21, each listed in MANIFEST-Latin-Modern.txt
+	// (fonts/opentype/public/lm/lmromanslant*-regular.otf); each name table reads
+	// "Version 2.004".
+	{"lm/lmromanslant8-regular.otf", "fonts/lm", "2.004",
+		"a88ecd1a6b4d5aa1c9d537b98d0de8e19d63b292918fabf0cc36158ed770ca63"},
+	{"lm/lmromanslant9-regular.otf", "fonts/lm", "2.004",
+		"7441aee0c9dfbca16118fc7fe339c2e6c79ecc966a51ac1f76860351b6a8f02e"},
+	{"lm/lmromanslant10-regular.otf", "fonts/lm", "2.004",
+		"056ad4d08d2eb58d6b7fd0ac5de3f1fb799f2bb0c16b66c7e6b5bc5b6aef6481"},
+	{"lm/lmromanslant12-regular.otf", "fonts/lm", "2.004",
+		"25f2ecfb860f2e45e6ebe69d11bc6305f5bfbef8f13476638ba291f47d1f130c"},
+	{"lm/lmromanslant17-regular.otf", "fonts/lm", "2.004",
+		"4f30eda1d4674a1f4eea513b3baf85e3ba3fb17b2e4cf09bf627aee91dc0a4cc"},
 	{"lm/latinmodern-math.otf", "fonts/lm-math", "1.959",
 		"6075562b771f8b82f0c179e363389684f2dd09de30038269e2628e504bd7be0f"},
 

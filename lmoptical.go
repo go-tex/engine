@@ -41,6 +41,7 @@ import (
 //	                <8.5-9.5> 9  <9.5-11> 10  <11-15> 12  <15-> 17
 //	bx/n (bold)     the same through 9.5-11, then <11-> 12 — there is NO lmroman17-bold
 //	m/it (italic)   <-7.5> 7  <7.5-8.5> 8  <8.5-9.5> 9  <9.5-11> 10  <11-> 12
+//	m/sl (slanted)  <-8.5> 8  <8.5-9.5> 9  <9.5-11> 10  <11-15> 12  <15-> 17
 //	lmtt m/n (mono) <-8.5> 8  <8.5-9.5> 9  <9.5-11> 10  <11-> 12   (tulmtt.fd)
 //
 // ⛔ THE RANGES ARE HALF-OPEN: latex.ltx:8642-8659 (\check@range) tests
@@ -102,6 +103,21 @@ var lmRoman9Italic []byte
 
 //go:embed fonts/lm/lmroman12-italic.otf
 var lmRoman12Italic []byte
+
+//go:embed fonts/lm/lmromanslant8-regular.otf
+var lmRomanSlant8 []byte
+
+//go:embed fonts/lm/lmromanslant9-regular.otf
+var lmRomanSlant9 []byte
+
+//go:embed fonts/lm/lmromanslant10-regular.otf
+var lmRomanSlant []byte
+
+//go:embed fonts/lm/lmromanslant12-regular.otf
+var lmRomanSlant12 []byte
+
+//go:embed fonts/lm/lmromanslant17-regular.otf
+var lmRomanSlant17 []byte
 
 //go:embed fonts/lm/lmmono8-regular.otf
 var lmMono8Regular []byte
@@ -166,6 +182,15 @@ var (
 		{11, lmRomanItalic, "lmroman10-italic"},
 		{0, lmRoman12Italic, "lmroman12-italic"},
 	}
+	// m/sl, transcribed from the tulmr.fd tectonic loads (read from inside it with
+	// \readline): <-8.5> 8  <8.5-9.5> 9  <9.5-11> 10  <11-15> 12  <15-> 17.
+	lmRomanSlantSizes = opticalFamily{
+		{8.5, lmRomanSlant8, "lmromanslant8-regular"},
+		{9.5, lmRomanSlant9, "lmromanslant9-regular"},
+		{11, lmRomanSlant, "lmromanslant10-regular"},
+		{15, lmRomanSlant12, "lmromanslant12-regular"},
+		{0, lmRomanSlant17, "lmromanslant17-regular"},
+	}
 	lmMonoSizes = opticalFamily{
 		{8.5, lmMono8Regular, "lmmono8-regular"},
 		{9.5, lmMono9Regular, "lmmono9-regular"},
@@ -220,6 +245,8 @@ func opticalOf(b []byte) opticalFamily {
 		return lmRomanBoldSizes
 	case sameBytes(b, lmRomanItalic):
 		return lmRomanItalicSizes
+	case sameBytes(b, lmRomanSlant):
+		return lmRomanSlantSizes
 	case sameBytes(b, lmMonoRegular):
 		return lmMonoSizes
 	}
