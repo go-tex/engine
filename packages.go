@@ -731,6 +731,11 @@ func (e *Engine) doUsepackageLoad() {
 			e.captionFontFromOptions(opts)
 		}
 		if emulateOnly(name) {
+			if isPGFFamily(name) {
+				// pgf is not loaded, but its declarations must still read their
+				// arguments (latex.go, \gotex@pgfstubs).
+				e.push([]tok{csTok("gotex@pgfstubs")})
+			}
 			continue
 		}
 		if data, _, ok := e.findTeXFile(name, []string{".sty"}); ok {
