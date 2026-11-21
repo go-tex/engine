@@ -116,3 +116,39 @@ func TestTwoSidedEvenHeadPutsTheFolioFirst(t *testing.T) {
 		t.Errorf("page 3 head is %q, want [T 3]", got)
 	}
 }
+
+// trimPageEnd keeps the infinite glue before the break, but never turns a page that
+// would be empty without it into one holding only that glue.
+func TestTrimPageEndKeepsFillButNotOnAnEmptyPage(t *testing.T) {
+	fil := glueNode{spec: glueSpec{stretch: 65536, stretchOrder: 1}}
+	pen := penaltyNode{}
+	if got := trimPageEnd([]node{fil, pen}); len(got) != 0 {
+		t.Errorf("a page of only fill and a break kept %d nodes, want 0", len(got))
+	}
+	if got := trimPageEnd([]node{&boxNode{}, fil, pen}); len(got) != 2 {
+		t.Errorf("a page keeps its fill: got %d nodes, want 2", len(got))
+	}
+}
+
+// The even-page shift is zero whenever its inputs are unknown, and never a shift made
+// of a register that is not there.
+func TestPageMarginShiftIsZeroWithoutItsInputs(t *testing.T) {
+	src := []byte("\\documentclass{book}\\begin{document}x\\end{document}")
+	e, err := compile(src, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.pageMarginShift(2) == 0 {
+		t.Skip("book has equal margins here")
+	}
+	e.hasClass = false
+	delete(e.eq, "paperwidth")
+	if got := e.pageMarginShift(2); got != 0 {
+		t.Errorf("no paper size: shift %d, want 0", got)
+	}
+	e.hasClass = true
+	delete(e.eq, "evensidemargin")
+	if got := e.pageMarginShift(2); got != 0 {
+		t.Errorf("no \\evensidemargin: shift %d, want 0", got)
+	}
+}
