@@ -205,10 +205,20 @@ func (e *Engine) collectEnvBody(name string) []tok {
 			// GATHERED, never run, so nothing is executed twice. The minipage comes out
 			// empty — a locally wrong box, not a lost document, which is the rule the
 			// other two exits of this scan already follow.
+			//
+			// ⛔ AND THE ENVIRONMENT'S GROUP STAYS OPEN (go-tex/engine#816). pgf's
+			// node does not close its minipage with an \end{minipage} in the text: it
+			// queues it with \aftergroup, to run when the node's own group ends —
+			// which is inside the tokens just handed back. Closing the group HERE
+			// left that \end{minipage} with nothing of its own to close, and the node's
+			// text, read after it, ran outside its box: the node rendered empty.
+			// Left open, the handed-back text is read inside the environment, and the
+			// queued \end closes it where pgf meant it to. Measured on both corpora,
+			// this exit is reached by 1 of 154 arXiv papers and 1 of 200 beamer talks,
+			// and both gain their node text, without losing a page.
 			if len(body) > 0 {
 				e.push(append([]tok(nil), body...))
 			}
-			e.endEnvGroup()
 			return nil
 		}
 		switch {
