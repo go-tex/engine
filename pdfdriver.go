@@ -83,7 +83,7 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 			d.rect(0, 0, pw, ph)
 			d.setColor(0)
 		}
-		d.box(page, margin, vmargin+spToPt(page.height))
+		d.box(page, margin+spToPt(page.pageShift), vmargin+spToPt(page.height))
 		d.drawSpecials()
 	}
 	// Section headings become the PDF's outline (the viewer's bookmark sidebar):

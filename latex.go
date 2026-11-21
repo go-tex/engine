@@ -1599,13 +1599,16 @@ const MiniLaTeXKernel = `
 %
 %	\if@twoside \else \raggedbottom \fi
 %
-% \@twosidefalse is this engine's standing state (classkernel.go), so the rule
-% evaluates to \raggedbottom for every document it sets today — which is also
-% what article.cls gives a plain \documentclass{article}. ⚠ twocolumn is the other
-% half of that passage (classes.dtx:4486-4489 calls \flushbottom) and this engine
-% tracks two columns in Go, not through \if@twocolumn, so that half is not
-% expressed here.
-\raggedbottom
+% ⛔ THE KERNEL ITSELF IS FLUSH. \@textbottom is \relax until a class says otherwise
+% (ltoutput.dtx:3013-3014), and the classes DO say it: article.cls:633, report.cls:733
+% and book.cls:738 each run \if@twoside\else\raggedbottom\fi. This line used to run
+% \raggedbottom for every document before any class was read, so a twoside class —
+% amsart, whose class file never mentions either command (amsart.cls) — kept a
+% ragged page where LaTeX stretches the block to \textheight (go-tex/engine#875).
+% ⚠ twocolumn is the other half of that passage (classes.dtx:4486-4489 calls
+% \flushbottom) and this engine tracks two columns in Go, not through
+% \if@twocolumn, so that half is not expressed here.
+\flushbottom
 \def\MFUhyphentrue{}
 \def\allowdisplaybreaks{\@ifnextbracket\@gobbleoptonly\relax}
 \def\@gobbleoptonly[#1]{}

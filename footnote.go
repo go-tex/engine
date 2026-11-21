@@ -413,6 +413,14 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 // differ by 2.60000pt = \baselineskip - \topskip = 13.6 - 11.0, which is the whole
 // of the residual #356 calls "a float is ~2.4pt short".
 func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) *boxNode {
+	b := e.assemblePageBox(page, pageNum, addTopskip)
+	if b != nil {
+		b.pageShift = e.pageMarginShift(pageNum)
+	}
+	return b
+}
+
+func (e *Engine) assemblePageBox(page []node, pageNum int, addTopskip bool) *boxNode {
 	var content []node
 	var notes []*boxNode
 	for _, n := range page {

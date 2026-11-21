@@ -234,10 +234,18 @@ func (e *Engine) headToHeadheight(line *boxNode) *boxNode {
 // and drew none here (#426). The line is one hbox to \hsize and the \hfil's inside
 // it place the pieces, which is exactly how LaTeX sets \@oddhead.
 //
-// \@evenhead is not read: this engine has no two-sided page model, so every page
-// takes the odd head — which is what a one-sided class declares anyway.
+// ⛔ THE PAGE'S PARITY PICKS THE HEAD. latex.ltx:15387-15393 (\@outputpage):
+//
+//	\if@twoside \ifodd\count\z@ \let\@thehead\@oddhead … \else \let\@thehead\@evenhead …
+//
+// so under \if@twoside an even page sets \@evenhead. amsart is twoside by default
+// (amsart.cls:350-351) and its two heads differ in ORDER — even is
+// `\rlap{\thepage}\hfil\leftmark\hfil`, odd `\hfil\rightmark\hfil\llap{\thepage}`
+// (:306-319) — so every even page of every amsart paper drew the odd head:
+// "TITLE 2" at x0 292 where tectonic sets "2 TITLE" at x0 126 (2406.10437 p2,
+// go-tex/engine#875). A oneside document never asks for the even one.
 func (e *Engine) latexHead() *boxNode {
-	m := e.eq["@oddhead"]
+	m := e.pageSidedMacro("head", e.pageOrdinal())
 	if m == nil || m.kind != mMacro || len(m.body) == 0 {
 		return nil
 	}
@@ -255,8 +263,55 @@ func (e *Engine) latexHead() *boxNode {
 // it: headBand is read before pagination (pdfdriver.go), so it must not run the
 // typesetter.
 func (e *Engine) hasLatexHead() bool {
-	m := e.eq["@oddhead"]
-	return m != nil && m.kind == mMacro && len(m.body) > 0
+	for _, name := range []string{"@oddhead", "@evenhead"} {
+		m := e.eq[name]
+		if m != nil && m.kind == mMacro && len(m.body) > 0 && (name == "@oddhead" || e.twoside()) {
+			return true
+		}
+	}
+	return false
+}
+
+// twoside is \if@twoside: a \newif's meaning IS its value (kernelhelpers.go).
+func (e *Engine) twoside() bool {
+	m := e.eq["if@twoside"]
+	return m != nil && m.kind == mPrim && m.name == "iftrue"
+}
+
+// pageSidedMacro is \@oddhead / \@evenhead (kind "head") or \@oddfoot / \@evenfoot
+// (kind "foot") for page number num, as \@outputpage chooses them: the even one on
+// an even page of a twoside document, the odd one otherwise. A twoside document
+// whose page style never declared the even one — the engine's own stand-in styles
+// define only the odd — keeps the odd rather than drawing nothing.
+func (e *Engine) pageSidedMacro(kind string, num int) *meaning {
+	odd := e.eq["@odd"+kind]
+	if e.twoside() && num%2 == 0 {
+		if ev := e.eq["@even"+kind]; ev != nil && ev.kind == mMacro {
+			return ev
+		}
+	}
+	return odd
+}
+
+// pageMarginShift is how far an EVEN page's text block sits from where an odd
+// page's does, in sp: \evensidemargin - \oddsidemargin under \if@twoside
+// (latex.ltx:15387-15393 puts the block at 1in + \hoffset + the page's own margin).
+// bk10.clo:147-182 makes them differ by 53.79pt on a letter-paper book. Only the
+// class's own margins are modelled: a document that loaded geometry states its
+// left margin itself (geometry.go).
+func (e *Engine) pageMarginShift(num int) int {
+	if e.geom != nil || !e.twoside() || num%2 != 0 {
+		return 0
+	}
+	if _, _, ok := e.paperSizePt(); !ok {
+		return 0
+	}
+	osm, ok1 := e.namedDimen("oddsidemargin")
+	esm, ok2 := e.namedDimen("evensidemargin")
+	if !ok1 || !ok2 {
+		return 0
+	}
+	return esm - osm
 }
 
 func (e *Engine) fancyFooter() *boxNode {
