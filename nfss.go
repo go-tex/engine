@@ -101,10 +101,11 @@ func (e *Engine) nfssSwitch(name string) (fontFace, bool) {
 	default:
 		return nil, false
 	}
-	want, ok := e.nfssRoleOf(e.curFont)
-	if !ok {
-		return nil, false
-	}
+	// A current face outside the family (the typewriter, a math font) has the zero
+	// role. A switch sets one axis only, so the other stays 0, and no entry of
+	// nfssFaces has a 0 axis: the search below finds nothing and the caller
+	// selects the switch's own face, as it does for a pair the family lacks.
+	want, _ := e.nfssRoleOf(e.curFont)
 	if series != 0 {
 		want.series = series
 	}
