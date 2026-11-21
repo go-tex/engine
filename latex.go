@@ -1083,7 +1083,11 @@ const MiniLaTeXKernel = `
   \let\subsectionmark\@gobble}
 % …and the two that have no head, which must CLEAR one a previous style set.
 \def\ps@empty{\let\@oddhead\@empty\let\@oddfoot\@empty\let\@mkboth\@gobbletwo}
-\def\ps@plain{\let\@oddhead\@empty\let\@mkboth\@gobbletwo}
+% \ps@plain is latex.ltx's, foot included: the folio is \@oddfoot's, set in
+% \reset@font, and pageFooter typesets that field rather than a folio of its own.
+\def\ps@plain{\let\@mkboth\@gobbletwo
+  \let\@oddhead\@empty\def\@oddfoot{\reset@font\hfil\thepage\hfil}%
+  \let\@evenhead\@empty\let\@evenfoot\@oddfoot}
 \def\@nsection#1{\par\medskip\advance\c@section by1 \c@subsection=0 \edef\@currentlabel{\thesection}\@tocentry{toc}{1}{\thesection}{#1}\sectionmark{#1}\noindent{\Large\bf\thesection\quad#1}\par\nobreak\smallskip}
 \def\@nsubsection#1{\par\smallskip\advance\c@subsection by1 \edef\@currentlabel{\thesubsection}\@tocentry{toc}{2}{\thesubsection}{#1}\subsectionmark{#1}\noindent{\large\bf\thesubsection\quad#1}\par\nobreak}
 \def\caption#1{\par\smallskip\global\expandafter\advance\csname c@\@captype\endcsname by1\relax\edef\@currentlabel{\csname the\@captype\endcsname}\@tocentry{\@captype}{1}{\csname the\@captype\endcsname}{#1}{\captionfont{\captionlabelfont\csname fnum@\@captype\endcsname:} #1}\par}

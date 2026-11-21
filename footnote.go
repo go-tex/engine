@@ -576,9 +576,9 @@ func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) 
 	// the rest of the page model can tell the two apart.
 	var out *boxNode
 	if e.vsize > 0 {
-		out = e.withFootAtFootskip(vpackSP(vlist, packTo, e.vsize), pageNum)
+		out = e.withFootAtFootskip(vpackSP(vlist, packTo, e.vsize), pageNum, style)
 	} else {
-		out = e.withFootAtFootskip(vpackSP(vlist, packNatural, 0), pageNum)
+		out = e.withFootAtFootskip(vpackSP(vlist, packNatural, 0), pageNum, style)
 	}
 	if band := e.headBand(); band > 0 {
 		// An empty head box of \headheight, then \headsep — the reference's own two
@@ -636,8 +636,8 @@ func (e *Engine) textBottom() (glueNode, bool) {
 // than \lineskiplimit and the foot must then sit \lineskip below it, exactly as
 // any two boxes do. Writing the subtraction inline would be a fifth copy of §679
 // with the threshold left out — the defect interlineGlue's own header records.
-func (e *Engine) withFootAtFootskip(body *boxNode, pageNum int) *boxNode {
-	foot := e.pageFooter(pageNum)
+func (e *Engine) withFootAtFootskip(body *boxNode, pageNum int, style string) *boxNode {
+	foot := e.pageFooter(pageNum, style)
 	if foot == nil {
 		return body
 	}

@@ -167,8 +167,40 @@ func (e *Engine) pageOrdinal() int {
 	return 1
 }
 
-// pageFooter builds the centred page-number line placed at the foot of a page.
-func (e *Engine) pageFooter(num int) *boxNode {
-	numBox := e.textToHbox(formatPageNumber(num, e.pageNumStyle))
-	return hpackSP([]node{e.hfil(), numBox, e.hfil()}, packTo, e.hsize)
+// pageFooter builds the foot of a page on the "plain" path: the page style's own
+// \@oddfoot, set as \@outputpage sets it, \hb@xt@\textwidth{\@thefoot}
+// (ltoutput.dtx).
+//
+// ⛔ IT WAS A FOLIO OF THE ENGINE'S OWN, in the body font, whatever the class
+// said. amsart's \ps@plain is `\def\@oddfoot{\normalfont\scriptsize
+// \hfil\thepage\hfil}` (amsart.cls:302-303), and the reference sets that folio at
+// 7pt (LMRoman7) where this engine set it at 10pt. Our own kernel's \ps@plain had
+// no \@oddfoot at all, which is how the stand-in went unnoticed: there was no
+// field to read.
+//
+// ⚠ \ps@<style> RUNS ONLY FOR A \thispagestyle OVERRIDE, inside a group, as
+// LaTeX's output routine runs \@specialstyle: its \def's are local and end with
+// the page. Under the document's own style \pagestyle already ran it, and
+// re-running it would undo a document's own later \def\@oddfoot.
+//
+// A style with no \ps@ definition at all keeps the engine's centred folio: there
+// is no field to typeset, and a folio is what every standard style but "empty"
+// and "headings" draws.
+func (e *Engine) pageFooter(num int, style string) *boxNode {
+	ps := e.eq["ps@"+style]
+	if ps == nil || ps.kind != mMacro {
+		numBox := e.textToHbox(formatPageNumber(num, e.pageNumStyle))
+		return hpackSP([]node{e.hfil(), numBox, e.hfil()}, packTo, e.hsize)
+	}
+	// Always inside a group: the foot sets its own font and size (\scriptsize), and
+	// typesetFieldToList restores only the current font.
+	toks := []tok{chTok('{', catBegin), csTok("@oddfoot"), chTok('}', catEnd)}
+	if style != e.pageStyle {
+		toks = []tok{chTok('{', catBegin), csTok("ps@" + style), csTok("@oddfoot"), chTok('}', catEnd)}
+	}
+	list := e.typesetFieldToList(toks)
+	if len(list) == 0 {
+		return nil
+	}
+	return hpackSP(list, packTo, e.hsize)
 }
