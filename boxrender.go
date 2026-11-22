@@ -145,6 +145,17 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			cx += spToPt(c.width)
 		case glueNode:
 			w := spToPt(b.setWidth(c.spec))
+			if c.tile != nil {
+				lg.close()
+				switch t := c.tile.(type) {
+				case ruleNode:
+					rect(sb, cx, baseline-spToPt(ruleHeight(t, b)), w, spToPt(ruleHeight(t, b)+ruleDepth(t, b)))
+				case *boxNode:
+					for _, o := range leaderTileOrigins(c.lmode, x, cx, w, spToPt(t.width)) {
+						paintBoxSP(sb, t, o, baseline+spToPt(t.shift), font, tl)
+					}
+				}
+			}
 			if c.leader != leaderNone {
 				lg.close()
 			}

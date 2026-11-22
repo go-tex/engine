@@ -270,6 +270,16 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 				dw, _, _ := lastFace.charDimsSP('.')
 				dotW = spToPt(dw)
 			}
+			switch t := c.tile.(type) {
+			case ruleNode:
+				d.setColor(0)
+				h, dp := spToPt(ruleHeight(t, b)), spToPt(ruleDepth(t, b))
+				d.inPicture(func() { d.rect(cx, baseline-h, w, h+dp) })
+			case *boxNode:
+				for _, o := range leaderTileOrigins(c.lmode, x, cx, w, spToPt(t.width)) {
+					d.box(t, o, baseline+spToPt(t.shift))
+				}
+			}
 			d.leader(c.leader, x, cx, baseline, w, spToPt(c.cell), dotW)
 			cx += w
 		case charNode:
