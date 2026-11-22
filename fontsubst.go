@@ -157,10 +157,8 @@ var textMonoFiles = map[string]string{
 // loadMonoFont binds \tt to the named face and leaves every other family alone. A tree
 // with no such file keeps the substitution, and reports it as any text-font package does.
 func (e *Engine) loadMonoFont(file string, pt float64) bool {
-	data, _, ok := e.findTeXFile(file, nil)
-	if !ok {
-		return false
-	}
+	// A missing file gives nil data, which NewOpenTypeFont refuses: one guard, not two.
+	data, _, _ := e.findTeXFile(file, nil)
 	f, err := NewOpenTypeFont(data, pt)
 	if err != nil {
 		return false
@@ -185,10 +183,8 @@ func (e *Engine) loadTextFontPackage(pkg string) bool {
 	if file, ok := textMonoFiles[pkg]; ok {
 		return e.loadMonoFont(file, pt)
 	}
-	fam, ok := textFontFiles[pkg]
-	if !ok {
-		return false
-	}
+	// An unknown package gives the zero family: load("") is nil, so rm is nil below.
+	fam := textFontFiles[pkg]
 	load := func(file string) fontFace {
 		if file == "" {
 			return nil
