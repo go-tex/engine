@@ -36,9 +36,7 @@ func (e *Engine) installUnicodeDeclaration() {
 func parseHexToks(ts []tok) (int, bool) {
 	n, digits := 0, 0
 	for _, t := range ts {
-		if t.cs_ {
-			return 0, false
-		}
+		// A control sequence carries no character: it falls to the default case.
 		var d int
 		switch c := t.ch; {
 		case c >= '0' && c <= '9':
