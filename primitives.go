@@ -1217,7 +1217,7 @@ func (e *Engine) doThe() {
 				// \the\catcode`\@ — a file that changes a character's category
 				// saves the old value this way and restores it when it is done, so
 				// reading a catcode matters as much as setting one.
-				e.pushString(strconv.Itoa(int(e.catcode[rune(e.scanInt())])))
+				e.pushString(strconv.Itoa(e.catValue(e.scanInt())))
 				return
 			case m.kind == mPrim && m.name == "sfcode":
 				// \ifnum\sfcode`\.=\@m is how LaTeX asks whether \frenchspacing is

@@ -122,6 +122,7 @@ func (e *Engine) loadETeXExpansion() {
 	// \currentgrouplevel and \currentgrouptype say where the file stands in the
 	// grouping stack; see etexgroup.go.
 	e.installGroupQueries()
+	e.installUnicodeDeclaration()
 }
 
 // rawGroup reads a braced group without expanding it. An argument that is not a

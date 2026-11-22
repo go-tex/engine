@@ -80,6 +80,8 @@ type Engine struct {
 	bpos  int
 
 	catcode [256]cat
+	// catHigh holds the catcodes of characters past the table, see catOf.
+	catHigh map[rune]cat
 	eq      map[string]*meaning
 
 	// source-position tracking (see srcmap.go): where the mouth is reading, so
@@ -1034,7 +1036,36 @@ func (e *Engine) catOf(r rune) cat {
 	if r < 256 {
 		return e.catcode[r]
 	}
+	// Past the table, every character is `other` (11 for none) unless a document has
+	// said otherwise: \DeclareUnicodeCharacter makes its character active, and XeTeX
+	// lets \catcode address any code point (tex.web's 256 is a Knuth-era limit).
+	if c, ok := e.catHigh[r]; ok {
+		return c
+	}
 	return catOther
+}
+
+// catValue is \the\catcode n for any n a document can write: a number outside the
+// code points reads as `other`, which is what a character without a declaration is.
+func (e *Engine) catValue(n int) int {
+	if n < 0 || n > 0x10FFFF {
+		return int(catOther)
+	}
+	return int(e.catOf(rune(n)))
+}
+
+// setHighCat records the catcode of a character the 256-entry table cannot hold.
+// `other` is the default, so it is stored as absence and the map stays the size of
+// what a document declared.
+func (e *Engine) setHighCat(r rune, c cat) {
+	if c == catOther {
+		delete(e.catHigh, r)
+		return
+	}
+	if e.catHigh == nil {
+		e.catHigh = map[rune]cat{}
+	}
+	e.catHigh[r] = c
 }
 
 // scanCS reads a control-sequence name after an escape char.
@@ -1388,11 +1419,15 @@ func (e *Engine) selectFont(f fontFace) {
 }
 
 func (e *Engine) setCat(r rune, c cat, global bool) {
-	if r >= 256 {
+	if r < 0 || r > 0x10FFFF {
 		return
 	}
 	if !global && len(e.groups) > 0 {
-		e.save = append(e.save, saveItem{kind: 2, idx: int(r), oldc: e.catcode[r]})
+		e.save = append(e.save, saveItem{kind: 2, idx: int(r), oldc: e.catOf(r)})
+	}
+	if r >= 256 {
+		e.setHighCat(r, c)
+		return
 	}
 	e.catcode[r] = c
 }
@@ -1524,7 +1559,11 @@ func (e *Engine) endGroup() {
 		case 1:
 			e.count[s.idx] = s.oldi
 		case 2:
-			e.catcode[rune(s.idx)] = s.oldc
+			if s.idx >= 256 {
+				e.setHighCat(rune(s.idx), s.oldc)
+			} else {
+				e.catcode[rune(s.idx)] = s.oldc
+			}
 		case 3:
 			e.dimen[s.idx] = s.oldd
 		case 4:
@@ -3116,7 +3155,7 @@ func (e *Engine) scanInt() int {
 					return sign * v
 				}
 				if m.kind == mPrim && m.name == "catcode" {
-					return sign * int(e.catcode[rune(e.scanInt())])
+					return sign * e.catValue(e.scanInt())
 				}
 				if m.kind == mPrim && m.name == "sfcode" {
 					return sign * e.sfcodeOf(rune(e.scanInt()))
