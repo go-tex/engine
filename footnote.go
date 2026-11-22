@@ -425,9 +425,16 @@ func (e *Engine) assemblePage(page []node, pageNum int) *boxNode {
 // differ by 2.60000pt = \baselineskip - \topskip = 13.6 - 11.0, which is the whole
 // of the residual #356 calls "a float is ~2.4pt short".
 func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) *boxNode {
+	// eso-pic's shipout pictures ride the list as nodes and leave it here, before
+	// anything measures the page (see shippic.go). The two-column pager lifts its
+	// own out of the columns and hands them over in carryPics.
+	pics, page := takeShipPics(page)
+	pics = append(e.carryPics, pics...)
+	e.carryPics = nil
 	b := e.assemblePageBox(page, pageNum, addTopskip)
 	if b != nil {
 		b.pageShift = e.pageMarginShift(pageNum)
+		e.attachShipPics(b, pics)
 	}
 	return b
 }

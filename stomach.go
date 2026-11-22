@@ -142,6 +142,9 @@ type boxNode struct {
 	// page's does: \evensidemargin - \oddsidemargin on an even page of a twoside
 	// document, 0 everywhere else (see pageMarginShift).
 	pageShift int
+	// overlays are, on a PAGE box, the eso-pic pictures drawn at the paper's
+	// lower-left corner behind or over the body (see shippic.go).
+	overlays []pageOverlay
 }
 
 type packMode uint8

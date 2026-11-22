@@ -2322,22 +2322,30 @@ const MiniLaTeXKernel = `
 \newcommand\translate[2][]{#2}
 \def\usedictionary#1{}
 \def\xspace{}
-% eso-pic: the engine paginates after reading, with no shipout hook to hang a
-% page picture on, so the picture is NOT drawn. Its argument is dropped instead
-% of being typeset into the body (where it cost an extra page); the placement
-% commands take no argument and print nothing.
-\newcommand\AddToShipoutPicture{\@ifstar\@gobble\@gobble}
-\newcommand\AddToShipoutPictureBG{\@ifstar\@gobble\@gobble}
-\newcommand\AddToShipoutPictureFG{\@ifstar\@gobble\@gobble}
-\newcommand\ClearShipoutPicture{}
-\newcommand\ClearShipoutPictureBG{}
-\newcommand\ClearShipoutPictureFG{}
-\newcommand\AtPageUpperLeft[1]{}
-\newcommand\AtPageLowerLeft[1]{}
-\newcommand\AtPageCenter[1]{}
-\newcommand\AtTextUpperLeft[1]{}
-\newcommand\AtTextLowerLeft[1]{}
-\newcommand\AtTextCenter[1]{}
+% eso-pic: the picture is drawn at the paper's lower-left corner on every page
+% (the starred form on the current page only), behind the body (BG) or over it.
+% The engine paginates after reading, so \gotex@shipoutpic (shippic.go) carries the
+% picture as a node to the page it was written on, or records it for all pages when
+% written in the preamble. The argument is a picture of zero size: \put coordinates
+% are measured from the corner, in \unitlength = 1pt as eso-pic sets it.
+\csname newbox\endcsname\gotex@spbox
+\def\gotex@eso#1#2#3{\sbox\gotex@spbox{\unitlength=1pt\begin{picture}(0,0)#3\end{picture}}\gotex@shipoutpic{#1}{#2}\gotex@spbox}
+\newcommand\AddToShipoutPicture{\@ifstar{\gotex@eso1{fg}}{\gotex@eso0{fg}}}
+\newcommand\AddToShipoutPictureBG{\@ifstar{\gotex@eso1{bg}}{\gotex@eso0{bg}}}
+\newcommand\AddToShipoutPictureFG{\@ifstar{\gotex@eso1{fg}}{\gotex@eso0{fg}}}
+\newcommand\ClearShipoutPicture{\gotex@shipoutpic{0}{clear}}
+\newcommand\ClearShipoutPictureBG{\gotex@shipoutpic{0}{clear}}
+\newcommand\ClearShipoutPictureFG{\gotex@shipoutpic{0}{clear}}
+\def\gotex@lu#1{\strip@pt\dimexpr#1\relax}
+\newcommand\AtPageUpperLeft[1]{\put(0,\gotex@lu{\paperheight}){#1}}
+\newcommand\AtPageLowerLeft[1]{\put(0,0){#1}}
+\newcommand\AtPageCenter[1]{\put(\gotex@lu{.5\paperwidth},\gotex@lu{.5\paperheight}){#1}}
+% The text area: its left edge is 1in+\oddsidemargin from the paper's, its top is
+% 1in+\topmargin+\headheight+\headsep below the paper's top (even pages of a
+% twoside document use \evensidemargin in eso-pic; the odd value is used here).
+\newcommand\AtTextUpperLeft[1]{\put(\gotex@lu{1in+\oddsidemargin},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep}){#1}}
+\newcommand\AtTextLowerLeft[1]{\put(\gotex@lu{1in+\oddsidemargin},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-\textheight}){#1}}
+\newcommand\AtTextCenter[1]{\put(\gotex@lu{1in+\oddsidemargin+.5\textwidth},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-.5\textheight}){#1}}
 % algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
 % pseudocode reads as lines with keywords instead of being dropped command-by-
 % command. Not the real indented layout — each control word starts a line and

@@ -197,6 +197,7 @@ func vHeightDepth(n node) (int, int, vKind) {
 const maxPages = 5000
 
 func (e *Engine) Pages() []*boxNode {
+	e.resetShipPics()
 	// \onecolumn / \twocolumn split the document into page-aligned regions (both
 	// commands \clearpage first — verified against the reference), each paginated in
 	// its own column mode; see twocolumn.go.
@@ -567,6 +568,9 @@ func precedesBreak(n node) bool {
 	// vertical list (see doMark). Kept because the reference says mark precedes a
 	// break and the engine should agree, not because it repaired that paper.
 	if _, ok := n.(markNode); ok {
+		return true
+	}
+	if _, ok := n.(shipPicNode); ok {
 		return true
 	}
 	_, _, kind := vHeightDepth(n)

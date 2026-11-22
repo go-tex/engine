@@ -197,6 +197,13 @@ type Engine struct {
 	// typeset, so lenient recovery may discard an undefined command's arguments —
 	// see skipUndefined.
 	inBody bool
+	// eso-pic shipout pictures (shippic.go): the preamble's, and the state of one
+	// pagination run.
+	shipPicPre, shipPicPreOnce, shipPics []pageOverlay
+	shipPicSeen                          map[int]bool
+	shipPicFirst                         bool
+	shipPicSeq                           int
+	carryPics                            []shipPicNode
 	// komaClass records that \documentclass named a KOMA-Script class, whose base
 	// size default is 11pt rather than the standard classes' 10pt (see isKomaClass).
 	komaClass bool
