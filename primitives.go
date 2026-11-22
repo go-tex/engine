@@ -2030,6 +2030,7 @@ func (e *Engine) loadMore() {
 	// the page in advance); in a header/footer field it reflects the real page
 	// (curPageNum set during assembly), and the per-page foot number is always correct.
 	e.prim("thepage", func(e *Engine) { e.pushString(formatPageNumber(e.pageOrdinal(), e.pageNumStyle)) })
+	e.installPageCounter()
 	// fancyhdr running headers/footers (see fancyhdr.go).
 	e.prim("lhead", func(e *Engine) { e.setFancyField(fldHL) })
 	e.prim("chead", func(e *Engine) { e.setFancyField(fldHC) })
