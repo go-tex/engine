@@ -1969,10 +1969,54 @@ const MiniLaTeXKernel = `
 %   makecell   \setcellgapes{2pt}                    leaked "2pt"
 \def\fancyheadoffset{\@ifnextbracket\gotex@optone\@gobble}
 \def\fancyfootoffset{\@ifnextbracket\gotex@optone\@gobble}
+% ⛔ manyfoot's \DeclareNewFootnote used to be swallowed whole, which also swallowed what
+% it DECLARES: \footnoteA, \footnotemarkA and \footnotetextA were then undefined and the
+% notes of every extra class vanished (12 corpus papers). Measured against tectonic on
+% \DeclareNewFootnote{A}, \DeclareNewFootnote{B}[roman] and \footnote{one}\footnoteA{two}
+% \footnoteB{three}: marks 1, 1, i and three separate note lines "1 one", "1 two",
+% "i three" — each class has its OWN counter, numbered in its own style.
+% The real manyfoot.sty cannot be run here (it needs the kernel's \@footnotemark and
+% \unrestored@protected@xdef and a second \insert class), so the declaration is
+% emulated: a counter footnote<X>, \thefootnote<X> in the requested style, and the three
+% commands, all feeding the one note area the engine has. The layout option [para] and
+% \SelectFootnoteRule are accepted and have no effect: the notes stay one per line.
 \def\DeclareNewFootnote{\@ifnextbracket\gotex@dnfopt\gotex@dnfmand}
-\long\def\gotex@dnfopt[#1]#2{\gotex@maybeopt}
-\long\def\gotex@dnfmand#1{\gotex@maybeopt}
-\def\gotex@maybeopt{\@ifnextbracket\@gobbleoptonly\relax}
+\long\def\gotex@dnfopt[#1]#2{\gotex@dnfstyle{#2}}
+\long\def\gotex@dnfmand#1{\gotex@dnfstyle{#1}}
+\def\gotex@dnfstyle#1{\def\gotex@dnfname{#1}\@ifnextbracket\gotex@dnfwith\gotex@dnfplain}
+\def\gotex@dnfwith[#1]{\expandafter\gotex@dnfdefine\csname @#1\endcsname}
+\def\gotex@dnfplain{\gotex@dnfdefine{\@arabic}}
+\def\gotex@dnfdefine#1{%
+  \edef\gotex@fnctr{footnote\gotex@dnfname}%
+  \expandafter\newcounter\expandafter{\gotex@fnctr}%
+  \expandafter\edef\csname thefootnote\gotex@dnfname\endcsname{%
+    \noexpand#1\expandafter\noexpand\csname c@footnote\gotex@dnfname\endcsname}%
+  \expandafter\edef\csname footnote\gotex@dnfname\endcsname{%
+    \noexpand\gotex@fnS{\gotex@dnfname}\noexpand\gotex@fnstepit\noexpand\gotex@fnfinFull}%
+  \expandafter\edef\csname footnotemark\gotex@dnfname\endcsname{%
+    \noexpand\gotex@fnS{\gotex@dnfname}\noexpand\gotex@fnstepit\noexpand\gotex@fnfinMark}%
+  \expandafter\edef\csname footnotetext\gotex@dnfname\endcsname{%
+    \noexpand\gotex@fnS{\gotex@dnfname}\noexpand\relax\noexpand\gotex@fnfinText}}
+% \gotex@fnS{class}<step><finish>[n]: take the optional explicit number, step the class's
+% counter unless it was given (\footnotetext does not step: its mark already did), compute
+% the mark into \gotex@fnmk, then run <finish>, which reads the note's text if it has one.
+\def\gotex@fnS#1#2#3{\def\gotex@fnN{#1}\let\gotex@fnstep#2\let\gotex@fnfin#3%
+  \@ifnextbracket\gotex@fnSo\gotex@fnSs}
+\def\gotex@fnSo[#1]{\gotex@fnmarkof{\gotex@fnN}{#1}\gotex@fnfin}
+\def\gotex@fnSs{\gotex@fnstep\gotex@fnmarkof{\gotex@fnN}{}\gotex@fnfin}
+\def\gotex@fnstepit{\edef\gotex@fnctr{footnote\gotex@fnN}%
+  \expandafter\stepcounter\expandafter{\gotex@fnctr}}
+% The mark of counter value #2 of class #1, or of its current value when #2 is empty, set
+% in a group so a given number never disturbs the counter, and carried out of it.
+\long\def\gotex@fnmarkof#1#2{%
+  \begingroup
+  \ifx\relax#2\relax\else\csname c@footnote#1\endcsname=#2\relax\fi
+  \edef\gotex@fnmk{\csname thefootnote#1\endcsname}%
+  \expandafter\endgroup\expandafter\def\expandafter\gotex@fnmk\expandafter{\gotex@fnmk}}
+\long\def\gotex@fnfinFull#1{\gotex@fnqueue{\gotex@fnmk}{#1}\gotex@fnmark{\gotex@fnmk}}
+\def\gotex@fnfinMark{\gotex@fnmark{\gotex@fnmk}}
+\long\def\gotex@fnfinText#1{\gotex@fnqueue{\gotex@fnmk}{#1}}
+\def\SelectFootnoteRule#1{}
 \long\def\AtBeginEnvironment#1#2{}
 \long\def\AtEndEnvironment#1#2{}
 \long\def\counterwithout#1#2{}
