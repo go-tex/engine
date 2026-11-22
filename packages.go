@@ -1334,11 +1334,42 @@ func (e *Engine) doIfFileExists() {
 	name := e.readBraceName()
 	then := e.readBraceToksRaw()
 	els := e.readBraceToksRaw()
-	if _, _, ok := e.findTeXFile(name, []string{"", ".tex"}); ok {
+	if _, _, ok := e.findTeXFile(name, []string{"", ".tex"}); ok || engineProvidesSty(name) {
 		e.push(then)
 	} else {
 		e.push(els)
 	}
+}
+
+// nativeStys are packages the engine handles itself with no .sty on the search
+// path: asked to load one, \usepackage does the work (or knowingly nothing), so a
+// document probing for it must be told it exists, as kpathsea would for a full TeX
+// tree.
+//
+// This is not cosmetic. acmart.cls (lines 852-860) asks \IfFileExists for
+// libertine.sty, zi4.sty and newtxmath.sty and, on any NO, sets
+// \@ACM@newfontsfalse and loads none of the three: the whole paper falls back to
+// the default face. Measured on the 12 acmart papers of the fidelity corpus, that
+// is why none of them was set in Linux Libertine.
+var nativeStys = map[string]bool{
+	"libertine": true, "zi4": true, "newtxmath": true,
+	"amsmath": true, "amssymb": true, "amsfonts": true, "amsthm": true,
+}
+
+// engineProvidesSty reports whether name, as \IfFileExists is given it, is a
+// package the engine provides: "libertine" and "libertine.sty" alike. Anything else
+// stays a plain file lookup, so an unknown package still answers NO.
+func engineProvidesSty(name string) bool {
+	// Any other extension leaves a base that is in no table below, so a .cls or
+	// .tex of the same stem answers NO without a check of its own.
+	base, _ := strings.CutSuffix(name, ".sty")
+	if _, ok := textFontFiles[base]; ok {
+		return true
+	}
+	if nativeStys[base] {
+		return true
+	}
+	return !isPGFFamily(base) && neverLoadReal[base]
 }
 
 // readBraceNameX reads a braced file name, expanding it as TeX's file-name
