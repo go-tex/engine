@@ -264,6 +264,14 @@ func (e *Engine) applyGeometry(opts string) {
 	}
 	g := e.geom
 	landscape := false
+	// twocol is the LAST twocolumn/onecolumn key of the list (1 on, -1 off, 0 none),
+	// applied once at the end: pushed token lists would run last-first.
+	twocol := 0
+	defer func() {
+		if twocol != 0 {
+			e.geomSetTwocolumn(twocol > 0)
+		}
+	}()
 
 	for _, raw := range splitOptsTopLevel(opts) {
 		item := strings.TrimSpace(raw)
@@ -283,6 +291,12 @@ func (e *Engine) applyGeometry(opts string) {
 				landscape = false
 			case "heightrounded":
 				g.heightRounded = true
+			case "twocolumn", "onecolumn":
+				// \define@key{Gm}{twocolumn}[true] sets the class's \@twocolumn
+				// switch and nothing else (geometry.sty:576-579): the columns
+				// themselves come from the \twocolumn the class runs afterwards
+				// (sn-jnl.cls:803-807 branches on \if@twocolumn at \maketitle).
+				twocol = onOff(key == "twocolumn")
 			case "includehead", "includefoot", "includeheadfoot":
 				// By default (includehead=false) the header/footer sit in the margins and
 				// the text height is paperH−top−bottom (the engine's head/headsep/foot are
@@ -357,6 +371,14 @@ func (e *Engine) applyGeometry(opts string) {
 			}
 			if wok && hok && w > 0 && h > 0 {
 				g.paperW, g.paperH = w, h
+			}
+			continue
+		}
+
+		if key == "twocolumn" || key == "onecolumn" {
+			// twocolumn=false is \@twocolumnfalse; onecolumn=true is the same.
+			if v := strings.ToLower(val); v == "true" || v == "false" {
+				twocol = onOff((v == "true") == (key == "twocolumn"))
 			}
 			continue
 		}
@@ -1049,6 +1071,24 @@ func (e *Engine) headBand() int {
 		return 0
 	}
 	return e.classDimen("headheight", 12*unity) + e.classDimen("headsep", 25*unity)
+}
+
+// onOff is 1 for true and -1 for false, so that 0 can mean "not stated".
+func onOff(b bool) int {
+	if b {
+		return 1
+	}
+	return -1
+}
+
+// geomSetTwocolumn is geometry's twocolumn / onecolumn key: \@twocolumntrue or
+// \@twocolumnfalse, run as TeX so the \newif the class reads is the one changed.
+func (e *Engine) geomSetTwocolumn(on bool) {
+	name := "@twocolumnfalse"
+	if on {
+		name = "@twocolumntrue"
+	}
+	e.push([]tok{csTok(name)})
 }
 
 // doGeometry handles \geometry{options}, re-applying geometry settings on top of
