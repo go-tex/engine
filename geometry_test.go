@@ -269,26 +269,27 @@ func TestGeometryOtherPaperSizes(t *testing.T) {
 }
 
 func TestGeometryUnknownKeysIgnored(t *testing.T) {
-	// Unknown keys and bare flags leave the layout at defaults (letterpaper, 1in).
+	// Unknown keys and bare flags leave the layout at geometry's defaults
+	// (letterpaper, body 0.7 of the paper: geometry.dtx:1928-1929, not 1in margins).
 	e := runGeom(t, `\usepackage[foo=3cm,bar,twoside,nosuchflag]{geometry}`)
-	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.hsize != want {
+	if want := geomDefaultBody(texSP(t, "8.5in")); e.hsize != want {
 		t.Errorf("hsize = %d, want %d (defaults preserved)", e.hsize, want)
 	}
-	if want := texSP(t, "11in") - 2*texSP(t, "1in"); e.vsize != want {
+	if want := geomDefaultBody(texSP(t, "11in")); e.vsize != want {
 		t.Errorf("vsize = %d, want %d (defaults preserved)", e.vsize, want)
 	}
 }
 
 func TestGeometryMalformedDimenNoPanic(t *testing.T) {
 	// A malformed dimension must be ignored, not panic, and not corrupt the layout:
-	// margin stays at the 1in default.
+	// the key names no margin, so geometry's default 0.7 body applies.
 	e := runGeom(t, `\usepackage[a4paper,margin=abc]{geometry}`)
-	if want := texSP(t, "210mm") - 2*texSP(t, "1in"); e.hsize != want {
-		t.Errorf("hsize = %d, want %d (malformed margin ignored ⇒ 1in default)", e.hsize, want)
+	if want := geomDefaultBody(texSP(t, "210mm")); e.hsize != want {
+		t.Errorf("hsize = %d, want %d (malformed margin ignored ⇒ default body)", e.hsize, want)
 	}
 	// An empty value is likewise ignored.
 	e2 := runGeom(t, `\usepackage[a4paper,margin=]{geometry}`)
-	if want := texSP(t, "210mm") - 2*texSP(t, "1in"); e2.hsize != want {
+	if want := geomDefaultBody(texSP(t, "210mm")); e2.hsize != want {
 		t.Errorf("empty margin: hsize = %d, want %d", e2.hsize, want)
 	}
 }
@@ -339,9 +340,9 @@ func TestGeometryPortraitFlag(t *testing.T) {
 
 func TestGeometryEmptyAndBlankItems(t *testing.T) {
 	// An empty option group and empty comma-separated items are skipped; the
-	// layout stays at defaults (letterpaper, 1in).
+	// layout stays at geometry's defaults (letterpaper, body 0.7 of the paper).
 	e := runGeom(t, `\geometry{}`)
-	if want := texSP(t, "8.5in") - 2*texSP(t, "1in"); e.hsize != want {
+	if want := geomDefaultBody(texSP(t, "8.5in")); e.hsize != want {
 		t.Errorf("empty group: hsize = %d, want %d", e.hsize, want)
 	}
 	// Double comma yields an empty middle item that must be skipped.
