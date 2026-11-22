@@ -172,3 +172,58 @@ func TestIEEEtranAuthorBlocksFollowTheClassMode(t *testing.T) {
 			"each row of \\@IEEEauthorhalign is missing", a)
 	}
 }
+
+// ⛔ The title is set at IEEEtran's \Huge, 24pt on every size option (IEEEtran.cls:667, :690,
+// :713; \maketitle uses it at :4808-4809), not at the running text's size. Measured against
+// tectonic: the title words are 23.91pt high in its PDF, and the author line stays at the
+// body size. Both emulated forms are checked: the spanning one and
+// the [onecolumn] one, which are two different macros.
+func TestIEEEtranTitleIsHuge(t *testing.T) {
+	const body = `\title{ZZZ}\author{\IEEEauthorblockN{QQQ}}\maketitle\section{Intro}BBB`
+	// span returns the glyph sizes found in the region's spanning box.
+	spanSizes := func(e *Engine) map[rune]float64 {
+		sizes := map[rune]float64{}
+		var walk func([]node)
+		walk = func(ns []node) {
+			for _, n := range ns {
+				switch c := n.(type) {
+				case charNode:
+					if _, ok := sizes[c.ch]; !ok {
+						sizes[c.ch] = c.size
+					}
+				case *boxNode:
+					walk(c.list)
+				}
+			}
+		}
+		walk(e.colRegions[0].span.list)
+		return sizes
+	}
+
+	e, err := compile([]byte(`\documentclass[conference]{IEEEtran}\begin{document}`+body+`\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(e.colRegions) == 0 || e.colRegions[0].span == nil {
+		t.Fatal("no spanning title block")
+	}
+	s := spanSizes(e)
+	if s['Z'] < 23 || s['Z'] > 25 {
+		t.Errorf("spanning title set at %gpt, want 24", s['Z'])
+	}
+	if s['Q'] > 12 {
+		t.Errorf("the author block is %gpt: only the title is \\Huge", s['Q'])
+	}
+
+	e1, err := compile([]byte(`\documentclass[conference,onecolumn]{IEEEtran}\begin{document}`+body+`\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("[onecolumn] compile: %v", err)
+	}
+	g := glyphSizes(e1)
+	if g['Z'] < 23 || g['Z'] > 25 {
+		t.Errorf("[onecolumn] title set at %gpt, want 24", g['Z'])
+	}
+	if g['Q'] > 12 {
+		t.Errorf("[onecolumn] author block is %gpt", g['Q'])
+	}
+}

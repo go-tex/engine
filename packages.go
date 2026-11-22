@@ -1590,13 +1590,16 @@ const IEEEtranAuthorBlocksInline = `
 // width and placed across the top of the region's first page (twocolumn.go,
 // typesetSpanFullWidth / colRegion.span), which is how the revtex emulation already does it.
 //
-// The font sizes are deliberately left as the generic \maketitle had them. This change is
-// structural — a vertical, full-width block instead of a horizontal box — and the title's
-// real size is a separate fidelity question with its own effect on Sigma.
+// ⛔ The TITLE is set in the class's \Huge, not at \normalsize. IEEEtran.cls:4808-4809 sets
+// {\Huge … \@title\par} and its 10pt \Huge is \@setfontsize\Huge{24}{28pt} (l.667; the 11pt
+// and 12pt branches, l.690 and l.713, are the same 24/28). Measured with tectonic
+// (pdftotext -bbox) on a minimal \documentclass[conference]{IEEEtran} witness: the title
+// words "ZZZ" and "Title" are 40.385pt and 46.10pt wide, 23.91pt high; this emulation set
+// them at body size, and now sets the same widths to the 0.01pt. The author block keeps the size of the running text, as in the class.
 const IEEEtranTitleSpan = `
 \makeatletter
 \long\def\maketitle{\twocolumn[%
-  \begin{center}\@title\par\smallskip\@author\par\end{center}\bigskip]%
+  \begin{center}{\fontsize{24}{28}\selectfont\@title\par}\smallskip\@author\par\end{center}\bigskip]%
   \global\let\maketitle\relax}
 \makeatother
 `
@@ -1606,7 +1609,7 @@ const IEEEtranTitleSpan = `
 const IEEEtranTitlePlain = `
 \makeatletter
 \long\def\maketitle{\par\bigskip
-  \begin{center}\@title\par\smallskip\@author\par\end{center}\bigskip
+  \begin{center}{\fontsize{24}{28}\selectfont\@title\par}\smallskip\@author\par\end{center}\bigskip
   \global\let\maketitle\relax}
 \makeatother
 `
