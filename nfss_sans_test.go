@@ -98,3 +98,29 @@ func TestLibertineBindsItsSansFaces(t *testing.T) {
 		t.Error("the sans bold is the sans regular: LinBiolinum_RB.otf was not the file read")
 	}
 }
+
+// \sf answers the face CURRENT \sf is bound to, and nothing when it is bound to no
+// face: a package may rebind the control sequence to a macro, and the switch must
+// neither dereference a missing meaning nor take a macro for a font.
+func TestSfSwitchNeedsAFaceBinding(t *testing.T) {
+	e, err := buildEngine(Options{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.bindFont("sf", famMock{w: 6})
+	if f, ok := e.nfssSwitch("sf"); !ok || f == nil {
+		t.Fatalf("bound \\sf: got (%v, %v), want its face", f, ok)
+	}
+	e.eq["sf"] = &meaning{kind: mFont}
+	if f, ok := e.nfssSwitch("sf"); ok && f != nil {
+		t.Errorf("a font meaning with no face answered %v", f)
+	}
+	e.eq["sf"] = &meaning{kind: mMacro, font: famMock{w: 6}}
+	if f, ok := e.nfssSwitch("sf"); ok {
+		t.Errorf("a macro meaning answered %v as a font", f)
+	}
+	delete(e.eq, "sf")
+	if _, ok := e.nfssSwitch("sf"); ok {
+		t.Error("an unbound \\sf answered a face")
+	}
+}
