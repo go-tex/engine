@@ -44,6 +44,28 @@ FRAMEBODY
 	}
 }
 
+// beamer's description item calls \GetTitleString{<label>} before it sets the
+// label through its template (beamerbaselocalstructure.sty:317-321). Undefined,
+// the call typeset the label a second time: "LABEL LABEL body".
+func TestABeamerDescriptionLabelIsSetOnce(t *testing.T) {
+	withTeXMF(t, texmf.Beamer)
+	e, err := compile([]byte(`\documentclass{beamer}
+\begin{document}
+\begin{frame}{T}
+\begin{description}
+\item[LABEL] BODY
+\end{description}
+\end{frame}
+\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := pageChars(e)
+	if n := strings.Count(got, "LABEL"); n != 1 {
+		t.Errorf("the label is set %d times in %q, want once", n, got)
+	}
+}
+
 // Each stub reads exactly hyperref's arguments: AFTER is text and must be typeset,
 // and \GetTitleStringResult holds the title it was given.
 func TestHyperrefInternalStubsReadTheirArguments(t *testing.T) {
