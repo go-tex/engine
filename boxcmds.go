@@ -411,6 +411,23 @@ func (e *Engine) unbox(want boxKind, keep bool) {
 	} else {
 		e.setBox(i, nil)
 	}
+	if want == vbox {
+		// ⛔ The list ALREADY HOLDS its interline glue: it was computed when the
+		// lines went into the box. tex.web §1110 (unpackage) links the list onto the
+		// tail as it stands — no interline glue, no \leftskip wrapping, and
+		// prev_depth untouched. Replaying it through place() sent every box through
+		// appendToPage, which added a SECOND \baselineskip gap before each one: a
+		// beamer frame, built as \vbox to\textheight{\unvbox\beamer@framebox}
+		// (beamerbaseframesize.sty:242), spread its itemize to 29.8pt per line
+		// against 16.54pt in the reference (go-tex/engine#884).
+		for _, n := range list {
+			if b, ok := n.(*boxNode); ok && b == nil {
+				continue
+			}
+			e.mvl = append(e.mvl, n)
+		}
+		return
+	}
 	for _, n := range list {
 		e.place(n)
 	}
