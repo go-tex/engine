@@ -430,12 +430,26 @@ const AMSClassSubstrate = `
 % \f@baselineskip is deliberately NOT set here: its argument comes in several
 % shapes (12, 11\p@, {12pt}) and nothing in the corpus asks for it.
 \def\@setfontsize#1#2#3{\ifx#1\normalsize\gotex@classnormalsize{#2}\fi\edef\f@size{#2}\gotex@fontsizeat{#2}\gotex@notefontsize{#3}\gotex@setstrutbox}
-\def\fontencoding#1{}
-\def\fontfamily#1{}
+% \fontencoding and \fontfamily RECORD their argument, because amsart.cls:380
+% asks \try@load@fontshape for the family they named and then tests
+% \@ifundefined{U/msa/m/n}: latex.ltx:8190 defines that name only when the font
+% shape loads. The AMS symbol fonts (msam, msbm) are the ones this engine can
+% stand in for, so the two families whose shape is U/msa/m/n and U/msb/m/n
+% are defined; any other family stays undefined, as when its .fd is missing.
+% Both were no-ops, so every amsart paper stopped with "Package amsfonts not
+% installed, or version too old?".
+\def\fontencoding#1{\def\gotex@fenc{#1}}
+\def\fontfamily#1{\def\gotex@ffam{#1}}
 \def\fontseries#1{\gotex@fontseries{#1}}
 \def\fontshape#1{\gotex@fontshape{#1}}
 \def\usefont#1#2#3#4{}
-\def\try@load@fontshape{}
+\def\gotex@fenc{OT1}
+\def\gotex@ffam{cmr}
+\def\try@load@fontshape{\ifx\gotex@fenc\gotex@ufenc\ifx\gotex@ffam\gotex@msa\global\@xp\let\csname U/msa/m/n\endcsname\gotex@fontloaded\fi\ifx\gotex@ffam\gotex@msb\global\@xp\let\csname U/msb/m/n\endcsname\gotex@fontloaded\fi\fi}
+\def\gotex@ufenc{U}
+\def\gotex@msa{msa}
+\def\gotex@msb{msb}
+\def\gotex@fontloaded{}
 \def\check@mathfonts{}
 % amsgen.sty's two shorthands (amsgen.sty:39-40), which every AMS-derived class
 % uses everywhere:
