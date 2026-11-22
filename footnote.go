@@ -521,6 +521,7 @@ func (e *Engine) assemblePageBox(page []node, pageNum int, addTopskip bool) *box
 		return vpackSP(vlist, packNatural, 0)
 	}
 	e.curPageNum = pageNum // so \thepage in a header/footer field is this page
+	e.notePageAssembled(pageNum)
 
 	// "fancy" always assembles head and foot; a LaTeX page style that declared
 	// \@oddhead takes the same path, since the only difference is where the fields
