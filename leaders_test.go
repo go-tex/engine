@@ -100,3 +100,12 @@ func TestLeadersMalformed(t *testing.T) {
 		text(body)
 	}
 }
+
+// A leader with glue but no box must not set a nil tile.
+func TestLeadersGlueWithoutBox(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}\begin{document}\noindent\hbox to 50pt{\leaders\hfil}\end{document}`), Options{Lenient: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	e.RenderPages(e.renderMargin(0))
+}

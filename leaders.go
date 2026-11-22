@@ -76,13 +76,12 @@ func (e *Engine) doLeaders(mode leaderMode) {
 	var tile node
 	e.skipOptSpace()
 	t, ok := e.getXToken()
-	if !ok {
-		return
-	}
-	if m := e.meaningOf(t); t.cs_ && m != nil && m.kind == mPrim && (m.name == "hrule" || m.name == "vrule") {
+	if m := e.meaningOf(t); ok && t.cs_ && m != nil && m.kind == mPrim && (m.name == "hrule" || m.name == "vrule") {
 		tile = e.scanRule(m.name == "hrule")
 	} else {
-		e.back(t)
+		if ok { // at end of input there is nothing to give back, and scanBox finds no box
+			e.back(t)
+		}
 		b := e.scanBox()
 		if b == nil {
 			return // tex.web §1078: "A <box> was supposed to be here" -- the glue is left to be read as itself
@@ -91,12 +90,11 @@ func (e *Engine) doLeaders(mode leaderMode) {
 	}
 	e.skipOptSpace()
 	g, ok := e.getXToken()
-	if !ok {
-		return
-	}
 	gm := e.meaningOf(g)
-	if !g.cs_ || gm == nil || gm.kind != mPrim {
-		e.back(g)
+	if !ok || !g.cs_ || gm == nil || gm.kind != mPrim {
+		if ok {
+			e.back(g)
+		}
 		return // "Leaders not followed by proper glue": the tile is dropped
 	}
 	var spec glueSpec
