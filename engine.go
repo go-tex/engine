@@ -434,6 +434,8 @@ type Engine struct {
 	// alignAbandoned tallies alignments dropped whole because the mandatory brace
 	// was not found, keyed by the primitive. See scanLeftBrace.
 	alignAbandoned map[string]int
+	// align is the \halign entry being read live, nil outside one. See alignCtx.
+	align *alignCtx
 
 	// sfcode is \sfcode, the space-factor code per character: only what a document
 	// assigned, with defaultSfcode supplying the rest. spaceFactor is TeX's
@@ -888,6 +890,14 @@ func (e *Engine) push(ts []tok) {
 // end_file_reading). The pop is what makes a file a level of its own: the file is
 // finished before whatever was being read when it was opened resumes.
 func (e *Engine) getNext() (tok, bool) {
+	if e.align == nil {
+		return e.getNextRaw()
+	}
+	return e.getNextAligned()
+}
+
+// getNextRaw is getNext without the alignment bookkeeping of getNextAligned.
+func (e *Engine) getNextRaw() (tok, bool) {
 	for {
 		for len(e.lists) > 0 {
 			top := e.lists[len(e.lists)-1]
@@ -916,7 +926,12 @@ func (e *Engine) getNext() (tok, bool) {
 }
 
 // back pushes a single token back onto the input.
-func (e *Engine) back(t tok) { e.lists = append(e.lists, []tok{t}) }
+func (e *Engine) back(t tok) {
+	if e.align != nil {
+		e.align.unread(t)
+	}
+	e.lists = append(e.lists, []tok{t})
+}
 
 // scan reads the next token from the base string using current catcodes.
 func (e *Engine) scan() (tok, bool) {

@@ -607,6 +607,9 @@ func (e *Engine) buildBoxList() []node {
 		if !ok {
 			return list
 		}
+		if t.cs_ && t.cs == endTemplateCS && e.align != nil {
+			return list // the v part of an \halign entry is over (liveCell)
+		}
 		if c, isChar := e.implicitChar(t); isChar {
 			t = c // \egroup closes the box, \bgroup opens a nested group
 		}

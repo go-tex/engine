@@ -110,7 +110,9 @@ func TestAnAlignmentDroppedForWantOfItsBraceIsReported(t *testing.T) {
 		name, src string
 		want      int
 	}{
-		{"implicit brace, not yet accepted", `\halign\bgroup#\cr a\cr\egroup`, 1},
+		// Was 1 ("not yet accepted"): the decision it pinned rested on the alignment
+		// being unbuildable (go-tex/engine#602), which the live entries fixed.
+		{"implicit brace, accepted", `\halign\bgroup#\cr a\cr\egroup`, 0},
 		{"no brace at all", `\halign x`, 1},
 		{"a space on the way", `\halign {#\cr a\cr}`, 0},
 		{"a \\relax on the way", `\halign\relax{#\cr a\cr}`, 0},
