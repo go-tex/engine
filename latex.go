@@ -1668,6 +1668,62 @@ const MiniLaTeXKernel = `
     \expandafter\newif\csname ifpgfpicture\endcsname
   \fi
   \gotex@pgfstub\pgfsetcolor\gotex@pgf@one}
+% The a4 package (NTG), emulated rather than bundled: its header lets the file be
+% distributed only with the NTG classes. Written from its documented effect — an
+% A4-based text block per base size (10/11/12pt): \topmargin 0pt, a text height of
+% 53/46/42 \baselineskip plus \topskip, a text width of 5.0/5.2/5.7in, a margin
+% note width of 1/1/0.8in and side margins of 0.55/0.45/0.2in (the even-page
+% margin is 0.2in wider under twoside) — and its widemargins option, also the
+% preamble command \WideMargins, which gives 0.5/0.5/0.7in of the text width to
+% the margin notes and, for reversed margin notes, shifts the side margins.
+% packages.go pushes \gotex@afour for \usepackage{a4} when no a4.sty is found, then
+% \WideMargins when the option widemargins is given. a4wide.sty (LPPL, bundled)
+% loads this with \RequirePackage and overrides the text width and side margins.
+\def\gotex@afour{%
+  \topmargin 0pt
+  \ifcase\@ptsize
+    \textheight 53\baselineskip
+  \or
+    \textheight 46\baselineskip
+  \or
+    \textheight 42\baselineskip
+  \fi
+  \advance\textheight by \topskip
+  \ifcase\@ptsize
+    \textwidth 5.00in \marginparwidth 1.00in \oddsidemargin 0.55in
+    \evensidemargin 0.55in
+    \if@twoside \evensidemargin 0.75in \fi
+  \or
+    \textwidth 5.20in \marginparwidth 1.00in \oddsidemargin 0.45in
+    \evensidemargin 0.45in
+    \if@twoside \evensidemargin 0.65in \fi
+  \or
+    \textwidth 5.70in \marginparwidth 0.80in \oddsidemargin 0.20in
+    \evensidemargin 0.20in
+    \if@twoside \evensidemargin 0.40in \fi
+  \fi}
+\def\WideMargins{%
+  \ifdefined\ExtraWidth\else\newdimen\ExtraWidth\fi
+  \ifcase\@ptsize \ExtraWidth 0.5in \or \ExtraWidth 0.5in \or \ExtraWidth 0.7in \fi
+  \global\advance\textwidth by -\ExtraWidth
+  \global\advance\marginparwidth by \ExtraWidth
+  \if@twoside
+    \if@reversemargin
+      \@tempdima\evensidemargin
+      \advance\@tempdima by -\oddsidemargin
+      \advance\oddsidemargin by \ExtraWidth
+      \advance\oddsidemargin by \@tempdima
+      \advance\evensidemargin by -\@tempdima
+    \else
+      \advance\evensidemargin by \ExtraWidth
+    \fi
+  \else
+    \if@reversemargin
+      \advance\oddsidemargin by \ExtraWidth
+      \advance\evensidemargin by \ExtraWidth
+    \fi
+  \fi
+  \let\WideMargins\relax}
 \def\XC@sdef#1#2{\edef#1{#2}}
 \def\XC@tgt@mod#1{rgb}
 \def\XC@mod@rgb{rgb}

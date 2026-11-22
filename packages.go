@@ -753,6 +753,18 @@ func (e *Engine) doUsepackageLoad() {
 		// Its options stay readable to \@ifpackagewith (opt@<name>.sty), as for a loaded
 		// file: the emulation keys on them (algorithm2e's linesnumbered).
 		e.define("opt@"+name+".sty", &meaning{kind: mMacro, body: stringToToks(strings.Join(opts, ","))}, true)
+		if name == "a4" {
+			// NTG's a4 is not bundled (its licence ties it to the NTG classes):
+			// \gotex@afour sets its text block (latex.go), and widemargins is the
+			// package's only option.
+			// push is a stack: the block goes on last so that it runs first, as
+			// the package applies widemargins after setting the layout.
+			if hasOption(opts, "widemargins") {
+				e.push([]tok{csTok("WideMargins")})
+			}
+			e.push([]tok{csTok("gotex@afour")})
+			continue
+		}
 		if name == "fullpage" {
 			// fullpage (H. Partl / P. W. Daly) is a one-line geometry: the text block is
 			// the paper less a uniform margin on every side — 1in by default, 1.5cm
