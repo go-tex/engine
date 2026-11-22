@@ -56,10 +56,7 @@ func (e *Engine) doSubfigure(captype string) {
 	content := append(prefix, body...)
 	content = append(content, csTok("par"), csTok("endgroup"))
 
-	savedHsize := e.hsize
-	e.hsize = width
-	vbox := e.typesetGroupToVbox(content)
-	e.hsize = savedHsize
+	vbox := e.typesetMinipageVbox(content, width)
 
 	vbox.width = width
 	// Panels flow inline: enter horizontal mode so consecutive \begin{subfigure}…
