@@ -614,9 +614,9 @@ const MiniLaTeXKernel = `
 \providecommand\tablename{Table}
 \def\fnum@figure{\figurename\nobreakspace\thefigure}
 \def\fnum@table{\tablename\nobreakspace\thetable}
-\long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\@discardopt}
+\long\def\figure{\par\bigskip\begingroup\gotex@singlespace\centering\def\@captype{figure}\@discardopt}
 \long\def\endfigure{\par\endgroup\bigskip}
-\long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\@discardopt}
+\long\def\table{\par\bigskip\begingroup\gotex@singlespace\centering\def\@captype{table}\@discardopt}
 \long\def\endtable{\par\endgroup\bigskip}
 % ─── the float package: \newfloat / \floatname / \floatstyle / … ─────────────
 % \newfloat{type}{placement}{ext}[within] declares a NEW float type that reuses
@@ -1466,8 +1466,8 @@ const MiniLaTeXKernel = `
 % tex.web §392 abandons the call and the whole subfigure goes. 13 in the corpus.
 \long\def\@subfloatopt[#1]#2{\subcaptionbox{#1}{#2}}
 \long\def\@subfloatnoopt#1{\subcaptionbox{}{#1}}
-\long\def\figure{\par\bigskip\begingroup\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
-\long\def\table{\par\bigskip\begingroup\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+\long\def\figure{\par\bigskip\begingroup\gotex@singlespace\centering\def\@captype{figure}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
+\long\def\table{\par\bigskip\begingroup\gotex@singlespace\centering\def\@captype{table}\global\advance\c@subfigure by-\c@subfigure\relax\@discardopt}
 % ─── end sub-captions / \captionof / \captionsetup ───────────────────────────
 % ─── real-world preamble robustness ──────────────────────────────────────────
 % Real papers configure many packages in the preamble with commands that do not

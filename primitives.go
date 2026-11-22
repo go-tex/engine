@@ -2046,6 +2046,7 @@ func (e *Engine) loadMore() {
 	e.prim("singlespacing", func(e *Engine) { e.setLineStretch(1) })
 	e.prim("onehalfspacing", func(e *Engine) { e.setLineStretch(onehalfStretch(e.ptsizeCode())) })
 	e.prim("doublespacing", func(e *Engine) { e.setLineStretch(doubleStretch(e.ptsizeCode())) })
+	e.prim("gotex@singlespace", func(e *Engine) { e.singleSpaceUnderSetspace() })
 	e.prim("setstretch", func(e *Engine) { e.doSetstretch() })
 	e.prim("linespread", func(e *Engine) { e.doSetstretch() })
 	e.prim("spacing", func(e *Engine) { e.doSpacing() })

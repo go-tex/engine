@@ -184,7 +184,9 @@ func (e *Engine) queueFootnoteText(mark string, text []tok) {
 // The precedent is footnoteRuleNodes below, and latexHead (fancyhdr.go:176): a macro the
 // reference defines is EXECUTED, not imitated.
 func (e *Engine) footnoteTextBody(mark string, text []tok) []tok {
-	body := []tok{chTok('{', catBegin), csTok("footnotesize")}
+	// gotex@singlespace first: setspace.sty:449-453 sets \baselinestretch before
+	// \footnotesize, so the note's leading is the font's own.
+	body := []tok{chTok('{', catBegin), csTok("gotex@singlespace"), csTok("footnotesize")}
 	body = append(body, csTok("def"), csTok("@thefnmark"), chTok('{', catBegin))
 	body = append(body, stringToToks(mark)...)
 	body = append(body, chTok('}', catEnd))
