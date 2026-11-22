@@ -187,11 +187,18 @@ func (e *Engine) tocList(kind string) []tocEntry {
 	if src == nil {
 		src = e.tocEntries
 	}
+	// \tocdepth keeps only the sectioning levels up to it: the class's \l@section opens
+	// with \ifnum #1>\c@tocdepth \else … \fi (article.cls:529), tested when the contents
+	// list is READ, so the value in force at \tableofcontents is the one that counts. Part
+	// (-1) and chapter (0) always pass at the default depth; the lists of figures and
+	// tables have no depth.
+	depth := e.counterValue("c@tocdepth")
 	var out []tocEntry
 	for _, en := range src {
-		if en.kind == kind {
-			out = append(out, en)
+		if en.kind != kind || (kind == "toc" && en.level > depth) {
+			continue
 		}
+		out = append(out, en)
 	}
 	return out
 }
