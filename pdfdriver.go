@@ -444,7 +444,7 @@ func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
 		// loadImage already had pdfkit accept the page; an error here (the
 		// document's own import bounds are narrower than the default) leaves the
 		// reserved box empty rather than losing the document.
-		if f, err := d.p.Document().ImportPDFPage(n.data, 1); err == nil {
+		if f, err := d.p.Document().ImportPDFPage(n.data, n.page); err == nil {
 			_ = d.p.DrawForm(f, r)
 		}
 	case imgSVG:

@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"image"
 	"image/png" // re-encode exotic formats for embedding
 	"io"
@@ -77,6 +78,7 @@ type imageNode struct {
 	width, height int
 	depth         int
 	srcLine       int
+	page          int // imgPDF: the 1-based page of data this figure shows
 }
 
 func (imageNode) isNode() {}
@@ -92,7 +94,7 @@ func (n imageNode) dataURI() string {
 // doIncludegraphics implements \includegraphics[opts]{name}. The image sits on the
 // baseline (height above, no depth); a load failure is a SourceError at this line.
 func (e *Engine) doIncludegraphics() {
-	wReq, hReq, scale := e.scanGraphicsOpts()
+	wReq, hReq, scale, page := e.scanGraphicsOpts()
 	name := e.readBraceName()
 	if name == "" {
 		return
@@ -107,7 +109,7 @@ func (e *Engine) doIncludegraphics() {
 	// or one walking out with ../ is caught; a bare name that a search path resolves
 	// outside the tree is not, and that is a stated limit rather than an oversight.
 	e.noteRead(name)
-	data, format, iw, ih, dpiX, dpiY, err := loadImage(name, pdfAspectOptIn() || e.twoColumn)
+	data, format, iw, ih, dpiX, dpiY, err := loadImagePage(name, pdfAspectOptIn() || e.twoColumn, page)
 	if err != nil {
 		if e.tolerant() {
 			// Best-effort preview: a real document's figure files are not shipped
@@ -126,7 +128,7 @@ func (e *Engine) doIncludegraphics() {
 	w, h := graphicsSize(iw, ih, wReq, hReq, scale, dpiX, dpiY)
 	e.startImage()
 	e.parList = append(e.parList, imageNode{
-		data: data, format: format, width: w, height: h, srcLine: e.curSrcLine,
+		data: data, format: format, width: w, height: h, srcLine: e.curSrcLine, page: page,
 	})
 }
 
@@ -337,6 +339,12 @@ func fileExists(path string) bool {
 }
 
 func loadImage(name string, aspect bool) (data []byte, format imgFormat, iw, ih int, dpiX, dpiY float64, err error) {
+	return loadImagePage(name, aspect, 1)
+}
+
+// loadImagePage is loadImage for page page (1-based) of a PDF figure; the page
+// means nothing to any other format.
+func loadImagePage(name string, aspect bool, page int) (data []byte, format imgFormat, iw, ih int, dpiX, dpiY float64, err error) {
 	svgHint := false
 	if strings.HasPrefix(name, "data:") {
 		svgHint = svgDataURI(name)
@@ -369,8 +377,13 @@ func loadImage(name string, aspect bool) (data []byte, format imgFormat, iw, ih 
 		// Its size is the page box go-pdfkit would import (pdffigure.go). A page
 		// pdfkit refuses (corrupt, encrypted, over its bounds) falls through to the
 		// rasteriser or the placeholder below.
-		if w, h, ok := nativePDFFigure(data); ok {
+		if w, h, ok := nativePDFFigure(data, page); ok {
 			return data, imgPDF, w, h, pdfFigureResolution, pdfFigureResolution, nil
+		}
+		// The rasteriser takes page 1 only, so a refused later page is an error, not
+		// a picture of the wrong page.
+		if page != 1 {
+			return nil, 0, 0, 0, 0, 0, fmt.Errorf("page %d is not in the PDF figure", page)
 		}
 		// The figure's natural size, read from its page box, lets a placeholder keep
 		// the right aspect (and reserve the right vertical space) when no renderer is
@@ -541,16 +554,17 @@ func (e *graphicsError) Error() string { return e.msg }
 
 // scanGraphicsOpts parses the optional [width=…,height=…,scale=…] argument.
 // Unknown keys are ignored. Missing bracket → all zero.
-func (e *Engine) scanGraphicsOpts() (w, h int, scale float64) {
+func (e *Engine) scanGraphicsOpts() (w, h int, scale float64, page int) {
 	e.skipOptSpace()
 	t, ok := e.getXToken()
 	if !ok {
-		return 0, 0, 0
+		return 0, 0, 0, 1
 	}
 	if t.cs_ || t.ch != '[' {
 		e.back(t)
-		return 0, 0, 0
+		return 0, 0, 0, 1
 	}
+	page = 1
 	// Collect the bracket content as a TOKEN list (control sequences KEPT) up to the
 	// closing ']' at brace level 0. Keeping the tokens is what lets a value like
 	// width=0.48\textwidth be evaluated as a real TeX dimension: a raw-text scan
@@ -611,9 +625,15 @@ scan:
 			h = evalDimen(val)
 		case "scale":
 			scale, _ = strconv.ParseFloat(strings.TrimSpace(tokensToText(val)), 64)
+		case "page":
+			// graphicx's page=N picks a page of a multi-page PDF. A value that is
+			// not a whole number is left at page 1, as an unknown key is.
+			if n, err := strconv.Atoi(strings.TrimSpace(tokensToText(val))); err == nil {
+				page = n
+			}
 		}
 	}
-	return w, h, scale
+	return w, h, scale, page
 }
 
 // splitTokensAtComma splits a token list on comma tokens at brace level 0.
