@@ -215,15 +215,25 @@ natbib's `\citet` calls the kernel's `\@citex`, which only a loaded class define
 
 About 140 corpus files load `\usepackage{a4wide}` and nothing in the engine
 emulated it, so they kept the class margins (paper 2111.13456: 36 pages against
-the reference's 29). Both files are taken as the TeX Live bundle ships them
+the reference's 29). `a4wide.sty` is taken as the TeX Live bundle ships it
 (`tectonic -X bundle cat`), byte for byte.
 
 | file | provides | sha256 | size |
 |---|---|---|---|
 | `a4wide.sty` | `\ProvidesPackage{a4wide}[1994/08/30]` | `836a8b86d7728b9e264addea2ee18376b0b939980a81fb1196f6af78e8df64a5` | 1635 bytes |
-| `a4.sty` | `\ProvidesPackage{a4}[2020/02/18 v1.2g]` | `81e954329ffd9fc6b8d33d09a197db7cf5e92151305a96ff1db3145ed8bba495` | 3590 bytes |
 
-`a4wide.sty` is LPPL 1 or later. `a4.sty` is LPPL 1.3c but its header adds *"This
-file may only be distributed together with a copy of the NTG document classes
-distribution"*, a restriction the other files here do not carry; it is the
-same kind of open question as natbib's `.dtx` sentence above.
+`a4wide.sty` is released "under the LPPL, version 1, or (at your option) any later
+version" (its header, line 10), with no further restriction: it is redistributable
+and stays bundled.
+
+`a4.sty` (NTG, LPPL 1.3c) is **not** bundled. Its header adds *"This file may
+only be distributed together with a copy of the NTG document classes
+distribution"*, which a public repository does not satisfy. It was bundled by
+mistake in the first version of this entry and is removed; the engine emulates it
+instead (`latex.go`, `\gotex@afour` and `\WideMargins`, pushed by `packages.go`
+for `\usepackage[widemargins]{a4}`), written from the package's documented
+effect, not from its text. `a4emul_test.go` pins `\textwidth`, `\textheight`,
+`\oddsidemargin`, `\evensidemargin`, `\topmargin` and `\marginparwidth` for
+10/11/12pt, twoside, `widemargins` and reversed margin notes, against the values
+the original package produced; `a4wide.sty` still loads and calls
+`\RequirePackage{a4}`, which now reaches the emulation.

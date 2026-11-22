@@ -8,8 +8,8 @@ import "testing"
 // a4wide.sty (J.-F. Lamy, loading NTG's a4.sty) sets the page geometry through
 // \textwidth, \oddsidemargin and \textheight, and nothing emulated it: about 140
 // corpus files loaded it and kept the class margins, so paper 2111.13456 ran 36
-// pages against 29. The two real files are bundled now (texmf/a4wide.sty,
-// texmf/a4.sty) and the engine runs them.
+// pages against 29. The real a4wide.sty is bundled (texmf/a4wide.sty) and the
+// engine runs it; the a4 it requires is the engine's emulation (a4emul_test.go).
 //
 // The expected values are what tectonic 0.15 (XeTeX) prints for
 // \documentclass[10pt]{amsart}\usepackage{a4wide}: textwidth=424.58624pt,
