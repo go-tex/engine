@@ -258,10 +258,30 @@ func (e *Engine) nfssSwitch(name string) (fontFace, bool) {
 	case "sc":
 		series, shape = "m", "sc"
 		e.nfssSet("f@family", "rm")
-	case "tt", "sf":
+	case "sf", "sffamily":
+		// \sffamily is a copy of \sf made when the engine was built (aliasFontSwitches),
+		// so its own face is the one bound then: a package that binds another sans
+		// (libertine's Biolinum) is reached through the CURRENT binding of \sf.
+		e.nfssSet("f@family", "sf")
+		if name == "sffamily" {
+			// A family switch keeps series and shape, as \rmfamily does.
+			if f := e.nfssFace(series, shape); f != nil {
+				return f, true
+			}
+			return nil, false
+		}
 		e.nfssSet("f@series", "m")
 		e.nfssSet("f@shape", "n")
-		e.nfssSet("f@family", name)
+		if m := e.eq["sf"]; m != nil && m.kind == mFont {
+			return m.font, true
+		}
+		return nil, false
+	case "tt", "ttfamily":
+		e.nfssSet("f@family", "tt")
+		if name == "tt" {
+			e.nfssSet("f@series", "m")
+			e.nfssSet("f@shape", "n")
+		}
 		return nil, false
 	default:
 		return nil, false
