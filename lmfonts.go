@@ -31,6 +31,13 @@ var lmRomanItalic []byte
 //go:embed fonts/lm/lmmono10-regular.otf
 var lmMonoRegular []byte
 
+// lmSansRegular is the default sans-serif face, bound to \sf (so \textsf and
+// \sffamily are Latin Modern Sans, LMSans10-Regular, as the reference sets them).
+// Its optical sizes are in lmoptical.go.
+//
+//go:embed fonts/lm/lmsans10-regular.otf
+var lmSansRegular []byte
+
 // lmRomanCaps is the small-caps shape. tulmr.fd declares it at ONE design size for
 // every size ("<-> ec-lmcsc10"), so it has no optical table and scales linearly.
 // Without it \scshape selected nothing: amsart's \section headings and every
