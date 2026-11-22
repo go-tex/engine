@@ -123,6 +123,7 @@ func (e *Engine) loadETeXExpansion() {
 	// grouping stack; see etexgroup.go.
 	e.installGroupQueries()
 	e.installUnicodeDeclaration()
+	e.installLeaders()
 }
 
 // rawGroup reads a braced group without expanding it. An argument that is not a

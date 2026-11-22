@@ -34,6 +34,11 @@ type glueNode struct { // \hskip/\vskip and the fil glues
 	// \dotfill uses (\hbox to .44em); LaTeX's TOC leader is wider (see tocDotCell),
 	// and it has to be measured where the font is known, not at render time.
 	cell int
+	// tile is the box or rule of a real \leaders/\cleaders/\xleaders (leaders.go);
+	// nil for ordinary glue and for the two built-in fills above. lmode says how the
+	// tiles are laid out in the glue's width.
+	tile  node
+	lmode leaderMode
 }
 
 // glueLeader marks a glue node that should be rendered as \leaders-like fill:
