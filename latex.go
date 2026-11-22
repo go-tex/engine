@@ -1000,7 +1000,7 @@ const MiniLaTeXKernel = `
 % redefined here — as new \def lines, to avoid touching the originals above — so
 % they emit an entry in addition to typesetting their heading. Starred forms
 % (\@ssection/\@ssubsection) are untouched and never record, matching LaTeX.
-\newcount\c@tocdepth
+\newcount\c@tocdepth \c@tocdepth=3
 % A sectioning command sets the running MARK, which is how a head shows the
 % section it is on: \@sect runs \csname #1mark\endcsname{#7} (latex.ltx:12796),
 % and the marks default to \@gobble (:12870-12872) so they cost nothing until a
