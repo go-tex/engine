@@ -158,4 +158,17 @@ var embeddedFontProvenance = []fontProvenance{
 		"cdd53c7dc01a1d25f21eaf7cae44bfb8a9665e4cbd60e5f8da14287aca819bb9"},
 	{"lm/lmmono12-regular.otf", "fonts/lm", "2.004",
 		"b826e490fa671f254840abe88afea0975b606f57fb4a8b93f53787c26d8ac319"},
+	// The sans-serif family, regular, all five design sizes tulmss.fd's m/n declares.
+	// Fetched from https://mirrors.ctan.org/fonts/lm.zip on 2026-11-22, each listed in
+	// MANIFEST-Latin-Modern.txt (fonts/opentype/public/lm/lmsans*-regular.otf).
+	{"lm/lmsans8-regular.otf", "fonts/lm", "2.004",
+		"04f0d25ca474494cb707e752170f6c22cdcb8ae2b5fb80872143e18d5cc463f8"},
+	{"lm/lmsans9-regular.otf", "fonts/lm", "2.004",
+		"80ef596460b7b402621780f7cd73a348efedc4cd2c6deca37da58f07ee61b85d"},
+	{"lm/lmsans10-regular.otf", "fonts/lm", "2.004",
+		"d431b786b9b603662718e79cfe9b441f47a8b0b3e854dde89d5acb3ed7cfd682"},
+	{"lm/lmsans12-regular.otf", "fonts/lm", "2.004",
+		"f87ebdea035a96e8787e2c663cfcc78ce73205d37800eafe7948278e2cc7666a"},
+	{"lm/lmsans17-regular.otf", "fonts/lm", "2.004",
+		"f6c395a436e4fa7e88bbf1445e64b9c78ce4effba3668b13cc433077fc71a984"},
 }

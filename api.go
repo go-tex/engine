@@ -176,6 +176,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		if opt.MonoFont == nil {
 			opt.MonoFont = lmMonoRegular
 		}
+		if opt.SansFont == nil {
+			opt.SansFont = lmSansRegular
+		}
 	}
 	reg, err := NewOpenTypeFont(fontBytes, float64(opt.size()))
 	if err != nil {
