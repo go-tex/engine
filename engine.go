@@ -95,6 +95,9 @@ type Engine struct {
 	// beamerBands: this document is a beamer talk, whose head/foot geometry bands
 	// must be folded into the body because its frame machinery is not run here.
 	beamerBands bool
+	// gobbleRec, when set, receives every token gobbleEnvBody reads, so a picture
+	// whose size follows from its body can be measured (pgfbbox.go).
+	gobbleRec *[]tok
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
 	importPath   string

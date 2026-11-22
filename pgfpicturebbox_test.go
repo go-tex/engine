@@ -42,11 +42,12 @@ func TestAPgfPictureKeepsItsDeclaredBoundingBox(t *testing.T) {
 }
 
 // A pgfpicture with no declared box — how TikZ and most pgf code open one, with a
-// command or text right after \begin{pgfpicture} — has no size to keep, so it
-// still gets the framed placeholder every gobbled picture gets.
+// command or text right after \begin{pgfpicture} — whose size its body does not
+// tell (pgfbbox.go reads only straight paths between \pgfpoint corners) still gets
+// the framed placeholder every gobbled picture gets.
 func TestAPgfPictureWithoutABoundingBoxKeepsThePlaceholder(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
-		{"a command follows", `\global\setbox1\hbox{\begin{pgfpicture}\pgfpathmoveto{\pgfpoint{0pt}{0pt}}\pgfusepath{stroke}\end{pgfpicture}}`},
+		{"a command follows", `\global\setbox1\hbox{\begin{pgfpicture}\pgfpathcircle{\pgfpoint{0pt}{0pt}}{3pt}\pgfusepath{stroke}\end{pgfpicture}}`},
 		{"text follows", `\global\setbox1\hbox{\begin{pgfpicture} a\end{pgfpicture}}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
