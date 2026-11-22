@@ -49,6 +49,9 @@ func (e *Engine) scanLeftBrace(prim string) bool {
 			e.noteAlignmentAbandoned(prim)
 			return false
 		}
+		if c, isChar := e.implicitChar(t); isChar {
+			t = c // \bgroup opens the group just as { does (§403 scan_left_brace)
+		}
 		if !t.cs_ {
 			switch t.cat {
 			case catBegin:
