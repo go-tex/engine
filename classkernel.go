@@ -1031,19 +1031,36 @@ const LaTeX2eClassKernel = `
 % \IEEEPARstart{T}{his} is IEEEtran's drop cap; with no drop-cap renderer, keep
 % the text — the initial and the rest — so the first sentence survives.
 \def\IEEEPARstart#1#2{#1#2}
-% titlesec: \titleformat / \titlespacing reconfigure sectioning, which the engine
-% renders with its own format — so gobble their arguments (both optionals and the
-% * forms) rather than strict-failing or typesetting the format code as body text.
+% titlesec: there is no titlesec.sty on the support tree, so \titleformat and
+% \titlespacing are the engine's own, and they RECORD what the class's heading
+% machinery reads (\@tsstyle, \@tsbefore, \@tsafter, \@tslabel, \@tstitle in
+% classprims.go: each yields the class's own argument when nothing is recorded).
+% Recorded per heading name: the format (macro @tsfmt@<name>), label+separator
+% (@tslab@), the code before the title (@tsbc@), the shape (@tsshape@) and the
+% vertical spacing (@tsbef@, @tsaft@). NOT done: the left margin of \titlespacing
+% and the right optional, the after-code, and the display/hang/runin shapes beyond
+% a run-in heading's sign of its after-space; \chapter and \part are not
+% \@startsection-based so they are recorded but never read.
 % \titleformat*{cmd}{fmt}; \titleformat{cmd}[shape]{fmt}{label}{sep}{before}[after].
+\def\@tsname#1{\edef\@tsn{\expandafter\@gobble\string#1}}
 \def\titleformat{\@ifstar\@tsecfmtS\@tsecfmtM}
-\def\@tsecfmtS#1#2{}
+\def\@tsecfmtS#1#2{\@tsname{#1}\global\expandafter\def\csname @tsfmt@\@tsn\endcsname{#2}}
 \def\@tsecfmtM#1{\@ifnextchar[{\@tsecfmtMo{#1}}{\@tsecfmtMn{#1}}}
-\def\@tsecfmtMo#1[#2]#3#4#5#6{\@ifnextchar[\@tsecgobopt\relax}
-\def\@tsecfmtMn#1#2#3#4#5{\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsecfmtMo#1[#2]#3#4#5#6{\@tsstore{#1}{#2}{#3}{#4}{#5}{#6}\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsecfmtMn#1#2#3#4#5{\@tsstore{#1}{}{#2}{#3}{#4}{#5}\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsstore#1#2#3#4#5#6{\@tsname{#1}%
+  \global\expandafter\def\csname @tsshape@\@tsn\endcsname{#2}%
+  \global\expandafter\def\csname @tsfmt@\@tsn\endcsname{#3}%
+  \global\expandafter\def\csname @tslab@\@tsn\endcsname{#4\hskip#5\relax}%
+  \global\expandafter\def\csname @tsbc@\@tsn\endcsname{#6}}
 \def\@tsecgobopt[#1]{}
-% \titlespacing[*]{cmd}{left}{before}{after}[right].
-\def\titlespacing{\@ifstar\@tsecspace\@tsecspace}
-\def\@tsecspace#1#2#3#4{\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsrunin{runin}
+% \titlespacing[*]{cmd}{left}{before}{after}[right]. The star drops the indent of
+% the paragraph after the heading, which \@startsection spells as a NEGATIVE
+% before-space.
+\def\titlespacing{\@ifstar\@tsecspaceS\@tsecspaceN}
+\def\@tsecspaceN#1#2#3#4{\@tsname{#1}\global\expandafter\def\csname @tsbef@\@tsn\endcsname{#3}\global\expandafter\def\csname @tsaft@\@tsn\endcsname{#4}\@ifnextchar[\@tsecgobopt\relax}
+\def\@tsecspaceS#1#2#3#4{\@tsname{#1}\global\expandafter\def\csname @tsbef@\@tsn\endcsname{-#3}\global\expandafter\def\csname @tsaft@\@tsn\endcsname{#4}\@ifnextchar[\@tsecgobopt\relax}
 % LaTeX makes the three escaped characters that stand for nothing but themselves
 % into \chardef tokens rather than macros: under a real LaTeX, \meaning\# is
 % \char"23. The difference that matters is that a \chardef token is
