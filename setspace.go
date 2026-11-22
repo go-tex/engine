@@ -164,6 +164,28 @@ func (e *Engine) endSpacing() {
 	}
 }
 
+// singleSpaceUnderSetspace gives a float or a footnote the single spacing setspace.sty
+// gives it, and only when the document loaded setspace. setspace.sty:425-430 wraps
+// \@xfloat, and 449-453 and 469-473 wrap \@footnotetext and \@mpfootnotetext, each with
+//
+//	\def\baselinestretch{\setspace@singlespace}   % normally 1
+//
+// so a \baselinestretch or \setstretch chosen for the BODY does not reach the leading
+// inside a table or a note. Without the package nothing resets it: a float re-selects
+// \normalsize and the stretch applies, so this is a no-op then.
+//
+// Called inside the float's or note's own group, which the closing brace undoes — the
+// same group-local write as \setstretch. Witness s1: with \baselinestretch 1.25 at 12pt,
+// table rows 14.45pt apart and footnote lines 11.95pt in tectonic, 18.05pt in both here
+// before this.
+func (e *Engine) singleSpaceUnderSetspace() {
+	if !e.pkgRequested["setspace"] {
+		return
+	}
+	e.setLineStretch(1)
+	e.markBaselineskipGroupLocal()
+}
+
 // parseFloatArg parses a decimal factor (e.g. "1.5"); ok is false when malformed.
 func parseFloatArg(s string) (float64, bool) {
 	f, err := strconv.ParseFloat(trimSpaces(s), 64)

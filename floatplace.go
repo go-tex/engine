@@ -69,7 +69,7 @@ const FloatPlacementSubstrate = `
 %
 % Measured against tectonic, ink to ink from a figure[h]'s caption to the next line of
 % text: reference 17.28pt, ours 9.60 with the \medskip \end@float carried.
-\long\def\gotex@inlinefloat#1{\par\addvspace\intextsep\begingroup\def\end@float{\par\endgroup\addvspace\intextsep}\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
+\long\def\gotex@inlinefloat#1{\par\addvspace\intextsep\begingroup\gotex@singlespace\def\end@float{\par\endgroup\addvspace\intextsep}\centering\def\@captype{#1}\@ifnextchar[\@gobbleopt\relax}
 \def\@float#1{\gotex@floatbegin{#1}}
 `
 
@@ -129,6 +129,7 @@ func (e *Engine) doFloatBegin() {
 	// at 0pt for the remaining 230 pages, which then set ONE WORD PER LINE and ran to
 	// 1439 pages against a reference of 333.
 	e.beginGroup()
+	e.singleSpaceUnderSetspace() // setspace.sty:425-430, \@xfloat
 	box := e.typesetGroupToVbox(append([]tok{csTok("centering")}, body...))
 	e.endGroup()
 	box.width = e.hsize
