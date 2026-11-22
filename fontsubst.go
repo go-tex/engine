@@ -75,6 +75,8 @@ var textFontPackages = map[string]string{
 	"tgadventor":       "TeX Gyre Adventor",
 	"tgcursor":         "TeX Gyre Cursor",
 	"anttor":           "Antykwa Torunska",
+	"zi4":              "Inconsolata",
+	"inconsolata":      "Inconsolata",
 	// fontspec is NOT here: loaded alone it sets Latin Modern, the face the engine
 	// sets, so it wants nothing it lacks. A \setmainfont naming another face is what
 	// asks for a substitution; see doSetMainFont.
@@ -141,6 +143,30 @@ var textFontFiles = map[string]textFontSet{
 	"tgtermes":   {rm: "TeXGyreTermesX-Regular.otf", bf: "TeXGyreTermesX-Bold.otf", it: "TeXGyreTermesX-Italic.otf"},
 }
 
+// textMonoFiles names the MONOSPACED face behind the packages that change only \ttfamily.
+// zi4 (and its older name inconsolata) is what acmart loads for \texttt and verbatim
+// (\RequirePackage[varqu]{zi4}): the reference embeds Inconsolatazi4-Regular, whose
+// advance is 0.5em where Latin Modern Mono's is 0.525em, so every \texttt run breaks
+// differently under the built-in face. The file ships in go-tex/texmf's inconsolata
+// bundle (SIL OFL 1.1).
+var textMonoFiles = map[string]string{
+	"zi4":         "Inconsolatazi4-Regular.otf",
+	"inconsolata": "Inconsolatazi4-Regular.otf",
+}
+
+// loadMonoFont binds \tt to the named face and leaves every other family alone. A tree
+// with no such file keeps the substitution, and reports it as any text-font package does.
+func (e *Engine) loadMonoFont(file string, pt float64) bool {
+	// A missing file gives nil data, which NewOpenTypeFont refuses: one guard, not two.
+	data, _, _ := e.findTeXFile(file, nil)
+	f, err := NewOpenTypeFont(data, pt)
+	if err != nil {
+		return false
+	}
+	e.bindFont("tt", f)
+	return true
+}
+
 // loadTextFontPackage swaps the engine's text faces for the ones a font package
 // names, and reports whether it could. WIDTH is what this is for: measured on a
 // controlled acmart sigconf document, our substitute set 4.619bp per character
@@ -150,14 +176,15 @@ var textFontFiles = map[string]textFontSet{
 // The face is built at the CURRENT base size and the size machinery re-faces it from
 // there (atSizePx), exactly as it does for the built-in face.
 func (e *Engine) loadTextFontPackage(pkg string) bool {
-	fam, ok := textFontFiles[pkg]
-	if !ok {
-		return false
-	}
 	pt := e.baseFontPt
 	if pt <= 0 {
 		pt = 10
 	}
+	if file, ok := textMonoFiles[pkg]; ok {
+		return e.loadMonoFont(file, pt)
+	}
+	// An unknown package gives the zero family: load("") is nil, so rm is nil below.
+	fam := textFontFiles[pkg]
 	load := func(file string) fontFace {
 		if file == "" {
 			return nil

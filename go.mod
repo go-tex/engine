@@ -9,7 +9,7 @@ require (
 	github.com/go-pdfkit/reader v0.17.0
 	github.com/go-tex/math v0.50.0
 	github.com/go-tex/pdfrender v0.3.2
-	github.com/go-tex/texmf v0.7.0
+	github.com/go-tex/texmf v0.9.0
 	github.com/go-typeset/hyphenation v1.0.1
 	github.com/go-typeset/linebreak v1.13.0
 	golang.org/x/text v0.43.0
@@ -17,6 +17,7 @@ require (
 
 require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
+	github.com/go-compressions/xz v0.3.1 // indirect
 	github.com/go-images/jpeg v0.3.0 // indirect
 	github.com/go-images/jpeg2000 v0.14.0 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
