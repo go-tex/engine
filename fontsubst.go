@@ -127,11 +127,18 @@ func isLatinModernName(name string) bool {
 // path does not resolve to an embedded face, so it keeps Latin Modern. Mapping them
 // to TeX Gyre Termes would have made us diverge from the judge on some thirty corpus
 // papers while looking like a fidelity fix.
-var textFontFiles = map[string]struct{ rm, bf, it string }{
-	"libertine":  {"LinLibertine_R.otf", "LinLibertine_RB.otf", "LinLibertine_RI.otf"},
-	"libertinus": {"LibertinusSerif-Regular.otf", "LibertinusSerif-Bold.otf", "LibertinusSerif-Italic.otf"},
-	"newtxtext":  {"TeXGyreTermesX-Regular.otf", "TeXGyreTermesX-Bold.otf", "TeXGyreTermesX-Italic.otf"},
-	"tgtermes":   {"TeXGyreTermesX-Regular.otf", "TeXGyreTermesX-Bold.otf", "TeXGyreTermesX-Italic.otf"},
+//
+// sf, sfbf and sfit are the family's SANS faces, bound beside \sf when the package
+// ships them: libertine loads Linux Biolinum, so acmart's titles (set in \sffamily)
+// are LinBiolinumOB where Latin Modern Sans would be wrong.
+type textFontSet struct{ rm, bf, it, sf, sfbf, sfit string }
+
+var textFontFiles = map[string]textFontSet{
+	"libertine": {"LinLibertine_R.otf", "LinLibertine_RB.otf", "LinLibertine_RI.otf",
+		"LinBiolinum_R.otf", "LinBiolinum_RB.otf", "LinBiolinum_RI.otf"},
+	"libertinus": {rm: "LibertinusSerif-Regular.otf", bf: "LibertinusSerif-Bold.otf", it: "LibertinusSerif-Italic.otf"},
+	"newtxtext":  {rm: "TeXGyreTermesX-Regular.otf", bf: "TeXGyreTermesX-Bold.otf", it: "TeXGyreTermesX-Italic.otf"},
+	"tgtermes":   {rm: "TeXGyreTermesX-Regular.otf", bf: "TeXGyreTermesX-Bold.otf", it: "TeXGyreTermesX-Italic.otf"},
 }
 
 // loadTextFontPackage swaps the engine's text faces for the ones a font package
@@ -182,6 +189,15 @@ func (e *Engine) loadTextFontPackage(pkg string) bool {
 		// \textsl changed NOTHING — measured on a witness where the reference uses
 		// three faces (Regular, Italic, Slant) and we used one.
 		e.bindFont("sl", it)
+	}
+	if sf := load(fam.sf); sf != nil {
+		e.bindFont("sf", sf)
+		if b := load(fam.sfbf); b != nil {
+			e.bindFont(sansBoldName, b)
+		}
+		if i := load(fam.sfit); i != nil {
+			e.bindFont(sansItalicName, i)
+		}
 	}
 	return true
 }

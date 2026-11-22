@@ -111,6 +111,18 @@ var nfssFaces = map[string]string{
 	"bx/it": boldItalicName, "bx/sl": boldSlantName, "m/scsl": capsSlantName,
 }
 
+// Internal names for the sans faces a font package binds beside \sf (the regular).
+const (
+	sansBoldName   = "gotex@font@sf/bx/n"
+	sansItalicName = "gotex@font@sf/m/it"
+)
+
+// nfssSansFaces is which bound face holds each pair in the sans family. A pair
+// with no entry, or no bound face, is set in the roman family.
+var nfssSansFaces = map[string]string{
+	"m/n": "sf", "bx/n": sansBoldName, "m/it": sansItalicName, "m/sl": sansItalicName,
+}
+
 // nfssStandIn is the face set for a declared pair this engine has no file for.
 var nfssStandIn = map[string]string{
 	"m/ui": "m/it",
@@ -188,9 +200,17 @@ func (e *Engine) nfssFace(series, shape string) fontFace {
 	if !lmrDeclared[try[0]] {
 		try = append(try, series+"/n", "m/n")
 	}
+	sans := e.nfssGet("f@family", "rm") == "sf"
 	for _, k := range try {
 		if s, ok := nfssStandIn[k]; ok {
 			k = s
+		}
+		if sans {
+			// A sans face bound for this pair wins; with none bound the roman one
+			// is set, as this engine always did.
+			if m := e.eq[nfssSansFaces[k]]; m != nil && m.kind == mFont {
+				return m.font
+			}
 		}
 		if m := e.eq[nfssFaces[k]]; m != nil && m.kind == mFont {
 			return m.font
@@ -222,19 +242,46 @@ func (e *Engine) nfssSwitch(name string) (fontFace, bool) {
 		shape = mergeShape(series, shape, "ulc")
 	case "rmfamily":
 		// The family changes; series and shape stay: {\itshape\rmfamily x} is italic.
+		e.nfssSet("f@family", "rm")
 	case "normalfont", "rm":
 		series, shape = "m", "n"
+		e.nfssSet("f@family", "rm")
 	case "bf":
 		series, shape = "bx", "n"
+		e.nfssSet("f@family", "rm")
 	case "it":
 		series, shape = "m", "it"
+		e.nfssSet("f@family", "rm")
 	case "sl":
 		series, shape = "m", "sl"
+		e.nfssSet("f@family", "rm")
 	case "sc":
 		series, shape = "m", "sc"
-	case "tt", "sf":
+		e.nfssSet("f@family", "rm")
+	case "sf", "sffamily":
+		// \sffamily is a copy of \sf made when the engine was built (aliasFontSwitches),
+		// so its own face is the one bound then: a package that binds another sans
+		// (libertine's Biolinum) is reached through the CURRENT binding of \sf.
+		e.nfssSet("f@family", "sf")
+		if name == "sffamily" {
+			// A family switch keeps series and shape, as \rmfamily does.
+			if f := e.nfssFace(series, shape); f != nil {
+				return f, true
+			}
+			return nil, false
+		}
 		e.nfssSet("f@series", "m")
 		e.nfssSet("f@shape", "n")
+		if m := e.eq["sf"]; m != nil && m.kind == mFont {
+			return m.font, true
+		}
+		return nil, false
+	case "tt", "ttfamily":
+		e.nfssSet("f@family", "tt")
+		if name == "tt" {
+			e.nfssSet("f@series", "m")
+			e.nfssSet("f@shape", "n")
+		}
 		return nil, false
 	default:
 		return nil, false
