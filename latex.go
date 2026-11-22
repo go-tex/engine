@@ -1625,11 +1625,61 @@ const MiniLaTeXKernel = `
 % around it (this is how TikZ's \draw[red] shorthand reaches the driver — it
 % asks the colour package, not pgf, to set the colour).
 \def\gotex@pgfcolor#1{\ifdefined\pgfsetcolor\ifpgfpicture\pgfsetcolor{#1}\fi\fi}
+% pgf's DECLARATIONS, for when pgf is emulated rather than loaded (packages.go
+% pushes \gotex@pgfstubs when it skips a pgf-family package). Each only records a
+% name for a later drawing and prints nothing, so here each reads exactly pgf's
+% arguments and discards them. Undefined, they printed: beamer's rounded theme
+% declares its shadows lazily, at the first block, IN THE DOCUMENT, where an
+% undefined command's arguments are typeset — every Warsaw talk set
+% "bmb@shadowball color(0bp)=(pgftransparent!50); ..." under its first block.
+% Signatures from pgf's sources: pgfcoreshade.code.tex:420/456/505 ([deps]{name}
+% {dim}{spec}) and :621 ([deps] and five), pgfcoreimage.code.tex:32/138
+% ([opts]{name}{file}) and :169 (two), pgfcoreobjects.code.tex:45 (four),
+% pgfcoretransparency.code.tex:108 (two), pgfcoreshade.code.tex:774 and
+% pgfcoreimage.code.tex:183 (one). Only names still undefined are given these, so
+% a document's own definition stands.
+\def\gotex@pgf@optthree{\@ifnextchar[\gotex@pgf@@optthree{\gotex@pgf@@optthree[]}}
+\long\def\gotex@pgf@@optthree[#1]#2#3#4{}
+\def\gotex@pgf@optfive{\@ifnextchar[\gotex@pgf@@optfive{\gotex@pgf@@optfive[]}}
+\long\def\gotex@pgf@@optfive[#1]#2#3#4#5#6{}
+\def\gotex@pgf@opttwo{\@ifnextchar[\gotex@pgf@@opttwo{\gotex@pgf@@opttwo[]}}
+\long\def\gotex@pgf@@opttwo[#1]#2#3{}
+\long\def\gotex@pgf@one#1{}
+\long\def\gotex@pgf@two#1#2{}
+\long\def\gotex@pgf@four#1#2#3#4{}
+\def\gotex@pgfstub#1#2{\ifx#1\@undefined\let#1#2\fi}
+\def\gotex@pgfstubs{%
+  \gotex@pgfstub\pgfdeclarehorizontalshading\gotex@pgf@optthree
+  \gotex@pgfstub\pgfdeclareverticalshading\gotex@pgf@optthree
+  \gotex@pgfstub\pgfdeclareradialshading\gotex@pgf@optthree
+  \gotex@pgfstub\pgfdeclarefunctionalshading\gotex@pgf@optfive
+  \gotex@pgfstub\pgfdeclareimage\gotex@pgf@opttwo
+  \gotex@pgfstub\pgfdeclaremask\gotex@pgf@opttwo
+  \gotex@pgfstub\pgfaliasimage\gotex@pgf@two
+  \gotex@pgfstub\pgfdefobject\gotex@pgf@four
+  \gotex@pgfstub\pgfdeclarefading\gotex@pgf@two
+  \gotex@pgfstub\pgfuseshading\gotex@pgf@one
+  \gotex@pgfstub\pgfuseimage\gotex@pgf@one
+  % \pgfsetcolor (pgfcoregraphicstate.code.tex:186, one argument) comes with
+  % pgf's \ifpgfpicture (pgfcorescopes), which stays false here: no picture is
+  % ever open, so \gotex@pgfcolor above, which tests both, still does nothing.
+  % Made through \csname so that a skipped branch never meets a bare \if token.
+  \expandafter\ifx\csname ifpgfpicture\endcsname\relax
+    \expandafter\newif\csname ifpgfpicture\endcsname
+  \fi
+  \gotex@pgfstub\pgfsetcolor\gotex@pgf@one}
 \def\XC@sdef#1#2{\edef#1{#2}}
 \def\XC@tgt@mod#1{rgb}
 \def\XC@mod@rgb{rgb}
 \def\XC@mod@cmyk{cmyk}
 \def\XC@mod@gray{gray}
+% \selectcolormodel{<model>} — xcolor.dtx:3892-3901 redefines \XC@tgt@mod, the
+% target of later \definecolor calls. RGB is this engine's only model, so the
+% target stays rgb and the argument is read and dropped. Undefined, it printed its
+% argument: beamer's rounded shadow calls \selectcolormodel{gray} in the document
+% body (beamerbaseboxes.sty:172), and every Warsaw talk showed "gray" under its
+% first block.
+\def\selectcolormodel#1{}
 % \extractcolorspec{name}{\cmd} hands back a colour as {model}{values}, and
 % \convertcolorspec converts one to another model. Both read the stored form this
 % engine publishes for every named colour (see colorbridge.go); since that form is
