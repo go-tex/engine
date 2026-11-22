@@ -210,3 +210,20 @@ the author's surname (which is also in the bibliography entry, needing no citati
 machinery); it must read the **two-pass** `compile()`, since `\bibcite` reaches the
 `.aux` only on the second pass; and the document needs a `\documentclass`, because
 natbib's `\citet` calls the kernel's `\@citex`, which only a loaded class defines.
+
+## `a4wide.sty` and `a4.sty`, the A4 text block (added 2026-11-22)
+
+About 140 corpus files load `\usepackage{a4wide}` and nothing in the engine
+emulated it, so they kept the class margins (paper 2111.13456: 36 pages against
+the reference's 29). Both files are taken as the TeX Live bundle ships them
+(`tectonic -X bundle cat`), byte for byte.
+
+| file | provides | sha256 | size |
+|---|---|---|---|
+| `a4wide.sty` | `\ProvidesPackage{a4wide}[1994/08/30]` | `836a8b86d7728b9e264addea2ee18376b0b939980a81fb1196f6af78e8df64a5` | 1635 bytes |
+| `a4.sty` | `\ProvidesPackage{a4}[2020/02/18 v1.2g]` | `81e954329ffd9fc6b8d33d09a197db7cf5e92151305a96ff1db3145ed8bba495` | 3590 bytes |
+
+`a4wide.sty` is LPPL 1 or later. `a4.sty` is LPPL 1.3c but its header adds *"This
+file may only be distributed together with a copy of the NTG document classes
+distribution"*, a restriction the other files here do not carry; it is the
+same kind of open question as natbib's `.dtx` sentence above.
