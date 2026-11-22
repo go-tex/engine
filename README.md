@@ -97,6 +97,11 @@ compile stops (`includegraphics <name>: …`), in lenient mode it becomes the
 framed placeholder above and is recorded as a dropped figure. There is no option
 to raise the ceiling; downscale the figure.
 
+**PDF figures.** `\includegraphics` of a `.pdf` (with `page=N` for a later page) is
+embedded in the PDF output as a Form XObject through `go-pdfkit/pdfkit`, as pdfTeX
+and XeTeX do, so it stays vector and its text stays selectable; a page past the end
+is an error in strict mode and an empty box in lenient mode.
+
 Every skipped construct is tallied (`(*Engine).SkippedCommands`) so a caller can
 report what was dropped. `Diagnostics` also records the paths the document read from
 **outside its own directory** — an absolute path, or one that walked out with `../`,

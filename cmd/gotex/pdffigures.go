@@ -13,7 +13,7 @@ import (
 )
 
 // A vector .pdf figure no longer needs this wiring for the PDF output: the PDF
-// driver imports its first page as a Form XObject through go-pdfkit
+// driver imports its page (page=N) as a Form XObject through go-pdfkit
 // (pdffigure.go), as pdfTeX and XeTeX do, whatever GOTEX_PDFRENDER says. What
 // follows is the raster path, still used by the SVG driver, by \includepdf and
 // by a figure pdfkit refuses to import.

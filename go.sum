@@ -15,8 +15,8 @@ github.com/go-opentype/opentype v0.24.0 h1:tyRvk9fbh8zaqLYK0PNhzrG0f4rMQz3cp6co9
 github.com/go-opentype/opentype v0.24.0/go.mod h1:xzFnB0oUWXuU1AxQl0CgtQpV8iWY7f5/RRGc9diiBZs=
 github.com/go-pdfkit/pdffont v0.4.0 h1:3CV2HnmUGHiIYuZ5dJWRLKvi7hMHGWS1RjgNYkEZ0Gk=
 github.com/go-pdfkit/pdffont v0.4.0/go.mod h1:l7es3IPbKewQF+sSgPh/bQL18jSewoI0cMjttk7uPlc=
-github.com/go-pdfkit/pdfkit v0.24.1-0.20261121204800-958547ee2757 h1:TJqZIZUwSUG72NRdvcCiUKyvzPpg5M/kBYs4My2hC0g=
-github.com/go-pdfkit/pdfkit v0.24.1-0.20261121204800-958547ee2757/go.mod h1:rwawVt53wjlsZxPB9JrkxLXW3QYP/fcJJ/eD0FWUzzo=
+github.com/go-pdfkit/pdfkit v0.25.0 h1:iAJpw1fMtHiAictRtj4x5PQaODfqyN9H58hdAmkvofk=
+github.com/go-pdfkit/pdfkit v0.25.0/go.mod h1:rwawVt53wjlsZxPB9JrkxLXW3QYP/fcJJ/eD0FWUzzo=
 github.com/go-pdfkit/reader v0.17.0 h1:17MUgAowqA5G6KJQxOpLSyEgy3qeITkBRgFYA1hbRHQ=
 github.com/go-pdfkit/reader v0.17.0/go.mod h1:EYHHREPKT/orDzlGiFPnPVPPuaRDLiAYezIr0cCFXaA=
 github.com/go-pdfkit/render v0.69.1 h1:t341L3Lz/2H1/yt2uZ3QUrEejdp7BVrLCa3ogc7cHSw=

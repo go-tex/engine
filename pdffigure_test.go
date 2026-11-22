@@ -116,12 +116,12 @@ func TestNativePDFFigureSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, h, ok := nativePDFFigure(data)
+	w, h, ok := nativePDFFigure(data, 1)
 	if !ok || w != 100*pdfFigurePrecision || h != 60*pdfFigurePrecision {
 		t.Errorf("nativePDFFigure = %d, %d, %v; want a 100x60bp page", w, h, ok)
 	}
 	for _, bad := range [][]byte{nil, []byte("%PDF-1.4\n% /MediaBox[0 0 600 200]\n%%EOF\n")} {
-		if w, h, ok := nativePDFFigure(bad); ok || w != 0 || h != 0 {
+		if w, h, ok := nativePDFFigure(bad, 1); ok || w != 0 || h != 0 {
 			t.Errorf("nativePDFFigure(%q) = %d, %d, %v; want a refusal", bad, w, h, ok)
 		}
 	}
@@ -145,5 +145,61 @@ func TestPDFSVGFallbacks(t *testing.T) {
 		if got := n.pdfSVG("0", "0", "1", "1"); !strings.HasPrefix(got, c.want) {
 			t.Errorf("%s: %s, want a prefix %s", c.name, got, c.want)
 		}
+	}
+}
+
+// testdata/pdffig/fig2.pdf has two pages: 100x60bp, then 200x50bp. Tectonic
+// (witness2.tex, page=2, width=60pt) includes the second as a Form XObject with
+// /BBox [0 0 200 50] drawn at one scale of .29887 (60 TeX pt over 200 units), and
+// stops with "image inclusion failed for fig2.pdf (page=3)" for a page past the end
+// (witness3.tex). Those are the values asserted here.
+func TestPDFFigurePageN(t *testing.T) {
+	pdf := renderWitness(t, `\noindent\includegraphics[page=2,width=60pt]{testdata/pdffig/fig2.pdf}\par`)
+	bb := regexp.MustCompile(`/BBox\s*\[\s*0\s+0\s+(\d+)\s+(\d+)\s*\]`).FindAllSubmatch(pdf, -1)
+	if len(bb) != 1 || string(bb[0][1]) != "200" || string(bb[0][2]) != "50" {
+		t.Fatalf("form /BBox = %q, want exactly [0 0 200 50]", bb)
+	}
+	m := fmDo.FindStringSubmatch(pdfContent(t, pdf))
+	if m == nil {
+		t.Fatal("no 'cm /Fm0 Do' in the page content")
+	}
+	a, _ := strconv.ParseFloat(m[1], 64)
+	if got := a * 72 / 72.27; math.Abs(got-0.29887) > 1e-4 {
+		t.Errorf("scale = %.5f, tectonic .29887", got)
+	}
+	// Without page= the first page is the figure.
+	first := renderWitness(t, `\noindent\includegraphics[width=60pt]{testdata/pdffig/fig2.pdf}\par`)
+	if !regexp.MustCompile(`/BBox\s*\[\s*0\s+0\s+100\s+60\s*\]`).Match(first) {
+		t.Error("no page= did not give page 1")
+	}
+}
+
+func TestPDFFigurePageOutOfRange(t *testing.T) {
+	for _, page := range []string{"3", "0", "-1"} {
+		src := `\includegraphics[page=` + page + `,width=60pt]{testdata/pdffig/fig2.pdf}`
+		e := New()
+		e.SetFont(testFont(t))
+		if _, err := e.Run(src); err == nil || !strings.Contains(err.Error(), "page "+page) {
+			t.Errorf("page=%s: err = %v, want a refusal naming the page", page, err)
+		}
+		// Tolerant mode keeps the box and draws nothing in it.
+		l := New()
+		l.lenient = true
+		l.SetFont(testFont(t))
+		if _, err := l.Run(src + `\par`); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if err := l.RenderPDF(&buf, 10); err != nil {
+			t.Fatal(err)
+		}
+		if regexp.MustCompile(`/Subtype\s*/Form`).Match(buf.Bytes()) {
+			t.Errorf("page=%s: a form was drawn", page)
+		}
+	}
+	// A page that is not a number is ignored, as an unknown key is.
+	pdf := renderWitness(t, `\includegraphics[page=x,width=60pt]{testdata/pdffig/fig2.pdf}\par`)
+	if !regexp.MustCompile(`/BBox\s*\[\s*0\s+0\s+100\s+60\s*\]`).Match(pdf) {
+		t.Error("page=x did not fall back to page 1")
 	}
 }
