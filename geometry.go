@@ -79,6 +79,13 @@ type geomState struct {
 	left, right, top, bottom int  // margins (sp)
 	textW, textH             int  // explicit text dimensions (sp), valid iff the has* flag is set
 	hasTextW, hasTextH       bool // textwidth / textheight were given (override margin arithmetic)
+	// hasLeft..hasBottom record that the option list NAMED a margin. geometry.sty
+	// decides each direction from which of its three parts (margin, body, margin)
+	// are fixed (\Gm@detall, geometry.dtx:2237-2271); when none is, the body is
+	// 0.7 of the paper and the margins split the rest by marginratio. The state
+	// holds 1in in left..bottom from the start, so "the value is 1in" cannot say
+	// whether anybody asked for it.
+	hasLeft, hasRight, hasTop, hasBottom bool
 	// head, headsep and foot are the running-head and running-foot bands geometry
 	// reserves between the top/bottom margins and the text block:
 	//
@@ -115,6 +122,24 @@ type geomState struct {
 	// bands out again. This engine does not run that machinery, so folding them here
 	// is what keeps a slide the right height.
 	beamerBands bool
+}
+
+// geomDefaultBody is geometry's default body, 0.7 of the paper in that direction
+// (\Gm@Dhscale/\Gm@Dvscale, geometry.dtx:1928-1929). The product is TeX's own for
+// `0.7\paperwidth`: the factor read as a 16-bit fraction (round(0.7*65536) =
+// 45875) and applied by xn_over_d, so it lands on the sp tectonic does.
+func geomDefaultBody(paper int) int {
+	q, _ := xnOverD(paper, 45875, 65536)
+	return q
+}
+
+// geomSplitMargins divides what the body leaves of the paper between two margins
+// by the ratio a:b as \Gm@detiiandiii does (geometry.dtx:2221-2226): the first is
+// (total / (a+b)) * a with the division done FIRST, on integers, and the second
+// is the remainder. Multiplying first lands up to a few sp away.
+func geomSplitMargins(total, a, b int) (first, second int) {
+	first = total / (a + b) * a
+	return first, total - first
 }
 
 // newGeomState returns the geometry defaults: the class's paper size (a4paper/…), or
@@ -390,12 +415,15 @@ func (e *Engine) applyGeometry(opts string) {
 		switch key {
 		case "margin":
 			g.left, g.right, g.top, g.bottom = d, d, d, d
+			g.hasLeft, g.hasRight, g.hasTop, g.hasBottom = true, true, true, true
 			g.hasTextW, g.hasTextH = false, false
 		case "hmargin":
 			g.left, g.right = d, d
+			g.hasLeft, g.hasRight = true, true
 			g.hasTextW = false
 		case "vmargin":
 			g.top, g.bottom = d, d
+			g.hasTop, g.hasBottom = true, true
 			g.hasTextH = false
 		// inner/outer are the binding-side and outside margins of a two-sided
 		// layout, and geometry defines them as plain ALIASES of the left and right
@@ -406,16 +434,16 @@ func (e *Engine) applyGeometry(opts string) {
 		// article's letterpaper default of 469.755pt instead of 506.3pt, and a
 		// column held 49 lines where the reference holds 57 (go-tex/engine#307).
 		case "left", "lmargin", "inner", "innermargin":
-			g.left = d
+			g.left, g.hasLeft = d, true
 			g.hasTextW = false
 		case "right", "rmargin", "outer", "outermargin":
-			g.right = d
+			g.right, g.hasRight = d, true
 			g.hasTextW = false
 		case "top", "tmargin":
-			g.top = d
+			g.top, g.hasTop = d, true
 			g.hasTextH = false
 		case "bottom", "bmargin":
-			g.bottom = d
+			g.bottom, g.hasBottom = d, true
 			g.hasTextH = false
 		case "textwidth", "width":
 			g.textW, g.hasTextW = d, true
@@ -454,7 +482,19 @@ func (e *Engine) applyGeometry(opts string) {
 		g.paperW, g.paperH = g.paperH, g.paperW
 	}
 
-	if g.hasTextW {
+	if !g.hasTextW && !g.hasLeft && !g.hasRight {
+		// Nothing of the horizontal partition is fixed (\Gm@detall case 000):
+		// width = \Gm@Dhscale\paperwidth, the margins split the rest by the
+		// default hmarginratio, 1:1 one-sided and 2:3 inner:outer two-sided
+		// (geometry.dtx:1918-1920, 2267).
+		w := geomDefaultBody(g.paperW)
+		a, b := 1, 1
+		if e.twoside() {
+			a, b = 2, 3
+		}
+		g.left, g.right = geomSplitMargins(g.paperW-w, a, b)
+		e.hsize = w
+	} else if g.hasTextW {
 		e.hsize = g.textW
 	} else {
 		e.hsize = g.paperW - g.left - g.right
@@ -480,7 +520,14 @@ func (e *Engine) applyGeometry(opts string) {
 	if g.inclFoot && !g.hasFoot && g.foot == 0 {
 		g.foot = e.classDimen("footskip", ptToSP(30))
 	}
-	if g.hasTextH {
+	if !g.hasTextH && !g.hasTop && !g.hasBottom {
+		// The same default in the vertical direction (geometry.dtx:2269): the
+		// body, head and foot included when includehead/includefoot say so, is
+		// \Gm@Dvscale\paperheight, and the margins split the rest 2:3 top:bottom.
+		h := geomDefaultBody(g.paperH)
+		g.top, g.bottom = geomSplitMargins(g.paperH-h, 2, 3)
+		e.vsize = h - g.bodyBands()
+	} else if g.hasTextH {
 		e.vsize = g.textH
 	} else {
 		e.vsize = g.paperH - g.top - g.bottom - g.bodyBands()
@@ -605,8 +652,13 @@ func (e *Engine) applyClassGeometry(g classGeometry) {
 // document names none, is manuscript — acmart.cls's own default.
 var acmartFormats = map[string]classGeometry{
 	// manuscript: single column, letterpaper, 9pt body under \onehalfspacing —
-	// a wide-spaced review layout. \textwidth≈465pt, \textheight≈585pt.
-	"manuscript": {inkedW: 465, textH: 585, leading: 13.5, fontPermille: 900},
+	// a wide-spaced review layout. acmart.cls hands geometry letterpaper, head=13pt,
+	// marginparwidth=6pc, heightrounded and NOTHING ELSE, so the body is geometry's
+	// default 0.7 of the paper: \textwidth 430.00462pt, and 0.7 of 11in = 556.48pt
+	// rounded to 50 lines at the 11pt baselineskip in force + \topskip = 560pt.
+	// tectonic 0.17.0 prints TW=430.00462pt TH=560.0pt for it. This row said
+	// 465x585, measured off a PDF and never read from the class's own arithmetic.
+	"manuscript": {inkedW: 430.00462, textH: 560, leading: 13.5, fontPermille: 900},
 	// Single-column journal formats. acmsmall/acmcp: 6.75in×10in paper,
 	// \textwidth=486−2·46=394pt. acmlarge: letter, \textwidth=612−2·81=450pt. 10pt.
 	"acmsmall": {inkedW: 394, textH: 588, leading: 12, paperW: 6.75 * 72.27, paperH: 10 * 72.27, fontPermille: 1000},
@@ -878,6 +930,27 @@ func (e *Engine) publishGeometry(g *geomState) {
 	e.setNamedDimen("Gm@rmargin", g.right)
 	e.setNamedDimen("Gm@tmargin", g.top)
 	e.setNamedDimen("Gm@bmargin", g.bottom)
+	// What a document reads back are the CLASS registers, which geometry sets
+	// from the margins at the end of \Gm@process (geometry.dtx:3280-3292):
+	// \oddsidemargin = left - 1in, \evensidemargin = right - 1in when two-sided
+	// and the same as odd otherwise, \topmargin = top - 1in less the head band
+	// when the head is not part of the body. They kept the class's values, so
+	// \the\oddsidemargin read 62pt after geometry had put the text elsewhere.
+	// 1in as TeX scans it: xn_over_d(65536, 7227, 100) = 4736286 sp. parseDimenStr
+	// rounds the product to 4736287, one sp too many, which shows in the fifth
+	// decimal of the register.
+	inch, _ := xnOverD(65536, 7227, 100)
+	e.setNamedDimen("oddsidemargin", g.left-inch)
+	if e.twoside() {
+		e.setNamedDimen("evensidemargin", g.right-inch)
+	} else {
+		e.setNamedDimen("evensidemargin", g.left-inch)
+	}
+	tm := g.top - inch
+	if !g.inclHead {
+		tm -= e.classDimen("headheight", 0) + e.classDimen("headsep", 0)
+	}
+	e.setNamedDimen("topmargin", tm)
 }
 
 // setNamedDimen assigns a value to an allocated \newdimen / \newlength by name,
