@@ -5,9 +5,13 @@ package engine
 
 import (
 	"bytes"
+	"errors"
+	"image"
 	"math"
+	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -104,5 +108,42 @@ func TestPDFFigureRefusedStaysEmptyBox(t *testing.T) {
 	pdf := buf.Bytes()
 	if regexp.MustCompile(`/Subtype\s*/Form`).Match(pdf) {
 		t.Error("a refused PDF produced a Form XObject")
+	}
+}
+
+func TestNativePDFFigureSize(t *testing.T) {
+	data, err := os.ReadFile("testdata/pdffig/fig.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h, ok := nativePDFFigure(data)
+	if !ok || w != 100*pdfFigurePrecision || h != 60*pdfFigurePrecision {
+		t.Errorf("nativePDFFigure = %d, %d, %v; want a 100x60bp page", w, h, ok)
+	}
+	for _, bad := range [][]byte{nil, []byte("%PDF-1.4\n% /MediaBox[0 0 600 200]\n%%EOF\n")} {
+		if w, h, ok := nativePDFFigure(bad); ok || w != 0 || h != 0 {
+			t.Errorf("nativePDFFigure(%q) = %d, %d, %v; want a refusal", bad, w, h, ok)
+		}
+	}
+}
+
+func TestPDFSVGFallbacks(t *testing.T) {
+	defer func(f func([]byte, float64) (image.Image, error)) { RasterizePDF = f }(RasterizePDF)
+	n := imageNode{data: []byte("x")}
+	cases := []struct {
+		name string
+		fn   func([]byte, float64) (image.Image, error)
+		want string
+	}{
+		{"none wired", nil, "<rect "},
+		{"rasteriser fails", func([]byte, float64) (image.Image, error) { return nil, errors.New("no") }, "<rect "},
+		{"picture cannot be encoded", func([]byte, float64) (image.Image, error) { return image.NewRGBA(image.Rect(0, 0, 0, 0)), nil }, "<rect "},
+		{"picture", func([]byte, float64) (image.Image, error) { return image.NewRGBA(image.Rect(0, 0, 2, 2)), nil }, "<image "},
+	}
+	for _, c := range cases {
+		RasterizePDF = c.fn
+		if got := n.pdfSVG("0", "0", "1", "1"); !strings.HasPrefix(got, c.want) {
+			t.Errorf("%s: %s, want a prefix %s", c.name, got, c.want)
+		}
 	}
 }
