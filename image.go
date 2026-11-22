@@ -52,6 +52,7 @@ const (
 	imgPNG  imgFormat = iota // raster, embedded/re-encoded as PNG
 	imgJPEG                  // raster, embedded verbatim (DCT)
 	imgSVG                   // vector: data-URI in the SVG driver, paths in the PDF driver
+	imgPDF                   // vector: a page of another PDF, a form XObject in the PDF driver (pdffigure.go)
 )
 
 // mime returns the data-URI media type for the format.
@@ -61,6 +62,8 @@ func (f imgFormat) mime() string {
 		return "image/jpeg"
 	case imgSVG:
 		return "image/svg+xml"
+	case imgPDF:
+		return "application/pdf"
 	}
 	return "image/png"
 }
@@ -361,6 +364,14 @@ func loadImage(name string, aspect bool) (data []byte, format imgFormat, iw, ih 
 	// at pdfFigureDPI, so that is its resolution — without it the figure would be
 	// pdfFigureDPI/72.27 times oversize.
 	if bytes.HasPrefix(data, []byte("%PDF-")) {
+		// pdfTeX and XeTeX include the page itself, as a form XObject, so does the
+		// PDF driver: the figure is not rasterised and its text and vectors stay.
+		// Its size is the page box go-pdfkit would import (pdffigure.go). A page
+		// pdfkit refuses (corrupt, encrypted, over its bounds) falls through to the
+		// rasteriser or the placeholder below.
+		if w, h, ok := nativePDFFigure(data); ok {
+			return data, imgPDF, w, h, pdfFigureResolution, pdfFigureResolution, nil
+		}
 		// The figure's natural size, read from its page box, lets a placeholder keep
 		// the right aspect (and reserve the right vertical space) when no renderer is
 		// wired or rasterisation fails — treated as pixels at 72dpi (1 PDF point = 1

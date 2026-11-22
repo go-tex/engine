@@ -78,7 +78,9 @@ func TestPDFPlaceholderKeepsAspect(t *testing.T) {
 	t.Setenv("GOTEX_PDFASPECT", "1") // aspect sizing is opt-in (see pdfAspectOptIn)
 	// A minimal PDF whose only feature that matters here is its MediaBox: 600×200
 	// user units = a 3:1 landscape figure.
-	pdf := "%PDF-1.4\n1 0 obj<</Type/Page/MediaBox[0 0 600 200]>>endobj\ntrailer<<>>\n%%EOF\n"
+	// It has a box but no page tree, so go-pdfkit refuses to import it and the
+	// placeholder path (which reads the box by pattern) is the one taken.
+	pdf := "%PDF-1.4\n% /MediaBox[0 0 600 200]\n%%EOF\n"
 	uri := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString([]byte(pdf))
 
 	e := New()
@@ -129,7 +131,7 @@ func TestPDFPlaceholderNoBoxDefault(t *testing.T) {
 func TestPDFPlaceholderAspectGatedOff(t *testing.T) {
 	// Ensure the env is unset for this test even if the runner has it exported.
 	t.Setenv("GOTEX_PDFASPECT", "")
-	pdf := "%PDF-1.4\n1 0 obj<</Type/Page/MediaBox[0 0 600 200]>>endobj\ntrailer<<>>\n%%EOF\n"
+	pdf := "%PDF-1.4\n% /MediaBox[0 0 600 200]\n%%EOF\n"
 	uri := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString([]byte(pdf))
 	e := New()
 	e.lenient = true

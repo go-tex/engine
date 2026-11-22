@@ -12,6 +12,12 @@ import (
 	"github.com/go-tex/pdfrender"
 )
 
+// A vector .pdf figure no longer needs this wiring for the PDF output: the PDF
+// driver imports its first page as a Form XObject through go-pdfkit
+// (pdffigure.go), as pdfTeX and XeTeX do, whatever GOTEX_PDFRENDER says. What
+// follows is the raster path, still used by the SVG driver, by \includepdf and
+// by a figure pdfkit refuses to import.
+//
 // A vector .pdf is the commonest figure on arXiv. The engine core keeps no PDF
 // renderer (image.go's RasterizePDF seam is nil there, so the browser/wasm build
 // stays small and a PDF figure frames a placeholder); this is the CLI wiring the

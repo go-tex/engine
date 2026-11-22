@@ -440,6 +440,13 @@ func (d *pdfDraw) drawImage(n imageNode, r pdfkit.Rect) {
 		_ = d.p.DrawPNG(n.data, r)
 	case imgJPEG:
 		_ = d.p.DrawJPEG(n.data, r)
+	case imgPDF:
+		// loadImage already had pdfkit accept the page; an error here (the
+		// document's own import bounds are narrower than the default) leaves the
+		// reserved box empty rather than losing the document.
+		if f, err := d.p.Document().ImportPDFPage(n.data, 1); err == nil {
+			_ = d.p.DrawForm(f, r)
+		}
 	case imgSVG:
 		drawSVGImage(d.p, n.data, r)
 		d.p.SetFillColor(pdfkit.RGB8(uint8(d.curColor>>16), uint8(d.curColor>>8), uint8(d.curColor)))
