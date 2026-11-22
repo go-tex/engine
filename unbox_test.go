@@ -64,6 +64,36 @@ func TestUnboxUnpacksARegister(t *testing.T) {
 	}
 }
 
+// \unvbox hands back the list as it stands: the interline glue between its lines
+// was computed when they went into the box, so unpacking must not add another
+// (tex.web §1110). Re-boxing an unpacked vbox therefore gives the SAME height.
+// While each line went through appendToPage again, every baseline gap doubled,
+// and a beamer frame — \vbox to\textheight{\unvbox\beamer@framebox} — spread its
+// lists apart (go-tex/engine#884).
+func TestUnvboxAddsNoInterlineGlue(t *testing.T) {
+	for _, src := range []string{
+		`\baselineskip=12pt \lineskiplimit=0pt \setbox1\vbox{\hbox{A}\hbox{B}\hbox{C}}\setbox3\copy1 \setbox2\vbox{\unvbox1}`,
+		`\baselineskip=12pt \lineskiplimit=0pt \setbox1\vbox{\hbox{A}\hbox{B}\hbox{C}}\setbox3\copy1 \setbox2\vbox{\unvcopy1}`,
+		`\baselineskip=12pt \lineskiplimit=0pt \setbox1\vbox{\hbox{A}\hbox{B}}\setbox3\copy1 \setbox2\vbox{\noindent\unvbox1}`,
+	} {
+		e := New()
+		e.SetFont(spMock{})
+		if _, err := e.Run(src); err != nil {
+			t.Fatal(err)
+		}
+		orig, re := e.box[3], e.box[2]
+		if orig == nil || re == nil {
+			t.Fatalf("%s: box missing (orig %v, re %v)", src, orig, re)
+		}
+		if orig.height <= 12*65536 {
+			t.Fatalf("%s: witness box is %dsp tall, so it carries no interline glue to double", src, orig.height)
+		}
+		if re.height != orig.height || re.depth != orig.depth {
+			t.Errorf("%s\n  re-boxed ht=%d dp=%d, original ht=%d dp=%d", src, re.height, re.depth, orig.height, orig.depth)
+		}
+	}
+}
+
 // \unvbox is the vertical pair, and refuses an hbox the same way round.
 func TestUnvboxUnpacksAVerticalRegister(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
