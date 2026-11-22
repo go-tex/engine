@@ -420,7 +420,7 @@ func (e *Engine) mvlHasContent(from int) bool {
 	for _, n := range e.mvl[from:] {
 		switch n.(type) {
 		case pageStyleNode, *pageStyleNode, shipPicNode, glueNode, *glueNode, kernNode, *kernNode,
-			penaltyNode, *penaltyNode, specialNode, *specialNode:
+			penaltyNode, *penaltyNode, specialNode, *specialNode, markNode, *markNode:
 			continue
 		default:
 			return true
