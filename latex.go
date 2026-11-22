@@ -1668,6 +1668,25 @@ const MiniLaTeXKernel = `
     \expandafter\newif\csname ifpgfpicture\endcsname
   \fi
   \gotex@pgfstub\pgfsetcolor\gotex@pgf@one}
+% hyperref's INTERNALS that a class calls directly, for when hyperref is emulated
+% rather than loaded (packages.go pushes \gotex@hyperrefstubs). beamer's \part,
+% \section, \subsection and \subsubsection (beamerbasesection.sty:105, 135-136 and
+% their twins) call \GetTitleString{<short title>} — gettitlestring.sty, which
+% hyperref loads — then \Hy@writebookmark with five arguments (hyperref.sty:2476,
+% whose default is empty) and \hyper@anchorstart{<name>}\hyper@anchorend. Undefined,
+% their arguments were typeset in the document, outside any frame:
+% "One1OneOutline0.12tocOutline0.1" on a page of its own before the first frame
+% of every beamer talk with a \section. The bookmark and the anchor draw nothing;
+% \GetTitleStringResult keeps the title as given. Only names still undefined are
+% given these, so a loaded hyperref's own definitions stand.
+\long\def\gotex@hy@title#1{\def\GetTitleStringResult{#1}}
+\long\def\gotex@hy@bookmark#1#2#3#4#5{}
+\def\gotex@hy@anchorstart#1{}
+\def\gotex@hyperrefstubs{%
+  \gotex@pgfstub\GetTitleString\gotex@hy@title
+  \gotex@pgfstub\Hy@writebookmark\gotex@hy@bookmark
+  \gotex@pgfstub\hyper@anchorstart\gotex@hy@anchorstart
+  \gotex@pgfstub\hyper@anchorend\@empty}
 % The a4 package (NTG), emulated rather than bundled: its header lets the file be
 % distributed only with the NTG classes. Written from its documented effect — an
 % A4-based text block per base size (10/11/12pt): \topmargin 0pt, a text height of
