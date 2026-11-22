@@ -742,6 +742,14 @@ func (e *Engine) doUsepackageLoad() {
 			e.loadTeXFile(data, name, ".sty", append(append([]string{}, opts...), e.takePassed(name)...))
 			continue
 		}
+		// No .sty to run: from here the package is whatever the engine emulates of it,
+		// or nothing. Until now that was invisible — every command it defines that
+		// the engine lacks surfaced as a skipped command with no hint that the file
+		// itself was never read. Recorded so -report-skipped can say so.
+		if e.pkgNoSty == nil {
+			e.pkgNoSty = map[string]bool{}
+		}
+		e.pkgNoSty[name] = true
 		if name == "fullpage" {
 			// fullpage (H. Partl / P. W. Daly) is a one-line geometry: the text block is
 			// the paper less a uniform margin on every side — 1in by default, 1.5cm

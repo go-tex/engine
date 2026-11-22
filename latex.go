@@ -1890,6 +1890,19 @@ const MiniLaTeXKernel = `
 \def\printcontents{\@ifnextbracket\@gtxprintcontso\@gtxprintcont}
 \def\@gtxprintcontso[#1]{\@gtxprintcont}
 \def\@gtxprintcont#1#2#3{}
+% \specialcomment{<name>}{<begin>}{<end>} (comment.sty) is an environment whose body
+% is typeset between the two code arguments, and comment.sty's own text says so: the
+% body is read by a verbatim-style scanner only so that \end{<name>} can be found, and
+% the code around it is run as in any environment. \includecomment{<name>} is the
+% special case with both empty and \excludecomment (a primitive here) the one that
+% discards the body. comment.sty is NOT loaded for real, and the reason is its
+% licence, not its ability: its header is the GNU GPL, and this module is BSD-3-Clause,
+% so the file cannot be embedded in texmf/ the way the LPPL packages are. (Loaded from
+% a paper's own copy it runs and matches tectonic, measured on the witness in
+% commentenv_test.go.)
+% Undefined, \specialcomment was skipped and the body of every environment it declared
+% was set as ordinary text with the begin and end code lost — 9 corpus papers.
+\def\specialcomment#1#2#3{\newenvironment{#1}{#2}{#3}}
 % \SetKwInput{\Cmd}{Label} (algorithm2e.sty) defines \Cmd{text} to print
 % "Label: text" as a line of the algorithm. It was a gobbler, and that left the
 % four commands algorithm2e DECLARES WITH IT undefined — \KwIn, \KwOut, \KwData

@@ -14,7 +14,9 @@ package engine
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -490,6 +492,10 @@ type Engine struct {
 	// pkgRequested is every package name \usepackage asked for, whether or not a
 	// .sty was found. An emulated package has no file to record itself.
 	pkgRequested map[string]bool
+	// pkgNoSty is the subset of pkgRequested for which no .sty could be resolved and
+	// that the engine does not take over wholesale (emulateOnly): the packages a
+	// document asked for and that were never read.
+	pkgNoSty map[string]bool
 
 	// tight-loop guard: TeX-style "no forward progress" detection. A pathological
 	// loop (a self-referential macro, or a peeking idiom the kernel helpers
@@ -2635,6 +2641,14 @@ type Diagnostics struct {
 	// is at fault or the engine is. nil/empty when every figure loaded.
 	FiguresDropped map[string]int
 
+	// PackagesWithoutSty names the packages \usepackage asked for and for which no
+	// .sty file could be resolved — not on the document's path, not in a support
+	// tree, not embedded — so that nothing of them ran but what the engine itself
+	// emulates. A package here that the document depends on is the cause behind its
+	// skipped commands: the file was never read. Sorted. nil when every package
+	// that is not emulated wholesale was found.
+	PackagesWithoutSty []string
+
 	// FilesMissing tallies files the document names and that are not there, keyed
 	// by the command that asked: "\\input", "\\bibliography", "\\putbib". It is NOT
 	// a missing command — every one of those is defined and RAN; what failed is
@@ -2825,7 +2839,9 @@ func (e *Engine) Diagnostics() Diagnostics {
 		FontsSubstituted: e.fontSubst,
 		FiguresDropped:   figuresDropped,
 		ExtraBrace:       extraBrace,
-		ReadsOutsideTree: e.readsOutside,
+
+		PackagesWithoutSty: slices.Sorted(maps.Keys(e.pkgNoSty)),
+		ReadsOutsideTree:   e.readsOutside,
 
 		AlignmentsAbandoned: alignAbandoned,
 
