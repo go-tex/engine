@@ -255,6 +255,18 @@ func (e *Engine) doFootnoteText() {
 	e.queueFootnoteText(e.footnoteMark(n), e.grabUndelimited())
 }
 
+// doFootnoteQueueMarked implements \gotex@fnqueue{mark}{text}: the note, under a mark
+// the caller expanded. The counter is not touched; that is the macro's business.
+func (e *Engine) doFootnoteQueueMarked() {
+	mark := strings.TrimSpace(e.expandToString(e.grabUndelimited()))
+	e.queueFootnoteText(mark, e.grabUndelimited())
+}
+
+// doFootnoteMarkMarked implements \gotex@fnmark{mark}: the raised mark alone.
+func (e *Engine) doFootnoteMarkMarked() {
+	e.emitFootnoteMark(strings.TrimSpace(e.expandToString(e.grabUndelimited())))
+}
+
 // scanOptFootnoteNumber reads the optional [n] both commands take. A bracket whose content
 // is not a number is consumed and ignored rather than guessed at.
 func (e *Engine) scanOptFootnoteNumber() (int, bool) {

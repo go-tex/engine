@@ -2315,6 +2315,10 @@ func (e *Engine) loadMore() {
 	// undefined and \footnotetext was a stub that swallowed the note whole.
 	e.prim("footnotemark", func(e *Engine) { e.doFootnoteMark() })
 	e.prim("footnotetext", func(e *Engine) { e.doFootnoteText() })
+	// \gotex@fnqueue{mark}{text} and \gotex@fnmark{mark}: the two halves of a note whose
+	// mark a macro already computed — manyfoot's extra footnote classes (latex.go).
+	e.prim("gotex@fnqueue", func(e *Engine) { e.doFootnoteQueueMarked() })
+	e.prim("gotex@fnmark", func(e *Engine) { e.doFootnoteMarkMarked() })
 	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
 	// \gotex@fontsizeat{size}: put the font at the size a class size table
 	// (size1x.clo) states for one of \tiny…\Huge, read against its \normalsize.
