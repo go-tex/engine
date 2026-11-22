@@ -95,6 +95,10 @@ type Engine struct {
 	// beamerBands: this document is a beamer talk, whose head/foot geometry bands
 	// must be folded into the body because its frame machinery is not run here.
 	beamerBands bool
+	// shipBands holds \headheight and \headsep as \end{document} found them, inside
+	// the document group (see recordShipBands). Pages are assembled after the run,
+	// once that group has restored whatever the body assigned locally.
+	shipBands map[string]int
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
 	importPath   string

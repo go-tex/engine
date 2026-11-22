@@ -213,7 +213,7 @@ func (e *Engine) fancyHeader() *boxNode {
 func (e *Engine) headToHeadheight(line *boxNode) *boxNode {
 	b := vpackSP(
 		[]node{glueNode{spec: glueSpec{stretch: unity, stretchOrder: 1}}, line},
-		packTo, e.classDimen("headheight", 12*unity),
+		packTo, e.bandDimen("headheight", 12*unity),
 	)
 	b.depth = 0
 	return b

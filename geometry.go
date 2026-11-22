@@ -946,6 +946,24 @@ func (e *Engine) publishGeometry(g *geomState) {
 	} else {
 		e.setNamedDimen("evensidemargin", g.left-inch)
 	}
+	// The bands a key named are asserted again every time the layout is processed:
+	// \Gm@process starts from \Gm@restore@org and re-applies the key list
+	// (geometry.sty:750-752), so a later \geometry{left=…} puts head=/headsep=/foot=
+	// back over whatever was assigned in between. beamer depends on it: it asks for
+	// head=0.5cm and headsep=0pt (beamer.cls:355-362), then \input's LaTeX's
+	// size11.clo (beamer.cls:375), which sets \headheight=12pt and \headsep=25pt, and
+	// only its own \geometry{left=…} (beamerbaseframecomponents.sty:39) restores
+	// 14.23pt and 0pt. Left at 12 and 25, every frame's body sat 14pt low
+	// (go-tex/engine#924).
+	if g.hasHead {
+		e.setNamedDimen("headheight", g.head)
+	}
+	if g.hasHeadsep {
+		e.setNamedDimen("headsep", g.headsep)
+	}
+	if g.hasFoot {
+		e.setNamedDimen("footskip", g.foot)
+	}
 	tm := g.top - inch
 	if !g.inclHead {
 		tm -= e.classDimen("headheight", 0) + e.classDimen("headsep", 0)
@@ -1107,7 +1125,13 @@ func (g *geomState) bodyBands() int {
 func (e *Engine) renderVMargin(fallback float64) float64 {
 	if e.geom != nil {
 		m := e.geom.top
-		if e.geom.inclHead || e.geom.beamerBands {
+		switch {
+		case e.geom.beamerBands && e.realBeamer():
+			// Real beamer resizes its head band at \begin{document}: \headheight
+			// becomes the headline's height (beamerbaseframecomponents.sty:169-180),
+			// not geometry's head=0.5cm, so the live registers are the band.
+			m += e.bandDimen("headheight", 0) + e.bandDimen("headsep", 0)
+		case e.geom.inclHead || e.geom.beamerBands:
 			m += e.geom.head + e.geom.headsep
 		}
 		return spToPt(m - e.headBand())
@@ -1143,7 +1167,23 @@ func (e *Engine) headBand() int {
 	if e.pageStyle == "empty" {
 		return 0
 	}
-	return e.classDimen("headheight", 12*unity) + e.classDimen("headsep", 25*unity)
+	return e.bandDimen("headheight", 12*unity) + e.bandDimen("headsep", 25*unity)
+}
+
+// bandDimen reads a running-head band register (\headheight, \headsep) for the
+// page assembly: the value \end{document} recorded when geometry ran (see
+// recordShipBands), ZERO INCLUDED, since geometry publishes those registers and a
+// zero there is the layout. beamer runs with \headsep=0pt and sets \headheight to
+// its headline's height, 0pt for the default theme
+// (beamerbaseframecomponents.sty:169); classDimen reads a zero as "never set" and
+// substituted article's 12pt and 25pt, which put a 37pt band above every frame and
+// its body 14pt low (go-tex/engine#924). Without geometry, the class default still
+// stands in for an unset register, as before.
+func (e *Engine) bandDimen(name string, def int) int {
+	if v, ok := e.shipBands[name]; ok {
+		return v
+	}
+	return e.classDimen(name, def)
 }
 
 // onOff is 1 for true and -1 for false, so that 0 can mean "not stated".
@@ -1176,6 +1216,28 @@ type geomSnap struct {
 
 // geomBandNames are the registers a head=/foot=/marginparwidth= key assigns.
 var geomBandNames = []string{"headheight", "headsep", "footskip", "marginparwidth"}
+
+// recordShipBands keeps \headheight and \headsep as they stand at \end{document},
+// for the page assembly. TeX's \@outputpage reads them at each \shipout, inside
+// the document environment's group; this engine assembles its pages after the run,
+// when that group has closed and undone every local assignment the body made.
+// beamer makes exactly such an assignment: \beamer@calculateheadfoot sets
+// \headheight to its headline's height at \begin{document}
+// (beamerbaseframecomponents.sty:169), 0pt for the default theme, and the
+// assembly read geometry's global 14.23pt back, so every frame's body sat 14pt
+// low (go-tex/engine#924). Only when geometry ran: it is what makes a zero in these
+// registers a real layout and not an unset one (see bandDimen).
+func (e *Engine) recordShipBands() {
+	if e.geom == nil {
+		return
+	}
+	e.shipBands = map[string]int{}
+	for _, n := range []string{"headheight", "headsep"} {
+		if v, ok := e.namedDimen(n); ok {
+			e.shipBands[n] = v
+		}
+	}
+}
 
 // saveGeometryAtBody records the preamble layout when \begin{document} runs.
 func (e *Engine) saveGeometryAtBody() {

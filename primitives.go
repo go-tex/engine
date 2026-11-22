@@ -2255,6 +2255,9 @@ func (e *Engine) loadMore() {
 	// \gotex@bodybegins marks the end of the preamble; \document calls it. See
 	// skipUndefined, which discards an undefined command's arguments before it.
 	e.prim("gotex@bodybegins", func(e *Engine) { e.inBody = true; e.saveGeometryAtBody() })
+	// \gotex@shipbands records the head band as the body leaves it; \enddocument
+	// calls it. See recordShipBands.
+	e.prim("gotex@shipbands", func(e *Engine) { e.recordShipBands() })
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	// Non-renderable picture environments (TikZ / PGF / tikz-cd): the whole body is

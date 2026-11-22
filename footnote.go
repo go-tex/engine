@@ -616,7 +616,7 @@ func (e *Engine) assemblePageBox(page []node, pageNum int, addTopskip bool) *box
 		// drawn head uses so the two paths cannot drift apart.
 		out = vpackSP([]node{
 			e.headToHeadheight(hpackSP(nil, packNatural, 0)),
-			glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}},
+			glueNode{spec: glueSpec{width: e.bandDimen("headsep", 25*unity)}},
 			out,
 		}, packNatural, 0)
 	}
@@ -716,7 +716,7 @@ func (e *Engine) assembleFancyPage(body []node) *boxNode {
 		// page by them when a head is drawn (geometry.go). Measured against the
 		// reference on 2405.18549 page 3, our head sat 72pt from the top with 10pt
 		// under it where the reference has 37pt and 31pt.
-		top = append(top, glueNode{spec: glueSpec{width: e.classDimen("headsep", 25*unity)}})
+		top = append(top, glueNode{spec: glueSpec{width: e.bandDimen("headsep", 25*unity)}})
 	}
 	// ⛔⛔ THE SAME DEFECT THE plain PATH HAD, and on the path that carries nearly
 	// every page of a real document: head, body, a \vfil and the foot were packed
