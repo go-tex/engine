@@ -631,6 +631,7 @@ func (e *Engine) doDocumentClass() {
 		// every line, and 40 pages against the real class's 50 on corpus paper
 		// 2301.11256. Loading the embedded article.cls with the same options gets the
 		// exact block for any paper/size pair, with no table to keep in step.
+		e.loadElsarticleEmulation(opts) // spliced first, so it runs after article does
 		if e.applyElsarticleGeometry(opts) {
 			return // a journal type: the class sizes it with geometry, not article's
 		}
