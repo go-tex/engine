@@ -115,6 +115,13 @@ func (e *Engine) stepFootnote() int {
 func (e *Engine) footnoteMark(n int) string {
 	i := e.footnoteCounterIndex()
 	m := e.eq["thefootnote"]
+	// \let\thefootnote\relax is how a class says "this note has NO mark": elsarticle's
+	// e-mail and URL lines and \nonumnote (elsarticle.cls:150-152, :738-746) do exactly
+	// that, and latex.ltx then writes an empty \@thefnmark. Falling through to the digits
+	// printed the counter's value, "0", in front of "Email address:".
+	if m != nil && m.kind == mPrim && m.name == "relax" {
+		return ""
+	}
 	if i < 0 || m == nil || m.kind != mMacro {
 		return strconv.Itoa(n)
 	}

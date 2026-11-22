@@ -64,7 +64,7 @@ func TestFrontmatterOrderIsKnownWrong(t *testing.T) {
 		t.Fatal("the witness lost its own markers")
 	}
 	if iT < iA {
-		t.Log("the title now precedes the abstract — the deferred abstract landed, " +
-			"update this test and TestFrontmatterEmitsTheTitleBlock's note")
+		return // the title precedes the abstract, as in the reference
 	}
+	t.Errorf("the abstract precedes the title block")
 }
