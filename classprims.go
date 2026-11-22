@@ -199,7 +199,7 @@ const LaTeX2eClassLead = `
 % calling LaTeX's continuations directly would otherwise keep the old silence,
 % and adding it in both places cannot double the penalty.
 \def\@startsection#1#2#3#4#5#6{\par
-  \@tempskipa#4\relax
+  \@tempskipa\@tsbefore{#1}{#4}\relax
   \@afterindenttrue
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
   \addpenalty\@secpenalty
@@ -208,7 +208,7 @@ const LaTeX2eClassLead = `
 \def\@gxsec#1#2#3#4#5{\@ifnextchar[{\@gxsecopt{#1}{#2}{#3}{#4}{#5}}{\@gxsecplain{#1}{#2}{#3}{#4}{#5}}}
 \def\@gxsecopt#1#2#3#4#5[#6]#7{#5{#1}{#2}{#3}{#4}{#7}}
 \def\@gxsecplain#1#2#3#4#5#6{#5{#1}{#2}{#3}{#4}{#6}}
-\def\@gxstar#1#2#3#4#5{\@gxhead{#3}{#5}{#4}}
+\def\@gxstar#1#2#3#4#5{\@gxhead{\@tsstyle{#1}{#3}}{\@tstitle{#1}{#5}}{\@tsafter{#1}{#4}}}
 % A sectioning command sets the running MARK, which is how a head shows the
 % section it is on: \@sect runs \csname #1mark\endcsname{#7} (latex.ltx:12796 and
 % :12806, both the display and the run-in heading). An unnumbered-but-not-starred
@@ -220,7 +220,15 @@ const LaTeX2eClassLead = `
 % The marks default to \@gobble (latex.ltx:12870-12872), so this costs nothing
 % until a page style redefines them; \ps@headings does
 % \def\sectionmark##1{\markright{\MakeUppercase{…##1}}}.
-\def\@gxnum#1#2#3#4#5{\ifnum#2>\c@secnumdepth\csname #1mark\endcsname{#5}\@gxhead{#3}{#5}{#4}\else\refstepcounter{#1}\csname #1mark\endcsname{#5}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#5}\@gxhead{#3}{\csname the#1\endcsname\quad#5}{#4}\fi}
+\def\@gxnum#1#2#3#4#5{\ifnum#2>\c@secnumdepth\csname #1mark\endcsname{#5}\@gxhead{\@tsstyle{#1}{#3}}{\@tstitle{#1}{#5}}{\@tsafter{#1}{#4}}\else\refstepcounter{#1}\csname #1mark\endcsname{#5}\@tocentry{toc}{#2}{\csname the#1\endcsname}{#5}\@gxhead{\@tsstyle{#1}{#3}}{\@tslabel{#1}\@tstitle{#1}{#5}}{\@tsafter{#1}{#4}}\fi}
+% titlesec hooks (\titleformat / \titlespacing store per-name macros, see
+% classkernel.go). With nothing stored they expand to the class's own argument, so
+% a document without titlesec sets exactly what it did before.
+\def\@tsstyle#1#2{\@ifundefined{@tsfmt@#1}{#2}{\csname @tsfmt@#1\endcsname}}
+\def\@tsbefore#1#2{\@ifundefined{@tsbef@#1}{#2}{\csname @tsbef@#1\endcsname}}
+\def\@tsafter#1#2{\@ifundefined{@tsaft@#1}{#2}{\ifx\@tsrunin\csname @tsshape@#1\endcsname-\fi\csname @tsaft@#1\endcsname}}
+\def\@tslabel#1{\@ifundefined{@tslab@#1}{\csname the#1\endcsname\quad}{\csname @tslab@#1\endcsname}}
+\def\@tstitle#1#2{\@ifundefined{@tsbc@#1}{#2}{\csname @tsbc@#1\endcsname{#2}}}
 % \@gxhead{style}{title}{afterskip}: set the heading, then its trailing space. A
 % positive afterskip is a display heading — end the line and skip that far down; a
 % negative one is a run-in heading — leave horizontal space and let the body text
@@ -304,7 +312,7 @@ const LaTeX2eClassLead = `
 % class that defines its own (amsart does) overrides these, since the kernel is
 % loaded first.
 \def\@sect#1#2#3#4#5#6[#7]#8{\par
-  \@tempskipa#4\relax
+  \@tempskipa\@tsbefore{#1}{#4}\relax
   \@afterindenttrue
   \ifdim\@tempskipa<\z@ \@tempskipa-\@tempskipa \@afterindentfalse\fi
   \addpenalty\@secpenalty
