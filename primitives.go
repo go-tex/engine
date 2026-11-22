@@ -2251,7 +2251,7 @@ func (e *Engine) loadMore() {
 	})
 	// \gotex@bodybegins marks the end of the preamble; \document calls it. See
 	// skipUndefined, which discards an undefined command's arguments before it.
-	e.prim("gotex@bodybegins", func(e *Engine) { e.inBody = true })
+	e.prim("gotex@bodybegins", func(e *Engine) { e.inBody = true; e.saveGeometryAtBody() })
 	e.prim("verbatim", func(e *Engine) { e.doVerbatim() })
 	e.prim("endverbatim", func(e *Engine) {}) // consumed literally by doVerbatim; defined for safety
 	// Non-renderable picture environments (TikZ / PGF / tikz-cd): the whole body is
@@ -2566,12 +2566,14 @@ func (e *Engine) loadMore() {
 	// \newgeometry{opts} re-applies geometry mid-document (the geometry package's
 	// bracketing command). Apply it like \geometry — far more faithful than letting
 	// it stay undefined, which strict-fails and, lenient, typesets the option list
-	// as body text. \restoregeometry restores the preamble geometry; without a
-	// saved-state stack it is a no-op (the applied change persists), which is right
-	// for the common whole-document re-application. \savegeometry / \loadgeometry
-	// gobble their name argument.
-	e.prim("newgeometry", func(e *Engine) { e.doGeometry() })
-	e.prim("restoregeometry", func(e *Engine) {})
+	// as body text. Both open with \clearpage (geometry.sty:1131, 1142) once the
+	// body has begun, and \restoregeometry returns to the layout \begin{document}
+	// found (geometry.go, doNewGeometry / doRestoreGeometry). \savegeometry /
+	// \loadgeometry gobble their name argument.
+	e.prim("newgeometry", func(e *Engine) { e.doNewGeometry() })
+	e.prim("gotex@newgeom", func(e *Engine) { e.doGeometry() })
+	e.prim("restoregeometry", func(e *Engine) { e.doRestoreGeometry() })
+	e.prim("gotex@restoregeom", func(e *Engine) { e.restoreGeometrySnap() })
 	e.prim("savegeometry", func(e *Engine) { e.readBraceGroupString() })
 	e.prim("loadgeometry", func(e *Engine) { e.readBraceGroupString() })
 	// enumitem subset (see enumitem.go): \@enumitemopt{<kind>} reads the optional

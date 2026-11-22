@@ -1091,6 +1091,83 @@ func (e *Engine) geomSetTwocolumn(on bool) {
 	e.push([]tok{csTok(name)})
 }
 
+// geomSnap is the page layout \restoregeometry returns to: geometry's
+// \Gm@restore@pkg (geometry.sty:1106-1107), which \AtBeginDocument fills with the
+// lengths as the preamble left them.
+type geomSnap struct {
+	g            geomState
+	hsize, vsize int // the ONE-column measure and the text height
+	columnsep    int
+	bands        map[string]int // \headheight, \headsep, \footskip, \marginparwidth
+}
+
+// geomBandNames are the registers a head=/foot=/marginparwidth= key assigns.
+var geomBandNames = []string{"headheight", "headsep", "footskip", "marginparwidth"}
+
+// saveGeometryAtBody records the preamble layout when \begin{document} runs.
+func (e *Engine) saveGeometryAtBody() {
+	if e.geom == nil {
+		return
+	}
+	s := &geomSnap{g: *e.geom, hsize: e.hsize, vsize: e.vsize, columnsep: e.columnsep,
+		bands: map[string]int{}}
+	if e.oneColHsize > 0 {
+		s.hsize = e.oneColHsize
+	}
+	for _, n := range geomBandNames {
+		if v, ok := e.namedDimen(n); ok {
+			s.bands[n] = v
+		}
+	}
+	e.geomPkg = s
+}
+
+// doNewGeometry is \newgeometry{opts}: \clearpage, then the options applied. The page
+// is cleared FIRST so that the paragraph in progress is broken at the old measure
+// (geometry.sty:1131); before \begin{document} there is no page to clear.
+func (e *Engine) doNewGeometry() {
+	// Before the body \clearpage is a no-op (measured: preamble \newgeometry starts no
+	// page), so one path serves both.
+	// The argument stays in the input; \gotex@newgeom reads it after \clearpage.
+	e.push([]tok{csTok("clearpage"), csTok("gotex@newgeom")})
+}
+
+// doRestoreGeometry is \restoregeometry: \clearpage, then back to the layout the
+// preamble left (geometry.sty:1141-1144).
+func (e *Engine) doRestoreGeometry() {
+	if e.inBody {
+		e.push([]tok{csTok("clearpage"), csTok("gotex@restoregeom")})
+		return
+	}
+	e.restoreGeometrySnap()
+}
+
+// restoreGeometrySnap puts the saved layout back, the way applyGeometry's own tail
+// establishes one: measure, column measure, text height, published lengths.
+//
+// The page grid is still one layout for the whole run (the paginator and the
+// renderer read the final \vsize and margins), so the title pages that precede a
+// \restoregeometry take the restored text height and margins too; what is exact is
+// the line measure of every paragraph set after it, and the page height of the pages
+// that follow. This is the A/B that measured 203 pages against 206 on 2402.04711.
+func (e *Engine) restoreGeometrySnap() {
+	s := e.geomPkg
+	if s == nil {
+		return
+	}
+	g := s.g
+	e.geom = &g
+	e.hsize = s.hsize
+	e.retakeColumnMeasure()
+	e.vsize = s.vsize
+	e.columnsep = s.columnsep
+	e.setNamedDimen("columnsep", s.columnsep)
+	for n, v := range s.bands {
+		e.setNamedDimen(n, v)
+	}
+	e.publishGeometry(e.geom)
+}
+
 // doGeometry handles \geometry{options}, re-applying geometry settings on top of
 // any earlier ones (later wins).
 func (e *Engine) doGeometry() {
