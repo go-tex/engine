@@ -28,13 +28,12 @@ const (
 // pdfFigureResolution dpi. ok is false when pdfkit would refuse to import the
 // page, so the caller falls back to the rasteriser or a placeholder.
 func nativePDFFigure(data []byte) (iw, ih int, ok bool) {
+	// A refusal comes back with a zero PageInfo, so its size is empty too: the
+	// error is the one thing that says why, and it is checked with the size.
 	info, err := pdfkit.New(pdfkit.Options{}).PDFPageInfo(data, 1)
-	if err != nil {
-		return 0, 0, false
-	}
 	iw = int(info.Width*pdfFigurePrecision + 0.5)
 	ih = int(info.Height*pdfFigurePrecision + 0.5)
-	return iw, ih, iw > 0 && ih > 0
+	return iw, ih, err == nil && iw > 0 && ih > 0
 }
 
 // pdfSVG is the SVG driver's rendering of a PDF figure, which that driver cannot
