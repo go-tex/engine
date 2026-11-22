@@ -1915,11 +1915,101 @@ const MiniLaTeXKernel = `
 % with [ruled]algorithm2e: "Input: alpha beta gamma" / "Output: delta epsilon".
 % The label is bold here where algorithm2e uses \KwSty, which is bold by default;
 % a document that redefines \KwSty does not reach this.
-\def\SetKwInput#1#2{\def#1##1{\par\noindent\textbf{#2: }##1\par}}
+\def\SetKwInput#1#2{\def#1##1{\par\begingroup\gotex@aenlfalse\noindent\textbf{#2: }##1\par\endgroup}}
 \SetKwInput{\KwIn}{Input}
 \SetKwInput{\KwOut}{Output}
 \SetKwInput{\KwData}{Data}
 \SetKwInput{\KwResult}{Result}
+% ⛔ algorithm2e's BLOCK structure was missing, not just its keyword list. Measured against
+% tectonic on [ruled,linesnumbered]algorithm2e with \eIf, \uIf, \Else, \For, \tcc and a
+% \SetKwProg function: eight commands were skipped, so the branches were typeset run
+% together ("x > 0y\gets x y\gets-x") where the reference has fifteen numbered lines
+%
+%	1 if x > 0 then / 2 y←x / 3 else / 4 y ← −x / 5 end / 6 for i ← 1 to n do / …
+%
+% The real algorithm2e.sty loads here but sets the body without its box (it needs
+% \algocf@algobox, \algocf@algoframe and \algocf@capbox, and abandons its \rs@autoTOL
+% grab), so the structure is emulated: 13 of the 21 sampled papers load it.
+%
+% A LINE IS A PARAGRAPH. \; ends one, a block command starts one, and the number and the
+% indent belong to the paragraph's start (\everypar), so a body that does not end in \; and
+% a closer that follows it produce no empty numbered line. The indent is \leftskip set
+% between paragraphs (\@algsetleft, as for algorithmic), the number hangs left of it.
+% \everypar is set at the FIRST algorithm2e command inside the algorithm's group (\gotex@aeon),
+% never for the whole float: algorithm + algorithmic share the environment, and an
+% \everypar for them would number their lines twice. \caption clears it for its own paragraph.
+% (\newif is not available at this point of the prelude: the three flags are written out.)
+\let\ifgotex@aenl\iffalse
+\def\gotex@aenltrue{\let\ifgotex@aenl\iftrue}
+\def\gotex@aenlfalse{\let\ifgotex@aenl\iffalse}
+\let\ifgotex@aesc\iftrue
+\def\gotex@aesctrue{\let\ifgotex@aesc\iftrue}
+\def\gotex@aescfalse{\let\ifgotex@aesc\iffalse}
+\let\ifgotex@aenoend\iffalse
+\def\gotex@aenoendtrue{\let\ifgotex@aenoend\iftrue}
+\def\gotex@aenoendfalse{\let\ifgotex@aenoend\iffalse}
+\def\gotex@aeon{\everypar{\gotex@aestart}\let\gotex@aeon\relax
+  \@algno0\relax\@alglevel0\relax\parindent0pt\relax
+  \@ifpackagewith{algorithm2e}{linesnumbered}{\gotex@aenltrue}{}%
+  \let\gotex@aesemi@old\;\def\;{\ifmmode\expandafter\gotex@aesemi@old\else\expandafter\gotex@aesemi\fi}%
+  \let\gotex@aecap@old\caption\let\caption\gotex@aecap}
+\def\gotex@aestart{\ifgotex@aenl\advance\@algno1\relax
+  \llap{\hbox to1.5em{\hss\footnotesize\the\@algno}\hskip.5em}\fi}
+\def\gotex@aesemi{\ifgotex@aesc;\fi\par}
+\def\gotex@aecap{\@ifnextchar[\gotex@aecap@o\gotex@aecap@s}
+\long\def\gotex@aecap@o[#1]#2{\par{\everypar{}\gotex@aecap@old[#1]{#2}\par}}
+\long\def\gotex@aecap@s#1{\par{\everypar{}\gotex@aecap@old{#1}\par}}
+\def\SetAlgoLined{\gotex@aeon}
+\def\SetAlgoNoLine{\gotex@aeon}
+\def\SetAlgoVlined{\gotex@aeon}
+\def\SetAlgoNoEnd{\gotex@aeon\gotex@aenoendtrue}
+\def\SetAlgoLongEnd{\gotex@aeon\gotex@aenoendfalse}
+\def\DontPrintSemicolon{\gotex@aeon\gotex@aescfalse}
+\def\PrintSemicolon{\gotex@aeon\gotex@aesctrue}
+\def\LinesNumbered{\gotex@aeon\gotex@aenltrue}
+\def\LinesNotNumbered{\gotex@aeon\gotex@aenlfalse}
+\def\KwTo{\@algkw{to} }
+\def\KwFrom{\@algkw{from} }
+\def\KwRet{\@algkw{return} }
+% ⛔ \@algsetleft ends in \leftskip<dimen>, a GLUE assignment, so TeX goes on reading for
+% "plus" after it and EXPANDS the next token to look. algorithmic's lines follow it with
+% \noindent, which stops the scan; here the next token is a keyword macro, whose expansion
+% was eaten and the whole line with it. \gotex@aeleft closes the scan with \relax.
+\def\gotex@aeleft{\@algsetleft\relax}
+\long\def\gotex@aeopen#1{\gotex@aeon\par\gotex@aeleft#1\par\advance\@alglevel1\relax\gotex@aeleft}
+\long\def\gotex@aemid#1{\par\advance\@alglevel-1\relax\gotex@aeleft#1\par\advance\@alglevel1\relax\gotex@aeleft}
+% The closer: "end" unless \SetAlgoNoEnd or the block declares no ending (an empty text).
+\long\def\gotex@aeend#1{\par\advance\@alglevel-1\relax\gotex@aeleft
+  \def\gotex@aet{#1}\ifx\gotex@aet\@empty\else\ifgotex@aenoend\else\@algkw{#1}\par\fi\fi}
+\long\def\gotex@aeuntil#1{\par\advance\@alglevel-1\relax\gotex@aeleft\@algkw{until} #1\par}
+\long\def\If#1#2{\gotex@aeopen{\@algkw{if} #1 \@algkw{then}}#2\gotex@aeend{end}}
+\long\def\uIf#1#2{\gotex@aeopen{\@algkw{if} #1 \@algkw{then}}#2}
+\long\def\eIf#1#2#3{\gotex@aeopen{\@algkw{if} #1 \@algkw{then}}#2\gotex@aemid{\@algkw{else}}#3\gotex@aeend{end}}
+\long\def\ElseIf#1#2{\gotex@aemid{\@algkw{else if} #1 \@algkw{then}}#2\gotex@aeend{end}}
+\long\def\uElseIf#1#2{\gotex@aemid{\@algkw{else if} #1 \@algkw{then}}#2}
+\long\def\Else#1{\gotex@aemid{\@algkw{else}}#1\gotex@aeend{end}}
+\long\def\lIf#1#2{\gotex@aeon\par\gotex@aeleft\@algkw{if} #1 \@algkw{then} #2\par}
+\long\def\lElse#1{\gotex@aeon\par\gotex@aeleft\@algkw{else} #1\par}
+\long\def\For#1#2{\gotex@aeopen{\@algkw{for} #1 \@algkw{do}}#2\gotex@aeend{end}}
+\long\def\ForEach#1#2{\gotex@aeopen{\@algkw{foreach} #1 \@algkw{do}}#2\gotex@aeend{end}}
+\long\def\ForAll#1#2{\gotex@aeopen{\@algkw{forall} #1 \@algkw{do}}#2\gotex@aeend{end}}
+\long\def\While#1#2{\gotex@aeopen{\@algkw{while} #1 \@algkw{do}}#2\gotex@aeend{end}}
+\long\def\Repeat#1#2{\gotex@aeopen{\@algkw{repeat}}#1\gotex@aeuntil{#2}}
+\long\def\tcc#1{\gotex@aeon\par\gotex@aeleft\begingroup\gotex@aenlfalse\noindent/* #1 */\endgroup\par}
+\def\tcp{\@ifstar\gotex@aetcp\gotex@aetcp}
+\long\def\gotex@aetcp#1{\hfill// #1}
+% \SetKwProg{Fn}{Title}{Sep}{End} declares \Fn{name}{body}: a "Title name Sep" line, an
+% indented body and the End line (none when End is empty). \SetKw{Kw}{text} declares a
+% bold keyword and \SetKwData / \SetKwFunction a name set as written.
+\long\def\SetKwProg#1#2#3#4{\expandafter\gotex@aeprog\csname#1\endcsname{#2}{#3}{#4}}
+\long\def\gotex@aeprog#1#2#3#4{\long\def#1##1##2{\gotex@aeopen{\@algkw{#2} ##1#3}##2\gotex@aeend{#4}}}
+\long\def\SetKw#1#2{\expandafter\gotex@aekw\csname#1\endcsname{#2}}
+\long\def\gotex@aekw#1#2{\def#1{\@algkw{#2}}}
+\long\def\SetKwData#1#2{\expandafter\gotex@aedata\csname#1\endcsname{#2}}
+\long\def\gotex@aedata#1#2{\def#1{\textsf{#2}}}
+\let\SetKwFunction\SetKwData
+\def\SetKwComment#1#2#3{}
+\def\SetAlgorithmName#1#2#3{}
 % \algnewcommand / \algrenewcommand (algorithmicx.sty:621-622) define the language
 % keywords: \algrenewcommand\algorithmicwhile{\textbf{While}}. Undefined, the command
 % is skipped and its braced argument is ORDINARY MATERIAL, so the keyword is TYPESET —
@@ -2200,17 +2290,13 @@ const MiniLaTeXKernel = `
 \def\Output{\par\noindent\textbf{Output: }}
 \def\Return{\textbf{return} }
 \def\Comment#1{}
-\def\If#1{\par\noindent\textbf{if} #1 \textbf{then}}
 \def\ElsIf#1{\par\noindent\textbf{else if} #1 \textbf{then}}
-\def\Else{\par\noindent\textbf{else}}
 \def\EndIf{}
-\def\For#1{\par\noindent\textbf{for} #1 \textbf{do}}
-\def\ForAll#1{\par\noindent\textbf{for all} #1 \textbf{do}}
 \def\EndFor{}
-\def\While#1{\par\noindent\textbf{while} #1 \textbf{do}}
 \def\EndWhile{}
-\def\Repeat{\par\noindent\textbf{repeat}}
 \def\Until#1{\par\noindent\textbf{until} #1}
+% \If \Else \For \ForAll \While \Repeat are algorithm2e's own (block commands above); this
+% fallback used to redefine them last and discard those. \algorithmic sets its own locally.
 \def\Loop{\par\noindent\textbf{loop}}
 \def\EndLoop{}
 \def\Function#1#2{\par\noindent\textbf{function} #1(#2)}
