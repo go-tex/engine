@@ -44,3 +44,43 @@ func TestInsertFootinsReachesTheFootnoteModel(t *testing.T) {
 		}
 	}
 }
+
+// Only the footnote class is a footnote. Another insert class is accepted and dropped
+// (its braces are consumed, nothing reaches the foot of the page), a brace-less
+// \insert leaves the following token alone, and an \insert at the end of the input
+// ends quietly.
+func TestInsertOtherClassesAreDropped(t *testing.T) {
+	run := func(src string) *Engine {
+		t.Helper()
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		if _, err := e.Run(src); err != nil {
+			t.Fatalf("%q: %v", src, err)
+		}
+		return e
+	}
+	notes := func(e *Engine) int {
+		n := 0
+		for _, nd := range e.mvl {
+			if _, ok := nd.(footnoteNode); ok {
+				n++
+			}
+		}
+		return n
+	}
+	if e := run(`\hsize=300pt \insert100{Zzz}\par`); notes(e) != 0 {
+		t.Errorf("an insert of class 100 became a footnote")
+	}
+	e := run(`\hsize=300pt \insert99 QQ\par`)
+	var b strings.Builder
+	collectChars(e.mvl, &b)
+	collectChars(e.parList, &b)
+	if !strings.Contains(b.String(), "QQ") {
+		t.Errorf("a brace-less \\insert swallowed the next token: %q", b.String())
+	}
+	run(`\insert99`)
+	if e := run(`\hsize=300pt \footnote{a\insert255{Inner}b}\par`); notes(e) != 1 {
+		t.Errorf("an \\insert inside a footnote made its own note: %d notes, want 1", notes(e))
+	}
+}
