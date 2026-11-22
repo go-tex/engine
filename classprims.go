@@ -357,8 +357,10 @@ const LaTeX2eClassLead = `
 % \@textsuperscript was defined). Undefined, they were skipped and their content —
 % the "2" in mc\textsuperscript{2}, footnote marks, "st"/"nd" ordinals — silently
 % dropped. Render through the math layer as a raised/lowered script, which both
-% preserves the text and sets it small and shifted as LaTeX does.
-\def\textsuperscript#1{\ensuremath{^{#1}}}
+% preserves the text and sets it small and shifted as LaTeX does. latex.ltx sets the
+% argument in an \mbox, so it is EXECUTED; the math layer only expands it, and
+% sn-jnl.cls:519-521 runs a \@for loop in it (68 corpus papers). Hence a box, not ^{}.
+\def\textsuperscript#1{\leavevmode\hbox{\raisebox{0.4em}[0pt][0pt]{\scriptsize #1}}}
 \def\textsubscript#1{\ensuremath{_{#1}}}
 % \text (amsmath) used in TEXT mode: the math layer handles \text inside $…$/\[…\]
 % from the raw source, but a \text{…} written in ordinary text reached execCS
