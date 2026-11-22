@@ -113,3 +113,29 @@ func TestIncludeComment(t *testing.T) {
 		t.Errorf("content after the included env not processed: zzafter=%d (want 1)", skip["zzafter"])
 	}
 }
+
+// ⭐ \specialcomment{name}{begin}{end} is an environment: the begin code, the body, the
+// end code. Measured against tectonic with the real comment.sty:
+//
+//	Before.
+//	  NOTE: shown text
+//	After.
+//
+// Undefined, the command was skipped and the declared environment did not exist, so the
+// begin code ("NOTE:") was LOST and the body set as plain text. The assertion is on the
+// begin code, which only the declaration can supply; the body is visible either way.
+func TestSpecialcommentRunsItsBeginAndEndCode(t *testing.T) {
+	lines := lineTextOf(t, `\specialcomment{note}{\begin{quote}NOTE: }{\end{quote}}`+
+		`\excludecomment{secret}`+
+		"Before.\n\\begin{note}\nshown text\n\\end{note}\n\\begin{secret}\nHIDDENBODY\n\\end{secret}\nAfter.\n")
+	all := strings.Join(lines, "|")
+	if !strings.Contains(all, "NOTE:shown") {
+		t.Errorf("the begin code and the body are not set together: %q", all)
+	}
+	if strings.Contains(all, "HIDDENBODY") {
+		t.Errorf("an \\excludecomment body was typeset: %q", all)
+	}
+	if !strings.Contains(all, "After.") {
+		t.Errorf("text after the environment is missing: %q", all)
+	}
+}
