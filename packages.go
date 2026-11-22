@@ -750,6 +750,9 @@ func (e *Engine) doUsepackageLoad() {
 			e.pkgNoSty = map[string]bool{}
 		}
 		e.pkgNoSty[name] = true
+		// Its options stay readable to \@ifpackagewith (opt@<name>.sty), as for a loaded
+		// file: the emulation keys on them (algorithm2e's linesnumbered).
+		e.define("opt@"+name+".sty", &meaning{kind: mMacro, body: stringToToks(strings.Join(opts, ","))}, true)
 		if name == "fullpage" {
 			// fullpage (H. Partl / P. W. Daly) is a one-line geometry: the text block is
 			// the paper less a uniform margin on every side — 1in by default, 1.5cm
