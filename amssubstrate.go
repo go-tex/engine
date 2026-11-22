@@ -116,18 +116,32 @@ func (e *Engine) loadAMSPrims() {
 			e.setFontDimen(e.curFont, n, v)
 		}
 	})
-	// \insert<n>{material}: add to an insert class (footnotes, amsart's \copyins).
-	// The engine has its own footnote model; accept the register number and the
-	// braced material and drop it here.
+	// \insert<n>{material} (tex.web §1097-1100): the material is set as a vertical
+	// list and attached to the insert class. The footnote class (\footins, which a
+	// document's own \@footnotetext fills — amsart.cls:1304-1314, so \@adminfootnotes
+	// puts the date, subject classes, keywords and \thanks there) reaches the engine's
+	// footnote model, so the note is placed at the foot of the page. Another class
+	// (amsart's \copyins) is accepted and dropped.
 	e.prim("insert", func(e *Engine) {
-		e.scanInt()
+		n := e.scanInt()
 		e.skipOptSpace()
-		if t, ok := e.getNext(); ok {
-			if t.cat == catBegin && !t.cs_ {
-				e.grabGroup()
-			} else {
-				e.back(t)
-			}
+		// At the end of the input getNext returns the zero token, which is not a
+		// brace: it is put back and the \insert ends.
+		t, _ := e.getNext()
+		if t.cat != catBegin || t.cs_ {
+			e.back(t)
+			return
+		}
+		body := e.grabGroup()
+		m := e.eq["footins"]
+		if m == nil || m.kind != mCountRef || n != e.getCount(m.code) || e.buildingFootnote {
+			return
+		}
+		toks := append([]tok{chTok('{', catBegin)}, body...)
+		toks = append(toks, chTok('}', catEnd))
+		e.pendingFootnotes = append(e.pendingFootnotes, e.typesetGroupToVbox(toks))
+		if !e.inPar {
+			e.flushFootnotes()
 		}
 	})
 	// \unhbox / \unvbox / \unhcopy / \unvcopy live in boxcmds.go.
