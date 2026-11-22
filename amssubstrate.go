@@ -125,10 +125,9 @@ func (e *Engine) loadAMSPrims() {
 	e.prim("insert", func(e *Engine) {
 		n := e.scanInt()
 		e.skipOptSpace()
-		t, ok := e.getNext()
-		if !ok {
-			return
-		}
+		// At the end of the input getNext returns the zero token, which is not a
+		// brace: it is put back and the \insert ends.
+		t, _ := e.getNext()
 		if t.cat != catBegin || t.cs_ {
 			e.back(t)
 			return
