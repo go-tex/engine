@@ -87,7 +87,19 @@ func renderBoxSVG(b *boxNode, margin, vmargin, paperW, paperH float64, font font
 	// with no CSS required of the page showing it.
 	var glyphs strings.Builder
 	layer := newTextLayerFor(font)
+	// eso-pic pictures: origin at the paper's lower-left corner, behind the body
+	// first and over it last.
+	for _, o := range b.overlays {
+		if !o.fg {
+			paintBoxSP(&glyphs, o.box, 0, pageH, font, layer)
+		}
+	}
 	paintBoxSP(&glyphs, b, margin, vmargin+spToPt(b.height), font, layer)
+	for _, o := range b.overlays {
+		if o.fg {
+			paintBoxSP(&glyphs, o.box, 0, pageH, font, layer)
+		}
+	}
 	sb.WriteString(layer.String())
 	sb.WriteString(`<g fill="black">`)
 	sb.WriteString(glyphs.String())

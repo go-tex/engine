@@ -83,7 +83,17 @@ func (e *Engine) RenderPDF(w io.Writer, margin float64) error {
 			d.rect(0, 0, pw, ph)
 			d.setColor(0)
 		}
+		for _, o := range page.overlays { // eso-pic, behind the body (shippic.go)
+			if !o.fg {
+				d.box(o.box, 0, ph)
+			}
+		}
 		d.box(page, margin+spToPt(page.pageShift), vmargin+spToPt(page.height))
+		for _, o := range page.overlays { // eso-pic, over the body
+			if o.fg {
+				d.box(o.box, 0, ph)
+			}
+		}
 		d.drawSpecials()
 	}
 	// Section headings become the PDF's outline (the viewer's bookmark sidebar):

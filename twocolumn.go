@@ -419,7 +419,7 @@ func (e *Engine) mvlHasContent(from int) bool {
 	}
 	for _, n := range e.mvl[from:] {
 		switch n.(type) {
-		case pageStyleNode, *pageStyleNode, glueNode, *glueNode, kernNode, *kernNode,
+		case pageStyleNode, *pageStyleNode, shipPicNode, glueNode, *glueNode, kernNode, *kernNode,
 			penaltyNode, *penaltyNode, specialNode, *specialNode:
 			continue
 		default:
@@ -738,6 +738,10 @@ func (e *Engine) assembleTwoColumnPage(bands []*boxNode, left, right []node, col
 	if r := vsize - e.bandsReserve(bands); r > 0 { // the columns share the height left below the bands
 		vsize = r
 	}
+	// eso-pic pictures written in a column belong to the page, not the column.
+	lpics, left := takeShipPics(left)
+	rpics, right := takeShipPics(right)
+	e.carryPics = append(lpics, rpics...)
 	mk := func(slice []node) *boxNode {
 		b := vpackSP(slice, packNatural, 0)
 		b.width = colW
