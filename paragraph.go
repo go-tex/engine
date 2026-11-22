@@ -328,6 +328,11 @@ func (e *Engine) breakSegment(hlist []node, lineWidth float64, shape Measure) ([
 		DoubleHyph:  float64(e.namedInt("doublehyphendemerits")),
 		FinalHyph:   float64(e.namedInt("finalhyphendemerits")),
 		Background:  e.skipBackground(),
+		// Widths reach the breaker in points (sp/65536, exact in binary). Badness
+		// is tex.web §108's integer one, not the float 100·r³: the two decide
+		// differently on a band of shortfalls around 12, 99 and \tolerance
+		// (go-typeset/linebreak v1.13.0, badness108_test.go).
+		ScaledPointsPerUnit: unity,
 		// \looseness: how many lines longer (or shorter) the paragraph should come
 		// out than the breaking would otherwise make it (tex.web:17197-17237). It
 		// was declared in texparams.go and read by nothing — go-tex/engine#754 item

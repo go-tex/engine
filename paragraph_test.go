@@ -167,7 +167,13 @@ func TestLineSkipsNarrowTheMeasureBeforeBreaking(t *testing.T) {
 	// \raggedright's \rightskip is 0pt plus 1fil: infinite stretch, NO width. It
 	// stops the lines being justified to the margin; it does not move the margin.
 	ragged := width(`{\rightskip=0pt plus 1fil` + "\n" + `\noindent ` + text + `\par}`)
-	if ragged < plain-20 {
+	//
+	// ⚠ Under a fil every line has badness 0, so every way of breaking ties on
+	// demerits and tex.web §855 keeps the LATER break (linebreak v1.13.0): the
+	// widest ragged line is no longer the one that fills the measure (320.60 of
+	// 345.00 here). The narrowing this guards against is 100pt, so the tolerance is
+	// 50, not the 20 a tie-breaking order that happened to fill lines allowed.
+	if ragged < plain-50 {
 		t.Errorf("a width-less \\rightskip narrowed the measure to %.2f from %.2f; ragged setting must not move the margin", ragged, plain)
 	}
 
