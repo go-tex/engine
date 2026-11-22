@@ -229,6 +229,16 @@ func reportDiagnostics(w io.Writer, d engine.Diagnostics) {
 			fmt.Fprintf(w, "  %6d  %s\n", e.count, e.name)
 		}
 	}
+	// A package with no .sty is not a skipped command either, and it used to leave no
+	// trace at all: the file was never read, and whatever the engine does not emulate
+	// of it surfaces only as undefined commands, with nothing to say why.
+	if len(d.PackagesWithoutSty) > 0 {
+		fmt.Fprintf(w, "gotex: %d package(s) requested with no .sty to load — only the engine's own emulation of them ran, "+
+			"if it has one (put the file on TEXINPUTS to run the real package):\n", len(d.PackagesWithoutSty))
+		for _, p := range d.PackagesWithoutSty {
+			fmt.Fprintf(w, "  %s\n", p)
+		}
+	}
 	if len(d.FiguresDropped) > 0 {
 		list := sortedByCount(d.FiguresDropped)
 		n := 0

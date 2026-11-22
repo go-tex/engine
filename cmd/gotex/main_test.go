@@ -118,6 +118,30 @@ func TestRunReportUndefinedEnvs(t *testing.T) {
 	}
 }
 
+// -report-skipped names a package whose .sty could not be found. It used to leave no
+// trace: the file was never read, the engine's emulation (when it has one) answered,
+// and only the commands the emulation lacks showed up — as undefined commands, with
+// nothing to say that the cause was a package nobody loaded. A package the engine
+// takes over wholesale (geometry) is NOT in the list: nothing was expected to load.
+func TestRunReportsPackagesWithoutSty(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "doc.tex")
+	os.WriteFile(src, []byte(`\documentclass{article}\usepackage{geometry,zzmysterypkg}`+
+		`\begin{document}text\end{document}`), 0644)
+	out := filepath.Join(dir, "doc.svg")
+	var so, se bytes.Buffer
+	if code := run([]string{"-lenient", "-offline", "-report-skipped", "-format", "svg", "-o", out, src}, &so, &se); code != 0 {
+		t.Fatalf("run exit=%d stderr=%s", code, se.String())
+	}
+	got := se.String()
+	if !strings.Contains(got, "no .sty to load") || !strings.Contains(got, "zzmysterypkg") {
+		t.Errorf("report did not name the package with no .sty; stderr=%q", got)
+	}
+	if strings.Contains(got, "geometry") {
+		t.Errorf("geometry is emulated wholesale and must not be listed; stderr=%q", got)
+	}
+}
+
 // -report-skipped also surfaces math equations the go-tex/math layer dropped: an
 // unknown command inside a formula takes the whole equation with it, which the
 // text-mode "undefined commands" list would never show.
