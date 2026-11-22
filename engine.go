@@ -204,6 +204,7 @@ type Engine struct {
 	// command changed it, so a group-local \setstretch can restore it.
 	prevBaselineskip int
 	geom             *geomState // geometry package layout (nil until \usepackage[..]{geometry} or \geometry; see geometry.go)
+	geomPkg          *geomSnap  // the layout at \begin{document}, what \restoregeometry returns to (geometry.go)
 
 	// save stack for grouping: each entry restores one eqtb/register/catcode.
 	save        []saveItem
