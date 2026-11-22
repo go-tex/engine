@@ -2188,6 +2188,22 @@ const MiniLaTeXKernel = `
 \newcommand\translate[2][]{#2}
 \def\usedictionary#1{}
 \def\xspace{}
+% eso-pic: the engine paginates after reading, with no shipout hook to hang a
+% page picture on, so the picture is NOT drawn. Its argument is dropped instead
+% of being typeset into the body (where it cost an extra page); the placement
+% commands take no argument and print nothing.
+\newcommand\AddToShipoutPicture{\@ifstar\@gobble\@gobble}
+\newcommand\AddToShipoutPictureBG{\@ifstar\@gobble\@gobble}
+\newcommand\AddToShipoutPictureFG{\@ifstar\@gobble\@gobble}
+\newcommand\ClearShipoutPicture{}
+\newcommand\ClearShipoutPictureBG{}
+\newcommand\ClearShipoutPictureFG{}
+\newcommand\AtPageUpperLeft[1]{}
+\newcommand\AtPageLowerLeft[1]{}
+\newcommand\AtPageCenter[1]{}
+\newcommand\AtTextUpperLeft[1]{}
+\newcommand\AtTextLowerLeft[1]{}
+\newcommand\AtTextCenter[1]{}
 % algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
 % pseudocode reads as lines with keywords instead of being dropped command-by-
 % command. Not the real indented layout — each control word starts a line and
