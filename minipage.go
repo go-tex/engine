@@ -52,13 +52,22 @@ func (e *Engine) doMinipage() {
 	// full measure — three times too wide, and its proportional height three times
 	// too tall (#406). oneColHsize goes with it: inside the box there is no
 	// two-column split for \textwidth to span.
+	vbox := e.typesetMinipageVbox(content, width)
+
+	vbox.width = width
+	e.place(alignParbox(vbox, pos, e.axisHeight()))
+}
+
+// typesetMinipageVbox typesets content as the body of a minipage of the given width:
+// \hsize, \textwidth and \columnwidth all become width, the two-column split is off, and
+// all three are restored afterwards. The subfigure environment is a minipage too
+// (subcaption.sty and subfig build it on \minipage) and shares this one definition.
+func (e *Engine) typesetMinipageVbox(content []tok, width int) *boxNode {
 	savedHsize, savedTW, savedOne := e.hsize, e.textWidth, e.oneColHsize
 	e.hsize, e.textWidth, e.oneColHsize = width, width, 0
 	vbox := e.typesetGroupToVbox(content) // breaks the paragraphs to e.hsize == width
 	e.hsize, e.textWidth, e.oneColHsize = savedHsize, savedTW, savedOne
-
-	vbox.width = width
-	e.place(alignParbox(vbox, pos, e.axisHeight()))
+	return vbox
 }
 
 // honourColClose takes the \end{minipage} off the front of \beamer@colclose and
