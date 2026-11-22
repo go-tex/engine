@@ -63,7 +63,10 @@ func main() {
 		keep    = flag.Bool("keep-going", false, "report even when a paper failed to compile on one side")
 	)
 	underLoad := flag.String("under-load", "", "measure even on a busy machine; the reason is STAMPED into the report")
+	refpdf := flag.String("refpdf", "", "directory of the reference PDFs (<paper id>.pdf): audited for the hyperref pdfTeX-driver leak and a junk first page, and the corrupt ones are left out of the totals")
+	includeBad := flag.Bool("include-unusable", false, "score the references -refpdf found corrupt anyway")
 	flag.Parse()
+	audit := auditConfig{Dir: *refpdf, Include: *includeBad}
 	if *list == "" || *refs == "" {
 		fmt.Fprintln(os.Stderr, "gotex-abdiff: -list and -refs are required")
 		os.Exit(2)
@@ -81,20 +84,20 @@ func main() {
 	}
 	fmt.Println(loadguard.Banner(load, *underLoad))
 	if *base == "" {
-		if err := rank(*list, *refs, *repo, *head, *texmf, *timeout, *top); err != nil {
+		if err := rank(*list, *refs, *repo, *head, *texmf, *timeout, *top, audit); err != nil {
 			fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if err := run(*list, *refs, *repo, *base, *head, *texmf, *timeout, *top, *keep); err != nil {
+	if err := run(*list, *refs, *repo, *base, *head, *texmf, *timeout, *top, *keep, audit); err != nil {
 		fmt.Fprintln(os.Stderr, "gotex-abdiff:", err)
 		os.Exit(1)
 	}
 }
 
-func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top int, keep bool) error {
-	papers, err := loadCorpus(list, refs)
+func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top int, keep bool, audit auditConfig) error {
+	papers, err := loadAudited(os.Stdout, list, refs, audit)
 	if err != nil {
 		return err
 	}
@@ -153,8 +156,8 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 // ⛔ A paper that produces no readable PDF is listed FIRST, with its error, and
 // is not scored. It is worse than any page deviation and it must not vanish into
 // a total.
-func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int) error {
-	papers, err := loadCorpus(list, refs)
+func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int, audit auditConfig) error {
+	papers, err := loadAudited(os.Stdout, list, refs, audit)
 	if err != nil {
 		return err
 	}
