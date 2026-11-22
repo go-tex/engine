@@ -36,6 +36,26 @@ func TestRestoregeometryReturnsToThePreambleLayout(t *testing.T) {
 	if want := texSP(t, "700.50687pt"); b.vsize != want {
 		t.Errorf("after \\restoregeometry: vsize = %d, want %d (tectonic 700.50687pt)", b.vsize, want)
 	}
+	// \newgeometry alone breaks the page that holds text (geometry.sty:1131).
+	c := runGeom(t, pre+`X\newgeometry{centering,vmargin=2cm,hmargin=3cm}A`)
+	if n := len(c.Pages()); n != 2 {
+		t.Errorf("\\newgeometry after text: pages = %d, want 2", n)
+	}
+	// Before \begin{document} there is no page to clear and no saved layout: \newgeometry
+	// applies in place and starts no page, \restoregeometry changes nothing.
+	const head = `\documentclass[12pt,a4paper]{book}` +
+		`\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}`
+	p := runGeom(t, head+`\newgeometry{centering,vmargin=2cm,hmargin=3cm}\begin{document}A`)
+	if want := texSP(t, "426.79135pt"); p.hsize != want {
+		t.Errorf("preamble \\newgeometry: hsize = %d, want %d", p.hsize, want)
+	}
+	if n := len(p.Pages()); n != 1 {
+		t.Errorf("preamble \\newgeometry: pages = %d, want 1 (no \\clearpage before the body)", n)
+	}
+	q := runGeom(t, head+`\restoregeometry\begin{document}A`)
+	if want := texSP(t, "452.9679pt"); q.hsize != want {
+		t.Errorf("preamble \\restoregeometry: hsize = %d, want %d (unchanged)", q.hsize, want)
+	}
 	// Both commands \clearpage first: tectonic's witness has B on page 2.
 	if n := len(b.Pages()); n != 2 {
 		t.Errorf("pages = %d, want 2 (tectonic: \\newgeometry and \\restoregeometry each break the page)", n)

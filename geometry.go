@@ -1126,10 +1126,8 @@ func (e *Engine) saveGeometryAtBody() {
 // is cleared FIRST so that the paragraph in progress is broken at the old measure
 // (geometry.sty:1131); before \begin{document} there is no page to clear.
 func (e *Engine) doNewGeometry() {
-	if !e.inBody {
-		e.doGeometry()
-		return
-	}
+	// Before the body \clearpage is a no-op (measured: preamble \newgeometry starts no
+	// page), so one path serves both.
 	// The argument stays in the input; \gotex@newgeom reads it after \clearpage.
 	e.push([]tok{csTok("clearpage"), csTok("gotex@newgeom")})
 }
