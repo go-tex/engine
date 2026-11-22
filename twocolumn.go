@@ -365,11 +365,27 @@ func (e *Engine) typesetSpanFullWidth(toks []tok) *boxNode {
 	span := e.typesetGroupToVbox(toks)
 	e.hsize, e.twoColApplied = savedH, savedApplied
 	span.width = fullW
-	if v := e.effectiveVsize(); span.height+span.depth > v { // \@topnewpage caps at \textheight
-		span.height = v - span.depth
+	// \@topnewpage (latex.ltx:15126-15132) ends the box with \vskip -\dbltextfloatsep, so
+	// the band is that much shorter and the \dbltextfloatsep the pager adds below it
+	// brings the columns back to exactly the end of the material.
+	span.height -= e.dblTextFloatSep()
+	if v := e.effectiveVsize(); span.height > v { // \@topnewpage caps \ht at \textheight
+		span.height = v
 	}
 	return span
 }
+
+// columnsFillFloor is the least height under a \twocolumn[...] span for which LaTeX still
+// fills the columns. latex.ltx:15148-15160, the end of \@topnewpage:
+//
+//	\ifdim \@colht<2.5\baselineskip   % "Optional argument of \twocolumn too tall"
+//	  \@emptycol ...                  % two empty columns
+//	\else
+//	  \global \vsize \@colht  \global \@colroom \@colht  ...
+//
+// The refusal is 2.5\baselineskip, not a tenth of the page. Witness d1: 49pt of 550pt is
+// left under the span, and tectonic sets the text there.
+func columnsFillFloor(baselineskip int) int { return 5 * baselineskip / 2 }
 
 // switchToTwoColumn records the boundary at which the body switches to two columns:
 // the material typeset so far (frontmatter) stays a full-width one-column region, and a
@@ -609,7 +625,7 @@ func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, page
 	takeCols := func(start, reserve int) (left, right []node, next int) {
 		next = start
 		colVsize := e.effectiveVsize() - reserve
-		if start >= len(list) || colVsize <= e.effectiveVsize()/10 {
+		if start >= len(list) || colVsize < columnsFillFloor(e.baselineskip) {
 			return nil, nil, start
 		}
 		savedVsize := e.vsize
