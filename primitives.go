@@ -2273,7 +2273,7 @@ func (e *Engine) loadMore() {
 	e.prim("foreach", func(e *Engine) { e.doForeach() })
 	e.prim("tikzpicture", func(e *Engine) { e.doGobbleEnv("tikzpicture") })
 	e.prim("endtikzpicture", func(e *Engine) {}) // consumed literally by doGobbleEnv; defined for safety
-	e.prim("pgfpicture", func(e *Engine) { e.doGobbleEnv("pgfpicture") })
+	e.prim("pgfpicture", func(e *Engine) { e.doPgfPicture() })
 	e.prim("endpgfpicture", func(e *Engine) {})
 	e.prim("tikzcd", func(e *Engine) { e.doGobbleEnv("tikzcd") })
 	e.prim("endtikzcd", func(e *Engine) {})

@@ -2854,6 +2854,42 @@ func (e *Engine) doGobbleEnv(name string) {
 	e.gobbleEnvBody(name, true)
 }
 
+// doPgfPicture gobbles a pgfpicture like any other picture, except when the
+// picture DECLARES its size. pgf's old syntax \begin{pgfpicture}{x0}{y0}{x1}{y1}
+// fixes the bounding box up front (pgfcorescopes.code.tex:218-225, \pgf@oldpicture),
+// and the box pgf sets is then exactly x1-x0 wide and y1-y0 tall with depth 0: the
+// baseline defaults to the lower border (:366-382), and \pgfsys@typesetpicturebox
+// (pgfsys.code.tex:1596-1611) assigns \ht, \wd and \dp from those bounds. So the
+// size is known without drawing anything, and the gobbled picture keeps it.
+//
+// The framed 96x60pt placeholder stood in for these too. beamer's ball enumerate
+// item is one — \begin{pgfpicture}{-1ex}{-0.65ex}{1ex}{1ex} around a shading and
+// the item number (beamerbaseauxtemplates.sty:374-384) — so every numbered item
+// carried a 60pt box and enumerate lines sat 70.5pt apart against 16.5pt in the
+// reference (go-tex/engine#884). The drawing is still lost and still counted as a
+// dropped figure; only its footprint is now pgf's own.
+func (e *Engine) doPgfPicture() {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if ok {
+		e.back(t)
+	}
+	if !ok || t.cs_ || t.cat != catBegin {
+		e.doGobbleEnv("pgfpicture")
+		return
+	}
+	minx := e.readBraceDimen()
+	miny := e.readBraceDimen()
+	maxx := e.readBraceDimen()
+	maxy := e.readBraceDimen()
+	if !e.gobbleEnvBody("pgfpicture", false) {
+		return // unterminated: like any gobbled picture, it leaves nothing
+	}
+	e.recordPictureDrop()
+	e.startImage()
+	e.parList = append(e.parList, &boxNode{kind: hbox, width: max(maxx-minx, 0), height: max(maxy-miny, 0)})
+}
+
 // doGobbleEnvSilent discards an environment body whole and emits NOTHING — for
 // content that must vanish entirely rather than reserve space: the comment
 // package's \begin{comment}…\end{comment} (and any env made with
@@ -2871,12 +2907,13 @@ func (e *Engine) doGobbleEnvSilent(name string) {
 // source or is replayed from a macro/box body; nothing from the body is emitted,
 // so no command inside it can leak into the typeset output. When placeholder is
 // true a framed box is left where the environment sat; when false nothing is.
-func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
+// It reports whether the matching \end was found.
+func (e *Engine) gobbleEnvBody(name string, placeholder bool) bool {
 	depth := 1
 	for {
 		t, ok := e.getNext()
 		if !ok {
-			return // unterminated: input exhausted
+			return false // unterminated: input exhausted
 		}
 		if !t.cs_ {
 			continue
@@ -2907,7 +2944,7 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 					e.emitPicturePlaceholder(name)
 				}
 				e.endEnvGroup()
-				return
+				return true
 			}
 			continue
 		}
@@ -2930,7 +2967,7 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 					// This \end was swallowed here, so \end — and the \gotex@endenv
 					// that closes the group \begin opened — never runs.
 					e.endEnvGroup()
-					return
+					return true
 				}
 			}
 		}
