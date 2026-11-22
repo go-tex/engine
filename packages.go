@@ -737,6 +737,11 @@ func (e *Engine) doUsepackageLoad() {
 				// arguments (latex.go, \gotex@pgfstubs).
 				e.push([]tok{csTok("gotex@pgfstubs")})
 			}
+			if name == "hyperref" {
+				// hyperref internals a class calls directly (latex.go,
+				// \gotex@hyperrefstubs).
+				e.push([]tok{csTok("gotex@hyperrefstubs")})
+			}
 			continue
 		}
 		if data, _, ok := e.findTeXFile(name, []string{".sty"}); ok {
