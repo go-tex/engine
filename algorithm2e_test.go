@@ -37,10 +37,12 @@ func a2eText(t *testing.T, opts, body string) string {
 // header would drop a number, and an unnumbered keyword line would shift every later one.
 func TestAlgorithm2eBlocksAreNumberedLineByLine(t *testing.T) {
 	got := a2eText(t, "linesnumbered", `\eIf{P}{a\;}{b\;}
-\For{Q}{\uIf{R}{c\;}\Else{d\;}}`)
+\For{Q}{\uIf{R}{c\;}\Else{d\;}}
+\If{S}{e\;}
+\While{W}{f\;}`)
 	// 1 if P then / 2 a / 3 else / 4 b / 5 end / 6 for Q do / 7 if R then / 8 c / 9 else /
-	// 10 d / 11 end / 12 end
-	want := "1ifPthen2a3else4b5end6forQdo7ifRthen8c9else10d11end12end"
+	// 10 d / 11 end / 12 end / 13 if S then / 14 e / 15 end / 16 while W do / 17 f / 18 end
+	want := "1ifPthen2a3else4b5end6forQdo7ifRthen8c9else10d11end12end13ifSthen14e15end16whileWdo17f18end"
 	if !strings.Contains(got, want) {
 		t.Errorf("block lines or numbers differ:\n got %q\nwant %q", got, want)
 	}
@@ -59,11 +61,13 @@ func TestAlgorithm2eNumbersOnlyUnderLinesnumbered(t *testing.T) {
 // \SetKwProg declares a block with a Title line, a body and an End line, and \KwIn prints
 // "Input: text" WITHOUT a number (the reference numbers neither, and counts the lines after).
 func TestAlgorithm2eProgAndInputLine(t *testing.T) {
-	got := a2eText(t, "linesnumbered", `\SetKwProg{Fn}{Function}{:}{end}
+	got := a2eText(t, "linesnumbered", `\SetAlgoLined\SetKwProg{Fn}{Function}{:}{end}
 \KwIn{X}
 \Fn{F}{r\;}`)
+	// A prefix, not a substring: a numbered \KwIn leaves "1Input:X1Function…", which
+	// still CONTAINS the text below (the number is local to the \KwIn group).
 	want := "Input:X1FunctionF:2r3end"
-	if !strings.Contains(got, want) {
+	if !strings.HasPrefix(got, want) {
 		t.Errorf("\\KwIn / \\SetKwProg lines differ:\n got %q\nwant %q", got, want)
 	}
 }
