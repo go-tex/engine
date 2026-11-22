@@ -79,16 +79,6 @@ func (e *Engine) resetShipPics() {
 
 // takeShipPics lifts the shipout-picture nodes out of a vertical list, in order.
 func takeShipPics(vlist []node) (pics []shipPicNode, rest []node) {
-	found := false
-	for _, n := range vlist {
-		if _, ok := n.(shipPicNode); ok {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return nil, vlist
-	}
 	rest = make([]node, 0, len(vlist))
 	for _, n := range vlist {
 		if sp, ok := n.(shipPicNode); ok {
@@ -104,9 +94,6 @@ func takeShipPics(vlist []node) (pics []shipPicNode, rest []node) {
 // stands after this page's own plain pictures joined it, then this page's starred
 // ones. The first page assembled also carries the preamble's starred pictures.
 func (e *Engine) attachShipPics(b *boxNode, pics []shipPicNode) {
-	if b == nil {
-		return
-	}
 	if e.shipPicSeen == nil {
 		e.resetShipPics()
 	}

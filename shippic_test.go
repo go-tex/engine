@@ -161,3 +161,32 @@ Body\ two.
 		t.Error("page 2 still draws the picture after \\ClearShipoutPicture")
 	}
 }
+
+// A void box register is not a picture: the hook ignores it instead of drawing a nil
+// box (which would panic the renderer).
+func TestEsoPicVoidBoxDrawsNothing(t *testing.T) {
+	e, err := compile([]byte(`\documentclass{article}
+\makeatletter
+\begin{document}
+\gotex@shipoutpic{0}{bg}200
+Body\ text.
+\end{document}`), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := e.Pages()
+	if len(pages) != 1 || len(pages[0].overlays) != 0 {
+		t.Fatalf("%d pages, %d overlays; want 1 page and none", len(pages), len(pages[0].overlays))
+	}
+	if svgs := e.RenderPages(72); len(svgs) != 1 {
+		t.Fatalf("%d pages, want 1", len(svgs))
+	}
+}
+
+// A page may break after a picture node as it may after a mark: the node is not a
+// box, and a break after it is a break after the line before it.
+func TestEsoPicNodeAllowsABreakAfterIt(t *testing.T) {
+	if !precedesBreak(shipPicNode{}) {
+		t.Error("a shipout-picture node must not forbid a break after it")
+	}
+}
