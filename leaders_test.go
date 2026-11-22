@@ -75,3 +75,28 @@ func TestLeadersPaint(t *testing.T) {
 		t.Errorf("a rule leader paints one rule, got %d", r-baseRects)
 	}
 }
+
+// Malformed leaders (tex.web §1078): no box, or no glue after it, drops the leader
+// and what follows is read as itself; input ending inside one is not a crash.
+func TestLeadersMalformed(t *testing.T) {
+	text := func(body string) string {
+		e, err := compile([]byte(`\documentclass{article}\begin{document}`+body), Options{Lenient: true})
+		if err != nil {
+			t.Fatalf("compile %q: %v", body, err)
+		}
+		return strings.Join(strings.Fields(stripSVGTags(strings.Join(e.RenderPages(e.renderMargin(0)), ""))), " ")
+	}
+	for _, c := range []struct{ body, want string }{
+		{`\leaders QQ\end{document}`, "QQ"},                          // no box: the text survives
+		{`\leaders\hbox{x}\relax QQ\end{document}`, "QQ"},            // box, no glue
+		{`\leaders\hbox{x}QQ\end{document}`, "QQ"},                   // box, a letter instead of glue
+		{`\noindent AA\leaders\hbox{x}\hfil BB\end{document}`, "AA"}, // well formed still works
+	} {
+		if got := text(c.body); !strings.Contains(got, c.want) {
+			t.Errorf("%q: %q lacks %q", c.body, got, c.want)
+		}
+	}
+	for _, body := range []string{`\leaders`, `\leaders\hbox{x}`} { // EOF inside the leader
+		text(body)
+	}
+}

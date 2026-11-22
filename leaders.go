@@ -61,15 +61,6 @@ func leaderTileOrigins(mode leaderMode, edge, x, w, tw float64) []float64 {
 	return out
 }
 
-// leaderTileWidth is the width a tile advances: a box's width, 0 for a rule (a rule
-// leader is painted as one rule, not tiled).
-func leaderTileWidth(tile node) int {
-	if b, ok := tile.(*boxNode); ok && b != nil {
-		return b.width
-	}
-	return 0
-}
-
 // installLeaders registers the three primitives.
 func (e *Engine) installLeaders() {
 	for name, mode := range map[string]leaderMode{
