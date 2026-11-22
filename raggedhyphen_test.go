@@ -4,7 +4,6 @@
 package engine
 
 import (
-	"math"
 	"strings"
 	"testing"
 )
@@ -138,10 +137,11 @@ func TestRaggedTextStillHyphenatesAWordThatCannotFit(t *testing.T) {
 		t.Errorf("a word wider than the ragged measure was not hyphenated; "+
 			"tectonic breaks it `incomprehen-` / `sibilities`: %q", got)
 	}
-	if d := e.Diagnostics(); math.Abs(d.WorstOverfull-0.10) > 0.05 {
-		t.Errorf("worst overhang = %.2fpt, want about 0.10 — the residue of our "+
-			"own break point, and the same value the commit before this one "+
-			"produced. Tens of points would mean the word was left unbroken",
-			d.WorstOverfull)
+	// The 0.10pt natural overhang of our break point is inside the line's shrink
+	// (tex.web §664), so no overfull box is reported; the reference reports none
+	// either. Tens of points would mean the word was left unbroken.
+	if d := e.Diagnostics(); d.WorstOverfull > 0.05 {
+		t.Errorf("worst overhang = %.2fpt, want 0 — a 0.10pt overhang shrinks away. "+
+			"Tens of points would mean the word was left unbroken", d.WorstOverfull)
 	}
 }

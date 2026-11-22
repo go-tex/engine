@@ -119,12 +119,12 @@ func TestAParagraphWithNoFeasibleBreakIsStillReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := e.Diagnostics()
-	if d.OverfullLines != 2 {
-		t.Errorf("%d overfull line(s), want 2 — the unbreakable first word (33.1pt, "+
-			"as the reference) and `every para-` (2.93pt), which the wide-open pass "+
-			"prefers to the reference's `ev-ery` break. The reference has ONE; see "+
-			"#768 finding (2), and this returns to 1 when that pass goes",
-			d.OverfullLines)
+	// ONE, as the reference: `every para-` runs 2.93pt past the measure NATURALLY
+	// but its finite shrink absorbs that (tex.web §664 subtracts total_shrink), so
+	// it is not an overfull box. Before the shrink was subtracted this read 2.
+	if d.OverfullLines != 1 {
+		t.Errorf("%d overfull line(s), want 1 — the unbreakable first word (33.1pt, "+
+			"as the reference); `every para-` fits by shrinking", d.OverfullLines)
 	}
 	if math.Abs(d.WorstOverfull-33.10) > 0.1 {
 		t.Errorf("worst overflow = %.2fpt, want about 33.10 — the width of "+

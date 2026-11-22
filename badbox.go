@@ -70,10 +70,27 @@ func lineOverflowSP(list []node, ln Line, targetSP int) int {
 	if ln.Start < 0 || ln.End > len(list) || ln.Start >= ln.End {
 		return 0
 	}
-	if natural := hpackSP(list[ln.Start:ln.End], packNatural, 0).width; natural > targetSP {
-		return natural - targetSP
+	seg := list[ln.Start:ln.End]
+	// tex.web §664: overfull is `-x - total_shrink[normal] > hfuzz`, the excess
+	// past the measure MINUS the finite shrink the line can still give.
+	// \hfuzz is accepted and ignored by this engine, so it is 0 here.
+	over := hpackSP(seg, packNatural, 0).width - targetSP - finiteShrinkSP(seg)
+	if over > 0 {
+		return over
 	}
 	return 0
+}
+
+// finiteShrinkSP is tex.web's total_shrink[normal] for a list: the sum of the
+// shrink of every glue whose shrink is finite (order 0).
+func finiteShrinkSP(list []node) int {
+	total := 0
+	for _, n := range list {
+		if g, ok := n.(glueNode); ok && g.spec.shrinkOrder == 0 {
+			total += g.spec.shrink
+		}
+	}
+	return total
 }
 
 // anyLineOverflows reports whether any line runs past the measure. It is the
