@@ -536,7 +536,24 @@ const LaTeX2eKernelHelpers = `
   % The stream becomes a readable file only at \closeout, and the NEXT pass is what
   % reads it — it is carried across by carryCrossRefs, beside the label tables.
   \immediate\closeout\@auxout
-  \par\label{LastPage}\vfill\penalty-10000 }
+  \par\gotex@begindvi\label{LastPage}\vfill\penalty-10000 }
+% ── \AtBeginDvi ─────────────────────────────────────────────────────────────
+% latex.ltx:15427 runs \@begindvi INSIDE the first page's shipout box, once
+% (\unvbox\@begindvibox, then \global\let\@begindvi\@empty); \AtBeginDvi{code} adds
+% to it (latex.ltx:14935, via \__shipout_add_firstpage_material:Nn). IEEEtran, for
+% one, uses it for \special{papersize=…} (IEEEtran.cls:546,554). The material of a
+% first page is typeset with \baselineskip, \lineskip and \lineskiplimit all zero
+% (latex.ltx:15400), which is what a \special or a \message asks of it.
+%
+% This engine paginates after the document has been read and has no shipout to hang
+% the hook on, so the code runs ONCE, at \end{document}, in a box that is thrown
+% away: its side effects (\message, \special, \write) happen exactly once, as on
+% the first shipout, and it puts nothing on any page. A real document whose
+% \AtBeginDvi typeset visible material would differ; none in the corpora does.
+\def\@begindvi{}
+\def\AtBeginDvi#1{\g@addto@macro\@begindvi{#1}}
+\def\gotex@begindvi{\begingroup\baselineskip\z@skip\lineskip\z@skip\lineskiplimit\z@
+  \setbox\z@\vbox{\@begindvi}\endgroup\global\let\@begindvi\@empty}
 % ── loaded-package / loaded-class registry (see CONTRACT above) ─────────────
 \def\@ifl@aded#1#2{\@ifundefined{ver@#2.#1}\@secondoftwo\@firstoftwo}
 % \@ptionlist{<file>} expands to the options that <file> was loaded with (the Go

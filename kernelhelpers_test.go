@@ -223,6 +223,25 @@ func TestKernelLogging(t *testing.T) {
 	}
 }
 
+// \AtBeginDvi{code} runs ONCE, in registration order, at the first shipout, and
+// IEEEtran's \special{papersize=…} is one of its users (IEEEtran.cls:546). Measured
+// against tectonic 0.17 on this very document (two pages, two \AtBeginDvi, one
+// \message in the body): `<BODY> <DVI1> <DVI2>` — the body first, each hook once,
+// not once per page. The engine has no shipout, so the code runs at \end{document}
+// in a box that is discarded; the messages are the observable the two agree on.
+func TestAtBeginDviRunsItsCodeOnceAfterTheBody(t *testing.T) {
+	const doc = `\AtBeginDvi{\message{<DVI1>}}` +
+		`\AtBeginDvi{\message{<DVI2>}\special{papersize=1in,1in}}` +
+		`\begin{document}\message{<BODY>}Hello.\newpage Second page.\end{document}`
+	if got := khRun(t, doc); got != "<BODY> <DVI1> <DVI2>" {
+		t.Errorf("AtBeginDvi => %q, want %q (tectonic)", got, "<BODY> <DVI1> <DVI2>")
+	}
+	// No \AtBeginDvi, no message: the hook is empty by default.
+	if got := khRun(t, `\begin{document}\message{<BODY>}x\end{document}`); got != "<BODY>" {
+		t.Errorf("without AtBeginDvi => %q, want <BODY>", got)
+	}
+}
+
 // \AtBeginDocument / \AtEndDocument hooks fire at \begin{document} /
 // \end{document}, in registration order, at the right time.
 func TestKernelDocumentHooks(t *testing.T) {
