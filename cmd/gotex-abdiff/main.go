@@ -97,15 +97,10 @@ func main() {
 }
 
 func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top int, keep bool, audit auditConfig) error {
-	papers, err := loadCorpus(list, refs)
+	papers, err := loadAudited(os.Stdout, list, refs, audit)
 	if err != nil {
 		return err
 	}
-	papers, bad, err := auditRefs(papers, audit)
-	if err != nil {
-		return err
-	}
-	reportUnusable(os.Stdout, bad, audit)
 	work, err := os.MkdirTemp("", "abdiff-")
 	if err != nil {
 		return err
@@ -162,15 +157,10 @@ func run(list, refs, repo, base, head, texmf string, timeout time.Duration, top 
 // is not scored. It is worse than any page deviation and it must not vanish into
 // a total.
 func rank(list, refs, repo, head, texmf string, timeout time.Duration, top int, audit auditConfig) error {
-	papers, err := loadCorpus(list, refs)
+	papers, err := loadAudited(os.Stdout, list, refs, audit)
 	if err != nil {
 		return err
 	}
-	papers, bad, err := auditRefs(papers, audit)
-	if err != nil {
-		return err
-	}
-	reportUnusable(os.Stdout, bad, audit)
 	work, err := os.MkdirTemp("", "abdiff-rank-")
 	if err != nil {
 		return err

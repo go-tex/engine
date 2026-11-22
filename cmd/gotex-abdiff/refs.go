@@ -53,6 +53,21 @@ func auditRefs(papers []Paper, cfg auditConfig) (usable []Paper, bad []unusableR
 	return usable, bad, nil
 }
 
+// loadAudited is what both modes start from: the corpus, audited, with the
+// "reference unusable" block already written to w.
+func loadAudited(w io.Writer, list, refs string, cfg auditConfig) ([]Paper, error) {
+	papers, err := loadCorpus(list, refs)
+	if err != nil {
+		return nil, err
+	}
+	papers, bad, err := auditRefs(papers, cfg)
+	if err != nil {
+		return nil, err
+	}
+	reportUnusable(w, bad, cfg)
+	return papers, nil
+}
+
 // reportUnusable prints the "reference unusable" block. It always says what was
 // done with them, because a total that silently lost papers reads as a better
 // corpus.

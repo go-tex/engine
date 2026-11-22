@@ -111,3 +111,40 @@ func TestReportUnusableBlock(t *testing.T) {
 		t.Errorf("clean corpus not said: %q", out.String())
 	}
 }
+
+func TestLoadAuditedWritesTheBlockAndDropsThem(t *testing.T) {
+	dir, papers := refDir(t)
+	root := t.TempDir()
+	var list, refs strings.Builder
+	for _, p := range papers {
+		pd := filepath.Join(root, p.ID)
+		if err := os.Mkdir(pd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		list.WriteString(pd + "/main.tex\n")
+		refs.WriteString("3\n")
+	}
+	lp, rp := filepath.Join(root, "list.txt"), filepath.Join(root, "refs.txt")
+	if err := os.WriteFile(lp, []byte(list.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rp, []byte(refs.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	got, err := loadAudited(&out, lp, rp, auditConfig{Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "good" || !strings.Contains(out.String(), "reference unusable: 2") {
+		t.Errorf("papers %v, output %q", got, out.String())
+	}
+	// Each refusal must name ITS OWN cause, not the generic "nothing to score".
+	if _, err := loadAudited(&out, filepath.Join(root, "absent.txt"), rp, auditConfig{Dir: dir}); err == nil || !strings.Contains(err.Error(), "absent.txt") {
+		t.Errorf("a missing corpus list: %v", err)
+	}
+	missing := t.TempDir()
+	if _, err := loadAudited(&out, lp, rp, auditConfig{Dir: missing}); err == nil || !strings.Contains(err.Error(), "could not be audited") {
+		t.Errorf("an empty reference directory: %v", err)
+	}
+}
