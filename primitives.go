@@ -2282,6 +2282,8 @@ func (e *Engine) loadMore() {
 	// papers use \begin{comment}; typesetting the body instead of gobbling it
 	// leaks stray \item/\\/unbalanced braces and can swallow the whole page.
 	e.registerExcludedComment("comment")
+	e.prim("IfInteger", func(e *Engine) { e.doIfNumberKind(true) })  // xstring: see xstring.go
+	e.prim("IfDecimal", func(e *Engine) { e.doIfNumberKind(false) }) // xstring: idem
 	e.prim("excludecomment", func(e *Engine) {
 		if n := e.grabEnvNameArg(); n != "" {
 			e.registerExcludedComment(n)
