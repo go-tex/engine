@@ -167,11 +167,74 @@ func (e *Engine) parsePreamble() ([]colTemplate, int) {
 		cur = colTemplate{}
 		seenHash = false
 	}
+	// ⛔ The template is copied UNEXPANDED. tex.web §782 (get_preamble_token) reads
+	// it with get_token and expands once only the token after \span; \tabskip is
+	// performed as the assignment it is. Reading it with
+	// getXToken expanded every macro in the u and v parts ONCE, at preamble time,
+	// so a \gdef or \let in a cell met a frozen copy of the macro it names
+	// (go-tex/engine#602: `\halign{#\a\cr \gdef\a{NEW}x\cr}` typeset OLD).
+	//
+	// depth is align_state's brace part: §783-784 end a u or v part only on an & or
+	// \cr met with align_state=-1000000, i.e. with the braces BALANCED, so one inside braces belongs to the
+	// template.
+	depth := 0
 	for {
-		t, ok := e.getXToken()
+		t, ok := e.getNext()
 		if !ok {
 			break
 		}
+		if t.noexp {
+			t.noexp = false
+		}
+		for t.cs_ && t.cs == "span" && (e.meaningOf(t) == nil || e.meaningOf(t).kind == mPrim) {
+			// §782: the token after \span "will be expanded once" — one step of
+			// expansion, then the next token is taken as it comes.
+			// At end of input x is the zero token, which the template drops with the
+			// unfinished column the next getNext of this loop ends.
+			x, _ := e.getNext()
+			if m := e.meaningOf(x); x.cs_ && m != nil && m.kind == mMacro {
+				e.expandMacro(m)
+				x, _ = e.getNext()
+			} else if x.cs_ && m != nil && m.kind != mPrim {
+				e.back(x)
+				x, _ = e.getXToken()
+			}
+			t = x
+		}
+		if t.cs_ && t.cs == "tabskip" {
+			if m := e.meaningOf(t); m != nil && m.kind == mSkipRef {
+				e.execCS(t) // §782: \tabskip=<glue> is executed, not copied
+				continue
+			}
+		}
+		// §783: spaces are eliminated from the beginning of a u template.
+		if !seenHash && !t.cs_ && t.cat == catSpace && len(cur.before) == 0 {
+			continue
+		}
+		orig := t // the template keeps the token as written
+		if c, isChar := e.implicitChar(t); isChar {
+			t = c
+		}
+		inside := depth > 0
+		if !t.cs_ {
+			switch t.cat {
+			case catBegin:
+				depth++
+			case catEnd:
+				if depth > 0 {
+					depth--
+				}
+			}
+		}
+		if inside || (!t.cs_ && t.cat == catBegin) {
+			if seenHash {
+				cur.after = append(cur.after, orig)
+			} else {
+				cur.before = append(cur.before, orig)
+			}
+			continue
+		}
+		t = orig
 		switch {
 		case t.cs_ && (t.cs == "cr" || t.cs == "crcr"):
 			flush()
