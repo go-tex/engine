@@ -379,6 +379,18 @@ func (e *Engine) installUnbox() {
 func (e *Engine) unbox(want boxKind, keep bool) {
 	i := e.boxRegIndex()
 	b := e.getBox(i)
+	// ⛔ \unhbox and \unhcopy in vertical mode START A PARAGRAPH, indented, before
+	// anything is unpacked: vmode+un_hbox is in tex.web:21104-21109's list, which
+	// does back_input; new_graf(true). Void box included, which is why \leavevmode
+	// can be \unhbox\voidb@x. Without it, LaTeX's \strut
+	// (\unhcopy\strutbox) opening a paragraph contributed its pieces to the
+	// VERTICAL list, and the text after it began a second line, about 10pt lower
+	// than the reference. beamer's frame title opens with \strut
+	// (beamerouterthemedefault.sty:172), so every frame title and body sat 13pt low
+	// (go-tex/engine#924).
+	if want == hbox {
+		e.leaveVMode()
+	}
 	if b == nil || b.kind != want {
 		return
 	}
