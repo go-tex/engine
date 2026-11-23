@@ -513,8 +513,16 @@ const LaTeX2eKernelHelpers = `
 % ⚠ Not the same thing as #500, which is about a DOCUMENT's own \makeatletter
 % surviving \begin{document} and is what \gotexatasked below records. This is the
 % kernel's own read, which needs @ to be a letter whatever the document asked.
+%
+% The body starts at \normalsize, whatever size the preamble left (ltfiles.dtx:302).
+% beamer's sidebar outer theme selects the \Large frame-title font in the preamble
+% to measure its head band (beamerouterthemesidebar.sty:18-21), and only its font,
+% not its size, is reset there; without this, every frame of a Rochester talk was
+% set at 14.4pt on 18pt lines. \normalsize also installs \@listI as \@listi
+% (size10.clo:47-53), over a style's preamble \def\@listi like tmlr.sty's.
 \def\document{\gotex@bodybegins\gotex@wrapappendix\gotex@applybaselinestretch\gotex@setmeasure
   \catcode64=11 \@input{\jobname.aux}\if1\gotexatasked\else\catcode64=12 \fi\immediate\openout\@auxout=\jobname.aux
+  \ifx\normalsize\@undefined\else\normalsize\fi
   \UseHook{begindocument/before}\@begindocumenthook
   \UseHook{begindocument}\UseHook{begindocument/end}\UseHook{env/document/begin}}
 % \enddocument also plants the LastPage label the lastpage package is loaded for,
