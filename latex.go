@@ -2894,7 +2894,23 @@ func (e *Engine) doPgfPicture() {
 		e.back(t)
 	}
 	if !ok || t.cs_ || t.cat != catBegin {
-		e.doGobbleEnv("pgfpicture")
+		// No declared box: record the body, and keep the box pgf would grow from
+		// its path when that is knowable (pgfbbox.go).
+		var body []tok
+		e.gobbleRec = &body
+		found := e.gobbleEnvBody("pgfpicture", false)
+		e.gobbleRec = nil
+		if !found {
+			return // unterminated: like any gobbled picture, it leaves nothing
+		}
+		minx, miny, maxx, maxy, known := e.pgfBodyBBox(body)
+		if !known {
+			e.emitPicturePlaceholder("pgfpicture")
+			return
+		}
+		e.recordPictureDrop()
+		e.startImage()
+		e.parList = append(e.parList, &boxNode{kind: hbox, width: maxx - minx, height: maxy - miny})
 		return
 	}
 	minx := e.readBraceDimen()
@@ -2933,6 +2949,9 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) bool {
 		t, ok := e.getNext()
 		if !ok {
 			return false // unterminated: input exhausted
+		}
+		if e.gobbleRec != nil {
+			*e.gobbleRec = append(*e.gobbleRec, t)
 		}
 		if !t.cs_ {
 			continue
