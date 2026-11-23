@@ -99,6 +99,9 @@ type Engine struct {
 	// the document group (see recordShipBands). Pages are assembled after the run,
 	// once that group has restored whatever the body assigned locally.
 	shipBands map[string]int
+	// gobbleRec, when set, receives every token gobbleEnvBody reads, so a picture
+	// whose size follows from its body can be measured (pgfbbox.go).
+	gobbleRec *[]tok
 	// importPath is the directory \import is currently reading from, and importStack
 	// the enclosing ones (importpkg.go).
 	importPath   string

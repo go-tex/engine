@@ -1668,6 +1668,25 @@ const MiniLaTeXKernel = `
     \expandafter\newif\csname ifpgfpicture\endcsname
   \fi
   \gotex@pgfstub\pgfsetcolor\gotex@pgf@one}
+% hyperref's INTERNALS that a class calls directly, for when hyperref is emulated
+% rather than loaded (packages.go pushes \gotex@hyperrefstubs). beamer's \part,
+% \section, \subsection and \subsubsection (beamerbasesection.sty:105, 135-136 and
+% their twins) call \GetTitleString{<short title>} — gettitlestring.sty, which
+% hyperref loads — then \Hy@writebookmark with five arguments (hyperref.sty:2476,
+% whose default is empty) and \hyper@anchorstart{<name>}\hyper@anchorend. Undefined,
+% their arguments were typeset in the document, outside any frame:
+% "One1OneOutline0.12tocOutline0.1" on a page of its own before the first frame
+% of every beamer talk with a \section. The bookmark and the anchor draw nothing;
+% \GetTitleStringResult keeps the title as given. Only names still undefined are
+% given these, so a loaded hyperref's own definitions stand.
+\long\def\gotex@hy@title#1{\def\GetTitleStringResult{#1}}
+\long\def\gotex@hy@bookmark#1#2#3#4#5{}
+\def\gotex@hy@anchorstart#1{}
+\def\gotex@hyperrefstubs{%
+  \gotex@pgfstub\GetTitleString\gotex@hy@title
+  \gotex@pgfstub\Hy@writebookmark\gotex@hy@bookmark
+  \gotex@pgfstub\hyper@anchorstart\gotex@hy@anchorstart
+  \gotex@pgfstub\hyper@anchorend\@empty}
 % The a4 package (NTG), emulated rather than bundled: its header lets the file be
 % distributed only with the NTG classes. Written from its documented effect — an
 % A4-based text block per base size (10/11/12pt): \topmargin 0pt, a text height of
@@ -2854,6 +2873,58 @@ func (e *Engine) doGobbleEnv(name string) {
 	e.gobbleEnvBody(name, true)
 }
 
+// doPgfPicture gobbles a pgfpicture like any other picture, except when the
+// picture DECLARES its size. pgf's old syntax \begin{pgfpicture}{x0}{y0}{x1}{y1}
+// fixes the bounding box up front (pgfcorescopes.code.tex:218-225, \pgf@oldpicture),
+// and the box pgf sets is then exactly x1-x0 wide and y1-y0 tall with depth 0: the
+// baseline defaults to the lower border (:366-382), and \pgfsys@typesetpicturebox
+// (pgfsys.code.tex:1596-1611) assigns \ht, \wd and \dp from those bounds. So the
+// size is known without drawing anything, and the gobbled picture keeps it.
+//
+// The framed 96x60pt placeholder stood in for these too. beamer's ball enumerate
+// item is one — \begin{pgfpicture}{-1ex}{-0.65ex}{1ex}{1ex} around a shading and
+// the item number (beamerbaseauxtemplates.sty:374-384) — so every numbered item
+// carried a 60pt box and enumerate lines sat 70.5pt apart against 16.5pt in the
+// reference (go-tex/engine#884). The drawing is still lost and still counted as a
+// dropped figure; only its footprint is now pgf's own.
+func (e *Engine) doPgfPicture() {
+	e.skipOptSpace()
+	t, ok := e.getNext()
+	if ok {
+		e.back(t)
+	}
+	if !ok || t.cs_ || t.cat != catBegin {
+		// No declared box: record the body, and keep the box pgf would grow from
+		// its path when that is knowable (pgfbbox.go).
+		var body []tok
+		e.gobbleRec = &body
+		found := e.gobbleEnvBody("pgfpicture", false)
+		e.gobbleRec = nil
+		if !found {
+			return // unterminated: like any gobbled picture, it leaves nothing
+		}
+		minx, miny, maxx, maxy, known := e.pgfBodyBBox(body)
+		if !known {
+			e.emitPicturePlaceholder("pgfpicture")
+			return
+		}
+		e.recordPictureDrop()
+		e.startImage()
+		e.parList = append(e.parList, &boxNode{kind: hbox, width: maxx - minx, height: maxy - miny})
+		return
+	}
+	minx := e.readBraceDimen()
+	miny := e.readBraceDimen()
+	maxx := e.readBraceDimen()
+	maxy := e.readBraceDimen()
+	if !e.gobbleEnvBody("pgfpicture", false) {
+		return // unterminated: like any gobbled picture, it leaves nothing
+	}
+	e.recordPictureDrop()
+	e.startImage()
+	e.parList = append(e.parList, &boxNode{kind: hbox, width: max(maxx-minx, 0), height: max(maxy-miny, 0)})
+}
+
 // doGobbleEnvSilent discards an environment body whole and emits NOTHING — for
 // content that must vanish entirely rather than reserve space: the comment
 // package's \begin{comment}…\end{comment} (and any env made with
@@ -2871,12 +2942,16 @@ func (e *Engine) doGobbleEnvSilent(name string) {
 // source or is replayed from a macro/box body; nothing from the body is emitted,
 // so no command inside it can leak into the typeset output. When placeholder is
 // true a framed box is left where the environment sat; when false nothing is.
-func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
+// It reports whether the matching \end was found.
+func (e *Engine) gobbleEnvBody(name string, placeholder bool) bool {
 	depth := 1
 	for {
 		t, ok := e.getNext()
 		if !ok {
-			return // unterminated: input exhausted
+			return false // unterminated: input exhausted
+		}
+		if e.gobbleRec != nil {
+			*e.gobbleRec = append(*e.gobbleRec, t)
 		}
 		if !t.cs_ {
 			continue
@@ -2907,7 +2982,7 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 					e.emitPicturePlaceholder(name)
 				}
 				e.endEnvGroup()
-				return
+				return true
 			}
 			continue
 		}
@@ -2930,7 +3005,7 @@ func (e *Engine) gobbleEnvBody(name string, placeholder bool) {
 					// This \end was swallowed here, so \end — and the \gotex@endenv
 					// that closes the group \begin opened — never runs.
 					e.endEnvGroup()
-					return
+					return true
 				}
 			}
 		}
