@@ -544,7 +544,31 @@ const LaTeX2eKernelHelpers = `
   % The stream becomes a readable file only at \closeout, and the NEXT pass is what
   % reads it — it is carried across by carryCrossRefs, beside the label tables.
   \immediate\closeout\@auxout
+  \gotex@rereadaux
   \par\gotex@shipbands\gotex@begindvi\label{LastPage}\vfill\penalty-10000 }
+% ── the .aux read a second time, at the end ─────────────────────────────────
+% latex.ltx:10879-10886 closes the .aux and reads it straight back, in a group,
+% with \@newl@bel bound to \@testdef (which only notes that a label changed). That
+% second reading is when the \@writefile lines take effect: \@writefile{ext}{…}
+% writes its text to \tf@ext if a package opened that stream, and is silent
+% otherwise (latex.ltx:10941-10949). beamer opens \tf@nav in its \AtEndDocument
+% (beamerbasemisc.sty:176-177), and every \section, \subsection and frame has put
+% an \@writefile{nav}{\headcommand{…}} line in the .aux; the .nav they make is what
+% the next run reads at \begin{document} to size and fill the navigation bars
+% (beamerbasemisc.sty:87-103, beamerouterthemesplit.sty:45-59). With the
+% \@writefile of the reading at \begin{document} (above, a no-op) used here as
+% well, no talk ever had a .nav, and a split headline measured 0 sections.
+%
+% The reading is put in a box that is thrown away: the engine paginates after the
+% document is read, so anything a line of the file typesets would otherwise reach
+% the last page, where LaTeX has already shipped every page out.
+\def\@testdef#1#2#3{\def\reserved@a{#3}\expandafter\ifx\csname #1@#2\endcsname
+  \reserved@a\else\@tempswatrue\fi}
+\long\def\gotex@writefile#1#2{\@ifundefined{tf@#1}\relax
+  {\@temptokena{#2}\immediate\write\csname tf@#1\endcsname{\the\@temptokena}}}
+\def\gotex@rereadaux{\begingroup\let\@setckpt\@gobbletwo\let\@newl@bel\@testdef
+  \let\@writefile\gotex@writefile\catcode64=11
+  \setbox\z@\vbox{\@input{\jobname.aux}}\endgroup}
 % ── \AtBeginDvi ─────────────────────────────────────────────────────────────
 % latex.ltx:15427 runs \@begindvi INSIDE the first page's shipout box, once
 % (\unvbox\@begindvibox, then \global\let\@begindvi\@empty); \AtBeginDvi{code} adds

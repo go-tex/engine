@@ -5,6 +5,10 @@ package engine
 
 import "strings"
 
+// maxWriteStreams is the number of \write streams \newwrite hands out, 0 to 15
+// (latex.ltx:358, \sixt@@n).
+const maxWriteStreams = 16
+
 // Output streams: \openout, \write, \closeout, and the in-memory files they leave
 // behind for \input to read back.
 //

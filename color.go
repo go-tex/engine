@@ -200,8 +200,9 @@ func (e *Engine) doTextcolor() {
 // (with \fboxsep padding, no border).
 func (e *Engine) doColorbox() frameNode {
 	bg := e.resolveColor(e.readBraceName())
+	sep := e.curFboxSep()
 	list, _ := e.grabHboxList()
-	return frameNode{inner: hpackSP(list, packNatural, 0), sep: fboxSep, rule: 0, bg: bg}
+	return frameNode{inner: hpackSP(list, packNatural, 0), sep: sep, rule: 0, bg: bg}
 }
 
 // doFcolorbox implements \fcolorbox{frame}{bg}{content}: a filled background with a
@@ -209,8 +210,9 @@ func (e *Engine) doColorbox() frameNode {
 func (e *Engine) doFcolorbox() frameNode {
 	frame := e.resolveColor(e.readBraceName())
 	bg := e.resolveColor(e.readBraceName())
+	sep, rule := e.curFboxSep(), e.curFboxRule()
 	list, _ := e.grabHboxList()
-	return frameNode{inner: hpackSP(list, packNatural, 0), sep: fboxSep, rule: fboxRule, bg: bg, ruleColor: frame}
+	return frameNode{inner: hpackSP(list, packNatural, 0), sep: sep, rule: rule, bg: bg, ruleColor: frame}
 }
 
 // doDefineColor implements xcolor's \definecolor, adding a named colour.

@@ -160,6 +160,7 @@ type Engine struct {
 
 	// paragraph-builder state (horizontal mode at top level)
 	inPar            bool   // a paragraph is being accumulated
+	restrictedH      bool   // an \hbox's list is being built (TeX's -hmode); \par does nothing
 	parList          []node // the current paragraph's horizontal list
 	everypar         []tok  // \everypar hook, fired at each paragraph start
 	inEverypar       bool   // guard: do not re-fire \everypar while it is running
@@ -225,6 +226,7 @@ type Engine struct {
 	groups      []groupFrame               // one frame per open group, innermost last
 	readStreams [maxReadStreams]readStream // \openin streams
 	allocRead   int                        // next \newread stream number
+	allocWrite  int                        // next \newwrite stream number
 
 	// resolve is Options.Resolve: a host-supplied source of texmf files, tried
 	// after the search path and before the embedded set (see hostTeXFile).

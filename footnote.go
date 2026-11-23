@@ -357,9 +357,11 @@ func (e *Engine) footnoteRuleNodes() []node {
 // guards endParagraph from flushing pending notes into this sandbox.
 func (e *Engine) typesetGroupToVbox(toks []tok) *boxNode {
 	savedMvl, savedPar, savedIn, savedPD := e.mvl, e.parList, e.inPar, e.prevDepth
-	savedBuilding, savedFont := e.buildingFootnote, e.curFont
+	savedBuilding, savedFont, savedRestricted := e.buildingFootnote, e.curFont, e.restrictedH
 	e.mvl, e.parList, e.inPar, e.prevDepth = nil, nil, false, ignoreDepth
 	e.buildingFootnote = true
+	e.restrictedH = false // a vertical list of its own, even when called from inside a box
+	defer func() { e.restrictedH = savedRestricted }()
 
 	e.push(append(append([]tok{}, toks...), csTok("par"), sentinel))
 	for e.err == nil {

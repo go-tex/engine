@@ -8,9 +8,10 @@ import "strings"
 // This file implements LaTeX's framed boxes: \fbox{content} and
 // \framebox[width][pos]{content}. Both compose their content as an hbox and draw a
 // rule of thickness \fboxrule around it, leaving \fboxsep between the content and
-// the frame. For this milestone \fboxsep and \fboxrule are fixed at their LaTeX
-// defaults (3pt and 0.4pt); they are not yet settable registers. The frame is
-// monochrome (black), matching the rest of the engine's single-colour output.
+// the frame. \fboxsep and \fboxrule are read from their registers when a kernel has
+// allocated them (curFboxSep, curFboxRule), and are 3pt and 0.4pt otherwise. The
+// frame is monochrome (black), matching the rest of the engine's single-colour
+// output.
 //
 // \framebox's first optional argument forces the content-box width; the second
 // ([pos] = l/c/r, default c) aligns the content within that width using fil glue.
@@ -22,6 +23,29 @@ const (
 	fboxSep  = 3 * unity   // \fboxsep: gap between content and frame (3pt)
 	fboxRule = defaultRule // \fboxrule: frame line thickness (0.4pt)
 )
+
+// curFboxSep and curFboxRule are \fboxsep and \fboxrule as they stand: LaTeX reads
+// the registers each time it frames a box (color.sty:163-167, \color@b@x, "\kern
+// \fboxsep"; latex.ltx's \@frameb@x), and a document or class sets them where it
+// needs to. beamer draws every coloured box with "\fboxsep=\z@\colorbox{bg}{…}"
+// (beamerbasecolor.sty:223): with the constant 3pt here, each beamercolorbox grew
+// 3pt on every side, the two half-width boxes of a split headline no longer fit
+// in \paperwidth, and the second one was set on a line of its own
+// (go-tex/engine#926). The constants remain for plain TeX, where no kernel has
+// allocated the registers.
+func (e *Engine) curFboxSep() int {
+	if v, ok := e.namedDimen("fboxsep"); ok {
+		return v
+	}
+	return fboxSep
+}
+
+func (e *Engine) curFboxRule() int {
+	if v, ok := e.namedDimen("fboxrule"); ok {
+		return v
+	}
+	return fboxRule
+}
 
 // frameNode is a framed box: the content packed as an hbox, surrounded by a rule
 // of thickness rule with sep of clearance on every side. It sits on the content's
@@ -44,8 +68,9 @@ func (fr frameNode) depth() int  { return fr.inner.depth + fr.sep + fr.rule }
 // doFbox implements \fbox{content}: it packs the content at its natural width and
 // wraps it in a frame at the default thicknesses.
 func (e *Engine) doFbox() frameNode {
+	sep, rule := e.curFboxSep(), e.curFboxRule()
 	list, _ := e.grabHboxList()
-	return frameNode{inner: hpackSP(list, packNatural, 0), sep: fboxSep, rule: fboxRule}
+	return frameNode{inner: hpackSP(list, packNatural, 0), sep: sep, rule: rule}
 }
 
 // doTightFrame implements \gotex@tightframe{content}: \fbox with \fboxsep set to
@@ -63,6 +88,7 @@ func (e *Engine) doTightFrame() frameNode {
 func (e *Engine) doFramebox() frameNode {
 	width, hasWidth := e.scanOptBracketDimen()
 	pos := e.scanOptBracketPos()
+	sep, rule := e.curFboxSep(), e.curFboxRule()
 	list, _ := e.grabHboxList()
 	var inner *boxNode
 	if hasWidth {
@@ -70,7 +96,7 @@ func (e *Engine) doFramebox() frameNode {
 	} else {
 		inner = hpackSP(list, packNatural, 0)
 	}
-	return frameNode{inner: inner, sep: fboxSep, rule: fboxRule}
+	return frameNode{inner: inner, sep: sep, rule: rule}
 }
 
 // alignList surrounds a content list with fil glue so hpacking it "to" a wider

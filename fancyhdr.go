@@ -135,6 +135,9 @@ func (e *Engine) typesetFieldToList(toks []tok) []node {
 	e.mvl, e.parList, e.inPar, e.prevDepth = nil, nil, false, ignoreDepth
 	e.buildingFootnote = true // guard endParagraph from flushing footnotes here
 	e.hsize = 1 << 30         // effectively no line breaking: keep it one line
+	savedRestricted := e.restrictedH
+	e.restrictedH = false // a list of its own, even when called from inside a box
+	defer func() { e.restrictedH = savedRestricted }()
 
 	e.push(append([]tok{csTok("noindent")}, append(append([]tok{}, toks...), sentinel)...))
 	for e.err == nil {

@@ -409,7 +409,31 @@ func compile(src []byte, opt Options) (*Engine, error) {
 	if _, err := e.Run(string(src)); err != nil {
 		return nil, err
 	}
+	if latex && e.wroteNav() {
+		// A beamer talk reads the .nav its previous run wrote: without it the
+		// navigation bars have no sections and \inserttotalframenumber is 1.
+		// LaTeX needs the same second run (beamer's .nav changes, latexmk and
+		// tectonic rerun), and one is enough: the second run reads the .nav the
+		// first wrote, and the sections and frames it lists do not move.
+		again, err := buildEngine(opt, latex)
+		if err != nil {
+			return nil, err
+		}
+		again.carryAuxFile(e)
+		if _, err := again.Run(string(src)); err != nil {
+			return nil, err
+		}
+		return again, nil
+	}
 	return e, nil
+}
+
+// wroteNav reports whether the run left a non-empty \jobname.nav: beamer's record
+// of the sections, subsections and frames that the next run lays its navigation
+// out from.
+func (e *Engine) wroteNav() bool {
+	s, ok := e.fileAtEnd(e.jobFile(".nav"))
+	return ok && s != ""
 }
 
 // isLaTeX reports whether the source looks like a LaTeX document. Both

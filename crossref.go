@@ -108,28 +108,49 @@ func (e *Engine) carryCrossRefs(prev *Engine) {
 // wrong "[1]" into a broken "(?)" — the package was never the missing half
 // (go-tex/engine#711).
 //
-// Only the .aux is carried, not every written file: \jobname.vrb and friends are a
-// single pass's own scratch, and carrying them would feed a pass the previous
-// pass's material as if it were its own.
+// The .aux and beamer's .nav are carried, not every written file: \jobname.vrb and
+// friends are a single pass's own scratch, and carrying them would feed a pass the
+// previous pass's material as if it were its own. The .nav is the file beamer reads
+// at \begin{document} to size and fill its navigation bars and to know the total
+// frame number (beamerbasemisc.sty:87-103); it is written from the .aux at
+// \end{document} (kernelhelpers.go, \gotex@rereadaux).
 func (e *Engine) carryAuxFile(prev *Engine) {
-	if prev.writtenFile == nil {
-		return
+	for _, ext := range []string{".aux", ".nav"} {
+		name := e.jobFile(ext)
+		s, ok := prev.fileAtEnd(name)
+		if !ok {
+			continue
+		}
+		if e.writtenFile == nil {
+			e.writtenFile = map[string]string{}
+		}
+		e.writtenFile[name] = s
 	}
-	// "" is \jobname's own default, texput (engine.go), and the name the stream was
-	// opened under has to match the one looked up here or the file is silently lost.
+}
+
+// jobFile names \jobname.<ext>. "" is \jobname's own default, texput (engine.go),
+// and the name a stream was opened under has to match the one looked up here or
+// the file is silently lost.
+func (e *Engine) jobFile(ext string) string {
 	job := e.jobName
 	if job == "" {
 		job = "texput"
 	}
-	name := job + ".aux"
-	s, ok := prev.writtenFile[name]
-	if !ok {
-		return
+	return job + ext
+}
+
+// fileAtEnd returns the text of the file this run wrote under name, as it stands
+// when the run is over. A stream still open counts: TeX closes every open \write
+// file when the job ends (tex.web:24983, "for k:=0 to 15 do if write_open[k] then
+// a_close(write_file[k])"), and beamer never closes \tf@nav itself.
+func (e *Engine) fileAtEnd(name string) (string, bool) {
+	for n, open := range e.outName {
+		if open == name {
+			return e.outStream[n].String(), true
+		}
 	}
-	if e.writtenFile == nil {
-		e.writtenFile = map[string]string{}
-	}
-	e.writtenFile[name] = s
+	s, ok := e.writtenFile[name]
+	return s, ok
 }
 
 // crossRefsAgree reports whether the page numbers this run typeset are the ones
