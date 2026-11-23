@@ -314,6 +314,57 @@ format and image type, with its status, plus every remaining gap — lives at
   read from their macros. Measured against the reference on forty figures in
   amsart prose: four floats to a page on both sides, 11 pages each, where
   article's hardcoded values gave three and 14.
+- **Primitives and registers (v0.290.0–v0.291.0).** `\halign` copies its
+  preamble unexpanded and runs its entries **live**, as `tex.web` §782-791 does:
+  `\def\a{OLD}\halign{#\cr \def\a{NEW}\a\cr}` typesets `NEW` (it used to print
+  `OLD`, [#602](https://github.com/go-tex/engine/issues/602)), a `\gdef` in a
+  cell reaches the next one, IEEEtran's `{\ifnum0=`}\fi … \ifnum0=`{\fi}\cr`
+  brace trick ends an entry from inside a group, and `\halign\bgroup` opens an
+  alignment. `tabular` and the maths alignments keep their own collect-then-build
+  shape. `\leaders`, `\cleaders` and `\xleaders` are real primitives with a box or
+  rule tile in the aligned, centred and expanded modes of §626-628, in both the SVG
+  and the PDF painter (vertical leaders keep the glue's space and paint nothing).
+  `\c@page` is a real count register, `\count0`: `\the\c@page` and
+  `\advance\c@page` work, `\stepcounter{page}` works, and a header or footer can
+  ask `\ifodd\c@page`. `\DeclareUnicodeCharacter` makes the character active with
+  the text as its meaning, and the catcode table is sparse past 255 so a character
+  beyond the old 256 entries can be made active.
+- **Page geometry (v0.290.0–v0.291.0).** `\restoregeometry` returns to the layout
+  `\begin{document}` found and, like `\newgeometry`, starts with a `\clearpage`
+  (`mdpi.cls` stayed on its title-page geometry for the whole body before). The
+  `twocolumn` and `onecolumn` keys set `\@twocolumn`, so `sn-jnl`'s `iicol`
+  option takes the two-column `\maketitle` branch. With none of margin, body,
+  margin fixed in a direction, `geometry` takes its **default body**, 0.7 of the
+  paper, and splits the margins 1:1 horizontally and 2:3 vertically, and
+  `\oddsidemargin`, `\evensidemargin` and `\topmargin` follow. `a4` is
+  **emulated** (the text block per base size, the two-side even margin and
+  `widemargins`) because its licence only allows distribution with the NTG
+  classes; `a4wide` is bundled and reaches it through `\RequirePackage{a4}`.
+  ⚠ The page grid is still one layout per run, so pages before a
+  `\restoregeometry` take the restored height and margins; the measure after it,
+  and the pages that follow, are exact.
+- **Packages (v0.290.0–v0.291.0).** `eso-pic`'s `\AddToShipoutPicture` family
+  draws at the paper's lower-left corner, behind (`BG`) or over (`FG`, plain) the
+  body, on every later page, or on that page only for the starred form;
+  `\ClearShipoutPicture` empties the list. `setspace` single-spaces floats and
+  footnotes as `setspace.sty` does, so `\baselinestretch` reaches the body and not
+  the rows of a table or the lines of a note. `titlesec`'s `\titleformat` and
+  `\titlespacing` are recorded and read by `\@startsection`, instead of being
+  gobbled. `manyfoot`'s `\DeclareNewFootnote` declares each class with its counter,
+  numbering style and `\footnoteA`, `\footnotemarkA`, `\footnotetextA`.
+  `algorithm2e` keeps its block commands (`\If`, `\For`, `\While`, …) and numbers
+  its lines under `linesnumbered`. `\tableofcontents` honours `tocdepth`.
+  `comment`'s `\specialcomment` declares an environment (`comment.sty` itself is
+  not embedded: GPL). `xstring`'s `\IfInteger` and `\IfDecimal` pick one branch.
+  `-report-skipped` now lists the packages that had no `.sty` to load.
+- **Classes and fonts (v0.290.0–v0.291.0).** `elsarticle` is still an emulation,
+  but its front matter is placed: `\ead`, `\journal`, `\cortext`, `\fntext`,
+  `\tnotetext`, `\tnoteref`, `\fnref`, `\corref`, `\cormark`, `\address` and
+  `\affiliation` no longer leak into the body, and `\maketitle` sets title,
+  authors, affiliations, abstract, keywords, the footnote block and the preprint
+  footer. `acmart` titles are Linux Biolinum (the sans family follows series and
+  shape) and `\texttt` is Inconsolata through `zi4`/`inconsolata` (0.5em per
+  character, where Latin Modern Mono is 0.525em).
 - **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
   float pagination (`GOTEX_FLOATS`), two-column reprint layouts
   (`GOTEX_TWOCOLUMN`), EPS graphics (an `.eps` is *measured* from its
