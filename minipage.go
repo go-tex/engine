@@ -336,8 +336,11 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				// .sty:237), which holds this minipage's \end. Stored raw, the scan ran
 				// past the whole columns block and shredded the frame — 17 pages to 1.
 				// Push \end<n>'s body so \beamer@colclose, and then its \end{minipage},
-				// surface for the depth bookkeeping.
-				e.push(e.eq["end"+n].body)
+				// surface for the depth bookkeeping — and then \gotex@endenv{n}, the
+				// \endgroup \end{columns} owes its \begin (see the case below): without
+				// it a frame of bare \column's ended one group deeper than it began.
+				e.push(append(append(append([]tok(nil), e.eq["end"+n].body...),
+					csTok("gotex@endenv")), braceNameToks(n)...))
 			case e.endMacroExpandsToEnd(n):
 				// \end{n} whose \end<n> macro produces the real terminator by
 				// expansion rather than a literal token — elsarticle/ifacconf's

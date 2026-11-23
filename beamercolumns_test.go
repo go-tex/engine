@@ -64,6 +64,20 @@ func TestAnEndWrapperAroundMinipageClosesItsGroup(t *testing.T) {
 	}
 }
 
+// The bare \column shape: the minipage's \end is stored in \beamer@colclose and run by
+// \end{columns}, whose \endcolumns begins with it (beamerbaseframecomponents.sty:237).
+// The scanner runs \endcolumns in place of the \end{columns} it consumed, and the
+// group \begin{columns} opened must close with it.
+func TestAnEndThatLeadsToColcloseClosesItsGroup(t *testing.T) {
+	got := ckRun(t, `\catcode`+"`"+`\@=11 \def\beamer@colclose{\end{minipage}}`+
+		`\newenvironment{zzcols}{}{\beamer@colclose}`+
+		`\message{[\the\currentgrouplevel]}\begin{zzcols}\begin{minipage}{50pt}x\end{zzcols}\message{[\the\currentgrouplevel]}`)
+	parts := strings.SplitAfter(got, "]")
+	if len(parts) < 2 || parts[0] != strings.TrimSpace(parts[1]) {
+		t.Errorf("group levels before/after = %q, want the same level twice", got)
+	}
+}
+
 // The column ENVIRONMENT, with text after \end{columns}: one page, in source order
 // (go-tex/engine#205). The leaked group was taken by \end{columns}' \egroup, and
 // AFTER came out on a page of its own BEFORE the frame.
