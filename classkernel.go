@@ -145,6 +145,9 @@ const LaTeX2eClassKernel = `
 \newdimen\tabbingsep
 \newdimen\fboxrule
 \newdimen\fboxsep
+% The values the kernel itself gives them (latex.ltx:16096-16097); a class may
+% change them, and \fbox and \colorbox read them as they stand (boxframe.go).
+\fboxsep=3pt \fboxrule=.4pt
 \newcount\col@number
 % ── float placement counters ────────────────────────────────────────────────
 % \setcounter is a NO-OP on a counter nobody declared, so amsart's
@@ -840,7 +843,20 @@ const LaTeX2eClassKernel = `
 % It expands to the number followed by a marker the recorder splits on, so the
 % number lands in its own box instead of running into the title.
 \def\numberline#1{#1\gotex@numberlineend}
-\long\def\addtocontents#1#2{}
+% \addtocontents{ext}{text} puts \@writefile{ext}{text} in the .aux, written as
+% \protected@write writes it (latex.ltx:12889-12892, :6749-6758). The engine's own
+% contents, figure and table lists do not come from there, and both readings of the
+% .aux leave such a line alone unless a package opened \tf@ext (kernelhelpers.go):
+% the one that does is beamer, whose \section, \subsection and frames record the
+% navigation through \addtocontents{nav} (beamerbasesection.sty:202, :277;
+% beamerbaseframe.sty:604-608). It used to write nothing, so no talk's navigation
+% bar had a section in it (go-tex/engine#926). \protected@write itself stays a
+% no-op above: its other callers have not been measured with a real one.
+\long\def\addtocontents#1#2{\begingroup\let\thepage\relax
+  \let\label\@gobble\let\index\@gobble\let\glossary\@gobble
+  \let\protect\@unexpandable@protect
+  \edef\reserved@a{\write\@auxout{\string\@writefile{#1}{#2}}}\reserved@a
+  \endgroup\if@nobreak\ifvmode\nobreak\fi\fi}
 % \addvspace was a plain \vskip, so two in a row ADDED where LaTeX takes the LARGER.
 % latex.ltx:6527-6539 with \@xaddvskip at :6513-6526; the body is in Go (addvspace.go)
 % because the rule needs the skip already on the list, which TeX reaches through

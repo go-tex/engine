@@ -1875,7 +1875,14 @@ func (e *Engine) loadMore() {
 		chTok('0', catOther), chTok('0', catOther),
 		csTok(" "), // control space: the interword glue
 	}}
-	e.prim("par", func(e *Engine) { e.suppressParskip = false; e.endParagraph() })
+	// In an \hbox, \par does nothing at all (tex.web:21178-21185; see buildBoxList).
+	e.prim("par", func(e *Engine) {
+		if e.restrictedH {
+			return
+		}
+		e.suppressParskip = false
+		e.endParagraph()
+	})
 	e.prim("halign", func(e *Engine) { e.doHalign() })
 	e.prim("patterns", func(e *Engine) { e.doPatterns() })
 	e.prim("hyphenation", func(e *Engine) { e.doHyphenation() })

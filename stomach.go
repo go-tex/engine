@@ -529,7 +529,11 @@ func (e *Engine) buildVBoxList() []node {
 	// two apart counts this instead (takeLastBox, lastbox.go: TeX refuses to
 	// reach onto the current page, and a \vbox is not the page).
 	e.internalVertical++
-	defer func() { e.internalVertical-- }()
+	// A \vbox inside an \hbox is vertical mode again, and a \par in it ends its own
+	// paragraph.
+	savedRestricted := e.restrictedH
+	e.restrictedH = false
+	defer func() { e.internalVertical--; e.restrictedH = savedRestricted }()
 
 	depth := 0
 	for e.err == nil {
@@ -595,15 +599,23 @@ func (e *Engine) buildBoxList() []node {
 	// Inside a box we are in restricted horizontal mode: keep inPar set so a
 	// character-emitting command (an accent, \char, …) appends to the current
 	// list rather than opening a fresh paragraph with a \parindent box.
-	savedInPar := e.inPar
-	e.inPar = true
+	//
+	// ⛔ inPar stays true, but parList is still the ENCLOSING paragraph's list, so
+	// restrictedH is what tells \par apart: in an \hbox it does nothing (tex.web
+	// :21178-21185, end_graf acts only "if mode=hmode", and a box's mode is
+	// -hmode). Without it, \hbox{\par} broke the enclosing paragraph into lines
+	// there and then — beamer's \color@endgroup is \endgraf\endgroup, so the two
+	// half-width colour boxes of a split headline were set on two lines
+	// (go-tex/engine#926).
+	savedInPar, savedRestricted := e.inPar, e.restrictedH
+	e.inPar, e.restrictedH = true, true
 	var list []node
 	// The box's list is local, so \lastskip would otherwise read the list of
 	// whatever encloses the box — the wrong one, and silently. Publish it while it
 	// is being built; see Engine.lastSkip.
 	e.boxLists = append(e.boxLists, &list)
 	defer func() {
-		e.inPar = savedInPar
+		e.inPar, e.restrictedH = savedInPar, savedRestricted
 		e.boxLists = e.boxLists[:len(e.boxLists)-1]
 	}()
 	depth := 0

@@ -146,20 +146,22 @@ func (e *Engine) loadAMSPrims() {
 	})
 	// \unhbox / \unvbox / \unhcopy / \unvcopy live in boxcmds.go.
 	e.installUnbox()
-	// aux-file writers: \newwrite\cs allocates a stream (a count is enough), and
-	// \openout / \write / \closeout are accepted and dropped (the engine's two-pass
-	// TOC/label machinery does not use TeX write streams).
+	// \newwrite\cs allocates an output stream, and LaTeX allocates it with \chardef
+	// from 0 to 15, as \newread below (latex.ltx:358, \e@alloc\write
+	// \chardef{\count17}\m@ne\sixt@@n): the handle IS the stream number. It used to
+	// be a count register, whose VALUE \openout and \write read — zero — so every
+	// stream a document opened was stream 0. beamer opens \tf@nav, \tf@toc and
+	// \tf@snm while \@auxout is still open (beamerbasemisc.sty:176-181): each \openout
+	// replaced the one before, the .aux was lost, and the .nav was never written
+	// (go-tex/engine#926). Past 16, TeX stops with "No room for a new \write"; here
+	// the name is left undefined, as \newread does.
 	e.prim("newwrite", func(e *Engine) {
 		name := e.scanCSName()
-		if name == "" {
+		if name == "" || e.allocWrite >= maxWriteStreams {
 			return
 		}
-		if e.allocCnt >= registerPoolSize {
-			e.noteRegisterExhausted(`\count`)
-			return
-		}
-		e.define(name, &meaning{kind: mCountRef, code: e.allocCnt}, false)
-		e.allocCnt++
+		e.define(name, &meaning{kind: mCharDef, code: e.allocWrite}, false)
+		e.allocWrite++
 	})
 	// \newread\cs allocates an input stream the same way; the engine reads no
 	// TeX streams, but a package that allocates one (pgf's \r@pgf@reada) must not
