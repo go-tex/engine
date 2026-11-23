@@ -544,7 +544,7 @@ const LaTeX2eKernelHelpers = `
   % The stream becomes a readable file only at \closeout, and the NEXT pass is what
   % reads it — it is carried across by carryCrossRefs, beside the label tables.
   \immediate\closeout\@auxout
-  \par\gotex@begindvi\label{LastPage}\vfill\penalty-10000 }
+  \par\gotex@shipbands\gotex@begindvi\label{LastPage}\vfill\penalty-10000 }
 % ── \AtBeginDvi ─────────────────────────────────────────────────────────────
 % latex.ltx:15427 runs \@begindvi INSIDE the first page's shipout box, once
 % (\unvbox\@begindvibox, then \global\let\@begindvi\@empty); \AtBeginDvi{code} adds

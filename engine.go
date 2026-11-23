@@ -95,6 +95,10 @@ type Engine struct {
 	// beamerBands: this document is a beamer talk, whose head/foot geometry bands
 	// must be folded into the body because its frame machinery is not run here.
 	beamerBands bool
+	// shipBands holds \headheight and \headsep as \end{document} found them, inside
+	// the document group (see recordShipBands). Pages are assembled after the run,
+	// once that group has restored whatever the body assigned locally.
+	shipBands map[string]int
 	// gobbleRec, when set, receives every token gobbleEnvBody reads, so a picture
 	// whose size follows from its body can be measured (pgfbbox.go).
 	gobbleRec *[]tok
