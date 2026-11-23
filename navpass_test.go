@@ -83,6 +83,29 @@ func TestColorboxReadsFboxsep(t *testing.T) {
 	}
 }
 
+// \fbox's rule is \fboxrule as it stands, not the kernel's 0.4pt.
+func TestFboxReadsFboxrule(t *testing.T) {
+	got := ckRun(t, `\fboxsep=0pt \fboxrule=1pt\relax\setbox1\hbox{\fbox{\vrule width10pt height10pt depth0pt}}\message{[\the\wd1/\the\ht1]}`)
+	if want := "[12.0pt/11.0pt]"; got != want {
+		t.Errorf("\\fbox with \\fboxrule=1pt = %s, want %s", got, want)
+	}
+}
+
+// \newwrite has sixteen streams, 0 to 15 (latex.ltx:358, \sixt@@n): past them a
+// name is left undefined rather than given a seventeenth number that \openout
+// would take for the terminal.
+func TestNewwriteStopsAtSixteenStreams(t *testing.T) {
+	src := ""
+	for i := 0; i < 20; i++ {
+		src += `\newwrite\zzw` + string(rune('a'+i))
+	}
+	src += `\message{[\meaning\zzwt]}`
+	got := ckRun(t, src)
+	if got != "[undefined]" {
+		t.Errorf("the 20th \\newwrite is %s, want undefined: only 16 streams exist", got)
+	}
+}
+
 // navClass does, in miniature, what beamer does with its .nav file: read the
 // previous run's at \begin{document} (beamerbasemisc.sty:87-92) and open \tf@nav
 // at \end{document} (:176-177), so that LaTeX's second reading of the .aux writes
@@ -112,6 +135,25 @@ func TestANavFileReachesTheNextPass(t *testing.T) {
 	}
 	if got != 2*unity {
 		t.Errorf(`\navseen = %.2fpt after compile, want 2pt read back from the .nav`, spToPt(got))
+	}
+}
+
+// The second pass reports its own failure: in strict mode, a .nav line naming an
+// undefined command stops the run that reads it, as it stops LaTeX's second run.
+// \protect keeps the first pass from expanding it while it is written.
+func TestASecondPassThatFailsIsReported(t *testing.T) {
+	src := `\documentclass{zznav}\begin{document}\addtocontents{nav}{\protect\zznotdefined}x\end{document}`
+	_, err := compile([]byte(src), Options{Resolve: func(name string) ([]byte, bool) {
+		if name == "zznav.cls" {
+			return []byte(navClass), true
+		}
+		return nil, false
+	}})
+	if err == nil {
+		t.Fatal("compile succeeded: the second pass read \\zznotdefined from the .nav and said nothing")
+	}
+	if !strings.Contains(err.Error(), "zznotdefined") {
+		t.Errorf("error = %v, want it to name \\zznotdefined", err)
 	}
 }
 

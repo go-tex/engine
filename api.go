@@ -415,12 +415,14 @@ func compile(src []byte, opt Options) (*Engine, error) {
 		// LaTeX needs the same second run (beamer's .nav changes, latexmk and
 		// tectonic rerun), and one is enough: the second run reads the .nav the
 		// first wrote, and the sections and frames it lists do not move.
+		// One error path for both steps: buildEngine has already succeeded with
+		// these options, so only the run can fail here.
 		again, err := buildEngine(opt, latex)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			again.carryAuxFile(e)
+			_, err = again.Run(string(src))
 		}
-		again.carryAuxFile(e)
-		if _, err := again.Run(string(src)); err != nil {
+		if err != nil {
 			return nil, err
 		}
 		return again, nil
