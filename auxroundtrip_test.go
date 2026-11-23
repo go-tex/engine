@@ -52,9 +52,12 @@ func TestAuxoutIsAnAllocatedStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := trimNL(e.out.String())
-	if strings.Contains(got, "-1") || !strings.Contains(got, `\count`) {
-		t.Errorf("\\@auxout is %s, want an allocated \\count: a stream nothing can "+
-			"open is a channel nothing can use", got)
+	// latex.ltx:358 allocates a write stream with \chardef: the handle IS the
+	// stream's number. A \count was the earlier shape here, and its value (0) made
+	// every stream the same one (go-tex/engine#926).
+	if strings.Contains(got, "-1") || !strings.Contains(got, `\char"`) {
+		t.Errorf("\\@auxout is %s, want an allocated stream number (\\char\"N): a stream "+
+			"nothing can open is a channel nothing can use", got)
 	}
 }
 

@@ -145,6 +145,9 @@ const LaTeX2eClassKernel = `
 \newdimen\tabbingsep
 \newdimen\fboxrule
 \newdimen\fboxsep
+% The values the kernel itself gives them (latex.ltx:16096-16097); a class may
+% change them, and \fbox and \colorbox read them as they stand (boxframe.go).
+\fboxsep=3pt \fboxrule=.4pt
 \newcount\col@number
 % ── float placement counters ────────────────────────────────────────────────
 % \setcounter is a NO-OP on a counter nobody declared, so amsart's
