@@ -345,7 +345,17 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				// \endabstract → \end{minipage}\hfill\egroup\egroup. Run \end<n> in
 				// place so the generated \end{minipage} surfaces next iteration;
 				// otherwise the raw scan runs past it to EOF, swallowing the body.
-				e.push(e.eq["end"+n].body)
+				//
+				// ⛔ Followed by \gotex@endenv{n}: \end{n} is \end<n> THEN the \endgroup
+				// that closes \begin{n}'s group (latex.go:52, ltmiscen.dtx), and the scan
+				// consumed the \end. Pushing \end<n> alone left that group open. beamer's
+				// column ENVIRONMENT is the shape (beamerbaseframecomponents.sty:268-279:
+				// \endcolumn is {\end{minipage}\hfill\end{actionenv}\@ignoretrue}), and
+				// the group it leaked was taken by \end{columns}' \egroup for the row's
+				// \hbox: text after the columns was typeset on a page of its own, BEFORE
+				// the frame (go-tex/engine#205).
+				e.push(append(append(append([]tok(nil), e.eq["end"+n].body...),
+					csTok("gotex@endenv")), braceNameToks(n)...))
 			default:
 				// re-emit \end{n} into the body (an ordinary non-matching \end), and
 				// remember where, in case the scan later runs out of file (see above).
