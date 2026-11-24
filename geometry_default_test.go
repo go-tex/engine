@@ -139,17 +139,25 @@ func TestAcmartManuscriptTextBlock(t *testing.T) {
 // where geometry drops the height; horizontally textwidth and left leave the
 // right margin free, so the width stays.
 func TestGeometryOneMarginKeepsTheBody(t *testing.T) {
-	for _, c := range []struct{ name, newgeo string }{
+	// The text layer joins the control words with no space. The last two cases
+	// are tectonic's values for both key orders: margin + body + margin, in
+	// either order, drops the body (it is the order that decides which margin
+	// key sees the other already named).
+	for _, c := range []struct{ name, newgeo, want string }{
 		{"top beside textheight",
-			`\newgeometry{textheight=9in,textwidth=5.5in,top=1in,headheight=12pt,headsep=25pt,footskip=30pt}`},
+			`\newgeometry{textheight=9in,textwidth=5.5in,top=1in,headheight=12pt,headsep=25pt,footskip=30pt}`,
+			"TW=397.48499ptTH=650.43ptOS=36.13501ptTM=-37.0pt"},
 		{"top and bottom drop the height",
-			`\newgeometry{textheight=9in,top=1in,bottom=2in,textwidth=5.5in,left=1in}`},
+			`\newgeometry{textheight=9in,top=1in,bottom=2in,textwidth=5.5in,left=1in}`,
+			"TW=397.48499ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
+		{"right then left, bottom then top",
+			`\newgeometry{textheight=9in,textwidth=5.5in,right=1.5in,left=1in,bottom=2in,top=1in}`,
+			"TW=433.62001ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
+		{"left then right, top then bottom",
+			`\newgeometry{textheight=9in,textwidth=5.5in,left=1in,right=1.5in,top=1in,bottom=2in}`,
+			"TW=433.62001ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
 	} {
-		// The text layer joins the control words with no space.
-		want := "TW=397.48499ptTH=650.43ptOS=36.13501ptTM=-37.0pt"
-		if c.name != "top beside textheight" {
-			want = "TW=397.48499ptTH=578.16ptOS=0.0ptTM=-37.0pt"
-		}
+		want := c.want
 		src := `\documentclass{article}\usepackage[verbose=true,letterpaper]{geometry}` +
 			`\AtBeginDocument{` + c.newgeo + `}` +
 			`\begin{document}TW=\the\textwidth\ TH=\the\textheight\ OS=\the\oddsidemargin\ ` +
