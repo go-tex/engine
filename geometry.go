@@ -435,16 +435,28 @@ func (e *Engine) applyGeometry(opts string) {
 		// column held 49 lines where the reference holds 57 (go-tex/engine#307).
 		case "left", "lmargin", "inner", "innermargin":
 			g.left, g.hasLeft = d, true
-			g.hasTextW = false
+			if g.hasRight {
+				g.hasTextW = false // over-specified: the margins win
+			}
 		case "right", "rmargin", "outer", "outermargin":
 			g.right, g.hasRight = d, true
-			g.hasTextW = false
+			if g.hasLeft {
+				g.hasTextW = false
+			}
+		// ONE margin beside a width/height does not cancel it: geometry fixes the
+		// body and derives the other margin (\Gm@detall, geometry.dtx:2237-2271).
+		// Only a margin pair plus the body is over-specified, and then the body
+		// is the one dropped.
 		case "top", "tmargin":
 			g.top, g.hasTop = d, true
-			g.hasTextH = false
+			if g.hasBottom {
+				g.hasTextH = false
+			}
 		case "bottom", "bmargin":
 			g.bottom, g.hasBottom = d, true
-			g.hasTextH = false
+			if g.hasTop {
+				g.hasTextH = false
+			}
 		case "textwidth", "width":
 			g.textW, g.hasTextW = d, true
 		case "textheight", "height":
@@ -496,6 +508,22 @@ func (e *Engine) applyGeometry(opts string) {
 		e.hsize = w
 	} else if g.hasTextW {
 		e.hsize = g.textW
+		// The body is fixed: the margin geometry did not get is what the paper
+		// leaves, shared 1:1 (2:3 two-sided) when neither was named. Left as it
+		// stood it kept the default split of an earlier layout, so a
+		// \newgeometry{textwidth=...} sat off-centre (\Gm@detall, dtx:2237-2271).
+		switch {
+		case !g.hasLeft && !g.hasRight:
+			a, b := 1, 1
+			if e.twoside() {
+				a, b = 2, 3
+			}
+			g.left, g.right = geomSplitMargins(g.paperW-g.textW, a, b)
+		case g.hasLeft && !g.hasRight:
+			g.right = g.paperW - g.textW - g.left
+		case !g.hasLeft && g.hasRight:
+			g.left = g.paperW - g.textW - g.right
+		}
 	} else {
 		e.hsize = g.paperW - g.left - g.right
 	}
@@ -529,6 +557,16 @@ func (e *Engine) applyGeometry(opts string) {
 		e.vsize = h - g.bodyBands()
 	} else if g.hasTextH {
 		e.vsize = g.textH
+		// As horizontally: the body is fixed, so the missing margin is derived
+		// (2:3 top:bottom when neither was named).
+		switch {
+		case !g.hasTop && !g.hasBottom:
+			g.top, g.bottom = geomSplitMargins(g.paperH-g.textH, 2, 3)
+		case g.hasTop && !g.hasBottom:
+			g.bottom = g.paperH - g.textH - g.top
+		case !g.hasTop && g.hasBottom:
+			g.top = g.paperH - g.textH - g.bottom
+		}
 	} else {
 		e.vsize = g.paperH - g.top - g.bottom - g.bodyBands()
 	}

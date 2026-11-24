@@ -118,3 +118,60 @@ func TestAcmartManuscriptTextBlock(t *testing.T) {
 		t.Errorf("manuscript block = %.5f x %.1f, tectonic reports 430.00462 x 560", f.inkedW, f.textH)
 	}
 }
+
+// ⛔ ONE MARGIN BESIDE A BODY DOES NOT CANCEL THE BODY. neurips_2024.sty and
+// arxiv.sty run, at \begin{document},
+//
+//	\newgeometry{textheight=9in,textwidth=5.5in,top=1in,headheight=12pt,
+//	             headsep=25pt,footskip=30pt}
+//
+// after \usepackage[verbose=true,letterpaper]{geometry}. `top` used to clear the
+// text height, and the bottom margin it then subtracted was the 0.7-body default
+// the first call had left in the state: an 8in text block, 5 extra pages on
+// 2405.16883 (29 -> 34) and 2405.18549 (40 -> 45).
+//
+// Witnesses, tectonic 0.17.0 (--print):
+//
+//	the line above:        TW=397.48499pt TH=650.43pt OS=36.13501pt TM=-37.0pt
+//	+ bottom=2in,left=1in: TW=397.48499pt TH=578.16pt OS=0.0pt     TM=-37.0pt
+//
+// The second is over-specified in the vertical direction (top, height, bottom),
+// where geometry drops the height; horizontally textwidth and left leave the
+// right margin free, so the width stays.
+func TestGeometryOneMarginKeepsTheBody(t *testing.T) {
+	// The text layer joins the control words with no space. The last two cases
+	// are tectonic's values for both key orders: margin + body + margin, in
+	// either order, drops the body (it is the order that decides which margin
+	// key sees the other already named).
+	for _, c := range []struct{ name, newgeo, want string }{
+		{"top beside textheight",
+			`\newgeometry{textheight=9in,textwidth=5.5in,top=1in,headheight=12pt,headsep=25pt,footskip=30pt}`,
+			"TW=397.48499ptTH=650.43ptOS=36.13501ptTM=-37.0pt"},
+		{"top and bottom drop the height",
+			`\newgeometry{textheight=9in,top=1in,bottom=2in,textwidth=5.5in,left=1in}`,
+			"TW=397.48499ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
+		{"right then left, bottom then top",
+			`\newgeometry{textheight=9in,textwidth=5.5in,right=1.5in,left=1in,bottom=2in,top=1in}`,
+			"TW=433.62001ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
+		{"left then right, top then bottom",
+			`\newgeometry{textheight=9in,textwidth=5.5in,left=1in,right=1.5in,top=1in,bottom=2in}`,
+			"TW=433.62001ptTH=578.16ptOS=0.0ptTM=-37.0pt"},
+	} {
+		want := c.want
+		src := `\documentclass{article}\usepackage[verbose=true,letterpaper]{geometry}` +
+			`\AtBeginDocument{` + c.newgeo + `}` +
+			`\begin{document}TW=\the\textwidth\ TH=\the\textheight\ OS=\the\oddsidemargin\ ` +
+			`TM=\the\topmargin\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b strings.Builder
+		for _, p := range e.Pages() {
+			b.WriteString(mvlText(p.list))
+		}
+		if got := b.String(); !strings.Contains(got, want) {
+			t.Errorf("%s: want %q (tectonic), got %q", c.name, want, got)
+		}
+	}
+}
