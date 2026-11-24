@@ -717,7 +717,10 @@ func (e *Engine) doUsepackageLoad() {
 			e.bindURLPath()
 		}
 		if name == "geometry" {
-			e.applyGeometry(strings.Join(opts, ","))
+			// \PassOptionsToPackage{...}{geometry} queued before the load (acl.sty
+			// does it with a4paper,margin=2.5cm) belongs to this load, as it does
+			// for every package that runs a real .sty (see takePassed above).
+			e.applyGeometry(strings.Join(append(append([]string{}, opts...), e.takePassed("geometry")...), ","))
 			continue
 		}
 		if name == "hyperref" && len(opts) > 0 {
