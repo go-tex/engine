@@ -60,6 +60,23 @@ func TestLMSansBoldAndObliqueShapes(t *testing.T) {
 	}
 }
 
+// A sans shape that cannot be loaded is an error from the engine's construction, not
+// a silent fall back to the roman face.
+func TestLMSansShapeThatDoesNotLoadIsAnError(t *testing.T) {
+	for name, slot := range map[string]*[]byte{
+		"bold": &lmSansBold, "oblique": &lmSansOblique, "boldoblique": &lmSansBoldOblique,
+	} {
+		t.Run(name, func(t *testing.T) {
+			saved := *slot
+			defer func() { *slot = saved }()
+			*slot = []byte("not a font")
+			if _, err := buildEngine(Options{}, true); err == nil {
+				t.Errorf("a corrupt sans %s built an engine", name)
+			}
+		})
+	}
+}
+
 // m/sl is optical: <-8.5> 8  8.5-9.5 9  9.5-11 10  11-15.5 12  15.5- 17 (tulmss.fd).
 func TestLMSansObliqueOpticalSizes(t *testing.T) {
 	if opticalOf(lmSansOblique) == nil {
