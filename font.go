@@ -638,9 +638,37 @@ func (e *Engine) scanPtArg() (float64, bool) {
 
 // parsePtArg reads a size as \set@fontsize does (latex.ltx: \@defaultunits
 // \@tempdimb#2pt\relax\nnil): a bare number is points, and an explicit "pt" is
-// accepted, so \fontsize{12pt}{14pt} and \fontsize{12}{14} are one size. Any other
-// unit is refused rather than misread as points.
+// accepted, so \fontsize{12pt}{14pt} and \fontsize{12}{14} are one size.
+//
+// \@defaultunits reads a full <dimen>, so any TeX unit is read as that unit and the
+// trailing "pt" is discarded: springer's sn-jnl states \@setfontsize\normalsize
+// {10bp}{12bp} and \fontsize{17bp}{22.5bp} (arxiv.cls:160,465), which tex.web
+// §458 reads as 10.0375pt and 17.06pt. A unit not in tex.web §458's list (and em/ex,
+// which depend on a font) is refused rather than misread as points.
 func parsePtArg(s string) (float64, bool) {
-	s = strings.TrimSuffix(trimSpaces(s), "pt")
+	s = trimSpaces(s)
+	for _, u := range sizeUnits {
+		if strings.HasSuffix(s, u.name) {
+			v, ok := parseFloatArg(strings.TrimSuffix(s, u.name))
+			return v * u.pt, ok
+		}
+	}
 	return parseFloatArg(s)
+}
+
+// sizeUnits are the physical units of tex.web §458, as points (§458: 1in = 72.27pt,
+// 1bp = 1/72in, 1dd = 1238/1157pt, 1cc = 12dd, 1pc = 12pt, 1sp = 1/65536pt).
+var sizeUnits = []struct {
+	name string
+	pt   float64
+}{
+	{"pt", 1},
+	{"bp", 72.27 / 72},
+	{"mm", 72.27 / 25.4},
+	{"cm", 72.27 / 2.54},
+	{"in", 72.27},
+	{"pc", 12},
+	{"dd", 1238.0 / 1157},
+	{"cc", 12 * 1238.0 / 1157},
+	{"sp", 1.0 / 65536},
 }

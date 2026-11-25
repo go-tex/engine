@@ -104,7 +104,30 @@ func TestParsePtArgReadsAnExplicitPoint(t *testing.T) {
 			t.Errorf("parsePtArg(%q) = %v, %v; want 12", s, v, ok)
 		}
 	}
-	if _, ok := parsePtArg("12mm"); ok {
-		t.Errorf("12mm read as points")
+	if _, ok := parsePtArg("12em"); ok {
+		t.Errorf("12em read as points")
+	}
+}
+
+// \@defaultunits reads a whole <dimen>: 10bp is 10.0375pt, not 10 and not refused
+// (springer sn-jnl: \@setfontsize\normalsize{10bp}{12bp}).
+func TestParsePtArgReadsPhysicalUnits(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want float64
+	}{
+		{"10bp", 10 * 72.27 / 72},
+		{"22.5bp", 22.5 * 72.27 / 72},
+		{"1in", 72.27},
+		{"2pc", 24},
+		{"25.4mm", 72.27},
+		{"2.54cm", 72.27},
+		{"1157dd", 1238},
+		{"65536sp", 1},
+	} {
+		v, ok := parsePtArg(c.in)
+		if !ok || math.Abs(v-c.want) > 1e-9 {
+			t.Errorf("parsePtArg(%q) = %v, %v; want %v", c.in, v, ok, c.want)
+		}
 	}
 }
