@@ -58,3 +58,26 @@ func TestFontsizeReadsBigPoints(t *testing.T) {
 		t.Errorf("\\fontsize{17bp} set at %.3fpt, want %.3fpt", sizes[0], want)
 	}
 }
+
+// A class that restates \normalsize states the body size: sn-jnl does
+// \@setfontsize\normalsize{10bp}{12bp} over \LoadClass[11pt]{article}
+// (arxiv.cls:57,160), and tectonic sets the whole document at 10bp, with the
+// \large/\Large... table taken from that body. The engine took the base only from
+// the class option, so the body stayed at 10.95pt. The size here is plain points so
+// the witness does not depend on the unit parser.
+func TestClassNormalsizeRestatedBecomesTheBody(t *testing.T) {
+	sizes := lineGlyphSizes(t, `\documentclass[11pt]{article}
+\makeatletter
+\renewcommand\normalsize{\@setfontsize\normalsize{10}{12}}
+\makeatother
+\begin{document}
+\normalsize Body text.\par
+\end{document}
+`)
+	if len(sizes) < 1 {
+		t.Fatal("no text line")
+	}
+	if math.Abs(sizes[0]-10) > 0.01 {
+		t.Errorf("body set at %.3fpt after \\normalsize{10}, want 10pt", sizes[0])
+	}
+}

@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"math"
 	"strings"
 
 	"github.com/go-opentype/opentype"
@@ -483,7 +484,12 @@ func (e *Engine) scaleClassFontsToBase(permille int) {
 	if permille == 0 || permille == 1000 || e.baseFontPt == 0 {
 		return
 	}
-	pt := e.baseFontPt * float64(permille) / 1000
+	e.setClassBasePt(e.baseFontPt * float64(permille) / 1000)
+}
+
+// setClassBasePt is the re-facing scaleClassFontsToBase describes, for a base size
+// given directly in the engine's size unit (TeX points: an 11pt class is 10.95).
+func (e *Engine) setClassBasePt(pt float64) {
 	if pt < 1 {
 		pt = 1
 	}
@@ -626,6 +632,15 @@ func (e *Engine) doFontSizeAt() {
 func (e *Engine) doClassNormalsize() {
 	if v, ok := e.scanPtArg(); ok && v > 0 {
 		e.classNormalsizePt = v
+		// The class's \normalsize IS the body size (latex.ltx \set@fontsize: \fontsize
+		// then \selectfont). The size option only chose which table the class loaded;
+		// a class that restates \normalsize — sn-jnl's \@setfontsize\normalsize
+		// {10bp}{12bp} over \LoadClass[11pt]{article} (arxiv.cls:57,160) — overrides
+		// it, and the rest of its table is stated against that body. Both sizes are
+		// TeX points (the PDF writer scales them by 72/72.27).
+		if e.baseFontPt > 0 && math.Abs(v-e.baseFontPt) > 0.02 {
+			e.setClassBasePt(v)
+		}
 	}
 }
 
