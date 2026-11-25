@@ -445,7 +445,7 @@ func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) 
 	b := e.assemblePageBox(page, pageNum, addTopskip)
 	if b != nil {
 		b.pageShift = e.pageMarginShift(pageNum)
-		e.attachShipPics(b, pics)
+		e.attachShipPics(b, pics, pageNum)
 	}
 	return b
 }

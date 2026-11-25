@@ -190,3 +190,54 @@ func TestEsoPicNodeAllowsABreakAfterIt(t *testing.T) {
 		t.Error("a shipout-picture node must not forbid a break after it")
 	}
 }
+
+// eso-pic's \AtText* corners are the text block's, and on an even page of a twoside
+// document the block starts at 1in+\evensidemargin (eso-pic.sty:98-118,
+// \if@twoside\ifodd\c@page). The picture was built once with \oddsidemargin, so an
+// even page drew it where the odd page does.
+//
+// Measured with tectonic 0.17.0 (pdftotext -bbox, big points) on the document below:
+//
+//	page 1  XTXT xMin 81.962640bp = 82.27pt   = 1in + 10pt  (\oddsidemargin)
+//	page 2  XTXT xMin 111.850560bp = 112.27pt = 1in + 40pt  (\evensidemargin)
+func TestEsoPicAtTextUsesEvenSideMarginOnEvenPages(t *testing.T) {
+	const bpPerPt = 72.0 / 72.27
+	doc := func(class string) []string {
+		src := `\documentclass` + class + `{article}
+\usepackage{eso-pic}
+\setlength\oddsidemargin{10pt}
+\setlength\evensidemargin{40pt}
+\AddToShipoutPictureBG{\AtTextUpperLeft{\put(0,0){XTXT}}}
+\begin{document}
+Body\ one.
+\newpage
+Body\ two.
+\end{document}`
+		e, err := compile([]byte(src), Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e.RenderPages(72)
+	}
+	x := func(svg string) float64 {
+		got, _, ok := spXY(svg, "XTXT")
+		if !ok {
+			t.Fatalf("XTXT is not drawn:\n%s", svg)
+		}
+		return got
+	}
+	two := doc("[twoside]")
+	if len(two) != 2 {
+		t.Fatalf("%d pages, want 2", len(two))
+	}
+	for i, ref := range []float64{81.962640, 111.850560} {
+		if got := x(two[i]); math.Abs(got*bpPerPt-ref) > 0.6 {
+			t.Errorf("twoside page %d: XTXT at %.3fbp, tectonic %.3fbp", i+1, got*bpPerPt, ref)
+		}
+	}
+	// A one-sided document has no even margin: both pages draw at the odd one.
+	one := doc("")
+	if got := x(one[1]); math.Abs(got*bpPerPt-81.962640) > 0.6 {
+		t.Errorf("oneside page 2: XTXT at %.3fbp, want the odd margin 81.963bp", got*bpPerPt)
+	}
+}

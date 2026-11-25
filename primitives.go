@@ -2032,6 +2032,7 @@ func (e *Engine) loadMore() {
 	e.prim("pagestyle", func(e *Engine) { e.doPagestyle() })
 	e.prim("thispagestyle", func(e *Engine) { e.doThisPagestyle() })
 	e.prim("gotex@shipoutpic", func(e *Engine) { e.doShipoutPic() })
+	e.prim("gotex@shipoutpicev", func(e *Engine) { e.doShipoutPicEven() })
 	e.prim("pagenumbering", func(e *Engine) { e.doPagenumbering() })
 	e.prim("today", func(e *Engine) { e.pushString(e.today) })
 	// \thepage in running text is best-effort (this single-pass engine cannot know
