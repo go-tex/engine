@@ -140,6 +140,18 @@ var lmSans12Regular []byte
 //go:embed fonts/lm/lmsans17-regular.otf
 var lmSans17Regular []byte
 
+//go:embed fonts/lm/lmsans8-oblique.otf
+var lmSans8Oblique []byte
+
+//go:embed fonts/lm/lmsans9-oblique.otf
+var lmSans9Oblique []byte
+
+//go:embed fonts/lm/lmsans12-oblique.otf
+var lmSans12Oblique []byte
+
+//go:embed fonts/lm/lmsans17-oblique.otf
+var lmSans17Oblique []byte
+
 // opticalRange is one \DeclareFontShape entry: the file to use while the
 // requested size is below upTo. upTo == 0 means "and everything above", which
 // is the table's final <N-> entry.
@@ -218,6 +230,14 @@ var (
 		{15, lmSans12Regular, "lmsans12-regular"},
 		{0, lmSans17Regular, "lmsans17-regular"},
 	}
+	// m/sl of tulmss.fd: <-8.5> 8  8.5-9.5 9  9.5-11 10  11-15.5 12  15.5- 17.
+	lmSansObliqueSizes = opticalFamily{
+		{8.5, lmSans8Oblique, "lmsans8-oblique"},
+		{9.5, lmSans9Oblique, "lmsans9-oblique"},
+		{11, lmSansOblique, "lmsans10-oblique"},
+		{15.5, lmSans12Oblique, "lmsans12-oblique"},
+		{0, lmSans17Oblique, "lmsans17-oblique"},
+	}
 )
 
 // opticalDesignPt is the size a Latin Modern file was DRAWN for, read out of
@@ -272,6 +292,8 @@ func opticalOf(b []byte) opticalFamily {
 		return lmMonoSizes
 	case sameBytes(b, lmSansRegular):
 		return lmSansSizes
+	case sameBytes(b, lmSansOblique):
+		return lmSansObliqueSizes
 	}
 	return nil
 }

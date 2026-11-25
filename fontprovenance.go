@@ -171,4 +171,21 @@ var embeddedFontProvenance = []fontProvenance{
 		"f87ebdea035a96e8787e2c663cfcc78ce73205d37800eafe7948278e2cc7666a"},
 	{"lm/lmsans17-regular.otf", "fonts/lm", "2.004",
 		"f6c395a436e4fa7e88bbf1445e64b9c78ce4effba3668b13cc433077fc71a984"},
+	// The sans bold and oblique shapes (tulmss.fd m/sl, bx/n, bx/sl), copied from the
+	// TeX Live bundle tectonic loads them from (2026-11-25), listed in the same
+	// MANIFEST-Latin-Modern.txt.
+	{"lm/lmsans10-bold.otf", "fonts/lm", "2.004",
+		"a597b710326c1a8a2c7238d808e5d38711638a72a32383478db4829d63afd687"},
+	{"lm/lmsans10-boldoblique.otf", "fonts/lm", "2.004",
+		"e45673d84754a94f2f053bd4c15950b4b320144fbb622c630a26fd7b68cfabc5"},
+	{"lm/lmsans8-oblique.otf", "fonts/lm", "2.004",
+		"7f4227513bfd47b7077bedd125caa4c0a223a2cdad17a1470145cdea83353c88"},
+	{"lm/lmsans9-oblique.otf", "fonts/lm", "2.004",
+		"ac0535d7d4a8eb1b531c5faeb9060a4b9bac397d72cf54191ef53eea6f66b617"},
+	{"lm/lmsans10-oblique.otf", "fonts/lm", "2.004",
+		"1b38b36efc21f9d3f34edf6a13f9d71f59c41f824e790f5d3ee5ba5b4936f377"},
+	{"lm/lmsans12-oblique.otf", "fonts/lm", "2.004",
+		"1f138e6203f7092f9a01f6193ed97d971b5045b99969f3a62c7e43a7faabc1c0"},
+	{"lm/lmsans17-oblique.otf", "fonts/lm", "2.004",
+		"0f6a4450c5fc9afd3650f24ad9003684fff3252691bbf2a33be94b383db8a77c"},
 }
