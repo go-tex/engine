@@ -408,6 +408,15 @@ func (e *Engine) applyGeometry(opts string) {
 			continue
 		}
 
+		if key == "heightrounded" {
+			// \define@key{Gm}{heightrounded}[true] (geometry.sty:513): the key form
+			// takes true or false, the bare flag is true.
+			if v := strings.ToLower(val); v == "true" || v == "false" {
+				g.heightRounded = v == "true"
+			}
+			continue
+		}
+
 		d, ok := e.geomEval(val)
 		if !ok {
 			continue // malformed dimension: ignore the key, never panic.
