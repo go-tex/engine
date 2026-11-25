@@ -152,6 +152,11 @@ func (e *Engine) doSetcounter() {
 	v := e.readBraceInt()
 	if m := e.eq["c@"+name]; m != nil && m.kind == mCountRef {
 		e.setCount(m.code, v, true)
+		if m.code == pageCounterReg {
+			// The page builder runs after the text is read, so the write has to
+			// travel with the page it falls on (see pageCounterSetNode).
+			e.contributePageCounterSet(pageCounterSetNode{value: v})
+		}
 	}
 }
 

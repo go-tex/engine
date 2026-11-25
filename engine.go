@@ -358,6 +358,13 @@ type Engine struct {
 	footRule   int      // \footrulewidth (sp; a rule over the footer)
 	curPageNum int      // page ordinal during assembly (0 ⇒ unknown ⇒ 1)
 
+	// folioDelta is what the last \c@page write (pageCounterSetNode) added to a page's
+	// ordinal to make its folio; carrySets holds the writes a two-column page lifted
+	// out of its columns for assemblePageTopskip to apply.
+	folioDelta int
+	carrySets  []pageCounterSetNode
+	parSets    []pageCounterSetNode // writes made inside a paragraph, listed after it
+
 	// enumitem (see enumitem.go): the last counter value each enumerate nesting
 	// level reached, keyed by the kernel suffix (i, ii, …), so a [resume] list can
 	// continue from it. Recorded by \@enumitemrec at every \end{enumerate}.
@@ -2418,7 +2425,7 @@ func (e *Engine) beginParagraph(indent bool) {
 	// a display and starts a fresh one for the trailing text, which would otherwise
 	// insert a spurious \parskip after every display (hundreds of them, and hundreds
 	// of surplus points, in a math paper that set \parskip).
-	if len(e.mvl) > 0 && !e.suppressParskip {
+	if e.mvlHasNodesBesidesPageCounter() && !e.suppressParskip {
 		e.mvl = append(e.mvl, glueNode{spec: e.namedSkip("parskip")})
 	}
 	e.suppressParskip = false

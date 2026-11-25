@@ -110,21 +110,28 @@ func (e *Engine) doPagestyle() {
 }
 
 // doPagenumbering implements \pagenumbering{style}: select the page-number format.
-// It also resets the page counter in LaTeX; here the foot number is a running
-// ordinal, so only the format is recorded (documented simplification).
+// It also resets the page counter to 1, as latex.ltx:10818-10820 does
+// (\global\c@page\@ne\gdef\thepage{…}); both ride the vertical list as a
+// pageCounterSetNode, so the page that follows takes folio 1 in the new format.
 func (e *Engine) doPagenumbering() {
-	switch e.readBraceName() {
+	e.pageNumStyle = pageNumStyleOf(e.readBraceName())
+	e.setCount(pageCounterReg, 1, true)
+	e.contributePageCounterSet(pageCounterSetNode{value: 1, style: e.pageNumStyle})
+}
+
+// pageNumStyleOf maps a \pagenumbering argument to its format letter.
+func pageNumStyleOf(name string) byte {
+	switch name {
 	case "roman":
-		e.pageNumStyle = 'r'
+		return 'r'
 	case "Roman":
-		e.pageNumStyle = 'R'
+		return 'R'
 	case "alph":
-		e.pageNumStyle = 'l'
+		return 'l'
 	case "Alph":
-		e.pageNumStyle = 'L'
-	default: // "arabic" and anything else
-		e.pageNumStyle = 'a'
+		return 'L'
 	}
+	return 'a' // "arabic" and anything else
 }
 
 // formatPageNumber renders a 1-based page ordinal in the current page-number style.

@@ -47,6 +47,11 @@ func (e *Engine) endParagraph() {
 	// Attach any footnotes referenced in this paragraph to the vertical list,
 	// just after it, so they land on (and reserve room in) the same page.
 	e.flushFootnotes()
+	// \c@page writes made inside the paragraph ride the list just after it.
+	for _, s := range e.parSets {
+		e.mvl = append(e.mvl, s)
+	}
+	e.parSets = nil
 }
 
 // layoutSegment hyphenates, line-breaks (Knuth–Plass with an emergency pass) and
