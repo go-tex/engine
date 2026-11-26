@@ -15,15 +15,15 @@ import (
 // a 0.7-body block, and before it the class's own block — either way the
 // paper broke into 19 or 16 pages where the reference has 17.
 //
-// Values are tectonic 0.17.0's (--print, \typeout) for the same source. The
-// text height is left out: heightrounded is not implemented (704.60031pt there,
-// 702.78308pt here), a separate gap.
+// Values are tectonic 0.17.0's (--print, \typeout) for the same source,
+// including the text height heightrounded=true rounds (geometry.sty:513, :794):
+// 704.60031pt there, 702.78308pt here before the key form was read.
 func TestGeometryTakesOptionsPassedToIt(t *testing.T) {
 	src := `\documentclass[11pt]{article}\makeatletter` +
 		`\PassOptionsToPackage{a4paper,margin=2.5cm,heightrounded=true}{geometry}` +
 		`\RequirePackage{geometry}\makeatother` +
 		`\begin{document}TW=\the\textwidth\ OS=\the\oddsidemargin\ ` +
-		`TM=\the\topmargin\ PH=\the\paperheight\end{document}`
+		`TM=\the\topmargin\ PH=\the\paperheight\ TH=\the\textheight\end{document}`
 	e, err := compile([]byte(src), Options{Lenient: true})
 	if err != nil {
 		t.Fatal(err)
@@ -33,8 +33,35 @@ func TestGeometryTakesOptionsPassedToIt(t *testing.T) {
 		b.WriteString(mvlText(p.list))
 	}
 	// The text layer joins the control words with no space.
-	want := "TW=455.24411ptOS=-1.1381ptTM=-38.1381ptPH=845.04684pt"
+	want := "TW=455.24411ptOS=-1.1381ptTM=-38.1381ptPH=845.04684ptTH=704.60031pt"
 	if got := b.String(); !strings.Contains(got, want) {
 		t.Errorf("want %q (tectonic), got %q", want, got)
+	}
+}
+
+// heightrounded=false is the key form of "off" (geometry.sty:513 takes true or
+// false): the height stays unrounded, 702.78308pt, and a later =true rounds it.
+func TestGeometryHeightRoundedKeyForm(t *testing.T) {
+	th := func(opt string) string {
+		src := `\documentclass[11pt]{article}\usepackage[a4paper,margin=2.5cm,` + opt +
+			`]{geometry}\begin{document}TH=\the\textheight\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b strings.Builder
+		for _, p := range e.Pages() {
+			b.WriteString(mvlText(p.list))
+		}
+		return b.String()
+	}
+	if got := th("heightrounded=false"); !strings.Contains(got, "TH=702.78308pt") {
+		t.Errorf("heightrounded=false: want unrounded 702.78308pt, got %q", got)
+	}
+	if got := th("heightrounded=true,heightrounded=false"); !strings.Contains(got, "TH=702.78308pt") {
+		t.Errorf("a later =false must clear the flag, got %q", got)
+	}
+	if got := th("heightrounded=false,heightrounded=true"); !strings.Contains(got, "TH=704.60031pt") {
+		t.Errorf("a later =true must round, got %q", got)
 	}
 }
