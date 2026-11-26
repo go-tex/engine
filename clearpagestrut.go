@@ -77,7 +77,9 @@ package engine
 // reading. The two-sided test is what holds that distinction, and it is the
 // test, not this comment, that will catch a future change that loses it.
 func (e *Engine) doClearpageStrut() {
-	if len(e.mvl) != 0 {
+	// A \c@page write is no material: article.cls runs \pagenumbering{arabic} just
+	// before \onecolumn, and the list is still empty as far as a page is concerned.
+	if e.mvlHasNodesBesidesPageCounter() {
 		return
 	}
 	e.prevDepth = 0

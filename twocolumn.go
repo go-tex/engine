@@ -394,7 +394,7 @@ func columnsFillFloor(baselineskip int) int { return 5 * baselineskip / 2 }
 // It captures the halved column measure in the region so pagination uses the right
 // width even after a later \onecolumn restores e.hsize.
 func (e *Engine) switchToTwoColumn(span *boxNode) {
-	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
+	if len(e.colRegions) == 0 && e.mvlHasNodesBesidesPageCounter() {
 		// The material so far (revtex frontmatter, a \maketitle block) is one-column
 		// at the full width.
 		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 1, colW: e.fullWidth()})
@@ -436,7 +436,7 @@ func (e *Engine) mvlHasContent(from int) bool {
 	for _, n := range e.mvl[from:] {
 		switch n.(type) {
 		case pageStyleNode, *pageStyleNode, shipPicNode, glueNode, *glueNode, kernNode, *kernNode,
-			penaltyNode, *penaltyNode, specialNode, *specialNode, markNode, *markNode:
+			penaltyNode, *penaltyNode, specialNode, *specialNode, markNode, *markNode, pageCounterSetNode:
 			continue
 		default:
 			return true
@@ -528,7 +528,7 @@ func (e *Engine) startTwoColumn() {
 // startOneColumn implements the \onecolumn command: \clearpage (region boundary) and
 // switch back to a single full-width column, restoring the measure two-column saved.
 func (e *Engine) startOneColumn() {
-	if len(e.colRegions) == 0 && len(e.mvl) > 0 {
+	if len(e.colRegions) == 0 && e.mvlHasNodesBesidesPageCounter() {
 		e.colRegions = append(e.colRegions, colRegion{at: 0, cols: 2, colW: e.hsize})
 	}
 	if e.oneColHsize > 0 {
@@ -758,6 +758,10 @@ func (e *Engine) assembleTwoColumnPage(bands []*boxNode, left, right []node, col
 	lpics, left := takeShipPics(left)
 	rpics, right := takeShipPics(right)
 	e.carryPics = append(lpics, rpics...)
+	// \setcounter{page} and \pagenumbering written in a column are the page's, too.
+	lsets, left := takePageCounterSets(left)
+	rsets, right := takePageCounterSets(right)
+	e.carrySets = append(e.carrySets, append(lsets, rsets...)...)
 	mk := func(slice []node) *boxNode {
 		b := vpackSP(slice, packNatural, 0)
 		b.width = colW
@@ -808,7 +812,7 @@ func (e *Engine) assembleTwoColumnPage(bands []*boxNode, left, right []node, col
 // keeps its own region and the body starts below it as before — the span mechanism
 // places a band on one page and cannot break it.
 func (e *Engine) startRevtexBody() {
-	if len(e.colRegions) > 0 || len(e.mvl) == 0 {
+	if len(e.colRegions) > 0 || !e.mvlHasNodesBesidesPageCounter() {
 		e.switchToTwoColumn(nil) // nothing typeset yet, or regions already begun
 		return
 	}

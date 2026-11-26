@@ -198,6 +198,9 @@ const maxPages = 5000
 
 func (e *Engine) Pages() []*boxNode {
 	e.resetShipPics()
+	// Every pagination starts from the document's own numbering: page 1, arabic, until
+	// a pageCounterSetNode on the list says otherwise.
+	e.folioDelta, e.pageNumStyle, e.carrySets = 0, 'a', nil
 	// \onecolumn / \twocolumn split the document into page-aligned regions (both
 	// commands \clearpage first — verified against the reference), each paginated in
 	// its own column mode; see twocolumn.go.
@@ -244,8 +247,13 @@ func (e *Engine) paginateSingleList(list []node, pageOffset int) []*boxNode {
 		switch {
 		case pageIsUnshippable(page):
 			for _, n := range page {
-				if _, isSpecial := n.(specialNode); isSpecial {
+				switch c := n.(type) {
+				case specialNode:
 					carry = append(carry, n)
+				case pageCounterSetNode:
+					// Not a page's own: it goes to whichever page ships next, even in
+					// another region of the list.
+					e.carrySets = append(e.carrySets, c)
 				}
 			}
 		case len(page) > 0:
@@ -328,7 +336,7 @@ func (e *Engine) effectiveVsize() int {
 func pageIsUnshippable(page []node) bool {
 	for _, n := range page {
 		switch n.(type) {
-		case glueNode, penaltyNode, kernNode, specialNode:
+		case glueNode, penaltyNode, kernNode, specialNode, pageCounterSetNode:
 		default:
 			return false
 		}

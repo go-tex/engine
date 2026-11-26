@@ -442,6 +442,12 @@ func (e *Engine) assemblePageTopskip(page []node, pageNum int, addTopskip bool) 
 	pics, page := takeShipPics(page)
 	pics = append(e.carryPics, pics...)
 	e.carryPics = nil
+	// The ordinal the caller counted is the page's place; its folio is what \c@page
+	// holds when it ships, which a \setcounter{page} or \pagenumbering on this page
+	// or an earlier one has changed (latex.ltx:10818-10820).
+	sets, page := takePageCounterSets(page)
+	pageNum = e.folioFor(pageNum, append(e.carrySets, sets...))
+	e.carrySets = nil
 	b := e.assemblePageBox(page, pageNum, addTopskip)
 	if b != nil {
 		b.pageShift = e.pageMarginShift(pageNum)
