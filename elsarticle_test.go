@@ -62,6 +62,59 @@ func TestElsarticleFrontMatterCommands(t *testing.T) {
 	}
 }
 
+// The title-note mark is the STAR OPERATOR U+22C6 (tectonic prints "Title⋆" and
+// "⋆ Title note text", see above), not the asterisk operator U+2217 the engine wrote
+// before: elsarticle.cls:136-137 gives `$^{\star}$`, :147 `$\star$` for the footnote.
+// The second note gets `$^{,\star\star}$` (:137).
+func TestElsarticleTitleNoteMarkIsStar(t *testing.T) {
+	// glyphs reads back the typeset characters, and the source of each formula in
+	// place (a math node is an SVG; its src is what the text layer says it is).
+	glyphs := func(body string) string {
+		src := `\documentclass{elsarticle}\begin{document}` + body + `\end{document}`
+		e, err := compile([]byte(src), Options{Lenient: true, Size: 11})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		var b strings.Builder
+		var walk func(ns []node)
+		walk = func(ns []node) {
+			for _, n := range ns {
+				switch c := n.(type) {
+				case charNode:
+					b.WriteRune(c.ch)
+				case mathNode:
+					b.WriteString("[" + c.src + "]")
+				case *boxNode:
+					walk(c.list)
+				}
+			}
+		}
+		for _, p := range e.Pages() {
+			walk(p.list)
+		}
+		return b.String()
+	}
+	text := glyphs(`\begin{frontmatter}` +
+		`\title{TTT\tnoteref{t1}}\tnotetext[t1]{TNOTE}` +
+		`\author{AU}\begin{abstract}ABS\end{abstract}\end{frontmatter}BODY`)
+	// The formula source is token-spaced: `^{\star }` is the class's `^{\star}`.
+	if !strings.Contains(text, `[^{\star }]`) {
+		t.Errorf("the title mark is not the class's $^{\\star}$: %q", text)
+	}
+	if !strings.Contains(text, "⋆TNOTE") {
+		t.Errorf("the footnote mark is not U+22C6 before the note: %q", text)
+	}
+	if strings.Contains(text, "∗") {
+		t.Errorf("a U+2217 asterisk is left in a title-note mark: %q", text)
+	}
+	text = glyphs(`\begin{frontmatter}` +
+		`\title{TTT\tnoteref{t1,t2}}\tnotetext[t1]{ONE}\tnotetext[t2]{TWO}` +
+		`\author{AU}\begin{abstract}ABS\end{abstract}\end{frontmatter}BODY`)
+	if !strings.Contains(text, `[^{\star }][^{,\star \star }]`) || !strings.Contains(text, "⋆⋆TWO") {
+		t.Errorf("want marks $^{\\star}$ $^{,\\star\\star}$ and the note ⋆⋆TWO, got %q", text)
+	}
+}
+
 // The \affiliation form with key=value pairs lists its values, and the final option drops the
 // preprint footer.
 func TestElsarticleAffiliationKeysAndFinal(t *testing.T) {

@@ -57,8 +57,8 @@ const ElsarticleFrontMatter = `
 \newcount\gotex@els@tn \newcount\gotex@els@fn \newcount\gotex@els@cn \newcount\gotex@els@an
 \let\@tnotemark\@empty
 \def\tnotemark[#1]{\ifdoubleblind\else\@for\mytmark:=#1\do{%
-        \expandafter\ifcase\elsRef{\mytmark}\or\textsuperscript{∗}\or
-       \textsuperscript{,∗∗}\fi
+        \expandafter\ifcase\elsRef{\mytmark}\or$^{\star}$\or
+       $^{,\star\star}$\fi
     }\fi}
 \def\tnoteref#1{\tnotemark[{#1}]}
 \let\@tnotes\@empty
@@ -67,7 +67,7 @@ const ElsarticleFrontMatter = `
   \gotex@els@label{#1}{\the\gotex@els@tn}%
   \g@addto@macro\@tnotes{%
     \refstepcounter{tnote}%
-    \def\thefootnote{\ifcase\c@tnote\or∗\or∗∗\fi}%
+    \def\thefootnote{\ifcase\c@tnote\or⋆\or⋆⋆\fi}%
     \footnotetext{#2}}}
 \let\@nonumnotes\@empty
 \def\nonumnote#1{\g@addto@macro\@nonumnotes{%
