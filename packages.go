@@ -633,6 +633,14 @@ func (e *Engine) doDocumentClass() {
 		// exact block for any paper/size pair, with no table to keep in step.
 		e.loadElsarticleEmulation(opts) // spliced first, so it runs after article does
 		if e.applyElsarticleGeometry(opts) {
+			if hasOption(opts, "5p") {
+				// 5p is two-column by nature: \DeclareOption{5p} runs
+				// \ExecuteOptions{twocolumn} (elsarticle.cls:62-63) and its geometry block
+				// states columnsep=18pt (:646), so the 522pt block holds two 252pt columns.
+				e.columnsep = ptToSP(18)
+				e.twoColumn = true
+				e.twoColLive = true
+			}
 			return // a journal type: the class sizes it with geometry, not article's
 		}
 		// The preprint default, on US LETTER.
