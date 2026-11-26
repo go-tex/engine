@@ -23,3 +23,7 @@ page.png
 # test binaries left by `go test -cpuprofile`, which is how a 29MB engine.test
 # nearly went into a commit
 *.test
+
+# the temporary file an atomic write leaves behind when it is interrupted
+# (.minipage.go.atomicwrite-501624589 was committed once, by a "git add -A").
+.*.atomicwrite-*
