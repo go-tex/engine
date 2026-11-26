@@ -77,6 +77,13 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		for j, c := range r.cells {
 			var m mathNode
 			if strings.TrimSpace(c) != "" {
+				// amsmath's align sets every right-hand (odd) column as $\displaystyle{}#$,
+				// the empty group giving a leading relation (&= , &\sim) an Ord to its left,
+				// so it gets thick spacing on BOTH sides. Alone in its cell it would be the
+				// first atom and be set tight against what follows.
+				if colAlign != nil && colAlign(j) == 'l' && !strings.HasPrefix(name, "eqnarray") {
+					c = "{}" + c
+				}
 				m = e.makeMath(c, true)
 			}
 			br.cells = append(br.cells, m)
@@ -129,9 +136,24 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 				e.recordRefMeta(k)
 			}
 		}
+		// The block is centred, unless its tag would collide: amsmath moves the block
+		// left to make room and, when block plus tag still exceed the line, sets the
+		// tag on a line of its own below, flush right. Packing both on one line made
+		// the row overflow with the tag printed right after the block, off the page.
+		rowPad := leftPad
+		var tagLine *boxNode
+		if colAlign != nil && numBox != nil {
+			if room := e.hsize - blockWidth - numBox.width; room < 0 {
+				rowPad = 0
+				tagLine = hpackSP([]node{e.hfil(), numBox}, packTo, e.hsize)
+				numBox = nil
+			} else if room < rowPad {
+				rowPad = room
+			}
+		}
 		var row []node
 		if colAlign != nil {
-			row = append(row, kernNode{width: leftPad})
+			row = append(row, kernNode{width: rowPad})
 			for j, m := range br.cells {
 				pad := colw[j] - m.width
 				if pad < 0 {
@@ -157,6 +179,9 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 			row = append(row, numBox)
 		}
 		rowBoxes = append(rowBoxes, hpackSP(row, packTo, e.hsize))
+		if tagLine != nil {
+			rowBoxes = append(rowBoxes, tagLine)
+		}
 	}
 	e.placeAlignmentDisplay(rowBoxes)
 }
