@@ -159,6 +159,7 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 	// has: without them a series and a shape switch fall back to the last one
 	// alone, as they always did (see nfss.go).
 	var boldItalicBytes, boldSlantBytes, capsSlantBytes []byte
+	var sansBoldBytes, sansObliqueBytes, sansBoldObliqueBytes []byte
 	if fontBytes == nil {
 		capsBytes = lmRomanCaps
 		slantBytes = lmRomanSlant
@@ -178,6 +179,9 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		}
 		if opt.SansFont == nil {
 			opt.SansFont = lmSansRegular
+		}
+		if opt.SansFont != nil && sameBytes(opt.SansFont, lmSansRegular) {
+			sansBoldBytes, sansObliqueBytes, sansBoldObliqueBytes = lmSansBold, lmSansOblique, lmSansBoldOblique
 		}
 	}
 	reg, err := NewOpenTypeFont(fontBytes, float64(opt.size()))
@@ -205,6 +209,15 @@ func buildEngine(opt Options, latex bool) (*Engine, error) {
 		return nil, err
 	}
 	if err := e.bindOptionalFont("sf", opt.SansFont, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont(sansBoldName, sansBoldBytes, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont(sansItalicName, sansObliqueBytes, opt.size()); err != nil {
+		return nil, err
+	}
+	if err := e.bindOptionalFont(sansBoldSlantName, sansBoldObliqueBytes, opt.size()); err != nil {
 		return nil, err
 	}
 	if err := e.bindOptionalFont("sc", capsBytes, opt.size()); err != nil {

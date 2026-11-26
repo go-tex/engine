@@ -115,12 +115,16 @@ var nfssFaces = map[string]string{
 const (
 	sansBoldName   = "gotex@font@sf/bx/n"
 	sansItalicName = "gotex@font@sf/m/it"
+	// sansBoldSlantName is bx/sl of the sans family (tulmss.fd: lmsans10-boldoblique).
+	sansBoldSlantName = "gotex@font@sf/bx/sl"
 )
 
 // nfssSansFaces is which bound face holds each pair in the sans family. A pair
 // with no entry, or no bound face, is set in the roman family.
 var nfssSansFaces = map[string]string{
 	"m/n": "sf", "bx/n": sansBoldName, "m/it": sansItalicName, "m/sl": sansItalicName,
+	// tulmss.fd declares bx/sl; bx/it is a substitution of it, as m/it is of m/sl.
+	"bx/sl": sansBoldSlantName, "bx/it": sansBoldSlantName,
 }
 
 // nfssStandIn is the face set for a declared pair this engine has no file for.

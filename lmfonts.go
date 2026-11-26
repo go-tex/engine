@@ -38,6 +38,19 @@ var lmMonoRegular []byte
 //go:embed fonts/lm/lmsans10-regular.otf
 var lmSansRegular []byte
 
+// The sans bold and oblique shapes, tulmss.fd: m/sl (and m/it, a substitution of it)
+// at five optical sizes, bx/n "<-> lmsans10-bold", bx/sl "<-> lmsans10-boldoblique"
+// (b is a substitution of bx). The bold pair has no optical table.
+//
+//go:embed fonts/lm/lmsans10-oblique.otf
+var lmSansOblique []byte
+
+//go:embed fonts/lm/lmsans10-bold.otf
+var lmSansBold []byte
+
+//go:embed fonts/lm/lmsans10-boldoblique.otf
+var lmSansBoldOblique []byte
+
 // lmRomanCaps is the small-caps shape. tulmr.fd declares it at ONE design size for
 // every size ("<-> ec-lmcsc10"), so it has no optical table and scales linearly.
 // Without it \scshape selected nothing: amsart's \section headings and every

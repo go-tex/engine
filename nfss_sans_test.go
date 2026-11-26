@@ -27,6 +27,13 @@ func TestSansFamilyFollowsSeriesAndShape(t *testing.T) {
 		if sans {
 			e.bindFont(sansBoldName, famMock{w: sfbf})
 			e.bindFont(sansItalicName, famMock{w: sfit})
+			e.bindFont(sansBoldSlantName, famMock{w: sfit})
+		} else {
+			// buildEngine binds Latin Modern's own sans bold and oblique: a package
+			// with no sans bold is one with none bound.
+			delete(e.eq, sansBoldName)
+			delete(e.eq, sansItalicName)
+			delete(e.eq, sansBoldSlantName)
 		}
 		e.SetFont(famMock{w: rm})
 		return e
