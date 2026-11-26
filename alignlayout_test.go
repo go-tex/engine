@@ -172,3 +172,12 @@ func TestAmsAlignShiftsWorkedCases(t *testing.T) {
 		t.Error("130 > 125: the tag must go on its own line")
 	}
 }
+
+// A display with no columns has nothing to shift: the calculation must answer zero, not
+// the half-line a block of no width would otherwise be centred by.
+func TestAmsAlignShiftsWithNoColumns(t *testing.T) {
+	eq, as, own := amsAlignShifts(200*unity, nil, nil, nil, 10*unity, 5*unity)
+	if eq != 0 || as != 0 || len(own) != 0 {
+		t.Errorf("no columns: eqnshift %d alignsep %d own %v, want 0 0 []", eq, as, own)
+	}
+}
