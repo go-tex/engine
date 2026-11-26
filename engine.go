@@ -208,6 +208,7 @@ type Engine struct {
 	// eso-pic shipout pictures (shippic.go): the preamble's, and the state of one
 	// pagination run.
 	shipPicPre, shipPicPreOnce, shipPics []pageOverlay
+	shipPicEven                          *boxNode // the next picture's even-page variant
 	shipPicSeen                          map[int]bool
 	shipPicFirst                         bool
 	shipPicSeq                           int

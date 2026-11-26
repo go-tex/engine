@@ -2436,23 +2436,43 @@ const MiniLaTeXKernel = `
 % written in the preamble. The argument is a picture of zero size: \put coordinates
 % are measured from the corner, in \unitlength = 1pt as eso-pic sets it.
 \csname newbox\endcsname\gotex@spbox
-\def\gotex@eso#1#2#3{\sbox\gotex@spbox{\unitlength=1pt\begin{picture}(0,0)#3\end{picture}}\gotex@shipoutpic{#1}{#2}\gotex@spbox}
+% A twoside document draws the picture a second time as an EVEN page would build it
+% (\gotex@esoeventrue): the \AtText* corners then read \evensidemargin
+% (eso-pic.sty:98-118 chooses by \ifodd\c@page when the picture is DRAWN; ours is
+% built when it is written, so both variants are built and the page picks one).
+\csname newbox\endcsname\gotex@spboxe
+\csname newdimen\endcsname\gotex@sm
+\def\gotex@eso#1#2#3{\gotex@sm=\oddsidemargin
+  \sbox\gotex@spbox{\unitlength=1pt\begin{picture}(0,0)#3\end{picture}}%
+  \if@twoside
+    \gotex@sm=\evensidemargin
+    \sbox\gotex@spboxe{\unitlength=1pt\begin{picture}(0,0)#3\end{picture}}%
+    \gotex@shipoutpicev\gotex@spboxe
+  \fi
+  \gotex@shipoutpic{#1}{#2}\gotex@spbox}
 \newcommand\AddToShipoutPicture{\@ifstar{\gotex@eso1{fg}}{\gotex@eso0{fg}}}
 \newcommand\AddToShipoutPictureBG{\@ifstar{\gotex@eso1{bg}}{\gotex@eso0{bg}}}
 \newcommand\AddToShipoutPictureFG{\@ifstar{\gotex@eso1{fg}}{\gotex@eso0{fg}}}
 \newcommand\ClearShipoutPicture{\gotex@shipoutpic{0}{clear}}
 \newcommand\ClearShipoutPictureBG{\gotex@shipoutpic{0}{clear}}
 \newcommand\ClearShipoutPictureFG{\gotex@shipoutpic{0}{clear}}
-\def\gotex@lu#1{\strip@pt\dimexpr#1\relax}
+% \gotex@lu is \strip@pt\dimexpr: the number of points, unit dropped. The kernel has no
+% \strip@pt here, so the corners below (\AtPageUpperLeft, \AtPageCenter, \AtText*) put
+% their picture at an undefined coordinate; the unit is stripped by a delimiter whose
+% p and t are the catcode-12 letters \the prints (P and T made so, then lowercased).
+\begingroup\catcode80=12 \catcode84=12
+\lowercase{\gdef\gotex@rempt#1PT{#1}}
+\endgroup
+\def\gotex@lu#1{\expandafter\gotex@rempt\the\dimexpr#1\relax}
 \newcommand\AtPageUpperLeft[1]{\put(0,\gotex@lu{\paperheight}){#1}}
 \newcommand\AtPageLowerLeft[1]{\put(0,0){#1}}
 \newcommand\AtPageCenter[1]{\put(\gotex@lu{.5\paperwidth},\gotex@lu{.5\paperheight}){#1}}
-% The text area: its left edge is 1in+\oddsidemargin from the paper's, its top is
-% 1in+\topmargin+\headheight+\headsep below the paper's top (even pages of a
-% twoside document use \evensidemargin in eso-pic; the odd value is used here).
-\newcommand\AtTextUpperLeft[1]{\put(\gotex@lu{1in+\oddsidemargin},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep}){#1}}
-\newcommand\AtTextLowerLeft[1]{\put(\gotex@lu{1in+\oddsidemargin},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-\textheight}){#1}}
-\newcommand\AtTextCenter[1]{\put(\gotex@lu{1in+\oddsidemargin+.5\textwidth},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-.5\textheight}){#1}}
+% The text area: its left edge is 1in+\oddsidemargin from the paper's (\evensidemargin
+% on an even page of a twoside document, eso-pic.sty:98-118), its top is
+% 1in+\topmargin+\headheight+\headsep below the paper's top.
+\newcommand\AtTextUpperLeft[1]{\put(\gotex@lu{1in+\gotex@sm},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep}){#1}}
+\newcommand\AtTextLowerLeft[1]{\put(\gotex@lu{1in+\gotex@sm},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-\textheight}){#1}}
+\newcommand\AtTextCenter[1]{\put(\gotex@lu{1in+\gotex@sm+.5\textwidth},\gotex@lu{\paperheight-1in-\topmargin-\headheight-\headsep-.5\textheight}){#1}}
 % algorithmicx / algpseudocode (algorithm bodies in CS papers): best-effort so the
 % pseudocode reads as lines with keywords instead of being dropped command-by-
 % command. Not the real indented layout — each control word starts a line and

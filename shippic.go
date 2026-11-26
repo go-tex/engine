@@ -26,13 +26,27 @@ package engine
 // pageOverlay is one picture drawn on a page, behind (fg false) or over (fg true).
 type pageOverlay struct {
 	box *boxNode
-	fg  bool
+	// even is the same picture built as eso-pic builds it on an EVEN page of a
+	// two-sided document (\AtText* use \evensidemargin there, eso-pic.sty:98-118);
+	// nil when the document is one-sided and both pages draw box.
+	even *boxNode
+	fg   bool
+}
+
+// pick is the box a page numbered num draws: the even variant on an even page.
+func (o pageOverlay) pick(num int) pageOverlay {
+	if o.even != nil && num%2 == 0 {
+		o.box = o.even
+	}
+	o.even = nil
+	return o
 }
 
 // shipPicNode carries one \AddToShipoutPicture* call through page breaking, or a
 // \ClearShipoutPicture (clear true, box nil).
 type shipPicNode struct {
 	box   *boxNode
+	even  *boxNode
 	star  bool
 	fg    bool
 	clear bool
@@ -47,6 +61,7 @@ func (e *Engine) doShipoutPic() {
 	star := e.readBraceName() == "1"
 	layer := e.readBraceName()
 	n := shipPicNode{star: star, clear: layer == "clear", fg: layer == "fg"}
+	n.even, e.shipPicEven = e.shipPicEven, nil
 	if !n.clear {
 		src := e.getBox(e.scanInt())
 		if src == nil {
@@ -64,9 +79,17 @@ func (e *Engine) doShipoutPic() {
 	case n.clear:
 		e.shipPicPre, e.shipPicPreOnce = nil, nil
 	case n.star:
-		e.shipPicPreOnce = append(e.shipPicPreOnce, pageOverlay{box: n.box, fg: n.fg})
+		e.shipPicPreOnce = append(e.shipPicPreOnce, pageOverlay{box: n.box, even: n.even, fg: n.fg})
 	default:
-		e.shipPicPre = append(e.shipPicPre, pageOverlay{box: n.box, fg: n.fg})
+		e.shipPicPre = append(e.shipPicPre, pageOverlay{box: n.box, even: n.even, fg: n.fg})
+	}
+}
+
+// doShipoutPicEven is \gotex@shipoutpicev<box number>: the even-page variant of the
+// picture the NEXT \gotex@shipoutpic carries.
+func (e *Engine) doShipoutPicEven() {
+	if src := e.getBox(e.scanInt()); src != nil {
+		e.shipPicEven = cloneBox(src)
 	}
 }
 
@@ -93,7 +116,7 @@ func takeShipPics(vlist []node) (pics []shipPicNode, rest []node) {
 // attachShipPics gives a finished page box its overlays: the persistent list, as it
 // stands after this page's own plain pictures joined it, then this page's starred
 // ones. The first page assembled also carries the preamble's starred pictures.
-func (e *Engine) attachShipPics(b *boxNode, pics []shipPicNode) {
+func (e *Engine) attachShipPics(b *boxNode, pics []shipPicNode, pageNum int) {
 	if e.shipPicSeen == nil {
 		e.resetShipPics()
 	}
@@ -114,10 +137,13 @@ func (e *Engine) attachShipPics(b *boxNode, pics []shipPicNode) {
 				once = nil
 			}
 		case p.star:
-			once = append(once, pageOverlay{box: p.box, fg: p.fg})
+			once = append(once, pageOverlay{box: p.box, even: p.even, fg: p.fg})
 		default:
-			e.shipPics = append(e.shipPics, pageOverlay{box: p.box, fg: p.fg})
+			e.shipPics = append(e.shipPics, pageOverlay{box: p.box, even: p.even, fg: p.fg})
 		}
 	}
-	b.overlays = append(append([]pageOverlay(nil), e.shipPics...), once...)
+	b.overlays = nil
+	for _, o := range append(append([]pageOverlay(nil), e.shipPics...), once...) {
+		b.overlays = append(b.overlays, o.pick(pageNum))
+	}
 }
