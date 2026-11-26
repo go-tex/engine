@@ -108,8 +108,10 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 		leftPad = 0
 	}
 
-	var rowBoxes []*boxNode
-	for _, br := range built {
+	// Numbers first, in order (stepping the counter is order-dependent), because amsmath
+	// needs every tag's width before it places any row.
+	nums := make([]*boxNode, len(built))
+	for i, br := range built {
 		var numBox *boxNode
 		switch {
 		case br.tag != "": // a \tag replaces the number and consumes none
@@ -136,13 +138,46 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 				e.recordRefMeta(k)
 			}
 		}
+		nums[i] = numBox
+	}
+
+	// align and align*: amsmath's own shift/tag calculation, ported exactly
+	// (alignshift.go). Other environments keep the centred block and the "fits or not"
+	// approximation below.
+	exact := colAlign != nil && (name == "align" || name == "align*")
+	var eqnshift, alignsep int
+	var ownLine []bool
+	if exact {
+		fields := make([][]int, len(built))
+		tagw := make([]int, len(built))
+		for i, br := range built {
+			for _, m := range br.cells {
+				fields[i] = append(fields[i], m.width)
+			}
+			if nums[i] != nil {
+				tagw[i] = nums[i].width
+			}
+		}
+		eqnshift, alignsep, ownLine = amsAlignShifts(e.hsize, colw, fields, tagw,
+			10*unity, e.mathQuadSP()/2)
+	}
+
+	var rowBoxes []*boxNode
+	for i, br := range built {
+		numBox := nums[i]
 		// The block is centred, unless its tag would collide: amsmath moves the block
 		// left to make room and, when block plus tag still exceed the line, sets the
 		// tag on a line of its own below, flush right. Packing both on one line made
 		// the row overflow with the tag printed right after the block, off the page.
 		rowPad := leftPad
 		var tagLine *boxNode
-		if colAlign != nil && numBox != nil {
+		if exact {
+			rowPad = eqnshift
+			if ownLine[i] {
+				tagLine = hpackSP([]node{e.hfil(), numBox}, packTo, e.hsize)
+				numBox = nil
+			}
+		} else if colAlign != nil && numBox != nil {
 			if room := e.hsize - blockWidth - numBox.width; room < 0 {
 				rowPad = 0
 				tagLine = hpackSP([]node{e.hfil(), numBox}, packTo, e.hsize)
@@ -158,6 +193,9 @@ func (e *Engine) doAlignEnv(name string, numbered bool, colAlign alignColumn) {
 				pad := colw[j] - m.width
 				if pad < 0 {
 					pad = 0
+				}
+				if exact && j > 0 && j%2 == 0 { // \tabskip\alignsep@ between pairs (:2345)
+					row = append(row, kernNode{width: alignsep})
 				}
 				switch colAlign(j) {
 				case 'r':

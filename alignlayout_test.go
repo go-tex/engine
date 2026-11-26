@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -109,4 +110,65 @@ func TestAlignTagThatFitsStaysOnTheLine(t *testing.T) {
 		}
 	}
 	t.Error("tag (7) not found")
+}
+
+// amsmath.sty:2142-2153 sends a tag to its own line when
+// width + tag + \minalignsep*pairs + 2\mintagsep exceeds \displaywidth, not merely when
+// width + tag exceeds it. With a 10pt quad \mintagsep is 5pt, so a row that is 5pt
+// inside the plain "fits" rule is still moved, and one 15pt inside is not.
+func TestAlignTagBoundaryIsAmsmathsNotPlainFit(t *testing.T) {
+	probe := runAlign(t, "\\hsize=300pt\n\\begin{align*}\nx &\\sim y\n\\end{align*}")
+	block := mathWidthSum(probe.mvl)
+	tag := probe.textToHbox("(7)").width
+	own := func(hsizePt float64) bool {
+		t.Helper()
+		src := "\\hsize=" + strconv.FormatFloat(hsizePt, 'f', 5, 64) + "pt\n\\begin{align}\nx &\\sim y \\tag{7}\n\\end{align}"
+		e := runAlign(t, src)
+		var boxes []*boxNode
+		leafBoxes(e.mvl, &boxes)
+		for _, b := range boxes {
+			var s strings.Builder
+			collectChars(b.list, &s)
+			if strings.Contains(s.String(), "(7)") {
+				return !hasMathNode(b.list)
+			}
+		}
+		t.Fatal("tag (7) not found")
+		return false
+	}
+	fit := float64(block+tag) / unity
+	if !own(fit + 5) {
+		t.Errorf("hsize = block+tag+5pt fits the plain rule but not amsmath's: the tag must go on its own line")
+	}
+	if own(fit + 15) {
+		t.Errorf("hsize = block+tag+15pt satisfies amsmath's rule: the tag must stay inline")
+	}
+}
+
+// The unit test of the port itself, on a case worked by hand from the source: one
+// pair, widths 40+60, tag 20, on displays of 200, 150 and 125pt.
+func TestAmsAlignShiftsWorkedCases(t *testing.T) {
+	const pt = unity
+	// one pair, no tag: centred, eqnshift = (200-100)/2 = 50pt.
+	eq, _, own := amsAlignShifts(200*pt, []int{40 * pt, 60 * pt}, [][]int{{40 * pt, 60 * pt}}, []int{0}, 10*pt, 5*pt)
+	if eq != 50*pt || own[0] {
+		t.Errorf("no tag: eqnshift %d own %v, want %d false", eq, own[0], 50*pt)
+	}
+	// tag 20 on a 200 display: inline needs 100+20+10 = 130 <= 200, and 50+100+20+20 = 190
+	// <= 200 so nothing shrinks.
+	eq, _, own = amsAlignShifts(200*pt, []int{40 * pt, 60 * pt}, [][]int{{40 * pt, 60 * pt}}, []int{20 * pt}, 10*pt, 5*pt)
+	if eq != 50*pt || own[0] {
+		t.Errorf("tag fits: eqnshift %d own %v", eq, own[0])
+	}
+	// display 150: 100+20+10 = 130 <= 150 so inline; 25+100+20+20 = 165 > 150 so the shift
+	// shrinks to (150-120)/2 ... d = (150-120)/2 = 15 < 25: eqnshift = 15pt.
+	eq, _, own = amsAlignShifts(150*pt, []int{40 * pt, 60 * pt}, [][]int{{40 * pt, 60 * pt}}, []int{20 * pt}, 10*pt, 5*pt)
+	if eq != 15*pt || own[0] {
+		t.Errorf("shrink: eqnshift %d own %v, want %d false", eq, own[0], 15*pt)
+	}
+	// display 125: 100+20+10 = 130 > 125, own line.
+	_, _, own = amsAlignShifts(125*pt, []int{40 * pt, 60 * pt}, [][]int{{40 * pt, 60 * pt}}, []int{20 * pt}, 10*pt, 5*pt)
+	if !own[0] {
+		t.Error("130 > 125: the tag must go on its own line")
+	}
 }
