@@ -470,6 +470,34 @@ func (e *Engine) doFontSize() {
 	e.selectFont(sf.atSize(pt))
 }
 
+// mathScriptSizes is fontmath.ltx:75-86, the \DeclareMathSizes table that gives \sf@size
+// for each text size (text size -> script size, in points).
+var mathScriptSizes = [...][2]float64{
+	{5, 5}, {6, 5}, {7, 5}, {8, 6}, {9, 6}, {10, 7}, {10.95, 8}, {12, 8},
+	{14.4, 10}, {17.28, 12}, {20.74, 14.4}, {24.88, 17.28},
+}
+
+// scriptSizeOf is \sf@size for a text size of pt points: the declared entry, else
+// latex.ltx:7782-7786 (\calculate@math@sizes) with \defaultscriptratio = .7.
+func scriptSizeOf(pt float64) float64 {
+	for _, r := range mathScriptSizes {
+		if d := r[0] - pt; d < 0.05 && d > -0.05 {
+			return r[1]
+		}
+	}
+	return 0.7 * pt
+}
+
+// doSupSize implements \gotexsupsize: the current font at \sf@size, the size
+// \@textsuperscript sets its argument in (latex.ltx:13172, \fontsize\sf@size\sf@size).
+func (e *Engine) doSupSize() {
+	sf, ok := e.curFont.(scalableFont)
+	if !ok || e.curFont.sizePt() <= 0 {
+		return
+	}
+	e.selectFont(sf.atSize(scriptSizeOf(e.curFont.sizePt())))
+}
+
 // scaleClassFontsToBase re-faces every bound TEXT face — the \normalsize base
 // (which \selectfont/\normalfont/\rmfamily reselect and the drivers render from)
 // and the roman/bold/italic/typewriter/sans bindings — to the class's base point
