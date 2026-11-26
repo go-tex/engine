@@ -621,7 +621,8 @@ func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, page
 
 	// takeCols fills the two columns from start with the height the bands (reserve) leave;
 	// it returns the two slices and the flow index the page ends at. A band-heavy page
-	// (reserve leaving under a tenth of the height) carries no column text.
+	// (reserve leaving under columnsFillFloor, 2.5 baselineskip, latex.ltx:15148) carries
+	// no column text.
 	takeCols := func(start, reserve int) (left, right []node, next int) {
 		next = start
 		colVsize := e.effectiveVsize() - reserve
@@ -708,7 +709,7 @@ func (e *Engine) paginateTwoColFlow(list []node, bands []pendingBand, colW, page
 		if next == start && len(pending) == 0 && bi >= len(bands) {
 			// No column progress. That does NOT mean the document is finished: it
 			// happens when the bands placed atop this page leave the columns less
-			// than a tenth of the page (takeCols declines to fill a sliver), and the
+			// than 2.5 baselineskip (takeCols declines to fill a sliver), and the
 			// text after them still has to go somewhere. Breaking here DISCARDED it —
 			// on corpus paper 2403.13798 the loop stopped at node 1182 of 1702 and
 			// 229 typeset line boxes never reached a page, the document ending
