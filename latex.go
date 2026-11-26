@@ -232,6 +232,38 @@ const MiniLaTeXKernel = `
 \def\affil{\@ifnextbracket\gotex@affilopt\gotex@affilmand}
 \long\def\gotex@affilopt[#1]#2{\gotex@affiladd{#2}}
 \long\def\gotex@affilmand#1{\gotex@affiladd{#1}}
+% \usepackage{authblk} with no authblk.sty to run: authblk's \author[marks]{name} does
+% not REPLACE \@author, it appends to the author list ("A, B, and C", authblk.sty
+% \Authsep/\Authand/\Authands) with the marks as superscripts, and \affil sets
+% "\textsuperscript{mark}text" in \Affilfont. Left as the kernel's \author, every call
+% replaced the last one and a four-author paper kept ONE author (2407.09954: tectonic
+% sets "Nadine Ben Boina1,2, Brigitte Mossé1, Anaïs Baudot2,3, and Elisabeth Remy1"),
+% and \Affilfont was ignored. packages.go pushes \gotex@authblkstubs for this package.
+\def\Authfont{}\def\Affilfont{}
+\def\Authsep{, }\def\Authand{ and }\def\Authands{, and }
+\def\gotex@austate{0}
+\long\def\gotex@abauthadd#1{%
+  \if0\gotex@austate
+    \long\gdef\gotex@aulast{#1}\gdef\@author{{\Authfont\gotex@aulast}}\gdef\gotex@austate{1}%
+  \else
+    \if1\gotex@austate
+      \global\let\gotex@auhead\gotex@aulast
+      \long\gdef\gotex@aulast{#1}%
+      \gdef\@author{{\Authfont\gotex@auhead\Authand\gotex@aulast}}\gdef\gotex@austate{2}%
+    \else
+      \g@addto@macro\gotex@auhead{\Authsep}%
+      \expandafter\g@addto@macro\expandafter\gotex@auhead\expandafter{\gotex@aulast}%
+      \long\gdef\gotex@aulast{#1}%
+      \gdef\@author{{\Authfont\gotex@auhead\Authands\gotex@aulast}}%
+    \fi
+  \fi}
+\long\def\gotex@abauthopt[#1]#2{\gotex@abauthadd{#2\textsuperscript{#1}}}
+\long\def\gotex@abauthmand#1{\gotex@abauthadd{#1}}
+\def\gotex@abauthor{\@ifnextbracket\gotex@abauthopt\gotex@abauthmand}
+\long\def\gotex@abaffilopt[#1]#2{\gotex@affiladd{{\Affilfont\textsuperscript{#1}#2}}}
+\long\def\gotex@abaffilmand#1{\gotex@affiladd{{\Affilfont #1}}}
+\def\gotex@authblkstubs{\let\author\gotex@abauthor
+  \let\gotex@affilopt\gotex@abaffilopt\let\gotex@affilmand\gotex@abaffilmand}
 % \maketitle defers to the CLASS's \@maketitle when it has one, which is what
 % article.cls does (classes.dtx, \maketitle):
 %

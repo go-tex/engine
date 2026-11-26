@@ -762,6 +762,12 @@ func (e *Engine) doUsepackageLoad() {
 		// Its options stay readable to \@ifpackagewith (opt@<name>.sty), as for a loaded
 		// file: the emulation keys on them (algorithm2e's linesnumbered).
 		e.define("opt@"+name+".sty", &meaning{kind: mMacro, body: stringToToks(strings.Join(opts, ","))}, true)
+		if name == "authblk" {
+			// Only when no authblk.sty could be run: \author accumulates and \affil
+			// takes \Affilfont (latex.go, \gotex@authblkstubs).
+			e.push([]tok{csTok("gotex@authblkstubs")})
+			continue
+		}
 		if name == "a4" {
 			// NTG's a4 is not bundled (its licence ties it to the NTG classes):
 			// \gotex@afour sets its text block (latex.go), and widemargins is the
