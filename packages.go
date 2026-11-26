@@ -1004,7 +1004,7 @@ func (e *Engine) skipOptDateBracket() {
 // doPassOptionsTo implements \PassOptionsToPackage{opts}{pkg} and
 // \PassOptionsToClass: it stashes options to be merged when pkg/class is loaded.
 func (e *Engine) doPassOptionsTo() {
-	opts := e.readBraceGroupText()
+	opts := e.readBraceGroupTextX()
 	target := e.readBraceName()
 	if e.passedOptions == nil {
 		e.passedOptions = map[string][]string{}
@@ -1016,40 +1016,34 @@ func (e *Engine) doPassOptionsTo() {
 	}
 }
 
-// readBraceGroupText reads a braced group and returns its text with the INNER
-// braces kept and counted. An option list is not a name: beamer passes
+// readBraceGroupTextX is readBraceGroupText for \PassOptionsTo*, which EXPANDS its
+// first argument: ltfiles.dtx \@pass@ptions stores it with \xdef, so the canonical
 //
-//	\PassOptionsToPackage{pdfborder={0 0 0},linkbordercolor=[rgb]{.5,.5,.5}}{hyperref}
+//	\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}
 //
-// and a reader that stops at the first closing brace ends the list inside
-// "pdfborder={0 0 0" — the remainder was typeset onto the first page.
-func (e *Engine) readBraceGroupText() string {
+// forwards the option the user wrote. Read as unexpanded text, the control sequence
+// was dropped and NOTHING was forwarded: elsarticle's [preprint,12pt] reached
+// article.cls with no size, which loaded size10.clo (\@ptsize 0) under a 12pt document.
+// That was invisible until a class's \normalsize rebased the body (#939), which then
+// snapped a 12pt body to 10pt (2205.03780: 33 pages for a 37-page reference).
+// A list with no control sequence in it takes the old path unchanged.
+func (e *Engine) readBraceGroupTextX() string {
 	e.skipOptSpace()
-	t, ok := e.getNext()
-	if !ok || t.cs_ || t.cat != catBegin {
-		if ok {
-			e.back(t)
+	toks := e.readBraceToksRaw()
+	for _, t := range toks {
+		if t.cs_ {
+			return strings.TrimSpace(e.toksToString(e.expandList(toks)))
 		}
-		return ""
 	}
+	// An option list is not a name: beamer passes
+	//
+	//	\PassOptionsToPackage{pdfborder={0 0 0},linkbordercolor=[rgb]{.5,.5,.5}}{hyperref}
+	//
+	// so the INNER braces are kept (grabGroup balances them) — a reader that stops at
+	// the first closing brace ended the list inside "pdfborder={0 0 0".
 	var b []rune
-	for depth := 1; ; {
-		u, ok := e.getNext()
-		if !ok {
-			break
-		}
-		if !u.cs_ && u.cat == catEnd {
-			depth--
-			if depth == 0 {
-				break
-			}
-		}
-		if !u.cs_ && u.cat == catBegin {
-			depth++
-		}
-		if !u.cs_ {
-			b = append(b, u.ch)
-		}
+	for _, t := range toks {
+		b = append(b, t.ch)
 	}
 	return string(b)
 }
