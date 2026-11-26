@@ -492,7 +492,7 @@ func scriptSizeOf(pt float64) float64 {
 // \@textsuperscript sets its argument in (latex.ltx:13172, \fontsize\sf@size\sf@size).
 func (e *Engine) doSupSize() {
 	sf, ok := e.curFont.(scalableFont)
-	if !ok || e.curFont.sizePt() <= 0 {
+	if !ok {
 		return
 	}
 	e.selectFont(sf.atSize(scriptSizeOf(e.curFont.sizePt())))

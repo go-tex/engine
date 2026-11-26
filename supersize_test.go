@@ -43,6 +43,27 @@ func TestTextsuperscriptFollowsTheCurrentSize(t *testing.T) {
 	}
 }
 
+// A font that cannot rescale, or has no size, keeps its size under \gotexsupsize.
+func TestSupSizeUnscalable(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.SetFont(spMock{}) // no atSize
+	defer func() {      // a panic here is the guard missing: say so as an assertion
+		if r := recover(); r != nil {
+			t.Errorf("\\gotexsupsize on a non-scalable face panicked: %v", r)
+		}
+	}()
+	if _, err := e.Run(`\gotexsupsize X`); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.curFont.sizePt(); got != 10 {
+		t.Errorf("non-scalable \\gotexsupsize changed size to %g, want 10", got)
+	}
+	if got := scriptSizeOf(13); math.Abs(got-9.1) > 1e-9 {
+		t.Errorf("an undeclared size 13 gives %g, want .7 of it (9.1)", got)
+	}
+}
+
 // elsarticle.cls:171-173, :180-181 and :186-187 write the correspondence mark as
 // $\ast$ (math, cmsy), not the text character U+2217 the engine wrote.
 func TestElsarticleCorrespondenceMarkIsMathAst(t *testing.T) {
