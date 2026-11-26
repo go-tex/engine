@@ -36,9 +36,10 @@ import "strings"
 //   - \affiliation's keys are read here by a comma/equals splitter, not keyval, because
 //     the kernel gobbles \setkeys. Keys that set punctuation (op, ap, cp, ...) are
 //     ignored; the default ", " after each value is used. An unknown key is dropped.
-//   - 1p/3p/5p (the CRC "final" layouts) use \finalMaketitle in one column; the class's
-//     \twocolumn[...] title box for 5p, the \vsplit of the long-title option and the
-//     highlights / graphical-abstract pages are not reproduced.
+//   - 1p/3p (the CRC "final" layouts) use \finalMaketitle in one column; 5p runs it as
+//     \twocolumn[\finalMaketitle] (:353-364), the title box spanning both columns. The
+//     \vsplit of the long-title option and the highlights / graphical-abstract pages
+//     are not reproduced.
 //   - \usepackage{hyperref}'s title/author hooks (:284-289) are not needed here.
 const ElsarticleFrontMatter = `
 \newif\ifpreprint \preprinttrue
@@ -390,7 +391,14 @@ func (e *Engine) loadElsarticleEmulation(opts []string) {
 	b.WriteString(ElsarticleFrontMatter)
 	for _, o := range opts {
 		switch strings.TrimSpace(o) {
-		case "final", "1p", "3p", "5p":
+		case "5p":
+			// elsarticle.cls:353-364: for jtype 5 \maketitle is
+			// \twocolumn[\finalMaketitle]\printFirstPageNotes, so the title block spans
+			// both columns at the top of page 1 and the body flows in two columns below it.
+			b.WriteString("\\preprintfalse\n" +
+				"\\def\\maketitle{\\twocolumn[\\finalMaketitle]\\printFirstPageNotes" +
+				"\\gdef\\thefootnote{\\arabic{footnote}}}\n")
+		case "final", "1p", "3p":
 			b.WriteString("\\preprintfalse\n")
 		case "preprint", "review":
 			b.WriteString("\\preprinttrue\n")
