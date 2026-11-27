@@ -56,6 +56,8 @@ func TestCleanPgfTextBodyRefusesWhatItCannotRead(t *testing.T) {
 		{"unknown command", `\foo\pgftext{X}\end`},
 		{"option never closed", `\color[rgb`},
 		{"argument missing", `\pgftext`},
+		{"argument missing before end", `\pgftext\end`},
+		{"option never closed in a group", `{\color[rgb}\pgftext{X}\end`},
 	} {
 		if _, _, ok := cleanPgfTextBody(tokenizeTeX(c.src), true); ok {
 			t.Errorf("%s: %q was accepted", c.name, c.src)
@@ -77,6 +79,48 @@ func TestAShadingWithNoSizePlacesNothing(t *testing.T) {
 		`\setbox0\hbox{\pgfuseshading{neg}}\message{[\the\wd0]}`)
 	if strings.Count(got, "[0.0pt]") != 2 {
 		t.Errorf("messages %q, want two empty boxes", got)
+	}
+}
+
+// specialTexts collects the driver literals in a box, depth first.
+func specialTexts(b *boxNode) []string {
+	var out []string
+	for _, n := range b.list {
+		switch c := n.(type) {
+		case specialNode:
+			out = append(out, c.text)
+		case *boxNode:
+			out = append(out, specialTexts(c)...)
+		}
+	}
+	return out
+}
+
+// The disk ends at the next-to-last stop, or at the only one, and takes the
+// colour of the last stop inside its edge, or its own when none is.
+func TestTheShadingDiskEndsAtTheNextToLastStop(t *testing.T) {
+	e := New()
+	e.SetFont(spMock{})
+	if err := e.LoadLaTeX(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Run(pgfStubsOn +
+		`\pgfdeclareradialshading{three}{\pgfpoint{0pt}{0pt}}{color(0pt)=(red);color(1pt)=(green);color(2pt)=(blue);color(3pt)=(white)}` +
+		`\pgfdeclareradialshading{one}{\pgfpoint{0pt}{0pt}}{color(3pt)=(blue)}` +
+		`\setbox1\hbox{\pgfuseshading{three}}\setbox2\hbox{\pgfuseshading{one}}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		box        int
+		want, fill string
+	}{
+		{1, `r="2"`, "#00FF00"}, // edge at 2pt, coloured by the 1pt stop
+		{2, `r="3"`, "#0000FF"}, // one stop: it is the edge and the colour
+	} {
+		got := strings.Join(specialTexts(e.box[c.box]), " ")
+		if !strings.Contains(got, c.want) || !strings.Contains(strings.ToUpper(got), c.fill) {
+			t.Errorf("box %d: %q, want %s filled %s", c.box, got, c.want, c.fill)
+		}
 	}
 }
 

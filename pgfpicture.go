@@ -78,10 +78,10 @@ func cleanPgfTextBody(ts []tok, top bool) (out []tok, hasText, ok bool) {
 		case !t.cs_ && t.cat == catSpace:
 			i++
 		case !t.cs_ && t.cat == catBegin:
-			inner, next, found := nextGroup(ts, i)
-			if !found {
-				return nil, false, false
-			}
+			// An unclosed group leaves next at len(ts): the body then never
+			// reaches its \end and is refused below. Groups inside one are
+			// balanced, so nextGroup's ok needs no test of its own here.
+			inner, next, _ := nextGroup(ts, i)
 			sub, text, good := cleanPgfTextBody(inner, false)
 			if !good {
 				return nil, false, false
@@ -164,29 +164,32 @@ type shadeStop struct {
 func (e *Engine) doShadeDisk() {
 	spec := e.grabUndelimited()
 	stops := e.parseShadeStops(spec)
-	if len(stops) == 0 {
-		return
-	}
 	scale := 1.0
 	if m := e.eq["gotex@pgfscale"]; m != nil && m.kind == mMacro {
 		if f, err := strconv.ParseFloat(strings.TrimSpace(e.toksToString(m.body)), 64); err == nil && f > 0 {
 			scale = f
 		}
 	}
-	side := int(float64(2*stops[len(stops)-1].r) * scale)
-	disk := stops[len(stops)-1]
+	// The last two stops, read without indexing: no stop at all leaves a zero
+	// last stop, a side of 0, and nothing placed.
+	var prev, last shadeStop
+	for _, s := range stops {
+		prev, last = last, s
+	}
+	side := int(float64(2*last.r) * scale)
+	if side <= 0 {
+		return
+	}
+	disk := last
 	if len(stops) > 1 {
-		disk = stops[len(stops)-2]
+		disk = prev
 	}
 	radius := int(float64(disk.r) * scale)
-	body := stops[0]
+	body := disk
 	for _, s := range stops {
 		if s.r < disk.r {
 			body = s
 		}
-	}
-	if side <= 0 {
-		return
 	}
 	half := side / 2
 	src := fmt.Sprintf(`\hbox to %dsp{\vrule width 0pt height %dsp depth 0pt\kern %dsp\raise %dsp\hbox{\color{%s}\gotex@circle %dsp 0pt 1\relax}\hss}`,
