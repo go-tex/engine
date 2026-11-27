@@ -1347,7 +1347,8 @@ func (e *Engine) forgetSaved(kind, idx int, name string) {
 	var dropped []int
 	out := e.save[:0]
 	for i, it := range e.save {
-		if it.kind == kind && ((kind == 0 && it.name == name) || (kind != 0 && it.idx == idx)) {
+		byName := kind == 0 || kind == saveColorName
+		if it.kind == kind && ((byName && it.name == name) || (!byName && it.idx == idx)) {
 			dropped = append(dropped, i)
 			continue
 		}
@@ -1646,6 +1647,12 @@ func (e *Engine) endGroup() {
 			e.parShape = s.oldshp
 		case saveLineWidth:
 			e.lineWidth = s.oldd
+		case saveColorName:
+			if s.oldd == 0 {
+				delete(e.colors, s.name)
+			} else {
+				e.colors[s.name] = uint32(s.oldi)
+			}
 		}
 	}
 	// \aftergroup's tokens are put back once the group is closed and its values

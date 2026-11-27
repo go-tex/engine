@@ -127,6 +127,9 @@ type pdfDraw struct {
 	pageH    float64
 	specials []string   // driver literals collected in paint order (see special)
 	ctm      pictureCTM // the transformation those literals have in force
+	// specialGroups is how many <g> the collected literals leave open: a stream
+	// is painted early only when it is closed (paintClosedSpecials).
+	specialGroups int
 }
 
 // setSize switches the PDF text size when a glyph's size differs from what's
@@ -272,7 +275,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			}
 			switch t := c.tile.(type) {
 			case ruleNode:
-				d.setColor(0)
+				d.setColor(t.color)
 				h, dp := spToPt(ruleHeight(t, b)), spToPt(ruleDepth(t, b))
 				d.inPicture(func() { d.rect(cx, baseline-h, w, h+dp) })
 			case *boxNode:
@@ -285,13 +288,15 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 		case charNode:
 			lastFace = c.face
 			if !c.covered { // covered: it holds its place and draws nothing
+				d.paintClosedSpecials()
 				d.setGlyphFont(c)
 				d.setColor(c.color)
 				d.drawCharMapped(cx, baseline, c.ch)
 			}
 			cx += spToPt(c.width)
 		case ruleNode:
-			d.setColor(0)
+			d.paintClosedSpecials()
+			d.setColor(c.color)
 			h := spToPt(ruleHeight(c, b))
 			dp := spToPt(ruleDepth(c, b))
 			w := spToPt(c.width)
@@ -351,7 +356,24 @@ func (d *pdfDraw) special(s specialNode, x, baseline float64) {
 	// opens have to be known now, since a character drawn after it is drawn
 	// through them (see pdfpicture.go).
 	lit = d.ctm.org.next(lit)
-	d.specials = append(d.specials, d.ctm.feed(lit))
+	lit = d.ctm.feed(lit)
+	d.specialGroups += strings.Count(lit, "<g") - strings.Count(lit, "</g>")
+	d.specials = append(d.specials, lit)
+}
+
+// paintClosedSpecials paints the literals collected so far BEFORE a glyph or a
+// rule that follows them, when they form a closed stream: no picture scope open
+// (the transformation is the identity) and every <g> they opened closed again.
+// A special is painted where TeX meets it, so a mark set after a drawing is drawn
+// over it. Collected to the end of the page, every drawing covered the text set
+// after it: beamer's ball item draws its sphere and then sets the item number on
+// it, and the numbers were painted first and hidden (go-tex/engine#884). An open
+// stream, a pgf scope still running across several specials, waits as before.
+func (d *pdfDraw) paintClosedSpecials() {
+	if len(d.specials) == 0 || d.ctm.active() || d.specialGroups != 0 {
+		return
+	}
+	d.drawSpecials()
 }
 
 // drawSpecials interprets the page's collected driver literals as vector marks.
@@ -363,6 +385,7 @@ func (d *pdfDraw) drawSpecials() {
 	}
 	drawSVGStream(d.p, strings.Join(d.specials, ""), d.pageH)
 	d.specials = nil
+	d.specialGroups = 0
 	d.curColor = 0
 	d.p.SetFillColor(pdfkit.RGB8(0, 0, 0))
 }
@@ -483,7 +506,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case glueNode:
 			cy += spToPt(b.setWidth(c.spec))
 		case ruleNode:
-			d.setColor(0)
+			d.setColor(c.color)
 			w := spToPt(ruleWidth(c, b))
 			hd := spToPt(c.height + c.depth)
 			d.inPicture(func() { d.rect(x, cy, w, hd) })

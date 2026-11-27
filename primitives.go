@@ -799,6 +799,11 @@ const (
 	saveParShape = 22
 	// \linewidth is its OWN \newdimen in LaTeX (latex.ltx:11414). See setLineWidth.
 	saveLineWidth = 23
+	// A NAMED colour (\definecolor, \colorlet) is local to the group that defines
+	// it unless \ifglobalcolors is true (xcolor.sty, \XC@definecolor's
+	// \ifglobalcolors\global\fi). See setNamedColor. The item keys by name; oldi
+	// is the displaced value and oldd is 1 when the name had one.
+	saveColorName = 24
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the
@@ -2276,6 +2281,7 @@ func (e *Engine) loadMore() {
 	e.prim("gotex@line", func(e *Engine) { e.doPictureLine(false) })
 	e.prim("gotex@vector", func(e *Engine) { e.doPictureLine(true) })
 	e.prim("gotex@circle", func(e *Engine) { e.doPictureCircle() })
+	e.prim("gotex@shadedisk", func(e *Engine) { e.doShadeDisk() })
 	e.prim("gotex@oval", func(e *Engine) { e.doPictureOval() })
 	e.prim("gotex@qbezier", func(e *Engine) { e.doQbezier() })
 	// pgffor's loop, for the document-level form. Inside a picture the body is
