@@ -47,6 +47,39 @@ func TestARadialShadingHasItsSize(t *testing.T) {
 	}
 }
 
+// A body the scanner cannot read whole is refused, never typeset in part.
+func TestCleanPgfTextBodyRefusesWhatItCannotRead(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"no closing end", `\pgftext{X}`},
+		{"group left open", `{\pgftext{X}`},
+		{"unknown command in a group", `{\foo}\pgftext{X}\end`},
+		{"unknown command", `\foo\pgftext{X}\end`},
+		{"option never closed", `\color[rgb`},
+		{"argument missing", `\pgftext`},
+	} {
+		if _, _, ok := cleanPgfTextBody(tokenizeTeX(c.src), true); ok {
+			t.Errorf("%s: %q was accepted", c.name, c.src)
+		}
+	}
+	out, hasText, ok := cleanPgfTextBody(tokenizeTeX(`{\color[rgb]{1,0,0} \pgftext{X}} \end`), true)
+	if !ok || !hasText || len(out) == 0 {
+		t.Errorf("a valid body was refused: ok=%v text=%v", ok, hasText)
+	}
+}
+
+// A shading with no stop it can read places nothing, and one whose radii are
+// not positive places no box of negative width.
+func TestAShadingWithNoSizePlacesNothing(t *testing.T) {
+	got := ckRun(t, pgfStubsOn+
+		`\pgfdeclareradialshading{none}{\pgfpoint{0pt}{0pt}}{junk}`+
+		`\pgfdeclareradialshading{neg}{\pgfpoint{0pt}{0pt}}{color(-3pt)=(red);color(-1pt)=(blue)}`+
+		`\setbox0\hbox{\pgfuseshading{none}}\message{[\the\wd0]}`+
+		`\setbox0\hbox{\pgfuseshading{neg}}\message{[\the\wd0]}`)
+	if strings.Count(got, "[0.0pt]") != 2 {
+		t.Errorf("messages %q, want two empty boxes", got)
+	}
+}
+
 // The stops are parsed with their models, sorted by radius, and the disk takes
 // the colour of the last stop inside its edge.
 func TestShadeStops(t *testing.T) {
