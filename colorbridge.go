@@ -35,19 +35,20 @@ import (
 // has to be visible too, not just what \definecolor added.
 func (e *Engine) publishNamedColors() {
 	for name, c := range namedColors {
-		e.publishColor(name, c)
+		e.publishColor(name, c, true)
 	}
 }
 
 // publishColor stores a colour under the name a colour-reading package expects,
-// alongside the engine's own table. It is called wherever a colour gets a name.
-func (e *Engine) publishColor(name string, c uint32) {
+// alongside the engine's own table. It is called wherever a colour gets a name,
+// with the same scope as that name (setNamedColor).
+func (e *Engine) publishColor(name string, c uint32, global bool) {
 	if name == "" {
 		return
 	}
 	// \string\color@<name> is the control sequence's *characters*, which is the
 	// name xcolor builds with \csname: a literal backslash, then "color@<name>".
-	e.define(`\color@`+name, &meaning{kind: mMacro, body: xcolorValue(c)}, true)
+	e.define(`\color@`+name, &meaning{kind: mMacro, body: xcolorValue(c)}, global)
 }
 
 // xcolorValue renders 0xRRGGBB as xcolor's stored five arguments.

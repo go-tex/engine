@@ -75,7 +75,8 @@ type adjustNode struct{ list []node }
 type penaltyNode struct{ penalty int } // \penalty
 type ruleNode struct {                 // \hrule/\vrule
 	width, height, depth          int
-	widthRun, heightRun, depthRun bool // a "running" dimension follows the box
+	widthRun, heightRun, depthRun bool   // a "running" dimension follows the box
+	color                         uint32 // 0xRRGGBB fill, like charNode's (0 = black)
 }
 type charNode struct { // a set character from the current font (metrics in sp)
 	ch                   rune
@@ -832,8 +833,14 @@ func (e *Engine) scanShiftedBox(shift int) *boxNode {
 // scanRule reads an \hrule/\vrule with any number of width/height/depth keywords,
 // each overriding the corresponding default (TeX §463). Unspecified dimensions in
 // the rule's running direction stay "running" (they follow the enclosing box).
+//
+// A rule is painted in the current colour, as a glyph is: the driver's colour
+// special is in force when the rule is shipped (color.sty sets it with
+// \special, and a rule is filled with whatever fill colour the page has). beamer's
+// background canvas is exactly \color{bg}\vrule width\paperwidth
+// height\paperheight; painted black, every beamer page was a black page.
 func (e *Engine) scanRule(horizontal bool) ruleNode {
-	r := ruleNode{}
+	r := ruleNode{color: e.curColor}
 	if horizontal { // \hrule: default height 0.4pt, depth 0, running width
 		r.height, r.widthRun = defaultRule, true
 	} else { // \vrule: default width 0.4pt, running height & depth
