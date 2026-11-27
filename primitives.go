@@ -2367,8 +2367,10 @@ func (e *Engine) loadMore() {
 		e.prim(env, func(e *Engine) { e.doTblr(env) })
 		e.prim("end"+env, func(e *Engine) {}) // consumed by doTblr
 	}
+	e.prim("DefTblrTemplate", func(e *Engine) { e.tblrTemplate(true) })
+	e.prim("SetTblrTemplate", func(e *Engine) { e.tblrTemplate(false) })
 	for name, groups := range map[string]int{
-		"DefTblrTemplate": 3, "SetTblrTemplate": 2, "SetTblrInner": 1, "SetTblrOuter": 1,
+		"SetTblrInner": 1, "SetTblrOuter": 1,
 		"SetTblrStyle": 2, "NewTblrTheme": 2, "SetCell": 1, "SetRow": 1, "SetColumn": 1,
 	} {
 		groups := groups
