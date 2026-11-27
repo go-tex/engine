@@ -25,8 +25,8 @@ github.com/go-pdfkit/render v0.69.1 h1:t341L3Lz/2H1/yt2uZ3QUrEejdp7BVrLCa3ogc7cH
 github.com/go-pdfkit/render v0.69.1/go.mod h1:VjnQZeNY5Rz4jmwSFD65KE64RHP3tEmL171H6e4KFQ8=
 github.com/go-simd/highway v0.0.14 h1:O3HPG00qgLGlrQyYBlMGyLYsuzZrqHA4+XNptPjV5gs=
 github.com/go-simd/highway v0.0.14/go.mod h1:t5XBPxqa10Lnj0frQS7Ur0JaN+/CckEmm5HXrqBDxXA=
-github.com/go-tex/math v0.52.0 h1:wMLjpX4eMSZJ9tkRI428Bo6BXFhtULHNi1idDv3Kgqc=
-github.com/go-tex/math v0.52.0/go.mod h1:cpu14hdmIjiZT1dh2FWkvbulp/mA/K34Z6xz6Ivtwyw=
+github.com/go-tex/math v0.53.0 h1:Sk8oM/EVvjU3RivyueTqz8A9Msm78KtSTZIZWOWLBBE=
+github.com/go-tex/math v0.53.0/go.mod h1:cpu14hdmIjiZT1dh2FWkvbulp/mA/K34Z6xz6Ivtwyw=
 github.com/go-tex/pdfrender v0.3.2 h1:3291c4DSb2wI4jeNJXzwt8QJIkNVab5hbKw62Q9UCrk=
 github.com/go-tex/pdfrender v0.3.2/go.mod h1:u2QdffHMZ+OzdrfY9K7PYtP4DGQVmCgZ7MhddzP+jxk=
 github.com/go-tex/texmf v0.9.0 h1:Kj1kkpk+umHuiSeEPH3Haj9lU8484C9aPXZ4RtgFCkU=
