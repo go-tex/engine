@@ -368,7 +368,9 @@ const LaTeX2eClassLead = `
 % preserves the text and sets it small and shifted as LaTeX does. latex.ltx sets the
 % argument in an \mbox, so it is EXECUTED; the math layer only expands it, and
 % sn-jnl.cls:519-521 runs a \@for loop in it (68 corpus papers). Hence a box, not ^{}.
-\def\textsuperscript#1{\leavevmode\hbox{\raisebox{0.4em}[0pt][0pt]{\scriptsize #1}}}
+% The size is latex.ltx:13172's \fontsize\sf@size: the math script size of the CURRENT
+% text size (fontmath.ltx:75-86), not a fixed \scriptsize (7pt) at every size.
+\def\textsuperscript#1{\leavevmode\hbox{\raisebox{0.4em}[0pt][0pt]{\gotexsupsize #1}}}
 \def\textsubscript#1{\ensuremath{_{#1}}}
 % \text (amsmath) used in TEXT mode: the math layer handles \text inside $…$/\[…\]
 % from the raw source, but a \text{…} written in ordinary text reached execCS

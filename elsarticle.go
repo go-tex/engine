@@ -91,7 +91,7 @@ const ElsarticleFrontMatter = `
     \footnotetext{#2}}}
 \def\cormark[#1]{\edef\cnotenum{\elsRef{#1}}%
     \unskip\textsuperscript{\sep\ifcase\cnotenum\or
-       ∗\or∗∗\fi\hspace{-1pt}}\let\sep=,}
+       $\ast$\or$\ast\ast$\fi\hspace{-1pt}}\let\sep=,}
 \let\@cormark\@empty
 \let\@cornotes\@empty
 \newcounter{cnote}
@@ -99,13 +99,13 @@ const ElsarticleFrontMatter = `
   \gotex@els@label{#1}{\the\gotex@els@cn}%
   \g@addto@macro\@cornotes{%
     \refstepcounter{cnote}%
-    \def\thefootnote{\ifcase\c@cnote\or∗\or
-    ∗∗\fi}%
+    \def\thefootnote{\ifcase\c@cnote\or$\ast$\or
+    $\ast\ast$\fi}%
     \footnotetext{#2}}}
 \let\@corref\@empty
 \def\corref#1{\edef\cnotenum{\elsRef{#1}}%
     \edef\@corref{\ifcase\cnotenum\or
-         ∗\or∗∗\fi\hskip-1pt}}
+         $\ast$\or$\ast\ast$\fi\hskip-1pt}}
 \def\resetTitleCounters{\c@cnote=0
    \c@fnote=0 \c@tnote=0 \c@footnote=0}
 \let\eadsep\@empty

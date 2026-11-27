@@ -2335,7 +2335,8 @@ func (e *Engine) loadMore() {
 	// mark a macro already computed — manyfoot's extra footnote classes (latex.go).
 	e.prim("gotex@fnqueue", func(e *Engine) { e.doFootnoteQueueMarked() })
 	e.prim("gotex@fnmark", func(e *Engine) { e.doFootnoteMarkMarked() })
-	e.prim("gotexsize", func(e *Engine) { e.doFontSize() }) // \gotexsize<permille>: scale the base font
+	e.prim("gotexsupsize", func(e *Engine) { e.doSupSize() }) // \sf@size, see font.go
+	e.prim("gotexsize", func(e *Engine) { e.doFontSize() })   // \gotexsize<permille>: scale the base font
 	// \gotex@fontsizeat{size}: put the font at the size a class size table
 	// (size1x.clo) states for one of \tiny…\Huge, read against its \normalsize.
 	e.prim("gotex@fontsizeat", func(e *Engine) { e.doFontSizeAt() })
