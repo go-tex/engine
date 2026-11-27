@@ -1068,7 +1068,13 @@ const LaTeX2eClassKernel = `
   \global\expandafter\def\csname @tsshape@\@tsn\endcsname{#2}%
   \global\expandafter\def\csname @tsfmt@\@tsn\endcsname{#3}%
   \global\expandafter\def\csname @tslab@\@tsn\endcsname{#4\hskip#5\relax}%
-  \global\expandafter\def\csname @tsbc@\@tsn\endcsname{#6}}
+  \@ifpackagewith{titlesec}{explicit}%
+    {\expandafter\@tsbcexplicit\csname @tsbc@\@tsn\endcsname{#6}}%
+    {\global\expandafter\def\csname @tsbc@\@tsn\endcsname{#6}}}
+% titlesec's explicit option (titlesec.sty:1209, 297-301): the before-code takes
+% the title as #1 (titlesec.sty:736), so it is a one-argument macro, not code the
+% title follows. \@tstitle already calls the recorded macro with the title.
+\def\@tsbcexplicit#1#2{\global\def#1##1{#2}}
 \def\@tsecgobopt[#1]{}
 \def\@tsrunin{runin}
 % \titlespacing[*]{cmd}{left}{before}{after}[right]. The star drops the indent of
