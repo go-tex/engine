@@ -203,3 +203,101 @@ func TestParseTblrOuterAndRows(t *testing.T) {
 		t.Errorf("rowhead %d rowfoot %d, want 2 3", sp.rowhead, sp.rowfoot)
 	}
 }
+
+// The column letters map as tabularray.sty defines them: S is centred (6970, in
+// the siunitx library), Q is l, t is p (2472), X is l without a width (2486).
+func TestNormalizeTblrColspecLetters(t *testing.T) {
+	if got := tokString(normalizeTblrColspec(tokenizeTeX("SQtX"), false)); got != "clpl" {
+		t.Errorf("SQtX = %q, want clpl", got)
+	}
+	if got := tokString(normalizeTblrColspec(tokenizeTeX("X"), true)); got != "X" {
+		t.Errorf("X with a width = %q, want X", got)
+	}
+}
+
+// Only longtblr repeats a header and draws the continuation foot; tblr and
+// talltblr leave the rows alone.
+func TestTblrAndTalltblrDoNotRepeatRowhead(t *testing.T) {
+	for _, env := range []string{"tblr", "talltblr"} {
+		src := `\documentclass{article}
+\usepackage{tabularray}
+\begin{document}
+\begin{` + env + `}{colspec = {ll}, rowhead = 1}
+HEADCELL & HDX\\
+` + tblrRows(90) + `\end{` + env + `}
+\end{document}`
+		e := New()
+		e.LoadLaTeX()
+		e.SetFont(spMock{})
+		if _, err := e.Run(src); err != nil {
+			t.Fatal(err)
+		}
+		txt := pageText(e)
+		if strings.Count(txt, "HEADCELL") != 1 || strings.Contains(txt, "Continued") {
+			t.Errorf("%s: header %d times, foot %v", env, strings.Count(txt, "HEADCELL"), strings.Contains(txt, "Continued"))
+		}
+	}
+}
+
+func TestPlaceLongNilBox(t *testing.T) {
+	e := New()
+	e.LoadLaTeX()
+	e.placeLong(nil, tblrSpec{}, nil) // must not panic
+}
+
+// Inside a box a longtblr is packed whole, on the line, like a tblr.
+func TestLongtblrInsideABoxStaysInline(t *testing.T) {
+	a := boxHeightOf(t, `x \begin{longtblr}{ll}a&b\\c&d\\\end{longtblr}`)
+	b := boxHeightOf(t, `x\par\begin{longtblr}{ll}a&b\\c&d\\\end{longtblr}`)
+	if a >= b {
+		t.Errorf("longtblr in a box height %d, want less than %d", a, b)
+	}
+}
+
+// An empty longtblr body must not break placement.
+func TestLongtblrEmptyBody(t *testing.T) {
+	if n := pagesOf(t, `\documentclass{article}
+\usepackage{tabularray}
+\begin{document}
+\begin{longtblr}{ll}
+\end{longtblr}
+\end{document}`); n < 1 {
+		t.Errorf("pages = %d", n)
+	}
+}
+
+func wrappedBlocks(e *Engine) int {
+	wrapped := 0
+	for _, p := range e.Pages() {
+		for _, top := range p.list {
+			tb, ok := top.(*boxNode)
+			if !ok {
+				continue
+			}
+			for _, n := range tb.list {
+				if b, ok := n.(*boxNode); ok && len(b.list) > 0 {
+					if _, g := b.list[0].(glueNode); g {
+						wrapped++
+					}
+				}
+			}
+		}
+	}
+	return wrapped
+}
+
+// Under \centering every page block after the first carries the skips.
+func TestLongtblrKeepsCentering(t *testing.T) {
+	for _, tc := range []struct {
+		pre  string
+		want func(int) bool
+	}{
+		{`\centering`, func(n int) bool { return n >= 2 }},
+		{``, func(n int) bool { return n == 0 }},
+	} {
+		e, _, pages := runLongtblr(t, tc.pre, "", `colspec = {ll}, rowhead = 1`, 90)
+		if got := wrappedBlocks(e); !tc.want(got) || pages < 3 {
+			t.Errorf("%q: %d wrapped blocks on %d pages", tc.pre, got, pages)
+		}
+	}
+}

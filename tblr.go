@@ -245,7 +245,7 @@ func normalizeTblrColspec(spec []tok, hasWidth bool) []tok {
 			case 'Q':
 				out = append(out, chTok('l', catLetter))
 			case 'S':
-				out = append(out, chTok('r', catLetter))
+				out = append(out, chTok('c', catLetter)) // tabularray.sty:6970: Q[si={..}, c]
 			case 'X':
 				if hasWidth {
 					out = append(out, t)
@@ -461,7 +461,7 @@ func tblrRowGroups(list []node, nh, nf int) (head []node, body [][]node, foot []
 	var cur []node
 	hasRow := false
 	for _, n := range list {
-		if c, ok := n.(*boxNode); ok && c != nil {
+		if _, ok := n.(*boxNode); ok {
 			if hasRow {
 				units = append(units, cur)
 				cur = nil
@@ -554,9 +554,6 @@ func (e *Engine) tblrPageFill() int {
 		}
 		start = next
 	}
-	if start >= len(list) {
-		return 0
-	}
 	p := pageSoFar{total: e.topskipHeightAt(list, start)}
 	maxDepth := e.pageMaxDepth()
 	for _, n := range list[start:] {
@@ -593,18 +590,13 @@ func (e *Engine) placeLong(b *boxNode, sp tblrSpec, capToks []tok) {
 	if b == nil {
 		return
 	}
-	if k, open := e.curGroupKind(); len(b.list) == 0 || (open && k == boxGroup) {
+	if k, open := e.curGroupKind(); open && k == boxGroup {
 		e.place(b)
 		return
 	}
 	e.endParagraph()
 	head, body, rowfoot := tblrRowGroups(b.list, sp.rowhead, sp.rowfoot)
-	boxH := func(x *boxNode) int {
-		if x == nil {
-			return 0
-		}
-		return x.height + x.depth
-	}
+	boxH := func(x *boxNode) int { return x.height + x.depth }
 	headsep, footsep, presep, postsep := ptToSP(6), ptToSP(6), ptToSP(18), ptToSP(18)
 
 	capFirst := e.tblrLine(capToks, b.width, false)
