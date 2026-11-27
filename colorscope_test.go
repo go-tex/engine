@@ -49,6 +49,14 @@ func TestARuleTakesTheCurrentColour(t *testing.T) {
 	if rules[0].color != 0xFF0000 || rules[1].color != 0 {
 		t.Errorf("rule colours = %06X, %06X; want FF0000 then the default", rules[0].color, rules[1].color)
 	}
+	// A rule with no area paints nothing, coloured or not (a \strut is a coloured
+	// zero-width rule inside every \color group).
+	var empty strings.Builder
+	ruleRect(&empty, 0, 0, 0, 2, 0xFF0000)
+	ruleRect(&empty, 0, 0, 2, 0, 0xFF0000)
+	if empty.Len() != 0 {
+		t.Errorf("an empty coloured rule painted %q", empty.String())
+	}
 	var sb strings.Builder
 	ruleRect(&sb, 0, 0, 2, 2, rules[0].color)
 	if !strings.Contains(sb.String(), `fill="#FF0000"`) && !strings.Contains(strings.ToLower(sb.String()), `fill="#ff0000"`) {
@@ -91,6 +99,15 @@ func TestColorletIsLocalUnlessGlobalcolors(t *testing.T) {
 	}
 	if got := e.colors["kept"]; got != 0x0000FF {
 		t.Errorf("kept = %06X, want blue: \\globalcolorstrue makes it global", got)
+	}
+}
+
+// A colour command with no braced argument reads no colour and leaves what follows
+// to be typeset, rather than swallowing it as a name.
+func TestAColourWithNoBraceReadsNothing(t *testing.T) {
+	e := colourEngine(t, `\color Zap}`)
+	if got := glyphString(e.mvl); !strings.Contains(got, "Zap") {
+		t.Errorf("text after a brace-less \\color = %q, want it typeset", got)
 	}
 }
 
