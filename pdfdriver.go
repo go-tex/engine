@@ -272,7 +272,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			}
 			switch t := c.tile.(type) {
 			case ruleNode:
-				d.setColor(0)
+				d.setColor(t.color)
 				h, dp := spToPt(ruleHeight(t, b)), spToPt(ruleDepth(t, b))
 				d.inPicture(func() { d.rect(cx, baseline-h, w, h+dp) })
 			case *boxNode:
@@ -291,7 +291,7 @@ func (d *pdfDraw) hlist(b *boxNode, x, baseline float64) {
 			}
 			cx += spToPt(c.width)
 		case ruleNode:
-			d.setColor(0)
+			d.setColor(c.color)
 			h := spToPt(ruleHeight(c, b))
 			dp := spToPt(ruleDepth(c, b))
 			w := spToPt(c.width)
@@ -483,7 +483,7 @@ func (d *pdfDraw) vlist(b *boxNode, x, top float64) {
 		case glueNode:
 			cy += spToPt(b.setWidth(c.spec))
 		case ruleNode:
-			d.setColor(0)
+			d.setColor(c.color)
 			w := spToPt(ruleWidth(c, b))
 			hd := spToPt(c.height + c.depth)
 			d.inPicture(func() { d.rect(x, cy, w, hd) })

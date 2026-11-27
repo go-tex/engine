@@ -149,7 +149,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 				lg.close()
 				switch t := c.tile.(type) {
 				case ruleNode:
-					rect(sb, cx, baseline-spToPt(ruleHeight(t, b)), w, spToPt(ruleHeight(t, b)+ruleDepth(t, b)))
+					ruleRect(sb, cx, baseline-spToPt(ruleHeight(t, b)), w, spToPt(ruleHeight(t, b)+ruleDepth(t, b)), t.color)
 				case *boxNode:
 					for _, o := range leaderTileOrigins(c.lmode, x, cx, w, spToPt(t.width)) {
 						paintBoxSP(sb, t, o, baseline+spToPt(t.shift), font, tl)
@@ -237,7 +237,7 @@ func paintHListSP(sb *strings.Builder, b *boxNode, x, baseline float64, font fon
 			h := ruleHeight(c, b)
 			d := ruleDepth(c, b)
 			w := spToPt(c.width) // an hbox never has a running-width rule
-			rect(sb, cx, baseline-spToPt(h), w, spToPt(h+d))
+			ruleRect(sb, cx, baseline-spToPt(h), w, spToPt(h+d), c.color)
 			cx += w
 		case *boxNode:
 			lg.close()
@@ -423,7 +423,7 @@ func paintVListSP(sb *strings.Builder, b *boxNode, x, top float64, font fontFace
 		case ruleNode:
 			w := ruleWidth(c, b)
 			hd := spToPt(c.height + c.depth)
-			rect(sb, x, cy, spToPt(w), hd)
+			ruleRect(sb, x, cy, spToPt(w), hd, c.color)
 			cy += hd
 		case *boxNode:
 			paintBoxSP(sb, c, x+spToPt(c.shift), cy+spToPt(c.height), font, tl)
@@ -580,4 +580,17 @@ func rect(sb *strings.Builder, x, y, w, h float64) {
 		return
 	}
 	fmt.Fprintf(sb, `<rect x="%s" y="%s" width="%s" height="%s"/>`, f(x), f(y), f(w), f(h))
+}
+
+// ruleRect paints a rule in its own colour; 0 is the enclosing group's black, as
+// for a glyph.
+func ruleRect(sb *strings.Builder, x, y, w, h float64, color uint32) {
+	if color == 0 {
+		rect(sb, x, y, w, h)
+		return
+	}
+	if w <= 0 || h <= 0 {
+		return
+	}
+	fmt.Fprintf(sb, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>`, f(x), f(y), f(w), f(h), hexColor(color))
 }

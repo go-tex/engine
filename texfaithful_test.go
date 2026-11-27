@@ -260,11 +260,11 @@ func TestFaithfulPrimitivesOnMalformedInput(t *testing.T) {
 // specification still yields a readable (black) value rather than nonsense.
 func TestPublishColorEdges(t *testing.T) {
 	e := New()
-	e.publishColor("", 0xffffff) // ignored: no name
+	e.publishColor("", 0xffffff, true) // ignored: no name
 	if e.eq[`\color@`] != nil {
 		t.Error("a colour with no name was published")
 	}
-	e.publishColor("noir", 0)
+	e.publishColor("noir", 0, true)
 	m := e.eq[`\color@noir`]
 	if m == nil {
 		t.Fatal("colour not published")

@@ -799,6 +799,11 @@ const (
 	saveParShape = 22
 	// \linewidth is its OWN \newdimen in LaTeX (latex.ltx:11414). See setLineWidth.
 	saveLineWidth = 23
+	// A NAMED colour (\definecolor, \colorlet) is local to the group that defines
+	// it unless \ifglobalcolors is true (xcolor.sty, \XC@definecolor's
+	// \ifglobalcolors\global\fi). See setNamedColor. The item keys by name; oldi
+	// is the displaced value and oldd is 1 when the name had one.
+	saveColorName = 24
 )
 
 // setEngineDimen assigns one of the engine's dimension parameters, recording the

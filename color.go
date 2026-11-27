@@ -40,6 +40,11 @@ func (e *Engine) resolveColor(expr string) uint32 {
 // resolveNamed looks up a plain colour name (no mix syntax).
 func (e *Engine) resolveNamed(name string) uint32 {
 	name = strings.TrimSpace(name)
+	if name == "." {
+		// xcolor's name for the CURRENT colour (\colorlet{beamer@tempcolor}{.},
+		// beamerbasecolor.sty:369).
+		return e.curColor
+	}
 	if e.colors != nil {
 		if c, ok := e.colors[name]; ok {
 			return c
@@ -125,7 +130,7 @@ func (e *Engine) doColor() {
 		e.ignoreSpaces() // color.sty:95
 		return           // an undeclared colour has no NAME to hand the drawing package
 	}
-	name := e.readBraceName()
+	name := e.readColorExpr()
 	e.selectColor(e.resolveColor(name))
 	e.tellDriverColor(name)
 	// color.sty:102 — \@declaredcolor ends with \ignorespaces, so "\color{red} X"
@@ -240,14 +245,87 @@ func (e *Engine) doDefineColor() {
 	e.scanOptBracketToks() // [prefix]
 	model := e.readBraceName()
 	spec := e.readBraceName()
+	e.setNamedColor(name, parseColorSpec(model, spec))
+}
+
+// setNamedColor gives a colour a name, in the current group unless
+// \ifglobalcolors is true — xcolor's \XC@definecolor ends in
+// \ifglobalcolors\global\fi (xcolor.sty), so \definecolor and \colorlet are
+// ordinary local definitions.
+//
+// The table used to be flat, and beamer depends on the scope: \usebeamercolor
+// redefines fg and bg (\colorlet{fg}{temp@fg}, beamerbasecolor.sty:99-100) inside
+// the \hbox or group of the element it colours, and only the closing brace gives
+// fg and bg back. Flat, the colours of the last element coloured stayed in force for
+// everything after it.
+func (e *Engine) setNamedColor(name string, c uint32) {
 	if name == "" {
 		return
 	}
 	if e.colors == nil {
 		e.colors = map[string]uint32{}
 	}
-	e.colors[name] = parseColorSpec(model, spec)
-	e.publishColor(name, e.colors[name])
+	global := e.globalColors()
+	if global {
+		e.forgetSaved(saveColorName, 0, name)
+	} else if len(e.groups) > 0 {
+		old, had := e.colors[name]
+		item := saveItem{kind: saveColorName, name: name, oldi: int(old)}
+		if had {
+			item.oldd = 1
+		}
+		e.save = append(e.save, item)
+	}
+	e.colors[name] = c
+	e.publishColor(name, c, global)
+}
+
+// globalColors reports xcolor's \ifglobalcolors (declared by the kernel helpers).
+func (e *Engine) globalColors() bool {
+	m := e.eq["ifglobalcolors"]
+	return m != nil && m.kind == mPrim && m.name == "iftrue"
+}
+
+// readColorExpr reads a braced colour expression FULLY EXPANDED, as xcolor does
+// before it parses one (\XC@edef in \XC@splitcolor). beamer names its colours
+// through macros — \colorlet{temp@fg}{\csname beamer@thc@fg\endcsname}
+// (beamerbasecolor.sty:90) — and read as written, every such name was the empty
+// string, so every beamer colour resolved to black: frame titles, structure, and
+// the background canvas, a full-page \color{bg}\vrule painted black. A control
+// sequence that does not expand is not part of any colour name and is dropped.
+func (e *Engine) readColorExpr() string {
+	e.skipOptSpace()
+	t, ok := e.getXToken()
+	if !ok || t.cs_ || t.cat != catBegin {
+		if ok {
+			e.back(t)
+		}
+		return ""
+	}
+	var b []rune
+	depth := 0
+	for {
+		u, ok := e.getXToken()
+		if !ok {
+			break
+		}
+		if !u.cs_ && u.cat == catBegin {
+			depth++
+			continue
+		}
+		if !u.cs_ && u.cat == catEnd {
+			if depth == 0 {
+				break
+			}
+			depth--
+			continue
+		}
+		if u.cs_ {
+			continue
+		}
+		b = append(b, u.ch)
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // parseColorSpec turns a color model + spec string into 0xRRGGBB.
@@ -300,16 +378,8 @@ func (e *Engine) doColorlet() {
 	// through a colour model. This engine keeps colours as RGB throughout, so the
 	// hint changes nothing; it must still be consumed, or it lands on the page.
 	e.scanOptBracketToks()
-	name := e.readBraceName()
-	c := e.resolveColor(e.readBraceName())
-	if name == "" {
-		return
-	}
-	if e.colors == nil {
-		e.colors = map[string]uint32{}
-	}
-	e.colors[name] = c
-	e.publishColor(name, c)
+	name := e.readColorExpr()
+	e.setNamedColor(name, e.resolveColor(e.readColorExpr()))
 }
 
 // doPagecolor implements \pagecolor{expr}: fill the page background with the colour
