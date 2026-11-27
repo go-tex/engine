@@ -2362,8 +2362,23 @@ func (e *Engine) loadMore() {
 	e.prim("tabular*", func(e *Engine) { e.doTabularStar() })
 	e.prim("longtable", func(e *Engine) { e.doLongtable() })
 	e.prim("endlongtable", func(e *Engine) {}) // consumed by doLongtable
-	e.prim("endtabular*", func(e *Engine) {})  // consumed by doTabularStar
-	e.prim("endtabular", func(e *Engine) {})   // consumed by doTabular; defined for safety
+	// tabularray (tblr.go): the three environments and the commands that restyle them.
+	for _, env := range []string{"tblr", "longtblr", "talltblr"} {
+		env := env
+		e.prim(env, func(e *Engine) { e.doTblr(env) })
+		e.prim("end"+env, func(e *Engine) {}) // consumed by doTblr
+	}
+	e.prim("DefTblrTemplate", func(e *Engine) { e.tblrTemplate(true) })
+	e.prim("SetTblrTemplate", func(e *Engine) { e.tblrTemplate(false) })
+	for name, groups := range map[string]int{
+		"SetTblrInner": 1, "SetTblrOuter": 1,
+		"SetTblrStyle": 2, "NewTblrTheme": 2, "SetCell": 1, "SetRow": 1, "SetColumn": 1,
+	} {
+		groups := groups
+		e.prim(name, func(e *Engine) { e.tblrGobble(groups) })
+	}
+	e.prim("endtabular*", func(e *Engine) {}) // consumed by doTabularStar
+	e.prim("endtabular", func(e *Engine) {})  // consumed by doTabular; defined for safety
 	e.prim("tabularx", func(e *Engine) { e.doTabularx() })
 	e.prim("endtabularx", func(e *Engine) {}) // consumed by doTabularx; defined for safety
 	e.prim("minipage", func(e *Engine) { e.doMinipage() })

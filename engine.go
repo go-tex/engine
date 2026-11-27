@@ -74,6 +74,9 @@ func (t tok) String() string {
 // meanings), integer registers, category codes, the grouping save stack, and
 // the \message output buffer.
 type Engine struct {
+	// tblr is what \DefTblrTemplate and \SetTblrTemplate changed (see tblr.go).
+	tblr tblrStyle
+
 	// input: a stack of token lists (top = most recent), plus the base string.
 	lists [][]tok
 	base  []rune
