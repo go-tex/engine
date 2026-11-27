@@ -114,11 +114,11 @@ func cleanPgfTextBody(ts []tok, top bool) (out []tok, hasText, ok bool) {
 				for k < len(ts) && (ts[k].cs_ || ts[k].ch != ']') {
 					k++
 				}
-				if k == len(ts) {
-					return nil, false, false
-				}
-				out = append(out, ts[j:k+1]...)
-				i = k + 1
+				// An unclosed [ runs to the end: every command with an option
+				// also takes an argument, and its read below refuses the body.
+				end := min(k+1, len(ts))
+				out = append(out, ts[j:end]...)
+				i = end
 			}
 			for a := 0; a < cmd.args; a++ {
 				arg, next, found := nextGroup(ts, i)

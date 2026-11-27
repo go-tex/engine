@@ -69,6 +69,16 @@ func TestCleanPgfTextBodyRefusesWhatItCannotRead(t *testing.T) {
 	}
 }
 
+// cleanPgfTextBody leaves an unclosed [..] to the argument read that follows it,
+// so every command taking an option must take an argument.
+func TestEveryPgfTextCommandWithAnOptionTakesAnArgument(t *testing.T) {
+	for name, cmd := range pgfTextCommands {
+		if cmd.opt && cmd.args == 0 {
+			t.Errorf("\\%s takes [..] and no argument: an unclosed [ would be accepted", name)
+		}
+	}
+}
+
 // A shading with no stop it can read places nothing, and one whose radii are
 // not positive places no box of negative width.
 func TestAShadingWithNoSizePlacesNothing(t *testing.T) {
