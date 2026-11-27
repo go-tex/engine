@@ -365,6 +365,49 @@ format and image type, with its status, plus every remaining gap — lives at
   footer. `acmart` titles are Linux Biolinum (the sans family follows series and
   shape) and `\texttt` is Inconsolata through `zi4`/`inconsolata` (0.5em per
   character, where Latin Modern Mono is 0.525em).
+- **Font sizes and classes (v0.299.0–v0.300.0).** `\fontsize` and `\@setfontsize`
+  read any TeX unit (`pt`, `bp`, `mm`, `cm`, `in`, `pc`, `dd`, `cc`, `sp`), as
+  `\set@fontsize` does by scanning a whole `<dimen>`; `em` and `ex` stay refused
+  because they depend on the font. A class that restates
+  `\@setfontsize\normalsize{10bp}{12bp}` makes that the **body size** and the size
+  table is rebased on it (springer's `sn-jnl` over `\LoadClass[11pt]{article}`
+  used to keep the 11pt body). `\PassOptionsToClass` and `\PassOptionsToPackage`
+  expand their option argument, so elsarticle's
+  `\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}` forwards `12pt`
+  and a 12pt document stays 12pt. `authblk`'s `\author[marks]{name}` accumulates
+  (“A, B, and C”, marks as superscripts) and `\affil` is set in `\Affilfont`
+  (before, the last author replaced the others). `elsarticle`'s `\tnotemark` and
+  title-note footnotes print the class's star (`$\star$`, `$\star\star$`) and no
+  longer U+2217. The sans bold, oblique and bold oblique of Latin Modern are bound
+  (`\textsf{\textbf{x}}`, `\textsf{\textit{x}}`), with the optical sizes of
+  `tulmss.fd`.
+- **Pages and geometry (v0.299.0–v0.300.0).** `\setcounter{page}{n}` and
+  `\pagenumbering{style}` change the printed folio: `\setcounter{page}{5}` then
+  `\pagenumbering{roman}` and `\pagenumbering{arabic}` print 1 5 6 i ii 1 2, as
+  `tectonic` does (they used to count 1 2 3 …). `geometry` takes the options
+  `\PassOptionsToPackage` queued for it (acl.sty's
+  `a4paper,margin=2.5cm,heightrounded=true`), reads `heightrounded=true|false` in
+  key form, and one margin beside a body no longer cancels the body, so
+  `\newgeometry{textheight=9in,top=1in,…}` keeps its 9in. `eso-pic`'s `\AtText…`
+  family uses `\evensidemargin` on the even pages of a `twoside` document, and
+  `\AtText…`, `\AtPageUpperLeft` and `\AtPageCenter` pictures no longer sit at
+  x = 0.
+- **Mathematics: `align` and `\text` (v0.299.0–v0.300.0).** `align` and `align*`
+  follow amsmath for the `\tag`: the block is placed from `\measure@`'s shift and
+  gap, and a tag that cannot fit (row + tag + `\minalignsep` × pairs +
+  2`\mintagsep` wider than `\displaywidth`) goes on a line of its own, flush right,
+  instead of running off the page. A relation opening a right-aligned column
+  (`x &\sim y`, `&\iff …`) gets the `{}` amsmath puts there, so it has its space.
+  `\text`, `\mbox`, `\hbox`, `\textrm` and `\textnormal` keep their interword
+  spaces ([go-tex/math v0.51.0](https://github.com/go-tex/math/pull/69): `\text{gene } i \text{ is …}` used to print
+  as one word). ⚠ `flalign`, `alignat`, `eqnarray` and `gather` keep their earlier
+  tag rule, and `\text` does not yet inherit the surrounding text font (it stays
+  upright).
+- **Corpus, v0.288.0 → v0.299.0** (140 scored papers, the A/B harness, measured on
+  **v0.299.0**; v0.300.0 is not measured yet): Σ|page deviation| from the reference
+  **258 → 219**, exact pagination **29 → 42** papers (38 moved: 32 toward the
+  reference, 5 away, 1 sideways). 13 references are left out as unusable (a
+  pdfTeX-driver leak or a junk first page).
 - **Not yet:** TikZ/pgf drawing (gated behind `GOTEX_PGF`, in bring-up), full
   float pagination (`GOTEX_FLOATS`), two-column reprint layouts
   (`GOTEX_TWOCOLUMN`), EPS graphics (an `.eps` is *measured* from its
