@@ -2281,6 +2281,7 @@ func (e *Engine) loadMore() {
 	e.prim("gotex@line", func(e *Engine) { e.doPictureLine(false) })
 	e.prim("gotex@vector", func(e *Engine) { e.doPictureLine(true) })
 	e.prim("gotex@circle", func(e *Engine) { e.doPictureCircle() })
+	e.prim("gotex@shadedisk", func(e *Engine) { e.doShadeDisk() })
 	e.prim("gotex@oval", func(e *Engine) { e.doPictureOval() })
 	e.prim("gotex@qbezier", func(e *Engine) { e.doQbezier() })
 	// pgffor's loop, for the document-level form. Inside a picture the body is

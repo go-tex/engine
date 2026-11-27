@@ -1680,17 +1680,57 @@ const MiniLaTeXKernel = `
 \long\def\gotex@pgf@two#1#2{}
 \long\def\gotex@pgf@four#1#2#3#4{}
 \def\gotex@pgfstub#1#2{\ifx#1\@undefined\let#1#2\fi}
+% A RADIAL shading is recorded, because \pgfuseshading places a box of its size:
+% a square whose side is twice the radius of the last colour stop
+% (pgfcoreshade.code.tex:479-488). beamer's ball items are radial shadings
+% (bigsphere, beamerbaseauxtemplates.sty:35-41), and with nothing recorded every
+% ball was an empty box of no size. Kept global, as pgf keeps its shadings
+% (pgfcoreshade.code.tex:508/512). The colours are resolved at USE: they name bg
+% and parent.bg, which \usebeamercolor sets around the use (the [bg,parent.bg]
+% dependencies). \gotex@shadedisk (pgfshade.go) draws the ball.
+\def\gotex@pgf@radial{\@ifnextchar[\gotex@pgf@@radial{\gotex@pgf@@radial[]}}
+\long\def\gotex@pgf@@radial[#1]#2#3#4{\expandafter\gdef\csname gotex@shade@#2\endcsname{#4}}
+\def\gotex@pgfscale{1}
+\def\gotex@pgfuseshading#1{%
+  \expandafter\ifx\csname gotex@shade@#1\endcsname\relax\else
+    \expandafter\expandafter\expandafter\gotex@shadedisk
+    \expandafter\expandafter\expandafter{\csname gotex@shade@#1\endcsname}%
+  \fi}
+% pgf's OLD picture syntax, \begin{pgfpicture}{x0}{y0}{x1}{y1}, when its body is
+% only text placed with \pgftext (pgfpicture.go decides): the box pgf sets, x1-x0
+% wide, y1-y0 tall, depth 0, the origin -x0 from its left and -y0 above its
+% baseline (pgfcorescopes.code.tex:218-225, 366-382). \pgftext centres its box on
+% the origin, both ways (pgfcorescopes.code.tex:118-122, 151 and 155);
+% \pgftransformshift moves the origin and \pgftransformscale reaches the shading
+% that \pgfuseshading draws.
+\newbox\gotex@pgfpicbox \newbox\gotex@pgftextbox
+\newdimen\gotex@pgfox \newdimen\gotex@pgfoy
+\long\def\gotex@pgftext#1{\setbox\gotex@pgftextbox\hbox{#1}%
+  \hbox to\z@{\kern\gotex@pgfox\kern-.5\wd\gotex@pgftextbox
+    \raise\dimexpr\gotex@pgfoy-(\ht\gotex@pgftextbox-\dp\gotex@pgftextbox)/2\relax
+    \box\gotex@pgftextbox\hss}}
+\def\gotex@pgfshift#1{\gotex@pgfshiftpt#1}
+\def\gotex@pgfshiftpt\pgfpoint#1#2{%
+  \advance\gotex@pgfox by #1\relax\advance\gotex@pgfoy by #2\relax}
+\long\def\gotex@pgfoldpic#1#2#3#4#5{%
+  \setbox\gotex@pgfpicbox\hbox to\dimexpr#3-#1\relax{%
+    \gotex@pgfox=-#1\relax\gotex@pgfoy=-#2\relax
+    \let\pgftext\gotex@pgftext\let\pgftransformshift\gotex@pgfshift
+    \def\pgftransformscale##1{\def\gotex@pgfscale{##1}}%
+    #5\hss}%
+  \ht\gotex@pgfpicbox=\dimexpr#4-#2\relax\dp\gotex@pgfpicbox=\z@
+  \box\gotex@pgfpicbox}
 \def\gotex@pgfstubs{%
   \gotex@pgfstub\pgfdeclarehorizontalshading\gotex@pgf@optthree
   \gotex@pgfstub\pgfdeclareverticalshading\gotex@pgf@optthree
-  \gotex@pgfstub\pgfdeclareradialshading\gotex@pgf@optthree
+  \gotex@pgfstub\pgfdeclareradialshading\gotex@pgf@radial
   \gotex@pgfstub\pgfdeclarefunctionalshading\gotex@pgf@optfive
   \gotex@pgfstub\pgfdeclareimage\gotex@pgf@opttwo
   \gotex@pgfstub\pgfdeclaremask\gotex@pgf@opttwo
   \gotex@pgfstub\pgfaliasimage\gotex@pgf@two
   \gotex@pgfstub\pgfdefobject\gotex@pgf@four
   \gotex@pgfstub\pgfdeclarefading\gotex@pgf@two
-  \gotex@pgfstub\pgfuseshading\gotex@pgf@one
+  \gotex@pgfstub\pgfuseshading\gotex@pgfuseshading
   \gotex@pgfstub\pgfuseimage\gotex@pgf@one
   % \pgfsetcolor (pgfcoregraphicstate.code.tex:186, one argument) comes with
   % pgf's \ifpgfpicture (pgfcorescopes), which stays false here: no picture is
@@ -2969,8 +3009,15 @@ func (e *Engine) doPgfPicture() {
 	miny := e.readBraceDimen()
 	maxx := e.readBraceDimen()
 	maxy := e.readBraceDimen()
-	if !e.gobbleEnvBody("pgfpicture", false) {
+	var body []tok
+	e.gobbleRec = &body
+	found := e.gobbleEnvBody("pgfpicture", false)
+	e.gobbleRec = nil
+	if !found {
 		return // unterminated: like any gobbled picture, it leaves nothing
+	}
+	if e.typesetPgfTextPicture(minx, miny, maxx, maxy, body) {
+		return
 	}
 	e.recordPictureDrop()
 	e.startImage()
