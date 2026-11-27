@@ -336,8 +336,11 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				// .sty:237), which holds this minipage's \end. Stored raw, the scan ran
 				// past the whole columns block and shredded the frame — 17 pages to 1.
 				// Push \end<n>'s body so \beamer@colclose, and then its \end{minipage},
-				// surface for the depth bookkeeping.
-				e.push(e.eq["end"+n].body)
+				// surface for the depth bookkeeping — and then \gotex@endenv{n}, the
+				// \endgroup \end{columns} owes its \begin (see the case below): without
+				// it a frame of bare \column's ended one group deeper than it began.
+				e.push(append(append(append([]tok(nil), e.eq["end"+n].body...),
+					csTok("gotex@endenv")), braceNameToks(n)...))
 			case e.endMacroExpandsToEnd(n):
 				// \end{n} whose \end<n> macro produces the real terminator by
 				// expansion rather than a literal token — elsarticle/ifacconf's
@@ -345,7 +348,17 @@ func (e *Engine) collectEnvBody(name string) []tok {
 				// \endabstract → \end{minipage}\hfill\egroup\egroup. Run \end<n> in
 				// place so the generated \end{minipage} surfaces next iteration;
 				// otherwise the raw scan runs past it to EOF, swallowing the body.
-				e.push(e.eq["end"+n].body)
+				//
+				// ⛔ Followed by \gotex@endenv{n}: \end{n} is \end<n> THEN the \endgroup
+				// that closes \begin{n}'s group (latex.go:52, ltmiscen.dtx), and the scan
+				// consumed the \end. Pushing \end<n> alone left that group open. beamer's
+				// column ENVIRONMENT is the shape (beamerbaseframecomponents.sty:268-279:
+				// \endcolumn is {\end{minipage}\hfill\end{actionenv}\@ignoretrue}), and
+				// the group it leaked was taken by \end{columns}' \egroup for the row's
+				// \hbox: text after the columns was typeset on a page of its own, BEFORE
+				// the frame (go-tex/engine#205).
+				e.push(append(append(append([]tok(nil), e.eq["end"+n].body...),
+					csTok("gotex@endenv")), braceNameToks(n)...))
 			default:
 				// re-emit \end{n} into the body (an ordinary non-matching \end), and
 				// remember where, in case the scan later runs out of file (see above).
