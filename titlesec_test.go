@@ -107,3 +107,32 @@ func TestTitlespacingBeforeSpace(t *testing.T) {
 		t.Errorf("a 40pt before-space moved the second heading %.2fpt, want about 25", d)
 	}
 }
+
+// With titlesec's `explicit` option the before-code of \titleformat takes the
+// title as #1 (titlesec.sty:736), which is how wlpeerj.cls:75-79 uppercases its
+// section titles. Tectonic prints "1 INTRODUCTION" for the witness; the engine
+// printed "1 Introduction" because it recorded the code as a parameterless macro.
+func TestTitleformatExplicitTakesTheTitle(t *testing.T) {
+	src := func(opt string) []byte {
+		return []byte(`\documentclass{article}\usepackage` + opt + `{titlesec}` +
+			`\titleformat{\section}{\normalfont\large}{\thesection}{1em}{\MakeUppercase{#1}}` +
+			`\begin{document}\section{Alpha}Body text one.\end{document}`)
+	}
+	words := func(opt string) map[string]bool {
+		e, err := compile(src(opt), Options{Lenient: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for _, p := range e.RenderPages(e.renderMargin(0)) {
+			for _, m := range tspanRE.FindAllStringSubmatch(p, -1) {
+				out[m[4]] = true
+			}
+		}
+		return out
+	}
+	got := words(`[explicit]`)
+	if !got["ALPHA"] || got["Alpha"] {
+		t.Errorf("explicit: the title was not given to the before-code, words %v", got)
+	}
+}
