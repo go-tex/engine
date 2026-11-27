@@ -47,8 +47,9 @@ func (e *Engine) doLongtable() {
 	// Scoped, so a longtable inside a figure cannot leave "table" behind.
 	e.beginGroup()
 	e.define("@captype", &meaning{kind: mMacro, body: stringToToks("table")}, false)
-	e.place(e.buildTabularBox(aligns, pwidths, vrules, longtableRows(items)))
+	box := e.buildTabularBox(aligns, pwidths, vrules, longtableRows(items))
 	e.endGroup()
+	e.placeSplit(box)
 }
 
 // longtableRows reduces a collected longtable body to the rows a single-page
