@@ -1,18 +1,18 @@
 module github.com/go-tex/engine
 
-go 1.27.2
+go 1.27.4
 
 require (
-	github.com/go-gfx/gfx v0.41.0
-	github.com/go-opentype/opentype v0.25.0
-	github.com/go-pdfkit/pdfkit v0.25.0
-	github.com/go-pdfkit/reader v0.17.0
-	github.com/go-tex/math v0.51.0
-	github.com/go-tex/pdfrender v0.3.2
+	github.com/go-gfx/gfx v0.42.0
+	github.com/go-opentype/opentype v0.26.0
+	github.com/go-pdfkit/pdfkit v0.27.0
+	github.com/go-pdfkit/reader v0.20.0
+	github.com/go-tex/math v0.54.0
+	github.com/go-tex/pdfrender v0.3.3
 	github.com/go-tex/texmf v0.9.0
 	github.com/go-typeset/hyphenation v1.0.1
 	github.com/go-typeset/linebreak v1.13.0
-	golang.org/x/text v0.43.0
+	golang.org/x/text v0.44.0
 )
 
 require (
@@ -25,6 +25,6 @@ require (
 	github.com/go-pdfkit/render v0.69.1 // indirect
 	github.com/go-simd/highway v0.0.14 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	golang.org/x/image v0.47.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/image v0.48.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
